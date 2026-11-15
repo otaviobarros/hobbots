@@ -43,7 +43,7 @@ import {
   TaskToolInputs,
   type TaskToolName,
   TaskToolRefused,
-  type ThreadId,
+  type ChannelId,
   type TurnEnding,
   taskToolJsonSchema,
   taskToolText,
@@ -128,7 +128,7 @@ export interface SessionCharms {
   /** The Attempt the session runs as: a memory save it makes settles in that Attempt's session (#1049). */
   readonly attemptId: AttemptId;
   /** The chat the Task belongs to, which the session's web records name (ADR 036). */
-  readonly threadId: ThreadId | null;
+  readonly channelId: ChannelId | null;
   readonly currentAccess: Effect.Effect<ToolAccess | null>;
   readonly redactor: Redactor;
   readonly approvals: TurnApprovals | null;
@@ -167,7 +167,7 @@ export class TaskTools extends Context.Service<
       only?: ReadonlyArray<TaskToolName>,
     ) => Effect.Effect<HubOffer & { readonly hubTools: HubTools }>;
     /**
-     * The tools a chat turn offers, on the open Task its hob owns in the thread. A call that starts
+     * The tools a chat turn offers, on the open Task its hob owns in the channel. A call that starts
      * work starts that Task from the turn's prompt when there is none; each turn that starts a Task
      * or returns its result runs it as an Attempt, which ends with the turn.
      */
@@ -217,11 +217,11 @@ export class TaskTools extends Context.Service<
             {
               ...turn,
               agentId: caller.agentId,
-              threadId: null,
+              channelId: null,
               messageId: null,
               taskId: caller.taskId,
               webPlace: {
-                threadId: turn.threadId,
+                channelId: turn.channelId,
                 taskId: Effect.succeed(caller.taskId),
                 attemptId: Effect.succeed(turn.attemptId),
               },
@@ -245,7 +245,7 @@ export class TaskTools extends Context.Service<
               { agentId: member.id, taskId },
               {
                 attemptId: AttemptIdSchema.make("check"),
-                threadId: null,
+                channelId: null,
                 currentAccess: Effect.succeed(access),
                 redactor,
                 approvals: null,

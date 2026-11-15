@@ -10,15 +10,15 @@ import { BusyHint, StopButton } from "./composer-busy.tsx";
 const copy = messages.composer;
 
 /**
- * A paused hob takes no new work. In a thread the composer queues messages until the hob wakes,
- * with Wake beside it; a new thread waits for Wake. While a reply runs, Send queues the message
+ * A paused hob takes no new work. In a channel the composer queues messages until the hob wakes,
+ * with Wake beside it; a new channel waits for Wake. While a reply runs, Send queues the message
  * behind it (CH-008).
  */
 export interface PausedHob {
   readonly name: string;
   readonly waking: boolean;
   readonly onWake: () => void;
-  /** False before the thread exists: a paused hob starts no new thread. */
+  /** False before the channel exists: a paused hob starts no new channel. */
   readonly canQueue: boolean;
 }
 
@@ -68,7 +68,7 @@ export function ComposerActions({
 }: {
   name: string;
   noting: boolean;
-  /** A paused hob's new thread: nothing can be sent until it wakes. */
+  /** A paused hob's new channel: nothing can be sent until it wakes. */
   closed: boolean;
   run: ReplyRun;
   paused: PausedHob | undefined;

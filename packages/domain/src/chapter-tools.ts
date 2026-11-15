@@ -7,7 +7,7 @@ import { toolInputJsonSchema } from "./task-tools.ts";
  * The Chapter tools (ADR 037): Hobbots' own hub tools for a hob's chapters, served on every runtime
  * that serves hub tools, never a Charm. `start_chapter` ends the live chapter of the chat the turn is
  * in and starts the next, so the next turn starts a new session from the context pack.
- * `read_message` reads a message of the hob's own threads, in parts, such as one the pack cut.
+ * `read_message` reads a message of the hob's own channels, in parts, such as one the pack cut.
  */
 export const START_CHAPTER_TOOL = "start_chapter";
 export const READ_MESSAGE_TOOL = "read_message";

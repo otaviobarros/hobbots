@@ -8,8 +8,8 @@ export const sendErrorText = (
       return hob.status === "paused"
         ? `${hob.name} is paused, so this message was not sent. Wake ${hob.name}, then send it again.`
         : `${hob.name} cannot take new work right now, so this message was not sent.`;
-    case "ThreadNotFound":
-      return "This thread is no longer on the hub, so the message was not sent. Start a new thread.";
+    case "ChannelNotFound":
+      return "This channel is no longer on the hub, so the message was not sent. Start a new channel.";
     default:
       return error.message.trim() === ""
         ? "Could not send. Check that Hobbots is running, then try again."

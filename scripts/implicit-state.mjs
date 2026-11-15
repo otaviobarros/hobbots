@@ -32,7 +32,7 @@ const idKeyOf = (name, typeArguments) => {
 
 /**
  * The id type a declaration's collection is keyed by: from `new Set<…Id>()`, or from the declared
- * type, as in `const busy: Set<ThreadId> = new Set()`.
+ * type, as in `const busy: Set<ChannelId> = new Set()`.
  */
 const idKey = (declaration) => {
   const init = declaration.init;

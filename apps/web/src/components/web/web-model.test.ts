@@ -116,7 +116,7 @@ describe("repliesWeb", () => {
     new WebFetchRecord({
       id: WebRecordId.make(id),
       agentId: AgentId.make("hob-1"),
-      threadId: null,
+      channelId: null,
       messageId: reply,
       taskId: null,
       attemptId: null,

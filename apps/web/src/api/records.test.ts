@@ -8,7 +8,7 @@ import {
   MessageId,
   MessagePin,
   RegisteredArtifactId,
-  ThreadId,
+  ChannelId,
 } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
@@ -20,13 +20,13 @@ import { applyRecordEvent, recordKeys, reviewArtifactError } from "./records.ts"
 // Issue #1387 (ADR 037): the camp sheet's lists, the suggestion card and pins read again on their
 // events, each cancelling a read already on its way first (STD-REACT-012).
 
-const threadId = ThreadId.make("camp-1");
+const channelId = ChannelId.make("camp-1");
 const at = "2026-11-12T00:00:00.000Z";
 const hob = { kind: "hob", id: "hob-1" } as const;
 
 const decision = new Decision({
   id: DecisionId.make("d1"),
-  threadId,
+  channelId,
   chapterId: ChapterId.make("c1"),
   sourceMessageId: null,
   text: "Ship on Fridays.",
@@ -40,7 +40,7 @@ const decision = new Decision({
 
 const artifact = new Artifact({
   id: RegisteredArtifactId.make("a1"),
-  threadId,
+  channelId,
   chapterId: ChapterId.make("c1"),
   kind: "doc",
   title: "plan.md",
@@ -66,18 +66,18 @@ const watch = (client: QueryClient, key: ReadonlyArray<unknown>) => {
 };
 
 describe("record events", () => {
-  it("reads the thread's decisions, artifacts and brief again, cancelling a read on its way first (#1387)", async () => {
+  it("reads the channel's decisions, artifacts and brief again, cancelling a read on its way first (#1387)", async () => {
     for (const [event, key] of [
-      [{ _tag: "DecisionRecorded", decision } as const, recordKeys.decisions(threadId)],
-      [{ _tag: "DecisionSuperseded", decision } as const, recordKeys.decisions(threadId)],
+      [{ _tag: "DecisionRecorded", decision } as const, recordKeys.decisions(channelId)],
+      [{ _tag: "DecisionSuperseded", decision } as const, recordKeys.decisions(channelId)],
       [
         {
           _tag: "ArtifactRegistered",
           artifact,
         } as const,
-        recordKeys.artifacts(threadId),
+        recordKeys.artifacts(channelId),
       ],
-      [{ _tag: "ArtifactReviewSettled", artifact } as const, recordKeys.artifacts(threadId)],
+      [{ _tag: "ArtifactReviewSettled", artifact } as const, recordKeys.artifacts(channelId)],
     ] as const) {
       const client = new QueryClient();
       const calls = watch(client, key);
@@ -86,24 +86,24 @@ describe("record events", () => {
     }
   });
 
-  it("reads a thread's pins and camp suggestions again on their events (#1387)", async () => {
+  it("reads a channel's pins and camp suggestions again on their events (#1387)", async () => {
     const pins = new QueryClient();
-    const pinCalls = watch(pins, ["threads", threadId, "pins"]);
+    const pinCalls = watch(pins, ["channels", channelId, "pins"]);
     await applyPinEvent(pins, {
       _tag: "MessagePinned",
-      pin: new MessagePin({ messageId: MessageId.make("m1"), threadId, pinnedAt: at, revision: 5 }),
+      pin: new MessagePin({ messageId: MessageId.make("m1"), channelId, pinnedAt: at, revision: 5 }),
     });
-    await applyPinEvent(pins, { _tag: "MessageUnpinned", threadId, messageId: MessageId.make("m1") });
+    await applyPinEvent(pins, { _tag: "MessageUnpinned", channelId, messageId: MessageId.make("m1") });
     expect(pinCalls).toEqual(["cancel", "invalidate", "cancel", "invalidate"]);
 
     const suggestions = new QueryClient();
-    const suggestionCalls = watch(suggestions, ["threads", threadId, "campSuggestions"]);
+    const suggestionCalls = watch(suggestions, ["channels", channelId, "campSuggestions"]);
     await applySuggestionEvent(suggestions, {
       _tag: "CampSuggestionExpired",
-      threadId,
+      channelId,
       suggestion: new CampSuggestion({
         id: CampSuggestionId.make("s1"),
-        threadId,
+        channelId,
         chapterId: ChapterId.make("c1"),
         reasons: [{ code: "decisions", count: 5 }],
         title: null,
@@ -118,13 +118,13 @@ describe("record events", () => {
     expect(suggestionCalls).toEqual(["cancel", "invalidate"]);
   });
 
-  it("reads both threads' decisions, artifacts and pins again when a chapter moves between them (#1387)", async () => {
-    const camp = ThreadId.make("camp-2");
+  it("reads both channels' decisions, artifacts and pins again when a chapter moves between them (#1387)", async () => {
+    const camp = ChannelId.make("camp-2");
     const client = new QueryClient();
-    const keys = [threadId, camp].flatMap((each) => [
+    const keys = [channelId, camp].flatMap((each) => [
       recordKeys.decisions(each),
       recordKeys.artifacts(each),
-      ["threads", each, "pins"],
+      ["channels", each, "pins"],
     ]);
     const calls: Array<string> = [];
     const record = (name: string) => (filters?: { readonly queryKey?: ReadonlyArray<unknown> }) => {
@@ -133,7 +133,7 @@ describe("record events", () => {
     };
     vi.spyOn(client, "cancelQueries").mockImplementation(record("cancel"));
     vi.spyOn(client, "invalidateQueries").mockImplementation(record("invalidate"));
-    await recordsMoved(client, [threadId, camp]);
+    await recordsMoved(client, [channelId, camp]);
     for (const key of keys) {
       const own = calls.filter((call) => call.endsWith(JSON.stringify(key)));
       expect(own.map((call) => call.split(" ")[0])).toEqual(["cancel", "invalidate"]);
@@ -143,8 +143,8 @@ describe("record events", () => {
 
 describe("catch-up reads", () => {
   it("keys each visit's read on its own and drops it once nothing reads it (#1387)", () => {
-    const first = catchUpQuery(threadId, "m1:1");
-    const remounted = catchUpQuery(threadId, "m2:1");
+    const first = catchUpQuery(channelId, "m1:1");
+    const remounted = catchUpQuery(channelId, "m2:1");
     expect(first.queryKey).not.toEqual(remounted.queryKey);
     expect(first.gcTime).toBe(0);
   });
@@ -153,7 +153,7 @@ describe("catch-up reads", () => {
 describe("artifact reviews", () => {
   it("tells a review the hub refused from one that did not reach it (#1387)", () => {
     expect(reviewArtifactError(new ApiError("refused", "ArtifactReviewChangeRefused"))).toBe("refused");
-    expect(reviewArtifactError(new ApiError("gone", "ThreadNotFound"))).toBe("unreachable");
+    expect(reviewArtifactError(new ApiError("gone", "ChannelNotFound"))).toBe("unreachable");
     expect(reviewArtifactError(new Error("offline"))).toBe("unreachable");
   });
 });
@@ -170,7 +170,7 @@ describe("artifact reads (#1434)", () => {
 
   it("a new version cancels the first read of its versions on its way, so the read after the event is kept (#1434)", async () => {
     const client = new QueryClient();
-    const queryKey = recordKeys.versions(threadId, artifact.id);
+    const queryKey = recordKeys.versions(channelId, artifact.id);
     const first = deferred<string>();
     const answers = [() => first.promise, () => Promise.resolve("version 2")];
     const observer = new QueryObserver(client, {
@@ -189,8 +189,8 @@ describe("artifact reads (#1434)", () => {
 
   it("a chapter move drops each artifact's versions and kept contents, and reads the shown ones again (#1434)", async () => {
     const client = new QueryClient();
-    const versions = recordKeys.versions(threadId, artifact.id);
-    const kept = recordKeys.content(threadId, artifact.id, 1);
+    const versions = recordKeys.versions(channelId, artifact.id);
+    const kept = recordKeys.content(channelId, artifact.id, 1);
     client.setQueryData(kept, new TextEncoder().encode("before the move"));
     let reads = 0;
     const observer = new QueryObserver(client, {
@@ -200,7 +200,7 @@ describe("artifact reads (#1434)", () => {
     });
     const stop = observer.subscribe(() => undefined);
     await vi.waitFor(() => expect(client.getQueryData(versions)).toBe("read 1"));
-    await recordsMoved(client, [threadId]);
+    await recordsMoved(client, [channelId]);
     expect(client.getQueryData(kept)).toBeUndefined();
     await vi.waitFor(() => expect(client.getQueryData(versions)).toBe("read 2"));
     stop();

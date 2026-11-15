@@ -30,7 +30,7 @@ import {
   QuestStates,
   type Task,
   TaskId,
-  type Thread,
+  type Channel,
 } from "@hobbots/domain";
 import { DateTime, Duration, Effect, FiberMap, Layer, Option, Schedule, Stream } from "effect";
 import { EventBus } from "./event-bus.ts";
@@ -129,7 +129,7 @@ const changeInShop = (attempt: AttemptId, path: string, hash: string | null, bus
 const iso = Effect.map(DateTime.now, DateTime.formatIso);
 
 interface Cast {
-  readonly thread: Thread;
+  readonly channel: Channel;
   readonly lead: AgentId;
   readonly quill: AgentId;
   readonly ada: AgentId;
@@ -143,29 +143,29 @@ interface Cast {
 const STOP_ASKED = /stop the quest/i;
 
 /**
- * The thread where you asked the lead of a played Quest to stop it, or null for any other event. The
+ * The channel where you asked the lead of a played Quest to stop it, or null for any other event. The
  * play's lead works while its chat reply runs, so it reads your message as soon as you send it, queued
  * or not.
  */
-const stopThread = (entry: EventEnvelope) => {
+const stopChannel = (entry: EventEnvelope) => {
   const { payload } = entry;
   return (payload._tag === "MessageUpserted" || payload._tag === "MessageQueued") &&
     payload.message.role === "user" &&
     STOP_ASKED.test(payload.message.content)
-    ? payload.message.threadId
+    ? payload.message.channelId
     : null;
 };
 
 /**
- * The lead of the Quest played in `threadId` stops it at your request (#1346), as its `stop_quest`
+ * The lead of the Quest played in `channelId` stops it at your request (#1346), as its `stop_quest`
  * call would: the Quest is stopping with its reason and summary, everything under it is cancelled,
  * and the lead says so in your chat. The cancels end the play as yours do.
  */
-const stopPlayed = (threadId: Thread["id"], bus: EventBus["Service"]) =>
+const stopPlayed = (channelId: Channel["id"], bus: EventBus["Service"]) =>
   Effect.gen(function* () {
     const tasks = yield* TaskRepository;
     const repo = yield* HobbotsRepository;
-    const tree = Option.getOrUndefined(yield* tasks.readTree(campaignOf(threadId)));
+    const tree = Option.getOrUndefined(yield* tasks.readTree(campaignOf(channelId)));
     const top = tree?.tasks[0];
     const quest = tree?.quests.find((each) => each.taskId === top?.id);
     if (tree === undefined || top === undefined || quest === undefined || !QuestStates.takesWork(quest)) return;
@@ -183,7 +183,7 @@ const stopPlayed = (threadId: Thread["id"], bus: EventBus["Service"]) =>
     const said = yield* repo.upsertMessage(
       new Message({
         id: MessageId.make(crypto.randomUUID()),
-        threadId: top.threadId ?? threadId,
+        channelId: top.channelId ?? channelId,
         role: "assistant",
         content:
           "I stopped the Black Friday campaign as you asked. Quill drafted the landing copy; the launch email was not scheduled.",
@@ -196,24 +196,24 @@ const stopPlayed = (threadId: Thread["id"], bus: EventBus["Service"]) =>
     yield* bus.publish(said.entries);
   });
 
-/** The thread of a scripted request and which script it asks for, or null for any other event. */
-const requestThread = (entry: EventEnvelope) => {
+/** The channel of a scripted request and which script it asks for, or null for any other event. */
+const requestChannel = (entry: EventEnvelope) => {
   const { payload } = entry;
   if (payload._tag !== "MessageUpserted" || payload.message.role !== "user" || payload.message.status === "queued") {
     return null;
   }
   const script = (Object.keys(SCRIPTS) as Array<Script>).find((each) => SCRIPTS[each].test(payload.message.content));
-  return script === undefined ? null : { threadId: payload.message.threadId, script };
+  return script === undefined ? null : { channelId: payload.message.channelId, script };
 };
 
-/** The ids the play gives its records in a thread, so each thread's Quest has its own. */
-const idsFor = (threadId: Thread["id"]) => {
-  const key = threadId.slice(0, 8);
+/** The ids the play gives its records in a channel, so each channel's Quest has its own. */
+const idsFor = (channelId: Channel["id"]) => {
+  const key = channelId.slice(0, 8);
   return { key, id: (name: string) => `${name}-${key}` };
 };
 
-/** The top Task of the Quest played in a thread. */
-const campaignOf = (threadId: Thread["id"]) => TaskId.make(idsFor(threadId).id("campaign"));
+/** The top Task of the Quest played in a channel. */
+const campaignOf = (channelId: Channel["id"]) => TaskId.make(idsFor(channelId).id("campaign"));
 
 /** A Task being cancelled, from an event that moved it there. */
 const cancellingTask = (entry: EventEnvelope) =>
@@ -246,7 +246,7 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
   Effect.gen(function* () {
     const tasks = yield* TaskRepository;
     const repo = yield* HobbotsRepository;
-    const { key, id } = idsFor(cast.thread.id);
+    const { key, id } = idsFor(cast.channel.id);
     const announce = <A>(committed: Committed<A>) => Effect.as(bus.publish(committed.entries), committed.value);
     const pause = Effect.sleep(step);
     const start = (task: Task, attempt: string) =>
@@ -359,15 +359,15 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
 
     // What the lead writes in your chat: only the plan, a question no lead can answer and the
     // finish (#901). The plan is its reply to your request; the rest the play writes as it goes, in
-    // the thread the Quest is in now: a chapter moved into a camp takes it there (#1389).
+    // the channel the Quest is in now: a chapter moved into a camp takes it there (#1389).
     const say = (content: string) =>
       Effect.gen(function* () {
-        const top = Option.getOrUndefined(yield* tasks.readTree(campaignOf(cast.thread.id)))?.tasks[0];
+        const top = Option.getOrUndefined(yield* tasks.readTree(campaignOf(cast.channel.id)))?.tasks[0];
         yield* repo
           .upsertMessage(
             new Message({
               id: MessageId.make(crypto.randomUUID()),
-              threadId: top?.threadId ?? cast.thread.id,
+              channelId: top?.channelId ?? cast.channel.id,
               role: "assistant",
               content,
               status: "complete",
@@ -386,7 +386,7 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
           id: TaskId.make(id("campaign")),
           ownerId: cast.lead,
           parentId: null,
-          threadId: cast.thread.id,
+          channelId: cast.channel.id,
           brief: BRIEFS[script].title,
           dependsOn: [],
           createdAt: yield* iso,
@@ -428,7 +428,7 @@ const play = (cast: Cast, script: Script, step: Duration.Input, bus: EventBus["S
               id: TaskId.make(id(name)),
               ownerId: owner,
               parentId,
-              threadId: null,
+              channelId: null,
               brief,
               dependsOn: after,
               createdAt: yield* iso,
@@ -749,15 +749,15 @@ const answered = (questionId: QuestionId, taskId: TaskId, step: Duration.Input) 
     while (!(yield* isAnswered)) yield* Effect.sleep(step);
   });
 
-const castFor = (threadId: Thread["id"]) =>
+const castFor = (channelId: Channel["id"]) =>
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
     const tasks = yield* TaskRepository;
-    const thread = yield* repo.findThread(threadId);
-    if (Option.isNone(thread) || (yield* tasks.readThreadTrees(threadId)).length > 0) return Option.none<Cast>();
+    const channel = yield* repo.findChannel(channelId);
+    if (Option.isNone(channel) || (yield* tasks.readChannelTrees(channelId)).length > 0) return Option.none<Cast>();
     const hobs = yield* repo.listAgents;
     const named = (name: string) =>
-      hobs.find((hob) => hob.name.toLowerCase() === name && hob.id !== thread.value.agentId);
+      hobs.find((hob) => hob.name.toLowerCase() === name && hob.id !== channel.value.agentId);
     const quill = named("quill");
     const ada = named("ada");
     if (quill === undefined || ada === undefined) {
@@ -769,8 +769,8 @@ const castFor = (threadId: Thread["id"]) =>
     const nested = rook === undefined || pip === undefined ? null : { rook: rook.id, pip: pip.id };
     const bram = named("bram")?.id ?? null;
     return Option.some({
-      thread: thread.value,
-      lead: thread.value.agentId,
+      channel: channel.value,
+      lead: channel.value.agentId,
       quill: quill.id,
       ada: ada.id,
       nested,
@@ -786,16 +786,16 @@ export const FakeQuestLive = (step: Duration.Input) =>
       // Each play runs under its top Task's id; the roots played stay known after a play ends.
       const plays = yield* FiberMap.make<TaskId>();
       const played = new Set<TaskId>();
-      const start = (threadId: Thread["id"], script: Script) =>
-        castFor(threadId).pipe(
+      const start = (channelId: Channel["id"], script: Script) =>
+        castFor(channelId).pipe(
           Effect.flatMap(
             Option.match({
               onNone: () => Effect.void,
               onSome: (cast) => {
-                played.add(campaignOf(threadId));
+                played.add(campaignOf(channelId));
                 return FiberMap.run(
                   plays,
-                  campaignOf(threadId),
+                  campaignOf(channelId),
                   play(cast, script, step, bus).pipe(
                     Effect.catchCause((cause) => Effect.logError("The Black Friday Quest stopped", cause)),
                   ),
@@ -815,9 +815,9 @@ export const FakeQuestLive = (step: Duration.Input) =>
       yield* bus.stream.pipe(
         Stream.runForEach((event) => {
           if (event._tag !== "Journaled") return Effect.void;
-          const request = requestThread(event.entry);
-          if (request !== null) return start(request.threadId, request.script);
-          const stopIn = stopThread(event.entry);
+          const request = requestChannel(event.entry);
+          if (request !== null) return start(request.channelId, request.script);
+          const stopIn = stopChannel(event.entry);
           if (stopIn !== null && played.has(campaignOf(stopIn))) {
             return stopPlayed(stopIn, bus).pipe(
               Effect.catchCause((cause) => Effect.logWarning("Could not stop a played Quest", cause)),

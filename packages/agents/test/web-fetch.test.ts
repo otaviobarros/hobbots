@@ -1,4 +1,4 @@
-import { TaskId, ThreadId } from "@hobbots/domain";
+import { TaskId, ChannelId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { briefWriterOf, foundUrlKey, pageAnswer, pageParts, searchFound, urlsIn, webWorkOf } from "../src/web-fetch.ts";
 
@@ -36,18 +36,18 @@ describe("web_fetch's found URLs (ADR 036)", () => {
   });
 
   it("keeps a found set by the chat, or by the Task a session outside a chat works on", () => {
-    expect(webWorkOf({ threadId: ThreadId.make("t1") })).toBe("thread:t1");
-    expect(webWorkOf({ threadId: null, taskId: TaskId.make("k1") })).toBe("task:k1");
-    expect(webWorkOf({ threadId: null })).toBeNull();
+    expect(webWorkOf({ channelId: ChannelId.make("t1") })).toBe("thread:t1");
+    expect(webWorkOf({ channelId: null, taskId: TaskId.make("k1") })).toBe("task:k1");
+    expect(webWorkOf({ channelId: null })).toBeNull();
   });
 
   it("reads a step's brief as written in your chat, and a deeper Task's in its parent's session", () => {
-    const thread = ThreadId.make("t1");
+    const channel = ChannelId.make("t1");
     const root = TaskId.make("root");
-    expect(briefWriterOf({ parentId: null, rootId: root, threadId: thread })).toBeNull();
-    expect(briefWriterOf({ parentId: root, rootId: root, threadId: thread })).toEqual({ threadId: thread });
-    expect(briefWriterOf({ parentId: TaskId.make("mid"), rootId: root, threadId: thread })).toEqual({
-      threadId: null,
+    expect(briefWriterOf({ parentId: null, rootId: root, channelId: channel })).toBeNull();
+    expect(briefWriterOf({ parentId: root, rootId: root, channelId: channel })).toEqual({ channelId: channel });
+    expect(briefWriterOf({ parentId: TaskId.make("mid"), rootId: root, channelId: channel })).toEqual({
+      channelId: null,
       taskId: "mid",
     });
   });

@@ -12,7 +12,7 @@ import {
   MessageId,
   MessageTransitions,
   QueuedMessageTransitions,
-  ThreadId,
+  ChannelId,
   takesNewWork,
   titleFromPrompt,
   YOU,
@@ -20,7 +20,7 @@ import {
 
 const streaming = new Message({
   id: MessageId.make("m1"),
-  threadId: ThreadId.make("t1"),
+  channelId: ChannelId.make("t1"),
   role: "assistant",
   content: "",
   status: "streaming",
@@ -142,7 +142,7 @@ describe("titleFromPrompt", () => {
   it("collapses whitespace and truncates long prompts", () => {
     expect(titleFromPrompt("  hi\n there ")).toBe("hi there");
     expect(titleFromPrompt("x".repeat(80))).toHaveLength(60);
-    expect(titleFromPrompt("   ")).toBe("New thread");
+    expect(titleFromPrompt("   ")).toBe("New channel");
   });
 });
 

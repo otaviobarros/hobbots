@@ -21,11 +21,11 @@ test("a machine declared on its own is read", () => {
 
 test("a machine wrapped with helpers, assigned or aliased is refused", () => {
   assert.match(
-    unreadUse("export const ThreadRun = { ...defineMachine<A, B, C, D>({}), isRunning };"),
+    unreadUse("export const ChannelRun = { ...defineMachine<A, B, C, D>({}), isRunning };"),
     /declare the machine on its own/,
   );
   assert.match(
-    unreadUse("export const ThreadRun = Object.assign(defineMachine<A, B, C, D>({}), { isRunning });"),
+    unreadUse("export const ChannelRun = Object.assign(defineMachine<A, B, C, D>({}), { isRunning });"),
     /declare the machine on its own/,
   );
   assert.match(

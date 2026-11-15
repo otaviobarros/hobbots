@@ -25,8 +25,8 @@ import {
   OWNER_USER_ID,
   type Task,
   type TaskTree,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Backpack, Dispatcher } from "@hobbots/inbox";
@@ -65,7 +65,7 @@ const QUILL = AgentId.make("quill");
 const ADA = AgentId.make("ada");
 const ROOK = AgentId.make("rook");
 const PIP = AgentId.make("pip");
-const threadId = ThreadId.make("campaign");
+const channelId = ChannelId.make("campaign");
 /** A prompt with this line of its own waits, before it does anything, until the test lets it go on. */
 const HOLD = "fake:hold";
 /** A prompt with this line waits like HOLD once its session has started, so a stop can reach it. */
@@ -171,8 +171,8 @@ const Party = Layer.effectDiscard(
     const repo = yield* HobbotsRepository;
     const party = [hob(ALDRIC, "Aldric"), hob(QUILL, "Quill"), hob(ADA, "Ada"), hob(ROOK, "Rook"), hob(PIP, "Pip")];
     for (const each of party) yield* repo.insertAgent(each);
-    yield* repo.upsertThread(
-      new Thread({ id: threadId, agentId: ALDRIC, title: "Black Friday", createdAt: now, updatedAt: now }),
+    yield* repo.upsertChannel(
+      new Channel({ id: channelId, agentId: ALDRIC, title: "Black Friday", createdAt: now, updatedAt: now }),
     );
   }),
 );
@@ -263,9 +263,9 @@ const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-const messages = () => HobbotsRepository.use((repo) => repo.listMessages(threadId));
+const messages = () => HobbotsRepository.use((repo) => repo.listMessages(channelId));
 
-/** The thread's messages once `ready` holds for them, every reply ended. */
+/** The channel's messages once `ready` holds for them, every reply ended. */
 const messagesWhen = (ready: (all: ReadonlyArray<Message>) => boolean) =>
   retry(
     Effect.gen(function* () {
@@ -279,7 +279,7 @@ const messagesWhen = (ready: (all: ReadonlyArray<Message>) => boolean) =>
 const treeWhen = (ready: (tree: TaskTree) => boolean) =>
   retry(
     Effect.gen(function* () {
-      const [tree] = yield* TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
+      const [tree] = yield* TaskRepository.use((tasks) => tasks.readChannelTrees(channelId));
       return tree !== undefined && ready(tree) ? tree : yield* Effect.fail("not yet" as const);
     }),
   );
@@ -357,12 +357,12 @@ const nestedRunning = (tree: TaskTree) =>
   tree.attempts.some((each) => each.agentId === PIP && isLive(each.state)) &&
   !tree.attempts.some((each) => each.agentId === ROOK && isLive(each.state));
 
-/** Your request in the thread, its step done and every reply ended: the Task the next message works on. */
+/** Your request in the channel, its step done and every reply ended: the Task the next message works on. */
 const requestDone = Effect.gen(function* () {
   const first = ["Write the copy", hub("plan_steps", { key: "plan", steps: [{ brief: "Draft the headlines" }] })].join(
     "\n",
   );
-  yield* ChatService.use((chat) => chat.sendPrompt(threadId, first));
+  yield* ChatService.use((chat) => chat.sendPrompt(channelId, first));
   const tree = yield* treeWhen(
     (each) => each.tasks[1]?.state === "completed" && !each.attempts.some((attempt) => isLive(attempt.state)),
   );
@@ -378,7 +378,7 @@ const strayTurn = Effect.gen(function* () {
   const turn = yield* TaskTurns.use((turns) =>
     turns.forChat({
       agentId: ALDRIC,
-      threadId,
+      channelId,
       messageId: MessageId.make(opening?.id ?? "none"),
       prompt: "Keep going",
       runtime: "claude-code",
@@ -389,11 +389,11 @@ const strayTurn = Effect.gen(function* () {
   return turn;
 });
 
-/** Your next message in the thread, held by `gate` once its turn has started. */
+/** Your next message in the channel, held by `gate` once its turn has started. */
 const laterReply = (gate: string, requests: ReadonlyArray<PromptRequest>) =>
   Effect.gen(function* () {
     const second = ["Now the emails", gate, hub("plan_steps", { key: "more", steps: [{ brief: "Draft the emails" }] })];
-    yield* ChatService.use((chat) => chat.sendPrompt(threadId, second.join("\n")));
+    yield* ChatService.use((chat) => chat.sendPrompt(channelId, second.join("\n")));
     yield* retry(
       Effect.suspend(() =>
         requests.some((each) => each.prompt.includes("Now the emails")) ? Effect.void : Effect.fail("not yet" as const),
@@ -406,7 +406,7 @@ const laterReply = (gate: string, requests: ReadonlyArray<PromptRequest>) =>
 describe("cancelling with confirmed outcomes", () => {
   it("cancelling the Quest shows it cancelling until every Task confirms, and starts nothing after", async () => {
     const { run, requests } = setUp();
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, questUnderWay())));
     const before = await run(treeWhen(underWay));
     await run(messagesWhen((all) => all.length === 2));
     const quest = before.quests[0];
@@ -446,7 +446,7 @@ describe("cancelling with confirmed outcomes", () => {
 
   it("cancelling a member's Task that waits with no turn running confirms it, and its lead hears of it", async () => {
     const { run, release } = setUp();
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, questUnderWay())));
     const before = await run(treeWhen(underWay));
     const ada = ownedBy(before, ADA);
     if (ada === undefined) throw new Error("no Task for Ada");
@@ -465,7 +465,7 @@ describe("cancelling with confirmed outcomes", () => {
 
   it("a session that does not stop in time leaves its cancel unresolved, and the Quest still ends", async () => {
     const { run, unstick } = setUp();
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay([STUCK]))));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, questUnderWay([STUCK]))));
     const before = await run(treeWhen(underWay));
     const quest = before.quests[0];
     if (quest === undefined) throw new Error("no Quest");
@@ -489,7 +489,7 @@ describe("cancelling with confirmed outcomes", () => {
 
   it("a late result from a cancelled Task changes nothing", async () => {
     const { run, release } = setUp();
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, questUnderWay())));
     const before = await run(treeWhen(underWay));
     const quill = ownedBy(before, QUILL);
     if (quill === undefined) throw new Error("no Task for Quill");
@@ -516,7 +516,7 @@ describe("cancelling with confirmed outcomes", () => {
   }, 20_000);
   it("cancelling the Quest reaches every level of a nested one, each Task confirmed, and starts nothing after", async () => {
     const { run, requests } = setUp();
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, nestedUnderWay)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, nestedUnderWay)));
     const before = await run(treeWhen(nestedRunning));
     const quest = before.quests.find((each) => each.depth === 1);
     if (quest === undefined) throw new Error("no Quest");
@@ -541,7 +541,7 @@ describe("cancelling with confirmed outcomes", () => {
 
   it("cancelling Rook's Task cancels Pip's under it and leaves Aldric's Quest going; neither changes hands across levels", async () => {
     const { run } = setUp();
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, nestedUnderWay)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, nestedUnderWay)));
     const before = await run(treeWhen(nestedRunning));
     const rook = ownedBy(before, ROOK);
     const pip = ownedBy(before, PIP);
@@ -600,7 +600,7 @@ describe("cancelling with confirmed outcomes", () => {
     expect(answer).toMatchObject({ refused: true });
     expect(answer.text).toContain("task-cancelling");
     await run(Effect.sleep("300 millis"));
-    const trees = await run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
+    const trees = await run(TaskRepository.use((tasks) => tasks.readChannelTrees(channelId)));
     expect(trees).toHaveLength(1);
     expect(trees[0]?.tasks.map((task) => task.state)).toEqual(["cancelled", "completed"]);
   }, 20_000);
@@ -623,7 +623,7 @@ describe("cancelling with confirmed outcomes", () => {
     await unstick();
     await run(messagesWhen(() => true));
     await run(Effect.sleep("300 millis"));
-    const after = await run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
+    const after = await run(TaskRepository.use((tasks) => tasks.readChannelTrees(channelId)));
     expect(after).toHaveLength(1);
     expect(after[0]?.tasks[0]?.state).toBe("cancelled");
     expect(after[0]?.attempts.find((each) => each.id === stop?.id)?.state).toBe("unresolved");
@@ -656,7 +656,7 @@ describe("cancelling with confirmed outcomes", () => {
       }),
       hub("wait_for", { key: "wait", tasks: ["$ads.task_id", "$copy.task_id"] }),
     ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, prompt)));
     const before = await run(treeWhen((tree) => ownedBy(tree, ROOK)?.state === "completed"));
     const quest = before.quests[0];
     if (quest === undefined) throw new Error("no Quest");
@@ -735,7 +735,7 @@ describe("cancelling with confirmed outcomes", () => {
       }),
       hub("wait_for", { key: "wait", tasks: ["$ads.task_id"] }),
     ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, prompt)));
     const openFor = (agentId: AgentId) => Backpack.use((backpack) => backpack.listOpen({ _tag: "Hob", agentId }));
     await run(
       retry(
@@ -775,7 +775,7 @@ describe("retrying and reassigning", () => {
       "Write the copy",
       hub("plan_steps", { key: "plan", steps: [{ brief: ["Draft the headlines", FLAKY].join("\n") }] }),
     ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, prompt)));
     const failed = await run(treeWhen((tree) => tree.tasks[1]?.state === "failed"));
     const step = failed.tasks[1];
     if (step === undefined) throw new Error("no step");
@@ -809,7 +809,7 @@ describe("retrying and reassigning", () => {
         ].join("\n"),
       }),
     ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, prompt)));
     await run(treeWhen((tree) => tree.attempts.some((each) => each.agentId === QUILL)));
     await run(HobLifecycle.use((lifecycle) => lifecycle.retire(QUILL, "stop")));
     const failed = await run(treeWhen((tree) => ownedBy(tree, QUILL)?.state === "failed"));
@@ -849,7 +849,7 @@ describe("retrying and reassigning", () => {
 
   it("a reassignment is refused while its turn runs, to a hob above it, for the Task you asked for and to a retired hob", async () => {
     const { run } = setUp();
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, questUnderWay())));
     const tree = await run(treeWhen(underWay));
     const quill = ownedBy(tree, QUILL);
     const top = tree.tasks[0];
@@ -871,7 +871,7 @@ describe("retrying and reassigning", () => {
       "Plan the campaign",
       hub("delegate_task", { key: "copy", hob: "Quill", brief: ["Draft the copy", FAILS].join("\n") }),
     ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, prompt)));
     /** The Task's Attempts once `count` of them have ended. */
     const ended = (count: number) =>
       run(
@@ -911,7 +911,7 @@ describe("retiring a hob with open work", () => {
 
   it("Stop and hand over gives each open Task to the hob named, which finishes it, and no Task fails", async () => {
     const { run, release } = setUp();
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, questUnderWay())));
     const before = await run(treeWhen(underWay));
     const copy = ownedBy(before, QUILL);
     if (copy === undefined) throw new Error("no Task for Quill");
@@ -947,7 +947,7 @@ describe("retiring a hob with open work", () => {
 
   it("a hand-over is refused with nothing changed when a Task cannot go to that hob", async () => {
     const { run } = setUp();
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, questUnderWay())));
     const before = await run(treeWhen(underWay));
     const copy = ownedBy(before, QUILL);
     const top = before.tasks[0];
@@ -974,7 +974,7 @@ describe("retiring a hob with open work", () => {
 
   it("a hand-over whose taker starts retiring while the work stops keeps the Task with its hob, which is not retired", async () => {
     const { run, hooks } = setUp();
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, questUnderWay())));
     const before = await run(treeWhen(underWay));
     const copy = ownedBy(before, QUILL);
     if (copy === undefined) throw new Error("no Task for Quill");
@@ -1003,7 +1003,7 @@ describe("retiring a hob with open work", () => {
 
   it("Finish, then retire gives no Task to the hob once it counted nothing open, and retires it", async () => {
     const { run, hooks } = setUp();
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, questUnderWay())));
     const before = await run(treeWhen(underWay));
     const build = ownedBy(before, ADA);
     if (build === undefined) throw new Error("no Task for Ada");
@@ -1042,28 +1042,28 @@ describe("retiring a hob with open work", () => {
     expect(after.tasks.some((task) => task.state === "failed")).toBe(false);
   }, 20_000);
 
-  it("a hob finishing first can continue a reply in the thread of its open Task, and nowhere else", async () => {
+  it("a hob finishing first can continue a reply in the channel of its open Task, and nowhere else", async () => {
     const { run } = setUp();
-    const other = await run(ChatService.use((chat) => chat.createThread(ALDRIC)));
+    const other = await run(ChatService.use((chat) => chat.createChannel(ALDRIC)));
     await run(ChatService.use((chat) => chat.sendPrompt(other.id, "fake:limit\nSomething else")));
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, questUnderWay())));
     await run(treeWhen(underWay));
     await run(lifecycle((each) => each.retireWhenDone(ALDRIC)));
 
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, "fake:limit\nHow is it going?")));
-    const limited = (id: ThreadId) =>
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, "fake:limit\nHow is it going?")));
+    const limited = (id: ChannelId) =>
       retry(
         Effect.gen(function* () {
           const last = (yield* HobbotsRepository.use((repo) => repo.listMessages(id))).at(-1);
           return last?.status === "limited" ? last : yield* Effect.fail("not yet" as const);
         }),
       );
-    const here = await run(limited(threadId));
+    const here = await run(limited(channelId));
     const there = await run(limited(other.id));
-    // Going on with the reply in its open Task's thread is the work it finishes: never refused as
-    // retiring there, only, at most, while another reply in the thread still runs.
+    // Going on with the reply in its open Task's channel is the work it finishes: never refused as
+    // retiring there, only, at most, while another reply in the channel still runs.
     const continued = await run(
-      ChatService.use((chat) => chat.continueReply(threadId, here.id)).pipe(
+      ChatService.use((chat) => chat.continueReply(channelId, here.id)).pipe(
         Effect.retry({
           while: (error) => error._tag === "ReplyNotResumable",
           schedule: Schedule.spaced("10 millis"),
@@ -1090,7 +1090,7 @@ describe("retiring a hob with open work", () => {
 
   it("Finish, then retire takes no new work, keeps working the open Task, and retires once it ends", async () => {
     const { run, release } = setUp();
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, questUnderWay())));
     const before = await run(treeWhen(underWay));
     const copy = ownedBy(before, QUILL);
     const build = ownedBy(before, ADA);
@@ -1101,8 +1101,8 @@ describe("retiring a hob with open work", () => {
     // Asking again keeps the first request.
     expect(await run(lifecycle((each) => each.retireWhenDone(QUILL)))).toMatchObject({ retiring: waiting.retiring });
 
-    // No new work: no new thread, and no Task given to it.
-    expect(await run(ChatService.use((chat) => chat.createThread(QUILL)).pipe(Effect.flip))).toMatchObject({
+    // No new work: no new channel, and no Task given to it.
+    expect(await run(ChatService.use((chat) => chat.createChannel(QUILL)).pipe(Effect.flip))).toMatchObject({
       _tag: "HobUnavailable",
       status: "retiring",
     });
@@ -1138,12 +1138,12 @@ describe("retiring a hob with open work", () => {
 
   it("Finish, then retire refuses messages that would start new work, and retires a hob with nothing open at once", async () => {
     const { run } = setUp();
-    const other = await run(ChatService.use((chat) => chat.createThread(ALDRIC)));
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, questUnderWay())));
+    const other = await run(ChatService.use((chat) => chat.createChannel(ALDRIC)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, questUnderWay())));
     await run(treeWhen(underWay));
 
     expect(await run(lifecycle((each) => each.retireWhenDone(ALDRIC)))).toMatchObject({ status: "active" });
-    // A thread with none of its open Tasks would start a new one.
+    // A channel with none of its open Tasks would start a new one.
     expect(
       await run(ChatService.use((chat) => chat.sendPrompt(other.id, "Something else")).pipe(Effect.flip)),
     ).toMatchObject({ _tag: "HobUnavailable", status: "retiring" });

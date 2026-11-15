@@ -19,7 +19,7 @@ import {
   TaskId,
   TaskNote,
   TaskTree,
-  ThreadId,
+  ChannelId,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
@@ -35,7 +35,7 @@ import {
   QuestNotFound,
   TaskNotControllable,
   TaskNotFound,
-  ThreadNotFound,
+  ChannelNotFound,
 } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
@@ -56,9 +56,9 @@ export const QuestRead = Schema.Struct({
 });
 export type QuestRead = typeof QuestRead.Type;
 
-/** The Tasks a thread's requests started, each with its tree, oldest first, with the cursor as above. */
-export const ThreadTasksRead = Schema.Struct({ cursor: Schema.String, trees: Schema.Array(TaskTree) });
-export type ThreadTasksRead = typeof ThreadTasksRead.Type;
+/** The Tasks a channel's requests started, each with its tree, oldest first, with the cursor as above. */
+export const ChannelTasksRead = Schema.Struct({ cursor: Schema.String, trees: Schema.Array(TaskTree) });
+export type ChannelTasksRead = typeof ChannelTasksRead.Type;
 
 /**
  * What still keeps a Task open, as its completion gate reads it (ADR 019), with the cursor as
@@ -120,18 +120,18 @@ export class TasksGroup extends HttpApiGroup.make("tasks")
       success: QuestRead,
       error: QuestNotFound,
     }),
-    // The work under a thread's requests, for the card, the strip and the drawer in its chat.
-    HttpApiEndpoint.get("threadTasks", "/threads/:threadId/tasks", {
-      params: { threadId: ThreadId },
-      success: ThreadTasksRead,
-      error: ThreadNotFound,
+    // The work under a channel's requests, for the card, the strip and the drawer in its chat.
+    HttpApiEndpoint.get("channelTasks", "/channels/:channelId/tasks", {
+      params: { channelId: ChannelId },
+      success: ChannelTasksRead,
+      error: ChannelNotFound,
     }),
     // Members' Tasks that failed while their work goes on: a needs-you mark and a notification each.
     HttpApiEndpoint.get("failed", "/failed-tasks", { success: FailedTasksRead }),
-    // How each Quest is going: with `threadId`, every Quest followed in that chat or camp, ended ones
+    // How each Quest is going: with `channelId`, every Quest followed in that chat or camp, ended ones
     // included; without it, every Quest still active.
     HttpApiEndpoint.get("questSummaries", "/quest-summaries", {
-      query: { threadId: Schema.optionalKey(ThreadId) },
+      query: { channelId: Schema.optionalKey(ChannelId) },
       success: QuestSummariesRead,
     }),
     // What a hob does on Quests it joined as a party member: its Task, the brief and the Quest.

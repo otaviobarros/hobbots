@@ -49,11 +49,11 @@ export const ApprovalRepositoryLive = Layer.effect(
       Result: ApprovalRequest,
       execute: (id) => sql`SELECT * FROM approval_requests WHERE id = ${id}`.pipe(Effect.map(approvalRows)),
     });
-    const listForThread = SqlSchema.findAll({
+    const listForChannel = SqlSchema.findAll({
       Request: Schema.String,
       Result: ApprovalRequest,
-      execute: (threadId) =>
-        sql`SELECT * FROM approval_requests WHERE thread_id = ${threadId} ORDER BY ${oldestFirst(sql)}`.pipe(
+      execute: (channelId) =>
+        sql`SELECT * FROM approval_requests WHERE channel_id = ${channelId} ORDER BY ${oldestFirst(sql)}`.pipe(
           Effect.map(approvalRows),
         ),
     });
@@ -78,24 +78,24 @@ export const ApprovalRepositoryLive = Layer.effect(
           ORDER BY ${oldestFirst(sql)}`.pipe(Effect.map(approvalRows)),
     });
 
-    // A party member's request, asked outside any reply, is in the thread its Task is in when it is
+    // A party member's request, asked outside any reply, is in the channel its Task is in when it is
     // written: its session may have started before a chapter moved the quest into a camp (#1389).
     // Read in the request's own transaction, which takes its turn with the move's.
-    const threadNow = (input: ApprovalRequest) =>
+    const channelNow = (input: ApprovalRequest) =>
       input.messageId !== null || input.taskId === null
-        ? Effect.succeed(input.threadId)
-        : sql<{ readonly threadId: string | null }>`SELECT thread_id FROM tasks WHERE id = ${input.taskId}`.pipe(
-            Effect.map(([task]) => (task?.threadId ?? input.threadId) as ApprovalRequest["threadId"]),
+        ? Effect.succeed(input.channelId)
+        : sql<{ readonly channelId: string | null }>`SELECT channel_id FROM tasks WHERE id = ${input.taskId}`.pipe(
+            Effect.map(([task]) => (task?.channelId ?? input.channelId) as ApprovalRequest["channelId"]),
           );
 
     const insert = (input: ApprovalRequest) =>
       journaled(1, (revision) =>
         Effect.gen(function* () {
-          const approval = new ApprovalRequest({ ...input, threadId: yield* threadNow(input), revision });
+          const approval = new ApprovalRequest({ ...input, channelId: yield* channelNow(input), revision });
           yield* sql`INSERT INTO approval_requests ${sql.insert({
             id: approval.id,
             agent_id: approval.agentId,
-            thread_id: approval.threadId,
+            channel_id: approval.channelId,
             message_id: approval.messageId,
             task_id: approval.taskId,
             root_task_id: approval.rootTaskId,
@@ -142,16 +142,16 @@ export const ApprovalRepositoryLive = Layer.effect(
       journaled(1 + grants.length, (revision) =>
         Effect.gen(function* () {
           const decided = new ApprovalRequest({ ...input, revision });
-          const [updated] = yield* sql<{ readonly threadId: string }>`UPDATE approval_requests
+          const [updated] = yield* sql<{ readonly channelId: string }>`UPDATE approval_requests
             SET state = ${decided.state}, lifetime = ${decided.lifetime}, deny_reason = ${decided.denyReason},
               decided_at = ${decided.decidedAt}, decided_by_device_id = ${decided.decidedByDeviceId},
               decided_via = ${decided.decidedVia}, revision = ${revision}
-            WHERE id = ${decided.id} AND state = ${from} RETURNING thread_id`;
+            WHERE id = ${decided.id} AND state = ${from} RETURNING channel_id`;
           if (updated === undefined) return null;
           // The request as stored: a chapter's move may have taken it to a camp since it was read (#1389).
           const approval = new ApprovalRequest({
             ...decided,
-            threadId: updated.threadId as ApprovalRequest["threadId"],
+            channelId: updated.channelId as ApprovalRequest["channelId"],
           });
           const saved = yield* Effect.forEach(grants, (grant, index) =>
             Effect.gen(function* () {
@@ -180,7 +180,7 @@ export const ApprovalRepositoryLive = Layer.effect(
 
     return ApprovalRepository.of({
       find: (id) => find(id).pipe(Effect.orDie),
-      listForThread: (threadId) => listForThread(threadId).pipe(Effect.orDie),
+      listForChannel: (channelId) => listForChannel(channelId).pipe(Effect.orDie),
       listPending: listPending().pipe(Effect.orDie),
       listRecent: (limit) => listRecent(limit).pipe(Effect.orDie),
       insert,

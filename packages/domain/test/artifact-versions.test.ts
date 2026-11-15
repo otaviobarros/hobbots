@@ -8,13 +8,13 @@ import {
   ContentId,
   RegisteredArtifactId,
   type StoredVersion,
-  ThreadId,
+  ChannelId,
 } from "../src/index.ts";
 
 const artifact = (locator: string, kind: Artifact["kind"] = "doc") =>
   new Artifact({
     id: RegisteredArtifactId.make("a1"),
-    threadId: ThreadId.make("t1"),
+    channelId: ChannelId.make("t1"),
     chapterId: ChapterId.make("c1"),
     kind,
     title: "Launch",

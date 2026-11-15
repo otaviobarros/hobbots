@@ -204,13 +204,13 @@ describe("a hub that moved to another address", () => {
   it("moves a page the hub redirected to HTTPS back to HTTP when HTTPS turns off, at the same path", () => {
     // The stored address is HTTP and its port is unchanged, so the address itself does not move.
     expect(followedAddress(ORIGINS.origin, remoteAccess(4317, false))).toBeNull();
-    const page = "https://studio.example.ts.net/#/hobs/h1/threads/t1?draft=1";
+    const page = "https://studio.example.ts.net/#/hobs/h1/channels/t1?draft=1";
     expect(windowAfterRemoteAccess(page, ORIGINS.origin, remoteAccess(4317, false))).toBe(
-      "http://studio.example.ts.net:4317/#/hobs/h1/threads/t1?draft=1",
+      "http://studio.example.ts.net:4317/#/hobs/h1/channels/t1?draft=1",
     );
     // It follows the hub's port too, and stays while HTTPS answers or the hub does not say.
     expect(windowAfterRemoteAccess(page, ORIGINS.origin, remoteAccess(4400, false))).toBe(
-      "http://studio.example.ts.net:4400/#/hobs/h1/threads/t1?draft=1",
+      "http://studio.example.ts.net:4400/#/hobs/h1/channels/t1?draft=1",
     );
     expect(windowAfterRemoteAccess(page, ORIGINS.origin, remoteAccess(4317, true))).toBeNull();
     expect(windowAfterRemoteAccess(page, ORIGINS.origin, remoteAccess(4317, null))).toBeNull();

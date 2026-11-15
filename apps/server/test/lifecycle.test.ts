@@ -101,17 +101,17 @@ const request = async (method: string, path: string, body?: unknown) => {
 
 const summon = async () => {
   const agent: Agent = (await request("POST", "/api/agents", hob)).body;
-  const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
-  return { agent, thread };
+  const channel = (await request("POST", `/api/agents/${agent.id}/channels`)).body;
+  return { agent, channel };
 };
 
-const messages = async (threadId: string): Promise<ReadonlyArray<Message>> =>
-  (await request("GET", `/api/threads/${threadId}/messages`)).body;
+const messages = async (channelId: string): Promise<ReadonlyArray<Message>> =>
+  (await request("GET", `/api/channels/${channelId}/messages`)).body;
 
-// Waits until no reply in the thread is still streaming and no message is queued.
-const settled = (threadId: string) =>
+// Waits until no reply in the channel is still streaming and no message is queued.
+const settled = (channelId: string) =>
   Effect.runPromise(
-    Effect.promise(() => messages(threadId)).pipe(
+    Effect.promise(() => messages(channelId)).pipe(
       Effect.flatMap((list) =>
         list.some((m) => m.status === "streaming" || m.status === "queued") ? Effect.fail("busy") : Effect.void,
       ),
@@ -120,8 +120,8 @@ const settled = (threadId: string) =>
   );
 
 describe("pausing and waking hobs", () => {
-  it("queues messages while paused, refuses new threads, keeps the threads readable and runs the queue once woken", async () => {
-    const { agent, thread } = await summon();
+  it("queues messages while paused, refuses new channels, keeps the channels readable and runs the queue once woken", async () => {
+    const { agent, channel } = await summon();
 
     const paused = await request("POST", `/api/agents/${agent.id}/pause`);
     expect(paused).toMatchObject({ status: 200, body: { id: agent.id, status: "paused" } });
@@ -129,19 +129,19 @@ describe("pausing and waking hobs", () => {
     expect((await request("POST", `/api/agents/${agent.id}/pause`)).body.status).toBe("paused");
 
     // A message waits for the hob instead of being refused (CH-008).
-    const queued = await request("POST", `/api/threads/${thread.id}/messages`, { content: "hello" });
+    const queued = await request("POST", `/api/channels/${channel.id}/messages`, { content: "hello" });
     expect(queued).toMatchObject({ status: 200, body: { userMessage: { status: "queued" }, assistantMessage: null } });
-    const noThread = await request("POST", `/api/agents/${agent.id}/threads`);
-    expect(noThread).toMatchObject({ status: 409, body: { _tag: "HobUnavailable" } });
-    expect((await messages(thread.id)).map((m) => [m.role, m.status])).toEqual([["user", "queued"]]);
-    expect((await request("GET", `/api/agents/${agent.id}/threads`)).body).toHaveLength(1);
+    const noChannel = await request("POST", `/api/agents/${agent.id}/channels`);
+    expect(noChannel).toMatchObject({ status: 409, body: { _tag: "HobUnavailable" } });
+    expect((await messages(channel.id)).map((m) => [m.role, m.status])).toEqual([["user", "queued"]]);
+    expect((await request("GET", `/api/agents/${agent.id}/channels`)).body).toHaveLength(1);
     // A paused hob is still listed, with its state.
     expect((await request("GET", "/api/agents")).body).toMatchObject([{ id: agent.id, status: "paused" }]);
 
     const woken = await request("POST", `/api/agents/${agent.id}/wake`);
     expect(woken).toMatchObject({ status: 200, body: { status: "active" } });
-    await settled(thread.id);
-    expect((await messages(thread.id)).map((m) => [m.role, m.status])).toEqual([
+    await settled(channel.id);
+    expect((await messages(channel.id)).map((m) => [m.role, m.status])).toEqual([
       ["user", "complete"],
       ["assistant", "complete"],
     ]);
@@ -151,28 +151,28 @@ describe("pausing and waking hobs", () => {
     const missing = await request("POST", `/api/agents/${crypto.randomUUID()}/pause`);
     expect(missing).toMatchObject({ status: 404, body: { _tag: "AgentNotFound" } });
 
-    const { agent, thread } = await summon();
-    await request("POST", `/api/threads/${thread.id}/messages`, { content: "hello" });
+    const { agent, channel } = await summon();
+    await request("POST", `/api/channels/${channel.id}/messages`, { content: "hello" });
     await request("POST", `/api/agents/${agent.id}/pause`);
-    await settled(thread.id);
-    expect((await messages(thread.id)).at(-1)).toMatchObject({ content: "Echo: hello", status: "complete" });
+    await settled(channel.id);
+    expect((await messages(channel.id)).at(-1)).toMatchObject({ content: "Echo: hello", status: "complete" });
   });
 });
 
 describe("retiring hobs", () => {
-  it("refuses new work for a retired hob, keeps its threads readable and lists it under archived hobs", async () => {
-    const { agent, thread } = await summon();
-    await request("POST", `/api/threads/${thread.id}/messages`, { content: "hello" });
-    await settled(thread.id);
+  it("refuses new work for a retired hob, keeps its channels readable and lists it under archived hobs", async () => {
+    const { agent, channel } = await summon();
+    await request("POST", `/api/channels/${channel.id}/messages`, { content: "hello" });
+    await settled(channel.id);
 
     const retired = await request("POST", `/api/agents/${agent.id}/retire`, { activeWork: "finish" });
     expect(retired).toMatchObject({ status: 200, body: { id: agent.id, status: "retired" } });
     const retiredAt = (retired.body as { retiredAt: string }).retiredAt;
     expect(new Date(retiredAt).toISOString()).toBe(retiredAt);
 
-    const refused = await request("POST", `/api/threads/${thread.id}/messages`, { content: "again" });
+    const refused = await request("POST", `/api/channels/${channel.id}/messages`, { content: "again" });
     expect(refused).toMatchObject({ status: 409, body: { _tag: "HobUnavailable", status: "retired" } });
-    expect((await request("POST", `/api/agents/${agent.id}/threads`)).status).toBe(409);
+    expect((await request("POST", `/api/agents/${agent.id}/channels`)).status).toBe(409);
     // A retired hob cannot be paused or woken, and retiring again changes nothing.
     expect((await request("POST", `/api/agents/${agent.id}/wake`)).body).toMatchObject({
       _tag: "HobUnavailable",
@@ -181,29 +181,29 @@ describe("retiring hobs", () => {
     expect((await request("POST", `/api/agents/${agent.id}/pause`)).status).toBe(409);
     expect((await request("POST", `/api/agents/${agent.id}/retire`, { activeWork: "stop" })).status).toBe(200);
 
-    expect((await messages(thread.id)).map((m) => m.content)).toEqual(["hello", "Echo: hello"]);
-    expect((await request("GET", `/api/agents/${agent.id}/threads`)).body).toMatchObject([{ id: thread.id }]);
+    expect((await messages(channel.id)).map((m) => m.content)).toEqual(["hello", "Echo: hello"]);
+    expect((await request("GET", `/api/agents/${agent.id}/channels`)).body).toMatchObject([{ id: channel.id }]);
     expect((await request("GET", "/api/agents")).body).toEqual([]);
     // Archived hobs show when the hob retired; retiring again kept the first time.
     expect((await request("GET", "/api/agents?status=retired")).body).toMatchObject([{ id: agent.id, retiredAt }]);
     expect((await request("GET", "/api/agents?status=active")).body).toEqual([]);
   });
 
-  it("brings a retired hob back active with its threads, and takes new work again", async () => {
-    const { agent, thread } = await summon();
-    await request("POST", `/api/threads/${thread.id}/messages`, { content: "hello" });
-    await settled(thread.id);
+  it("brings a retired hob back active with its channels, and takes new work again", async () => {
+    const { agent, channel } = await summon();
+    await request("POST", `/api/channels/${channel.id}/messages`, { content: "hello" });
+    await settled(channel.id);
     await request("POST", `/api/agents/${agent.id}/retire`, { activeWork: "finish" });
 
     const back = await request("POST", `/api/agents/${agent.id}/bring-back`);
     expect(back).toMatchObject({ status: 200, body: { id: agent.id, status: "active", retiredAt: null } });
     expect((await request("GET", "/api/agents")).body).toMatchObject([{ id: agent.id, status: "active" }]);
     expect((await request("GET", "/api/agents?status=retired")).body).toEqual([]);
-    expect((await request("GET", `/api/agents/${agent.id}/threads`)).body).toMatchObject([{ id: thread.id }]);
+    expect((await request("GET", `/api/agents/${agent.id}/channels`)).body).toMatchObject([{ id: channel.id }]);
 
-    await request("POST", `/api/threads/${thread.id}/messages`, { content: "again" });
-    await settled(thread.id);
-    expect((await messages(thread.id)).map((m) => m.content)).toEqual(["hello", "Echo: hello", "again", "Echo: again"]);
+    await request("POST", `/api/channels/${channel.id}/messages`, { content: "again" });
+    await settled(channel.id);
+    expect((await messages(channel.id)).map((m) => m.content)).toEqual(["hello", "Echo: hello", "again", "Echo: again"]);
     // Bringing back an active hob changes nothing; a paused one is refused, and an unknown one is not found.
     expect((await request("POST", `/api/agents/${agent.id}/bring-back`)).body).toMatchObject({ status: "active" });
     await request("POST", `/api/agents/${agent.id}/pause`);
@@ -215,12 +215,12 @@ describe("retiring hobs", () => {
   });
 
   it("stops a running reply and records it as interrupted when retiring with stop", async () => {
-    const { agent, thread } = await summon();
-    await request("POST", `/api/threads/${thread.id}/messages`, { content: "a long question" });
+    const { agent, channel } = await summon();
+    await request("POST", `/api/channels/${channel.id}/messages`, { content: "a long question" });
 
     await request("POST", `/api/agents/${agent.id}/retire`, { activeWork: "stop" });
     // The retire request returns once the reply is stopped and saved.
-    expect((await messages(thread.id)).at(-1)?.status).toBe("interrupted");
+    expect((await messages(channel.id)).at(-1)?.status).toBe("interrupted");
     expect((await request("GET", "/api/activity")).body).toEqual({ working: [] });
   });
 
@@ -248,14 +248,14 @@ describe("retiring hobs", () => {
   });
 
   it("lets a running reply finish when retiring with finish, and asks which", async () => {
-    const { agent, thread } = await summon();
-    await request("POST", `/api/threads/${thread.id}/messages`, { content: "hello" });
+    const { agent, channel } = await summon();
+    await request("POST", `/api/channels/${channel.id}/messages`, { content: "hello" });
 
     const unasked = await request("POST", `/api/agents/${agent.id}/retire`, {});
     expect(unasked.status).toBe(400);
     expect((await request("POST", `/api/agents/${agent.id}/retire`, { activeWork: "finish" })).status).toBe(200);
-    expect((await messages(thread.id)).at(-1)?.status).toBe("streaming");
-    await settled(thread.id);
-    expect((await messages(thread.id)).at(-1)).toMatchObject({ content: "Echo: hello", status: "complete" });
+    expect((await messages(channel.id)).at(-1)?.status).toBe("streaming");
+    await settled(channel.id);
+    expect((await messages(channel.id)).at(-1)).toMatchObject({ content: "Echo: hello", status: "complete" });
   });
 });

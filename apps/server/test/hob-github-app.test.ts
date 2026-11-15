@@ -449,10 +449,10 @@ describe("A hob's own GitHub App on a hub", () => {
     const turn = await runtime.runPromise(
       Effect.gen(function* () {
         const chat = yield* ChatService;
-        const thread = yield* chat.createThread(SAM);
-        const sent = yield* chat.sendPrompt(thread.id, "hello");
+        const channel = yield* chat.createChannel(SAM);
+        const sent = yield* chat.sendPrompt(channel.id, "hello");
         return yield* (yield* ApprovalService).forTurn(
-          { agentId: SAM, threadId: thread.id, messageId: (sent.assistantMessage as Message).id },
+          { agentId: SAM, channelId: channel.id, messageId: (sent.assistantMessage as Message).id },
           Effect.succeed(access),
           Effect.succeed(null),
         );

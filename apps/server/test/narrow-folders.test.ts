@@ -9,8 +9,8 @@ import {
   TaskId,
   type TaskToolDone,
   type TaskToolRefused,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { delegatedAccess, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -30,7 +30,7 @@ import { NodeFolderChecks } from "../src/folders.ts";
 const now = "2026-11-03T01:06:00.000Z";
 const FRODO = AgentId.make("frodo");
 const QUILL = AgentId.make("quill");
-const threadId = ThreadId.make("badge");
+const channelId = ChannelId.make("badge");
 const LEAD = TaskId.make("site");
 
 let work: string;
@@ -116,13 +116,13 @@ const seed = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
   yield* repo.insertAgent(hob(FRODO, "Frodo"));
   yield* repo.insertAgent(hob(QUILL, "Quill"));
-  yield* repo.upsertThread(new Thread({ id: threadId, agentId: FRODO, title: "Site", createdAt: now, updatedAt: now }));
+  yield* repo.upsertChannel(new Channel({ id: channelId, agentId: FRODO, title: "Site", createdAt: now, updatedAt: now }));
   yield* (yield* TaskRepository).createTask({
     task: {
       id: LEAD,
       ownerId: FRODO,
       parentId: null,
-      threadId,
+      channelId,
       brief: "Build the site",
       dependsOn: [],
       createdAt: now,

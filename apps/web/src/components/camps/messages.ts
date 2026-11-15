@@ -1,5 +1,5 @@
 import { CAMP_HOBS_MAX } from "@hobbots/api";
-import { CAMP_GOAL_MAX, type CampSuggestionCode, type CarriedOverRef, THREAD_TITLE_MAX } from "@hobbots/domain";
+import { CAMP_GOAL_MAX, type CampSuggestionCode, type CarriedOverRef, CHANNEL_TITLE_MAX } from "@hobbots/domain";
 import { formatCount, plural } from "../../lib/format.ts";
 import type { CampProblem, MakeCampError } from "./make-camp-flow.ts";
 import type { StartFreshError } from "./start-fresh-flow.ts";
@@ -8,7 +8,7 @@ interface Named {
   readonly name: string;
 }
 
-/** User-facing copy for a hob's chat and camps (STD-I18N-001): the UI says chat and camp, never thread. */
+/** User-facing copy for a hob's chat and camps (STD-I18N-001): the UI says chat and camp, never channel. */
 export const messages = {
   sidebar: {
     chat: "Chat",
@@ -47,7 +47,7 @@ export const messages = {
     making: "Making the camp…",
     problems: {
       "title-missing": "Give the camp a name.",
-      "title-long": `Keep the name to ${formatCount(THREAD_TITLE_MAX)} characters.`,
+      "title-long": `Keep the name to ${formatCount(CHANNEL_TITLE_MAX)} characters.`,
       "goal-long": `Keep the goal to ${formatCount(CAMP_GOAL_MAX)} characters.`,
       "hobs-missing": "Pick at least one hob to lead the camp.",
       "hobs-many": `A camp takes up to ${CAMP_HOBS_MAX + 1} hobs. Untick one or more.`,

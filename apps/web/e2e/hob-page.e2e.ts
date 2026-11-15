@@ -73,7 +73,7 @@ test("a hob opens on its own page, with New chat, its chats and a History tab", 
 
   // A chat opens from the list; New chat and Profile sit in the hero.
   await main.getByRole("link", { name: /^Open / }).click();
-  await expect(page).toHaveURL(new RegExp(`#/hobs/${pip.id}/threads/`));
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${pip.id}/channels/`));
   await expect(page.getByRole("main").getByText("Echo: first")).toBeVisible();
   await page.goBack();
   await hero.getByRole("link", { name: "Profile" }).click();
@@ -81,6 +81,6 @@ test("a hob opens on its own page, with New chat, its chats and a History tab", 
   await page.goBack();
   await hero.getByRole("link", { name: "Your chat with Pip" }).click();
   // The hob already has its chat, so the hero opens that one.
-  await expect(page).toHaveURL(new RegExp(`#/hobs/${pip.id}/threads/`));
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${pip.id}/channels/`));
   await expect(page.getByRole("main").getByText("Echo: first")).toBeVisible();
 });

@@ -1,4 +1,4 @@
-import { type Actor, isInProgress, type Message, mentionsIn, sameActor, type ThreadId } from "@hobbots/domain";
+import { type Actor, isInProgress, type Message, mentionsIn, sameActor, type ChannelId } from "@hobbots/domain";
 import { Effect } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
 import { markdownCode } from "./markdown-code.ts";
@@ -40,7 +40,7 @@ export interface StoredMentions {
  * parsed once: a reply that ends again with more text keeps its mentions, as they were decided
  * against the roster of then, and adds after them those of the text past what was parsed. So a hob
  * renamed later never changes what a stored message mentions. The roster is every hob and person of
- * the hub, so a mention of a hob outside the thread is kept, for who answers to refuse.
+ * the hub, so a mention of a hob outside the channel is kept, for who answers to refuse.
  */
 export const mentionsToStore = (
   sql: SqlClient.SqlClient,
@@ -69,20 +69,20 @@ export const mentionsActor = (sql: SqlClient.SqlClient, actor: Actor) =>
   });
 
 /**
- * How many messages mention the actor that they have not read, per thread they are an active member
- * of, for threads with any (ADR 039, Users as actors: mentions of you are per person). A message
+ * How many messages mention the actor that they have not read, per channel they are an active member
+ * of, for channels with any (ADR 039, Users as actors: mentions of you are per person). A message
  * counts once it is past the member's read marker; your own messages, notes to self and a lead's quiet
- * progress never count. Threads in byte order of their id.
+ * progress never count. Channels in byte order of their id.
  */
 export const unreadMentionsOf = (sql: SqlClient.SqlClient, actor: Actor) =>
-  sql<{ readonly threadId: string; readonly count: unknown }>`SELECT m.thread_id, COUNT(*) AS count
+  sql<{ readonly channelId: string; readonly count: unknown }>`SELECT m.channel_id, COUNT(*) AS count
     FROM messages m
-    JOIN thread_members tm ON tm.thread_id = m.thread_id
+    JOIN channel_members tm ON tm.channel_id = m.channel_id
       AND tm.actor_kind = ${actor.kind} AND tm.actor_id = ${actor.id} AND tm.state = 'active'
     WHERE m.revision > COALESCE(tm.read_revision, 0) AND m.role <> 'note' AND m.quiet = 0
       AND NOT (m.actor_kind = ${actor.kind} AND m.actor_id = ${actor.id})
       AND ${mentionsActor(sql, actor)}
-    GROUP BY m.thread_id
-    ORDER BY ${sql.onDialectOrElse({ pg: () => sql.literal(`m.thread_id COLLATE "C"`), orElse: () => sql.literal("m.thread_id") })}`.pipe(
-    Effect.map((rows) => rows.map((row) => ({ threadId: row.threadId as ThreadId, count: Number(row.count) }))),
+    GROUP BY m.channel_id
+    ORDER BY ${sql.onDialectOrElse({ pg: () => sql.literal(`m.channel_id COLLATE "C"`), orElse: () => sql.literal("m.channel_id") })}`.pipe(
+    Effect.map((rows) => rows.map((row) => ({ channelId: row.channelId as ChannelId, count: Number(row.count) }))),
   );

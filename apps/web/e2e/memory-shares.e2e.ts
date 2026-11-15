@@ -64,9 +64,9 @@ const shareHub = async (preset: "balanced" | "trusting" = "balanced") => {
   });
   await api("PATCH", `/agents/${ada.id}/permissions`, { ownFolders: [folder] });
   const ask = async (scope: "project" | "everyone", key = "deploy") => {
-    const thread = await api("POST", `/agents/${ada.id}/threads`);
+    const channel = await api("POST", `/agents/${ada.id}/channels`);
     const call = { key, scope, path: PAGE, markdown: MARKDOWN, tags: ["deploy"] };
-    await api("POST", `/threads/${thread.id}/messages`, {
+    await api("POST", `/channels/${channel.id}/messages`, {
       content: `Remember how to deploy\nfake:hub memory_save ${JSON.stringify(call)}`,
     });
   };

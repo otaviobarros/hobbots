@@ -1,16 +1,16 @@
-import { ApprovalId, ApprovalRequest, ThreadId } from "@hobbots/domain";
+import { ApprovalId, ApprovalRequest, ChannelId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { COPY, memberApproval, QUILL, THREAD } from "../../test/quests.ts";
+import { COPY, memberApproval, QUILL, CHANNEL } from "../../test/quests.ts";
 import { approvalEntry } from "./inbox-entries.ts";
 import { inScope, inSearch, waitingIn } from "./inbox-scope.ts";
 
-const CAMP = ThreadId.make("camp-launch");
+const CAMP = ChannelId.make("camp-launch");
 const inChat = approvalEntry(new ApprovalRequest({ ...memberApproval(COPY, QUILL), state: "pending" }));
 const inCamp = approvalEntry(
   new ApprovalRequest({
     ...memberApproval(COPY, QUILL),
     id: ApprovalId.make("in-camp"),
-    threadId: CAMP,
+    channelId: CAMP,
     state: "pending",
   }),
 );
@@ -26,20 +26,20 @@ describe("inScope", () => {
 
   it("lists everything when the Inbox opened on no chat or camp, or shows everywhere", () => {
     expect(inScope(entries, undefined)).toBe(entries);
-    expect(inScope(entries, { threadId: CAMP, scope: "everywhere" })).toBe(entries);
+    expect(inScope(entries, { channelId: CAMP, scope: "everywhere" })).toBe(entries);
   });
 
   it("lists only what is about the chat or camp it opened on", () => {
-    expect(inScope(entries, { threadId: CAMP, scope: "here" })).toEqual([inCamp]);
-    expect(inScope(entries, { threadId: THREAD, scope: "here" })).toEqual([inChat]);
+    expect(inScope(entries, { channelId: CAMP, scope: "here" })).toEqual([inCamp]);
+    expect(inScope(entries, { channelId: CHANNEL, scope: "here" })).toEqual([inChat]);
   });
 });
 
 describe("inSearch", () => {
   it("keeps the chat or camp, and Everywhere only when it is on", () => {
     expect(inSearch(undefined)).toEqual({});
-    expect(inSearch({ threadId: CAMP, scope: "here" })).toEqual({ in: CAMP });
-    expect(inSearch({ threadId: CAMP, scope: "everywhere" })).toEqual({ in: CAMP, scope: "everywhere" });
+    expect(inSearch({ channelId: CAMP, scope: "here" })).toEqual({ in: CAMP });
+    expect(inSearch({ channelId: CAMP, scope: "everywhere" })).toEqual({ in: CAMP, scope: "everywhere" });
   });
 });
 

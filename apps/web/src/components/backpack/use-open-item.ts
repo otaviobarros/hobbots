@@ -6,7 +6,7 @@ import { taskTreeQuery } from "../../api/tasks.ts";
 import { questSearch } from "../quest-sheet/quest-search.ts";
 
 /**
- * Opens the Task an item is about in the sheet of the chat its work started in: the thread of
+ * Opens the Task an item is about in the sheet of the chat its work started in: the channel of
  * its tree's top Task, whose owner leads it. An item about no Task, or one the hub no longer has,
  * opens nothing, and only the last item asked for opens, however the reads arrive.
  */
@@ -24,10 +24,10 @@ export const useOpenItem = () => {
       rootId === item.taskId
         ? read?.tree.tasks[0]
         : (await queryClient.fetchQuery(taskTreeQuery(rootId)).catch(() => null))?.tree.tasks[0];
-    if (top?.threadId == null || asked !== latest.current) return;
+    if (top?.channelId == null || asked !== latest.current) return;
     void navigate({
-      to: "/hobs/$hobId/threads/$threadId",
-      params: { hobId: top.ownerId, threadId: top.threadId },
+      to: "/hobs/$hobId/channels/$channelId",
+      params: { hobId: top.ownerId, channelId: top.channelId },
       search: questSearch(item.taskId),
     });
   };

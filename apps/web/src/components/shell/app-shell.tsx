@@ -1,4 +1,4 @@
-import { AgentId, ThreadId } from "@hobbots/domain";
+import { AgentId, ChannelId } from "@hobbots/domain";
 import { Outlet, useParams, useRouterState } from "@tanstack/react-router";
 import { reasonOf, useDesktopConnection, useFollowDesktopConnection } from "../../api/connected-desktop.ts";
 import { useHobbotsEvents } from "../../api/events.ts";
@@ -16,7 +16,7 @@ import { ReconnectingCard, ReconnectingProvider } from "./reconnecting.tsx";
 import { titleStrip, windowBody, windowFrame } from "./window-classes.ts";
 
 /** A hob's chat or its fresh page, whose header holds the reconnecting card. */
-const CHAT_PATH = /^\/hobs\/[^/]+\/(chat|threads\/[^/]+)$/;
+const CHAT_PATH = /^\/hobs\/[^/]+\/(chat|channels\/[^/]+)$/;
 
 /**
  * The desktop window's title bar, which macOS draws the traffic lights over and the window drags by.
@@ -83,11 +83,11 @@ export function AppShell() {
 
 /** Archiving and its toasts for every page, aware of the hob and chat the address names. */
 function ShellArchive({ children }: { children: React.ReactNode }) {
-  const params = useParams({ strict: false }) as { hobId?: string; threadId?: string };
+  const params = useParams({ strict: false }) as { hobId?: string; channelId?: string };
   return (
     <ArchiveProvider
       hobId={params.hobId === undefined ? undefined : AgentId.make(params.hobId)}
-      threadId={params.threadId === undefined ? undefined : ThreadId.make(params.threadId)}
+      channelId={params.channelId === undefined ? undefined : ChannelId.make(params.channelId)}
     >
       <MoveOnProvider>{children}</MoveOnProvider>
     </ArchiveProvider>

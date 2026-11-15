@@ -22,8 +22,8 @@ import {
   EMPTY_HOB_POLICY,
   type Message,
   type TaskTree,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { waitFor, waitUntil } from "@hobbots/domain/testing";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
@@ -58,7 +58,7 @@ let others: ReadonlyArray<string> = [];
 
 const now = "2026-11-03T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
-const threadId = ThreadId.make("docs");
+const channelId = ChannelId.make("docs");
 /** A prompt with this line of its own waits, after its turn's baseline, until the test lets it go on. */
 export const HOLD = "fake:hold";
 
@@ -120,8 +120,8 @@ const Seed = Layer.effectDiscard(
         createdAt: now,
       }),
     );
-    yield* repo.upsertThread(
-      new Thread({ id: threadId, agentId: ALDRIC, title: "Docs", createdAt: now, updatedAt: now }),
+    yield* repo.upsertChannel(
+      new Channel({ id: channelId, agentId: ALDRIC, title: "Docs", createdAt: now, updatedAt: now }),
     );
   }),
 );
@@ -201,24 +201,24 @@ export const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.str
 /** A prompt line that makes the fake run a command, with what it writes, prints and how it exits. */
 export const fakeRun = (command: object) => `fake:run ${JSON.stringify(command)}`;
 
-/** Sends a message in the thread and waits until every reply in it has ended. */
+/** Sends a message in the channel and waits until every reply in it has ended. */
 export const say = (prompt: string) =>
   Effect.gen(function* () {
-    const before = (yield* HobbotsRepository.use((repo) => repo.listMessages(threadId))).length;
-    yield* ChatService.use((chat) => chat.sendPrompt(threadId, prompt));
+    const before = (yield* HobbotsRepository.use((repo) => repo.listMessages(channelId))).length;
+    yield* ChatService.use((chat) => chat.sendPrompt(channelId, prompt));
     return yield* waitUntil(
-      HobbotsRepository.use((repo) => repo.listMessages(threadId)),
+      HobbotsRepository.use((repo) => repo.listMessages(channelId)),
       (all: ReadonlyArray<Message>) =>
         all.every((m) => m.status !== "streaming" && m.status !== "stopping") && all.length >= before + 2,
       { what: "every reply to end" },
     );
   });
 
-/** The thread's Task tree, once it is as `ready` wants it. */
+/** The channel's Task tree, once it is as `ready` wants it. */
 export const treeWhen = (ready: (tree: TaskTree) => boolean) =>
   waitUntil(
     Effect.map(
-      TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)),
+      TaskRepository.use((tasks) => tasks.readChannelTrees(channelId)),
       ([tree]) => tree,
     ),
     (tree): tree is TaskTree => tree !== undefined && ready(tree),

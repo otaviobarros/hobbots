@@ -52,8 +52,8 @@ const openMoss = async (page: Page) => {
 };
 
 const sentTexts = async (page: Page) => {
-  const thread = page.url().match(/threads\/([^/?#]+)/)?.[1];
-  const messages = await call<ReadonlyArray<{ role: string; content: string }>>(`/api/threads/${thread}/messages`);
+  const channel = page.url().match(/channels\/([^/?#]+)/)?.[1];
+  const messages = await call<ReadonlyArray<{ role: string; content: string }>>(`/api/channels/${channel}/messages`);
   return messages.filter((m) => m.role === "user").map((m) => m.content);
 };
 
@@ -87,7 +87,7 @@ test("the composer sends plain text exactly as typed or pasted and keeps focus",
   await expect(composer).toHaveValue(`${PASTED}\nThanks`);
 
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/threads\//);
+  await expect(page).toHaveURL(/channels\//);
   await expect(composer).toHaveValue("");
   await expect(composer).toBeFocused();
   // The hub has the message exactly as typed, line breaks, tabs and indentation included.
@@ -102,7 +102,7 @@ test("the composer sends plain text exactly as typed or pasted and keeps focus",
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 15_000 });
   await expect(composer).toBeFocused();
 
-  // Up on an empty composer brings back the last message to edit; Alt+Up is thread navigation.
+  // Up on an empty composer brings back the last message to edit; Alt+Up is channel navigation.
   await page.keyboard.press("Alt+ArrowUp");
   await expect(composer).toHaveValue("");
   await page.keyboard.press("ArrowUp");

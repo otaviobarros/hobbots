@@ -29,7 +29,7 @@ import {
   type MessageId,
   type SummoningDraft,
   type TaskId,
-  type ThreadId,
+  type ChannelId,
 } from "@hobbots/domain";
 import { Context, DateTime, Deferred, Effect, Layer, Option, Semaphore } from "effect";
 import { CharmCalls } from "./charm-calls.ts";
@@ -79,7 +79,7 @@ export interface HobProposalInput {
   readonly kind: HobProposalKind;
   readonly tool: string;
   readonly call: ChangeCall;
-  readonly threadId: ThreadId | null;
+  readonly channelId: ChannelId | null;
   readonly messageId: MessageId | null;
   readonly taskId: TaskId | null;
   readonly stepId: string | null;

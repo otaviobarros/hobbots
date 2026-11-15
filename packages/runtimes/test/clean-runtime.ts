@@ -20,7 +20,7 @@ import {
   Message,
   MessageId,
   roleFields,
-  ThreadId,
+  ChannelId,
   WEB_FETCH_DESCRIPTION,
   WEB_FETCH_LABEL,
   WEB_FETCH_TOOL,
@@ -411,7 +411,7 @@ export const CONTRACT_PACK = ((): string => {
   const said = (n: number, role: "user" | "assistant", kind: "user" | "hob", id: string, content: string) =>
     new Message({
       id: MessageId.make(`m${n}`),
-      threadId: ThreadId.make("market"),
+      channelId: ChannelId.make("market"),
       actor: { kind, id },
       role,
       content,

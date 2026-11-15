@@ -7,8 +7,8 @@ import {
   DeviceId,
   Message,
   MessageId,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { ApprovalRepositoryLive, HobbotsRepositoryLive } from "@hobbots/persistence";
@@ -24,7 +24,7 @@ const TestLayer = Layer.mergeAll(HobbotsRepositoryLive, ApprovalRepositoryLive).
 const now = "2026-11-03T01:17:52.000Z";
 const later = "2026-11-03T01:18:27.000Z";
 const agentId = AgentId.make("nettle");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 const messageId = MessageId.make("m1");
 const PHONE = DeviceId.make("phone");
 
@@ -32,7 +32,7 @@ const request = (id: string) =>
   new ApprovalRequest({
     id: ApprovalId.make(id),
     agentId,
-    threadId,
+    channelId,
     messageId,
     stepId: "tool-1",
     tool: "Bash",
@@ -66,11 +66,11 @@ const seed = Effect.gen(function* () {
       createdAt: now,
     }),
   );
-  yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "t", createdAt: now, updatedAt: now }));
+  yield* repo.upsertChannel(new Channel({ id: channelId, agentId, title: "t", createdAt: now, updatedAt: now }));
   yield* repo.upsertMessage(
     new Message({
       id: messageId,
-      threadId,
+      channelId,
       role: "assistant",
       content: "",
       status: "streaming",
@@ -150,9 +150,9 @@ describe("0040_approval_deciders", () => {
     // Keeps 0047, 0049, 0051, 0053, 0062, 0067, 0068, 0076, 0079, 0080, 0082, 0083, 0084, 0095 and 0099 too: the repository that
     // seeds the hob writes its name with each version, its Charms, whether other hobs see it, its good at
     // and who made and summoned it, and its Summoning scope,
-    // seeds the thread with its pin, the draft it tries, its kind and state and its first chapter,
+    // seeds the channel with its pin, the draft it tries, its kind and state and its first chapter,
     // writes the reply with the prompt it answers, whether it is quiet, its skills and the ones it used,
-    // and reads the thread with how far you read it.
+    // and reads the channel with how far you read it.
     const kept = new Set([
       "0047_versioned_name",
       "0049_thread_pinned_at",
@@ -185,7 +185,7 @@ describe("0040_approval_deciders", () => {
       yield* sql`INSERT INTO approval_requests ${sql.insert({
         id: "a1",
         agent_id: agentId,
-        thread_id: threadId,
+        channel_id: channelId,
         message_id: messageId,
         step_id: "tool-1",
         tool: "Bash",

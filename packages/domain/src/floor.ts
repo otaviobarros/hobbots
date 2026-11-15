@@ -16,7 +16,7 @@ export interface FloorHob {
    * retires, only where one of them is open (#408). A member hob's rules come from its own record.
    */
   readonly available: boolean;
-  /** Whether the hob is the thread's own hob or one of its active members: only those speak or carry work there. */
+  /** Whether the hob is the channel's own hob or one of its active members: only those speak or carry work there. */
   readonly member: boolean;
   /** Whether you stopped a turn of the hob's that carried backpack work there: its work waits for you. */
   readonly held: boolean;
@@ -44,7 +44,7 @@ export type FloorPhase =
 /** Everything `decideFloor` reads, as the runner found it under the line's lock. */
 export interface FloorSnapshot {
   readonly phase: FloorPhase;
-  /** Whether the thread exists and takes new turns: an archived thread is read-only until restored. */
+  /** Whether the channel exists and takes new turns: an archived channel is read-only until restored. */
   readonly open: boolean;
   /**
    * Whether the hub holds what waited after a restore, until you resume work (ADR 026): only the
@@ -60,11 +60,11 @@ export interface FloorSnapshot {
   /** The message Send now picked, whose requests go first. */
   readonly chosen: TurnRequest["messageId"] | null;
   /**
-   * The hobs the floor may go to: the thread's own hob, then its members as they joined, then any
+   * The hobs the floor may go to: the channel's own hob, then its members as they joined, then any
    * other hob a request waits for. Their order is the order a carrier of work is picked in.
    */
   readonly hobs: ReadonlyArray<FloorHob>;
-  /** Whether a message of yours waits in the thread's queue: it takes the work you stopped with it. */
+  /** Whether a message of yours waits in the channel's queue: it takes the work you stopped with it. */
   readonly queued: boolean;
 }
 
@@ -127,7 +127,7 @@ const carries = (hob: FloorHob | undefined): hob is FloorHob => hob?.member === 
 
 /**
  * The floor's decision for one line (ADR 039, One hob speaks at a time; ADR 019). In one place:
- * - an archived thread admits nothing, nothing starts beside a request that speaks, and a hub
+ * - an archived channel admits nothing, nothing starts beside a request that speaks, and a hub
  *   holding what waited after a restore admits only the message you just sent, carrying nothing;
  * - the oldest waiting request goes first, Send now's pick ahead of it, skipping a hob that cannot
  *   take work now;

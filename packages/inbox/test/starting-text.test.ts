@@ -6,7 +6,7 @@ import {
   type BackpackPayload,
   Task,
   TaskId,
-  ThreadId,
+  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { startingText } from "../src/index.ts";
@@ -17,14 +17,14 @@ import { startingText } from "../src/index.ts";
 const at = "2026-11-03T00:00:00.000Z";
 const FRODO = AgentId.make("frodo");
 const PIP = AgentId.make("pip");
-const threadId = ThreadId.make("chat");
+const channelId = ChannelId.make("chat");
 
 const migrate = new Task({
   id: TaskId.make("migrate"),
   ownerId: PIP,
   parentId: TaskId.make("ship"),
   rootId: TaskId.make("ship"),
-  threadId,
+  channelId,
   brief: "Run the migration",
   state: "active",
   dependsOn: [],
@@ -46,7 +46,7 @@ const item = (kind: BackpackItemKind, payload: BackpackPayload) =>
     taskId: migrate.id,
     questId: null,
     attemptId: null,
-    threadId,
+    channelId,
     dedupeKey: kind,
     payload,
     notBefore: null,

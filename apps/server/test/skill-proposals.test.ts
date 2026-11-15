@@ -43,7 +43,7 @@ import {
   SkillProposal,
   SkillRevisionHash,
   type SkillScope,
-  type ThreadId,
+  type ChannelId,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -178,7 +178,7 @@ type AppLayer = ReturnType<typeof App>;
 let runtime: ManagedRuntime.ManagedRuntime<Layer.Success<AppLayer>, Layer.Error<AppLayer>>;
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
-let thread: ThreadId;
+let channel: ChannelId;
 let run = 0;
 
 beforeEach(async () => {
@@ -205,7 +205,7 @@ beforeEach(async () => {
       ),
     ),
   );
-  thread = (await runtime.runPromise(ChatService.use((chat) => chat.createThread(ada)))).id;
+  channel = (await runtime.runPromise(ChatService.use((chat) => chat.createChannel(ada)))).id;
   const web = HttpRouter.toWebHandler(
     ApiRoutes.pipe(
       Layer.provide(TestDevices),
@@ -250,7 +250,7 @@ const accessFor = (preset: SafetyPreset, overrides: HobPolicy["overrides"] = {})
 
 const turnFor = (access: ToolAccess, work = "reply:m1"): CharmTurn => ({
   agentId: ada,
-  threadId: thread,
+  channelId: channel,
   messageId: null,
   scope: () => work,
   also: work,
@@ -358,7 +358,7 @@ describe("hobs proposing skills", () => {
       state: "waiting",
       skillId: null,
       memoryPages: ["howto/release.md"],
-      threadId: thread,
+      channelId: channel,
     });
     expect(await journal()).toEqual(["SkillProposalRequested"]);
 

@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { CommandState, FileChangeKind } from "./activity.ts";
 import { AgentStatus, Effort, RuntimeKind } from "./agent.ts";
-import { AgentId, MessageId, ThreadId } from "./ids.ts";
+import { AgentId, MessageId, ChannelId } from "./ids.ts";
 import { MemoryAuthor, MemoryPath, MemoryScope } from "./memory.ts";
 import { MessageRole, MessageStatus, ReplyStepState, ReplyUsage } from "./message.ts";
 import { ArtifactId, ArtifactKind, QuestId, QuestionId, QuestionState, QuestState } from "./quest.ts";
@@ -17,9 +17,9 @@ import { HobWebLimits, WebFetchRecord, WebSearchRecord, WebSettings } from "./we
  * so a field that is not named here never reaches it.
  */
 
-/** What an export covers: one thread, one hob, or everything. */
+/** What an export covers: one channel, one hob, or everything. */
 export const ExportScope = Schema.Union([
-  Schema.TaggedStruct("Thread", { threadId: ThreadId }),
+  Schema.TaggedStruct("Channel", { channelId: ChannelId }),
   Schema.TaggedStruct("Hob", { agentId: AgentId }),
   Schema.TaggedStruct("Everything", {}),
 ]);
@@ -70,8 +70,8 @@ export const ExportedMessage = Schema.Struct({
 });
 export type ExportedMessage = typeof ExportedMessage.Type;
 
-export const ExportedThread = Schema.Struct({
-  id: ThreadId,
+export const ExportedChannel = Schema.Struct({
+  id: ChannelId,
   agentId: AgentId,
   title: Schema.String,
   createdAt: Schema.String,
@@ -81,7 +81,7 @@ export const ExportedThread = Schema.Struct({
   file: Schema.String,
   messages: Schema.Array(ExportedMessage),
 });
-export type ExportedThread = typeof ExportedThread.Type;
+export type ExportedChannel = typeof ExportedChannel.Type;
 
 /**
  * Why a file artifact was not copied. `gone`: it is no longer a regular file. `outside-folders`:
@@ -207,7 +207,7 @@ export type ExportedQuest = typeof ExportedQuest.Type;
 /** A Task you asked for and everything under it: a Quest once it brought in other hobs. */
 export const ExportedTree = Schema.Struct({
   rootTaskId: TaskId,
-  threadId: Schema.NullOr(ThreadId),
+  channelId: Schema.NullOr(ChannelId),
   title: Schema.String,
   /** Its Markdown file, relative to the export folder. */
   file: Schema.String,
@@ -232,7 +232,7 @@ export type ExportedMemoryPage = typeof ExportedMemoryPage.Type;
 
 /**
  * The memory an export holds: `included` with its pages, `unavailable` when memory did not answer,
- * or `none` when the export covers no memory, as one thread's does.
+ * or `none` when the export covers no memory, as one channel's does.
  */
 export const ExportedMemory = Schema.Struct({
   state: Schema.Literals(["included", "unavailable", "none"]),
@@ -259,7 +259,7 @@ export const HobbotsExport = Schema.Struct({
   hobbotsVersion: Schema.String,
   scope: ExportScope,
   hobs: Schema.Array(ExportedHob),
-  threads: Schema.Array(ExportedThread),
+  channels: Schema.Array(ExportedChannel),
   quests: Schema.Array(ExportedTree),
   memory: ExportedMemory,
   web: Schema.optionalKey(ExportedWeb),

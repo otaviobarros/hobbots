@@ -5,7 +5,7 @@ import {
   type ApprovalRequest,
   type ApprovalSurface,
   type GrantRule,
-  type ThreadId,
+  type ChannelId,
 } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
@@ -13,23 +13,23 @@ import { inboxWindow } from "./inbox-window.ts";
 import { newer, recordApproval, syncedApproval, syncedApprovals, syncedInbox } from "./sync.ts";
 import { applyTaskEvent, taskKeys } from "./tasks.ts";
 
-export const approvalsKey = (threadId: ThreadId) => ["threads", threadId, "approvals"] as const;
+export const approvalsKey = (channelId: ChannelId) => ["channels", channelId, "approvals"] as const;
 
-/** The thread's approval requests, oldest first, whatever their state (PE-003). */
-export const approvalsQuery = (threadId: ThreadId) =>
+/** The channel's approval requests, oldest first, whatever their state (PE-003). */
+export const approvalsQuery = (channelId: ChannelId) =>
   queryOptions({
-    queryKey: approvalsKey(threadId),
-    queryFn: syncedApprovals(threadId, () => call((c) => c.approvals.forThread({ params: { threadId } }))),
+    queryKey: approvalsKey(channelId),
+    queryFn: syncedApprovals(channelId, () => call((c) => c.approvals.forChannel({ params: { channelId } }))),
   });
 
 /**
- * Keeps the newer version of a request in its thread's list, adding it when it is new, and in the
+ * Keeps the newer version of a request in its channel's list, adding it when it is new, and in the
  * Task tree of the Task whose turn asked it.
  */
 export const storeApproval = (queryClient: QueryClient, approval: ApprovalRequest) => {
   recordApproval(queryClient, approval);
   if (approval.taskId !== null) applyTaskEvent(queryClient, { _tag: "ApprovalRecorded", approval });
-  queryClient.setQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(approval.threadId), (old) =>
+  queryClient.setQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(approval.channelId), (old) =>
     withApproval(old, approval),
   );
   queryClient.setQueryData<ApprovalRequest>(approvalKey(approval.id), (old) =>
@@ -42,12 +42,12 @@ export const storeApproval = (queryClient: QueryClient, approval: ApprovalReques
 };
 
 /**
- * A request moved to another thread with its quest (ADR 037, #1389): it leaves the list of the
- * thread it left, and is kept, at its newer revision, everywhere else it shows.
+ * A request moved to another channel with its quest (ADR 037, #1389): it leaves the list of the
+ * channel it left, and is kept, at its newer revision, everywhere else it shows.
  */
-export const moveApproval = (queryClient: QueryClient, fromThreadId: ThreadId, approval: ApprovalRequest) => {
+export const moveApproval = (queryClient: QueryClient, fromChannelId: ChannelId, approval: ApprovalRequest) => {
   storeApproval(queryClient, approval);
-  queryClient.setQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(fromThreadId), (old) =>
+  queryClient.setQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(fromChannelId), (old) =>
     old?.filter((each) => each.id !== approval.id),
   );
 };
@@ -65,7 +65,7 @@ export interface Decision {
 
 /**
  * Decides one request as the user saw it: the action digest shown goes with the decision, so it
- * never applies to another action. A refused decision refetches the thread's requests, since the
+ * never applies to another action. A refused decision refetches the channel's requests, since the
  * request was most likely decided elsewhere or has expired; the Inbox is refetched too. `via` names
  * where it was decided, the chat card or the Inbox, which the hub records with the device (#598).
  */
@@ -90,7 +90,7 @@ export const useDecideApproval = (approval: ApprovalRequest, via: ApprovalSurfac
     onSuccess: (decided) => storeApproval(queryClient, decided),
     onError: () =>
       Promise.all([
-        queryClient.invalidateQueries({ queryKey: approvalsKey(approval.threadId), exact: true }),
+        queryClient.invalidateQueries({ queryKey: approvalsKey(approval.channelId), exact: true }),
         queryClient.invalidateQueries({ queryKey: inboxKey, exact: true }),
         // The Task trees hold the request too (#698).
         queryClient.invalidateQueries({ queryKey: taskKeys.all }),
@@ -98,7 +98,7 @@ export const useDecideApproval = (approval: ApprovalRequest, via: ApprovalSurfac
   });
 };
 
-/** The Inbox's requests from every thread: every pending one and the most recent closed ones, oldest first. */
+/** The Inbox's requests from every channel: every pending one and the most recent closed ones, oldest first. */
 const inboxKey = ["approvals"] as const;
 
 export const inboxQuery = queryOptions({

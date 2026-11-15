@@ -288,7 +288,7 @@ describe("Heads-up clashes (#1390)", () => {
     )
     .map((fields) => fields.map((each, index) => claim({ ...each, id: `claim-${index}` })));
 
-  it("puts each clash touching the thread's claims in one group, once, and nothing else (#1390)", () => {
+  it("puts each clash touching the channel's claims in one group, once, and nothing else (#1390)", () => {
     fc.assert(
       fc.property(claims, fc.integer({ min: 0, max: 8 }), (open, cut) => {
         const ours = open.slice(0, cut);

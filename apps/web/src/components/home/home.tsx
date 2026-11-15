@@ -6,8 +6,8 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useHobPresence, useThreadReplies } from "../../api/hub-status.ts";
-import { agentsQuery, threadsQuery } from "../../api/queries.ts";
+import { useHobPresence, useChannelReplies } from "../../api/hub-status.ts";
+import { agentsQuery, channelsQuery } from "../../api/queries.ts";
 import { useQuestWork } from "../../api/quest-work.ts";
 import { HOME_VILLAGE, HOME_VILLAGE_PALETTE } from "../../art/home-village.ts";
 import { splitScene } from "../../lib/crew.ts";
@@ -31,16 +31,16 @@ import { useStageFit } from "./use-stage-fit.ts";
 export function Home() {
   const agents = useQuery(agentsQuery);
   const hobs = agents.data ?? [];
-  const threadLists = useQueries({ queries: hobs.map((hob) => threadsQuery(hob.id)) });
-  const activity = useThreadReplies();
+  const channelLists = useQueries({ queries: hobs.map((hob) => channelsQuery(hob.id)) });
+  const activity = useChannelReplies();
   const presence = useHobPresence();
   const [picked, setPicked] = useState<HobFilter>("all");
   const [stageBox, setStageBox] = useState<HTMLDivElement | null>(null);
 
   const crew = sceneOrder(
     hobs.map((hob, index) => {
-      const threads = threadLists[index]?.data ?? [];
-      return { hob, threads, state: presenceState(presence[hob.id], hob.status) };
+      const channels = channelLists[index]?.data ?? [];
+      return { hob, channels, state: presenceState(presence[hob.id], hob.status) };
     }),
   );
   const { stage } = splitScene(crew);
@@ -49,8 +49,8 @@ export function Home() {
   const hall = crew.length - fit;
   const many = hall > 0;
   const recent = crew
-    .flatMap((c) => c.threads.map((thread) => ({ hob: c.hob, thread })))
-    .sort((a, b) => b.thread.updatedAt.localeCompare(a.thread.updatedAt));
+    .flatMap((c) => c.channels.map((channel) => ({ hob: c.hob, channel })))
+    .sort((a, b) => b.channel.updatedAt.localeCompare(a.channel.updatedAt));
   const quests = questsInProgress(useQuestWork(hobs.map((hob) => hob.id)));
   const byId = new Map(hobs.map((hob) => [hob.id, hob]));
 
@@ -72,12 +72,12 @@ export function Home() {
             ref={setStageBox}
             className="flex min-w-0 flex-1 flex-wrap-reverse content-start items-start justify-end gap-3 overflow-hidden p-1 @5xl:gap-7"
           >
-            {stage.map(({ hob, state, threads }, index) => (
+            {stage.map(({ hob, state, channels }, index) => (
               <div key={hob.id} className={cn(index >= fit && "invisible")}>
                 <StageHob
                   hob={hob}
                   state={state}
-                  threads={threads}
+                  channels={channels}
                   activity={activity}
                   size={56}
                   dimmed={!inFilter(state, filter)}

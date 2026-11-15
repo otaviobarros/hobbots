@@ -36,7 +36,7 @@ Name a module after what it does. A grab-bag module or package named `utils`, `h
 
 ### STD-DUP-004 Effect Schemas are the single source of a contract
 
-Derive TypeScript types from Effect Schemas, for example `type ThreadId = typeof ThreadId.Type`. Never declare the same shape again by hand.
+Derive TypeScript types from Effect Schemas, for example `type ChannelId = typeof ChannelId.Type`. Never declare the same shape again by hand.
 
 - **Why:** a hand-written copy of a Schema type compiles after the Schema changes and lies at run time.
 - **Enforced by:** review.

@@ -1,11 +1,11 @@
-import { AgentId, CAMP_GOAL_MAX, THREAD_TITLE_MAX, ThreadId } from "@hobbots/domain";
+import { AgentId, CAMP_GOAL_MAX, CHANNEL_TITLE_MAX, ChannelId } from "@hobbots/domain";
 import { Schema } from "effect";
 
 /**
  * The key of Make a camp or Start fresh: the command's idempotency key, which becomes the new
- * thread's id, so sending the same request again changes nothing.
+ * channel's id, so sending the same request again changes nothing.
  */
-export const ThreadKey = ThreadId.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(100));
+export const ChannelKey = ChannelId.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(100));
 
 /** The most hobs a camp is made with beside the one that leads it. */
 export const CAMP_HOBS_MAX = 24;
@@ -15,8 +15,8 @@ export const CAMP_HOBS_MAX = 24;
  * are the other hobs it is made with (ADR 039, Members); the hob it is made for leads its quests.
  */
 export const MakeCampPayload = Schema.Struct({
-  key: ThreadKey,
-  title: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(THREAD_TITLE_MAX)),
+  key: ChannelKey,
+  title: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(CHANNEL_TITLE_MAX)),
   goal: Schema.NullOr(Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(CAMP_GOAL_MAX))),
   private: Schema.Boolean,
   hobs: Schema.optionalKey(Schema.Array(AgentId).check(Schema.isMaxLength(CAMP_HOBS_MAX))),

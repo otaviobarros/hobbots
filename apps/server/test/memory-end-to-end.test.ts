@@ -25,7 +25,7 @@ import {
   MemoryPath,
   type Message,
   roleFields,
-  type Thread,
+  type Channel,
 } from "@hobbots/domain";
 import { Dispatcher } from "@hobbots/inbox";
 import { MemoryProjectsLive, MemoryToolsLive } from "@hobbots/memory";
@@ -180,16 +180,16 @@ const eventually = <A>(read: () => Promise<A | undefined>) =>
     ),
   );
 
-const messages = async (thread: Thread) =>
-  (await request<ReadonlyArray<Message>>("GET", `/api/threads/${thread.id}/messages`)).body;
+const messages = async (channel: Channel) =>
+  (await request<ReadonlyArray<Message>>("GET", `/api/channels/${channel.id}/messages`)).body;
 
 /** Sends `lines` as one message and waits until its reply has ended. */
-const exchange = async (thread: Thread, ...lines: Array<string>) => {
-  const before = (await messages(thread)).length;
-  const sent = await request("POST", `/api/threads/${thread.id}/messages`, { content: lines.join("\n") });
+const exchange = async (channel: Channel, ...lines: Array<string>) => {
+  const before = (await messages(channel)).length;
+  const sent = await request("POST", `/api/channels/${channel.id}/messages`, { content: lines.join("\n") });
   expect(sent.status).toBe(200);
   return eventually(async () => {
-    const all = await messages(thread);
+    const all = await messages(channel);
     const last = all.at(-1);
     return all.length >= before + 2 && last?.role === "assistant" && !isInProgress(last.status) ? last : undefined;
   });
@@ -220,12 +220,12 @@ const lesson = {
 
 describe("hobs remember through the hub, end to end", () => {
   // covers ADR 028 (The memory tools)
-  it("a lesson a hob saves in one thread is found in its next thread, never by another hob, and Never refuses before memory", async () => {
+  it("a lesson a hob saves in one channel is found in its next channel, never by another hob, and Never refuses before memory", async () => {
     await request("PATCH", "/api/setup", { completed: true, safetyPreset: "balanced", approvedFolders: [project] });
     const pip = await summon("Pip", 955);
     const quill = await summon("Quill", 956);
 
-    const first = (await request<Thread>("POST", `/api/agents/${pip.id}/threads`)).body;
+    const first = (await request<Channel>("POST", `/api/agents/${pip.id}/channels`)).body;
     // The same call twice in one turn, as a runtime retries it: the second answers the first answer.
     const saved = await exchange(
       first,
@@ -245,12 +245,12 @@ describe("hobs remember through the hub, end to end", () => {
     );
     expect(history).toHaveLength(1);
 
-    const next = (await request<Thread>("POST", `/api/agents/${pip.id}/threads`)).body;
+    const next = (await request<Channel>("POST", `/api/agents/${pip.id}/channels`)).body;
     const found = await exchange(next, "How do the tests run?", hub("memory_search", { query: "pnpm test" }));
     expect(found.content).toContain("Tests (notes/tests.md, in your memory)");
     expect(found.steps.find((step) => step.label === MEMORY_SEARCH_LABEL)).toBeDefined();
 
-    const theirs = (await request<Thread>("POST", `/api/agents/${quill.id}/threads`)).body;
+    const theirs = (await request<Channel>("POST", `/api/agents/${quill.id}/channels`)).body;
     const nothing = await exchange(theirs, "How do the tests run?", hub("memory_search", { query: "pnpm test" }));
     expect(nothing.content).toContain('memory_search: Memory holds nothing that matches "pnpm test".');
 
@@ -275,11 +275,11 @@ describe("hobs remember through the hub, end to end", () => {
   it("the fake runtime records a memory call's step with the reply before memory is reached", async () => {
     await request("PATCH", "/api/setup", { completed: true, safetyPreset: "balanced", approvedFolders: [project] });
     const ember = await summon("Ember", 957);
-    const thread = (await request<Thread>("POST", `/api/agents/${ember.id}/threads`)).body;
+    const channel = (await request<Channel>("POST", `/api/agents/${ember.id}/channels`)).body;
     // What the reply held each time a call reached memory.
     const seen: Array<unknown> = [];
     onReach = async () => {
-      const reply = (await messages(thread)).at(-1);
+      const reply = (await messages(channel)).at(-1);
       seen.push(
         reply?.steps
           .filter((step) => step.kind === "tool")
@@ -293,7 +293,7 @@ describe("hobs remember through the hub, end to end", () => {
     };
     try {
       await exchange(
-        thread,
+        channel,
         "Remember how the tests run, then look it up",
         hub("memory_save", { ...lesson, key: "ember" }),
         hub("memory_search", { query: "pnpm test" }),

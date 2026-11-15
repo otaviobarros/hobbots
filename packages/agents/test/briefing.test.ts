@@ -1,4 +1,4 @@
-import { Message, MessageId, type ReplyStep, ThreadId } from "@hobbots/domain";
+import { Message, MessageId, type ReplyStep, ChannelId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { BRIEFING_LIMITS, buildBriefing } from "../src/briefing.ts";
 
@@ -6,7 +6,7 @@ let next = 0;
 const message = (role: "user" | "assistant", content: string, fields: Partial<Message> = {}) =>
   new Message({
     id: MessageId.make(`m${++next}`),
-    threadId: ThreadId.make("t"),
+    channelId: ChannelId.make("t"),
     role,
     content,
     status: "complete",
@@ -43,7 +43,7 @@ describe("buildBriefing", () => {
 
     expect(briefing).not.toBeNull();
     const text = briefing?.text ?? "";
-    expect(text).toMatch(/^## This thread so far\n\nYou are picking up this thread from Claude Code\./);
+    expect(text).toMatch(/^## This channel so far\n\nYou are picking up this channel from Claude Code\./);
     expect(text).toContain("### Earlier, in summary");
     // Older messages become one clipped line each, a reply's tool calls included.
     expect(text).toContain("- You, thinking with Claude Code · sonnet: “older 1 ");
@@ -56,7 +56,7 @@ describe("buildBriefing", () => {
     expect(text.endsWith("## Now")).toBe(true);
     expect(text.length).toBeLessThan(BRIEFING_LIMITS.verbatim + BRIEFING_LIMITS.summary + 2_000);
 
-    // The summary is offered as the thread's checkpoint, through the last message it covers.
+    // The summary is offered as the channel's checkpoint, through the last message it covers.
     const checkpoint = briefing?.checkpoint;
     expect(checkpoint).not.toBeNull();
     const covered = older.findIndex((m) => m.id === checkpoint?.throughMessageId);
@@ -71,7 +71,7 @@ describe("buildBriefing", () => {
     expect(again?.text).not.toContain(`older ${covered - 1} `);
     expect(again?.checkpoint).toBeNull();
 
-    // A resumed session is told what it missed, and never reuses the thread's checkpoint.
+    // A resumed session is told what it missed, and never reuses the channel's checkpoint.
     const resumed = buildBriefing({ kind: "resumed", messages: latest, checkpoint: stored });
     expect(resumed?.text).toMatch(/^## Since your last reply/);
     expect(resumed?.text).not.toContain("(from the checkpoint)");

@@ -45,7 +45,7 @@ const share = (state: MemoryShareState, pending: MemorySharePending | null, thro
     version: state === "waiting" ? null : MemoryVersion.make("v2"),
     previous: state === "waiting" ? null : MemoryVersion.make("v1"),
     replaced: state === "waiting" ? null : "Launch on Monday.",
-    threadId: null,
+    channelId: null,
     messageId: null,
     createdAt: at(0),
     updatedAt: at(0),

@@ -48,7 +48,7 @@ const bubble =
 const yourColumn = "flex max-w-bubble-max animate-hb-in flex-col items-end gap-1 self-end";
 
 /**
- * Continuing a reply that was cut off: offered on the thread's latest reply only, on its brain or,
+ * Continuing a reply that was cut off: offered on the channel's latest reply only, on its brain or,
  * through `alternatives`, on another one that is ready (ADR 017).
  */
 export type ContinueReply = {
@@ -158,8 +158,8 @@ function ReplyRow({
         <ReplySteps
           steps={steps}
           inProgress={streaming}
-          logUrl={(stepId) => toolLogUrl(message.threadId, message.id, stepId)}
-          settle={(stepId) => <SettleCharmCall threadId={message.threadId} messageId={message.id} stepId={stepId} />}
+          logUrl={(stepId) => toolLogUrl(message.channelId, message.id, stepId)}
+          settle={(stepId) => <SettleCharmCall channelId={message.channelId} messageId={message.id} stepId={stepId} />}
           proposal={(proposalId) => <HobProposalStep proposalId={proposalId} who={hob.name} />}
         />
         {children}

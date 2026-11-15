@@ -21,12 +21,12 @@ import {
   SkillName,
   StartedFresh,
   SummonCaps,
-  THREAD_TITLE_MAX,
-  Thread,
-  ThreadId,
-  ThreadMember,
-  ThreadRunStatus,
-  UnreadThreads,
+  CHANNEL_TITLE_MAX,
+  Channel,
+  ChannelId,
+  ChannelMember,
+  ChannelRunStatus,
+  UnreadChannels,
   Voice,
 } from "@hobbots/domain";
 import { Schema } from "effect";
@@ -34,7 +34,7 @@ import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchem
 import { ApprovalsGroup, GrantsGroup } from "./approvals.ts";
 import { BackpackGroup, BlockersGroup } from "./backpack.ts";
 import { BackupGroup } from "./backup.ts";
-import { MakeCampPayload, ThreadKey } from "./camp-payloads.ts";
+import { MakeCampPayload, ChannelKey } from "./camp-payloads.ts";
 import { CampSuggestionsGroup } from "./camp-suggestions.ts";
 import { ChaptersGroup } from "./chapters.ts";
 import { CharmCallsGroup } from "./charm-calls.ts";
@@ -49,11 +49,11 @@ import {
   MessageNotQueued,
   ReplyNotResumable,
   StartFreshRefused,
-  ThreadArchived,
-  ThreadArchiveRefused,
-  ThreadKeyReused,
-  ThreadNotCamp,
-  ThreadNotFound,
+  ChannelArchived,
+  ChannelArchiveRefused,
+  ChannelKeyReused,
+  ChannelNotCamp,
+  ChannelNotFound,
   ToolLogNotFound,
   TurnsAtLimit,
 } from "./errors.ts";
@@ -169,15 +169,15 @@ export const SendPromptPayload = Schema.Struct({
   skill: Schema.optionalKey(Schema.NullOr(SkillName)),
 });
 
-/** A message sent while the thread's reply runs is queued: it has no reply yet (CH-008). */
+/** A message sent while the channel's reply runs is queued: it has no reply yet (CH-008). */
 export const SendPromptResult = Schema.Struct({
   userMessage: Message,
   assistantMessage: Schema.NullOr(Message),
 });
 
 /**
- * A thread's own brain, or null to think with the hob's again (ADR 017). With `makeDefault`, the
- * brain becomes the hob's next configuration version instead, and the thread follows the hob.
+ * A channel's own brain, or null to think with the hob's again (ADR 017). With `makeDefault`, the
+ * brain becomes the hob's next configuration version instead, and the channel follows the hob.
  */
 export const SetBrainPayload = Schema.Struct({
   brain: Schema.NullOr(Brain),
@@ -186,26 +186,26 @@ export const SetBrainPayload = Schema.Struct({
 export type SetBrainPayload = typeof SetBrainPayload.Type;
 
 /** A chat's new title: trimmed, not empty, and as long as a title made from a first prompt at most. */
-export const RenameThreadPayload = Schema.Struct({
-  title: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(THREAD_TITLE_MAX)),
+export const RenameChannelPayload = Schema.Struct({
+  title: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(CHANNEL_TITLE_MAX)),
 });
 
 /** Start fresh on a hob's chat (ADR 037); `key` becomes the new chat's id. */
-export const StartFreshPayload = Schema.Struct({ key: ThreadKey });
+export const StartFreshPayload = Schema.Struct({ key: ChannelKey });
 export type StartFreshPayload = typeof StartFreshPayload.Type;
 
 /** Whether a chat is pinned to the top of its hob's chats. */
-export const PinThreadPayload = Schema.Struct({ pinned: Schema.Boolean });
+export const PinChannelPayload = Schema.Struct({ pinned: Schema.Boolean });
 
 /** Whether a camp is private (ADR 037): capture takes nothing it writes while private. */
 export const SetPrivatePayload = Schema.Struct({ private: Schema.Boolean });
 
-/** The last message you read in the thread (ADR 027). */
+/** The last message you read in the channel (ADR 027). */
 /**
- * What you read a thread through (ADR 027): the last message you saw, and the newest message
+ * What you read a channel through (ADR 027): the last message you saw, and the newest message
  * revision you saw up to it, so a reply continued after that is not counted read.
  */
-export const MarkThreadReadPayload = Schema.Struct({ messageId: MessageId, revision: Schema.Int });
+export const MarkChannelReadPayload = Schema.Struct({ messageId: MessageId, revision: Schema.Int });
 
 /**
  * What the health endpoint returns: enough for a client to tell this installation's server from
@@ -241,7 +241,7 @@ export type PublicServerIdentity = typeof PublicServerIdentity.Type;
 export const WorkingHob = Schema.Struct({
   agentId: AgentId,
   name: Schema.String,
-  threadId: ThreadId,
+  channelId: ChannelId,
 });
 
 /** What the hub is doing right now; the desktop app asks before closing would stop the work. */
@@ -250,15 +250,15 @@ export const Activity = Schema.Struct({
 });
 
 /**
- * The status the hub decides (ADR 037), for the sync snapshot: every thread whose run is not idle
- * and every live hob's presence, each with the revision of the last change of its kind, so a thread
+ * The status the hub decides (ADR 037), for the sync snapshot: every channel whose run is not idle
+ * and every live hob's presence, each with the revision of the last change of its kind, so a channel
  * or hob left out has none as of it. Revisions count from the hub's start, so on every `Ready` a
- * client drops the status it held and reads this again. It then keeps, per thread and per hob,
+ * client drops the status it held and reads this again. It then keeps, per channel and per hob,
  * whichever of this and each later `status` event has the higher revision.
  */
 export const HubStatus = Schema.Struct({
   runsRevision: Schema.Int,
-  runs: Schema.Array(ThreadRunStatus),
+  runs: Schema.Array(ChannelRunStatus),
   presenceRevision: Schema.Int,
   hobs: Schema.Array(HobPresence),
 });
@@ -305,30 +305,30 @@ export class AgentsGroup extends HttpApiGroup.make("agents")
       success: OpenWork,
       error: AgentNotFound,
     }),
-    // Brings a retired hob back, active with all its threads; refused for a paused hob.
+    // Brings a retired hob back, active with all its channels; refused for a paused hob.
     HttpApiEndpoint.post("bringBack", "/agents/:agentId/bring-back", {
       params: { agentId: AgentId },
       success: Agent,
       error: [AgentNotFound, HobUnavailable],
     }),
-    // Lists the hob's live threads; `?archived=true` lists its archived ones, newest-archived first.
-    HttpApiEndpoint.get("threads", "/agents/:agentId/threads", {
+    // Lists the hob's live channels; `?archived=true` lists its archived ones, newest-archived first.
+    HttpApiEndpoint.get("channels", "/agents/:agentId/channels", {
       params: { agentId: AgentId },
       query: { archived: Schema.optionalKey(Schema.Literals(["true", "false"])) },
-      success: Schema.Array(Thread),
+      success: Schema.Array(Channel),
       error: AgentNotFound,
     }),
-    HttpApiEndpoint.post("createThread", "/agents/:agentId/threads", {
+    HttpApiEndpoint.post("createChannel", "/agents/:agentId/channels", {
       params: { agentId: AgentId },
-      success: Thread,
+      success: Channel,
       error: [AgentNotFound, HobUnavailable],
     }),
     // Makes a camp for the hob (ADR 037); the same request sent again returns the camp it made.
     HttpApiEndpoint.post("makeCamp", "/agents/:agentId/camps", {
       params: { agentId: AgentId },
       payload: MakeCampPayload,
-      success: Thread,
-      error: [AgentNotFound, HobUnavailable, ThreadKeyReused],
+      success: Channel,
+      error: [AgentNotFound, HobUnavailable, ChannelKeyReused],
     }),
     // The hob's live hobs summoned without asking you, and the caps on them (ADR 034).
     HttpApiEndpoint.get("summonCaps", "/agents/:agentId/summon-caps", {
@@ -340,122 +340,122 @@ export class AgentsGroup extends HttpApiGroup.make("agents")
   .middleware(DeviceSession)
   .prefix("/api") {}
 
-export class ThreadsGroup extends HttpApiGroup.make("threads")
+export class ChannelsGroup extends HttpApiGroup.make("channels")
   .add(
-    HttpApiEndpoint.get("messages", "/threads/:threadId/messages", {
-      params: { threadId: ThreadId },
+    HttpApiEndpoint.get("messages", "/channels/:channelId/messages", {
+      params: { channelId: ChannelId },
       success: Schema.Array(Message),
-      error: ThreadNotFound,
+      error: ChannelNotFound,
     }),
-    HttpApiEndpoint.post("sendPrompt", "/threads/:threadId/messages", {
-      params: { threadId: ThreadId },
+    HttpApiEndpoint.post("sendPrompt", "/channels/:channelId/messages", {
+      params: { channelId: ChannelId },
       payload: SendPromptPayload,
       success: SendPromptResult,
-      error: [ThreadNotFound, HobUnavailable, ThreadArchived, MentionRefused],
+      error: [ChannelNotFound, HobUnavailable, ChannelArchived, MentionRefused],
     }),
-    HttpApiEndpoint.delete("removeQueued", "/threads/:threadId/messages/:messageId", {
-      params: { threadId: ThreadId, messageId: MessageId },
-      error: [ThreadNotFound, MessageNotQueued],
+    HttpApiEndpoint.delete("removeQueued", "/channels/:channelId/messages/:messageId", {
+      params: { channelId: ChannelId, messageId: MessageId },
+      error: [ChannelNotFound, MessageNotQueued],
     }),
     // Stops the running reply, if any, and starts this queued message next.
-    HttpApiEndpoint.post("sendNow", "/threads/:threadId/messages/:messageId/send-now", {
-      params: { threadId: ThreadId, messageId: MessageId },
-      error: [ThreadNotFound, MessageNotQueued],
+    HttpApiEndpoint.post("sendNow", "/channels/:channelId/messages/:messageId/send-now", {
+      params: { channelId: ChannelId, messageId: MessageId },
+      error: [ChannelNotFound, MessageNotQueued],
     }),
-    HttpApiEndpoint.post("interrupt", "/threads/:threadId/interrupt", {
-      params: { threadId: ThreadId },
-      error: ThreadNotFound,
+    HttpApiEndpoint.post("interrupt", "/channels/:channelId/interrupt", {
+      params: { channelId: ChannelId },
+      error: ChannelNotFound,
     }),
-    // Stop all (ADR 039): stops the turn speaking and drops every answer still owed in the thread.
-    HttpApiEndpoint.post("stopAll", "/threads/:threadId/stop-all", {
-      params: { threadId: ThreadId },
-      error: ThreadNotFound,
+    // Stop all (ADR 039): stops the turn speaking and drops every answer still owed in the channel.
+    HttpApiEndpoint.post("stopAll", "/channels/:channelId/stop-all", {
+      params: { channelId: ChannelId },
+      error: ChannelNotFound,
     }),
-    // Let them go on (ADR 039): the hobs the relay budget paused in the thread go on for its turns again.
-    HttpApiEndpoint.post("letHobsGoOn", "/threads/:threadId/go-on", {
-      params: { threadId: ThreadId },
-      error: ThreadNotFound,
+    // Let them go on (ADR 039): the hobs the relay budget paused in the channel go on for its turns again.
+    HttpApiEndpoint.post("letHobsGoOn", "/channels/:channelId/go-on", {
+      params: { channelId: ChannelId },
+      error: ChannelNotFound,
     }),
     // Stop waiting: ends a reply that only waits on commands its hob started, keeping its text (#1056).
-    HttpApiEndpoint.post("stopWaiting", "/threads/:threadId/stop-waiting", {
-      params: { threadId: ThreadId },
-      error: ThreadNotFound,
+    HttpApiEndpoint.post("stopWaiting", "/channels/:channelId/stop-waiting", {
+      params: { channelId: ChannelId },
+      error: ChannelNotFound,
     }),
     // Resumes a reply that was cut off or ended by the provider's limit, in place.
-    HttpApiEndpoint.post("continueReply", "/threads/:threadId/messages/:messageId/continue", {
-      params: { threadId: ThreadId, messageId: MessageId },
+    HttpApiEndpoint.post("continueReply", "/channels/:channelId/messages/:messageId/continue", {
+      params: { channelId: ChannelId, messageId: MessageId },
       success: Message,
-      error: [ThreadNotFound, HobUnavailable, ReplyNotResumable, ThreadArchived, TurnsAtLimit],
+      error: [ChannelNotFound, HobUnavailable, ReplyNotResumable, ChannelArchived, TurnsAtLimit],
     }),
     // The whole redacted output of a tool step that shows only its start and end, as plain text.
-    HttpApiEndpoint.get("toolLog", "/threads/:threadId/messages/:messageId/steps/:stepId/log", {
-      params: { threadId: ThreadId, messageId: MessageId, stepId: Schema.String },
+    HttpApiEndpoint.get("toolLog", "/channels/:channelId/messages/:messageId/steps/:stepId/log", {
+      params: { channelId: ChannelId, messageId: MessageId, stepId: Schema.String },
       success: Schema.String.pipe(HttpApiSchema.asText({ contentType: "text/plain; charset=utf-8" })),
       error: ToolLogNotFound,
     }),
-    // Switches the thread's brain from its next turn; a reply already running keeps its own.
-    HttpApiEndpoint.put("setBrain", "/threads/:threadId/brain", {
-      params: { threadId: ThreadId },
+    // Switches the channel's brain from its next turn; a reply already running keeps its own.
+    HttpApiEndpoint.put("setBrain", "/channels/:channelId/brain", {
+      params: { channelId: ChannelId },
       payload: SetBrainPayload,
-      success: Thread,
-      error: [ThreadNotFound, HobUnavailable, InvalidHob, AgentNotFound, ThreadArchived],
+      success: Channel,
+      error: [ChannelNotFound, HobUnavailable, InvalidHob, AgentNotFound, ChannelArchived],
     }),
     // Renaming or pinning a chat leaves its place by last activity; an archived chat refuses both.
-    HttpApiEndpoint.put("rename", "/threads/:threadId/title", {
-      params: { threadId: ThreadId },
-      payload: RenameThreadPayload,
-      success: Thread,
-      error: [ThreadNotFound, ThreadArchived],
+    HttpApiEndpoint.put("rename", "/channels/:channelId/title", {
+      params: { channelId: ChannelId },
+      payload: RenameChannelPayload,
+      success: Channel,
+      error: [ChannelNotFound, ChannelArchived],
     }),
-    HttpApiEndpoint.put("pin", "/threads/:threadId/pinned", {
-      params: { threadId: ThreadId },
-      payload: PinThreadPayload,
-      success: Thread,
-      error: [ThreadNotFound, ThreadArchived],
+    HttpApiEndpoint.put("pin", "/channels/:channelId/pinned", {
+      params: { channelId: ChannelId },
+      payload: PinChannelPayload,
+      success: Channel,
+      error: [ChannelNotFound, ChannelArchived],
     }),
     // A camp made private keeps what memory captured before; a chat has no such setting.
-    HttpApiEndpoint.put("setPrivate", "/threads/:threadId/private", {
-      params: { threadId: ThreadId },
+    HttpApiEndpoint.put("setPrivate", "/channels/:channelId/private", {
+      params: { channelId: ChannelId },
       payload: SetPrivatePayload,
-      success: Thread,
-      error: [ThreadNotFound, ThreadArchived, ThreadNotCamp],
+      success: Channel,
+      error: [ChannelNotFound, ChannelArchived, ChannelNotCamp],
     }),
-    // Moves how far you read the thread forward, for every device of yours; never back (ADR 027).
+    // Moves how far you read the channel forward, for every device of yours; never back (ADR 027).
     // Answers your member row as it is now, or null when it did not move (ADR 039).
-    HttpApiEndpoint.put("markRead", "/threads/:threadId/read", {
-      params: { threadId: ThreadId },
-      payload: MarkThreadReadPayload,
-      success: Schema.NullOr(ThreadMember),
-      error: ThreadNotFound,
+    HttpApiEndpoint.put("markRead", "/channels/:channelId/read", {
+      params: { channelId: ChannelId },
+      payload: MarkChannelReadPayload,
+      success: Schema.NullOr(ChannelMember),
+      error: ChannelNotFound,
     }),
-    // The threads where a hob wrote since you last read them, from your own read markers (ADR 039).
-    HttpApiEndpoint.get("unreadThreads", "/unread-threads", {
-      success: UnreadThreads,
+    // The channels where a hob wrote since you last read them, from your own read markers (ADR 039).
+    HttpApiEndpoint.get("unreadChannels", "/unread-channels", {
+      success: UnreadChannels,
     }),
-    // Archiving again, or restoring a live thread, returns the thread unchanged.
-    HttpApiEndpoint.post("archive", "/threads/:threadId/archive", {
-      params: { threadId: ThreadId },
-      success: Thread,
-      error: [ThreadNotFound, ThreadArchiveRefused],
+    // Archiving again, or restoring a live channel, returns the channel unchanged.
+    HttpApiEndpoint.post("archive", "/channels/:channelId/archive", {
+      params: { channelId: ChannelId },
+      success: Channel,
+      error: [ChannelNotFound, ChannelArchiveRefused],
     }),
-    HttpApiEndpoint.post("restore", "/threads/:threadId/restore", {
-      params: { threadId: ThreadId },
-      success: Thread,
-      error: [ThreadNotFound, ThreadArchiveRefused],
+    HttpApiEndpoint.post("restore", "/channels/:channelId/restore", {
+      params: { channelId: ChannelId },
+      success: Channel,
+      error: [ChannelNotFound, ChannelArchiveRefused],
     }),
     // Supersedes the hob's chat and opens a new one with what it still owed (ADR 037); the same
     // request sent again returns what it did.
-    HttpApiEndpoint.post("startFresh", "/threads/:threadId/start-fresh", {
-      params: { threadId: ThreadId },
+    HttpApiEndpoint.post("startFresh", "/channels/:channelId/start-fresh", {
+      params: { channelId: ChannelId },
       payload: StartFreshPayload,
       success: StartedFresh,
-      error: [ThreadNotFound, StartFreshRefused, ThreadKeyReused],
+      error: [ChannelNotFound, StartFreshRefused, ChannelKeyReused],
     }),
-    // What Start fresh would carry over from the thread now (ADR 037), so its sheet can list it; it changes nothing.
-    HttpApiEndpoint.get("carryOver", "/threads/:threadId/carry-over", {
-      params: { threadId: ThreadId },
+    // What Start fresh would carry over from the channel now (ADR 037), so its sheet can list it; it changes nothing.
+    HttpApiEndpoint.get("carryOver", "/channels/:channelId/carry-over", {
+      params: { channelId: ChannelId },
       success: Schema.Array(CarriedOverEntry),
-      error: ThreadNotFound,
+      error: ChannelNotFound,
     }),
   )
   .middleware(DeviceSession)
@@ -504,7 +504,7 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(DevicesGroup)
   .add(AgentsGroup)
   .add(HobChangesGroup)
-  .add(ThreadsGroup)
+  .add(ChannelsGroup)
   .add(ChaptersGroup)
   .add(RecordsGroup)
   .add(CampSuggestionsGroup)

@@ -16,7 +16,7 @@ export function InboxScopePicker({ scope, place }: { scope: InboxIn; place: stri
   const pick = (next: InboxScope) =>
     void navigate({
       to: "/inbox",
-      search: { tab: "needs", in: scope.threadId, ...(next === "everywhere" && { scope: next }) },
+      search: { tab: "needs", in: scope.channelId, ...(next === "everywhere" && { scope: next }) },
       replace: true,
     });
   return (
@@ -42,7 +42,7 @@ export function QuietHere({ scope, place }: { scope: InboxIn; place: string }) {
       </EmptyHeader>
       <EmptyContent>
         <Button asChild variant="outline">
-          <Link to="/inbox" search={{ tab: "needs", in: scope.threadId, scope: "everywhere" }}>
+          <Link to="/inbox" search={{ tab: "needs", in: scope.channelId, scope: "everywhere" }}>
             {copy.seeEverywhere}
           </Link>
         </Button>

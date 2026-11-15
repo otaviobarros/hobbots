@@ -1,6 +1,6 @@
 # Security policy
 
-Hobbots runs AI agents on your machine with access to the folders, commands and network you allow. A flaw that lets a hob act outside those boundaries is a security issue, and so is anything that exposes your threads, tokens or files. Thank you for reporting one privately.
+Hobbots runs AI agents on your machine with access to the folders, commands and network you allow. A flaw that lets a hob act outside those boundaries is a security issue, and so is anything that exposes your channels, tokens or files. Thank you for reporting one privately.
 
 ## Report a vulnerability
 

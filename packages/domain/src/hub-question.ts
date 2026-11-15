@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { DeviceId } from "./device.ts";
-import { AgentId, ThreadId } from "./ids.ts";
+import { AgentId, ChannelId } from "./ids.ts";
 import { MAX_QUESTION_OPTIONS, QuestionState, QuestionSurface } from "./quest.ts";
 import { Revision } from "./revision.ts";
 
@@ -86,20 +86,20 @@ export type HubQuestionChoice<K extends HubQuestionKind = HubQuestionKind> = (ty
 export const HubQuestionChoiceKey = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]{0,63}$/));
 
 /** The chat a hub question concerns, whose Needs-you tray shows it too. */
-export const HubQuestionChat = Schema.Struct({ agentId: AgentId, threadId: ThreadId });
+export const HubQuestionChat = Schema.Struct({ agentId: AgentId, channelId: ChannelId });
 export type HubQuestionChat = typeof HubQuestionChat.Type;
 
 /**
- * The chat a question about `task`'s work concerns: the thread whose request started its tree, which
+ * The chat a question about `task`'s work concerns: the channel whose request started its tree, which
  * belongs to the hob that owns the tree's top Task. A Quest's members and steps all point to it, so
- * a question there shows in the Quest's own chat. Null for work with no thread.
+ * a question there shows in the Quest's own chat. Null for work with no channel.
  */
 export const taskChat = (
-  task: { readonly rootId: string; readonly threadId: ThreadId | null },
+  task: { readonly rootId: string; readonly channelId: ChannelId | null },
   tasks: ReadonlyArray<{ readonly id: string; readonly ownerId: AgentId }>,
 ): HubQuestionChat | null => {
   const root = tasks.find((each) => each.id === task.rootId);
-  return task.threadId === null || root === undefined ? null : { agentId: root.ownerId, threadId: task.threadId };
+  return task.channelId === null || root === undefined ? null : { agentId: root.ownerId, channelId: task.channelId };
 };
 
 /** Tells apart the things of one kind, so the hub asks about each one once at a time. */

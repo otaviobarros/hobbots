@@ -1,4 +1,4 @@
-import { Claim, ClaimClash, TaskId, ThreadId } from "@hobbots/domain";
+import { Claim, ClaimClash, TaskId, ChannelId } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { TaskNotFound } from "./errors.ts";
@@ -12,8 +12,8 @@ import { DeviceSession } from "./user-session.ts";
  */
 export class ClaimsGroup extends HttpApiGroup.make("claims")
   .add(
-    HttpApiEndpoint.get("clashes", "/threads/:threadId/clashes", {
-      params: { threadId: ThreadId },
+    HttpApiEndpoint.get("clashes", "/channels/:channelId/clashes", {
+      params: { channelId: ChannelId },
       success: Schema.Array(ClaimClash),
     }),
   )

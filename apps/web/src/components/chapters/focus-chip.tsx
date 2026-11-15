@@ -1,5 +1,5 @@
 import type { FocusRead } from "@hobbots/api";
-import type { Agent, PackPart, Thread } from "@hobbots/domain";
+import type { Agent, PackPart, Channel } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@hobbots/ui/components/popover";
@@ -24,9 +24,9 @@ const TONE: Readonly<Record<FocusGroup, "waiting" | "done">> = {
  * and, open, what the hob reads each turn, row by row with each part's size, as the turn's
  * `PackReport` says. It reads the report each time it opens.
  */
-export function FocusChip({ hob, thread }: { hob: Agent; thread: Thread }) {
+export function FocusChip({ hob, channel }: { hob: Agent; channel: Channel }) {
   const [open, setOpen] = useState(false);
-  const chapters = useQuery(chaptersQuery(thread.id));
+  const chapters = useQuery(chaptersQuery(channel.id));
   const label = copy.label(chapterFocus(chapters.data));
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -40,7 +40,7 @@ export function FocusChip({ hob, thread }: { hob: Agent; thread: Thread }) {
       <PopoverContent aria-label={copy.heading({ name: hob.name })} className="w-[400px] max-w-[calc(100vw-32px)]">
         <div className="flex flex-col gap-2">
           <span className="font-heading text-ui text-text-strong">{copy.heading({ name: hob.name })}</span>
-          {open && <FocusReport hob={hob} thread={thread} />}
+          {open && <FocusReport hob={hob} channel={channel} />}
           <p className="m-0 text-meta text-text-secondary">{copy.footer({ name: hob.name })}</p>
           <PopoverClose asChild>
             <Button variant="quiet" size="xs" className="self-end">
@@ -54,8 +54,8 @@ export function FocusChip({ hob, thread }: { hob: Agent; thread: Thread }) {
 }
 
 /** The report's rows, read as the chip opens, with its loading and error states. */
-function FocusReport({ hob, thread }: { hob: Agent; thread: Thread }) {
-  const focus = useQuery(focusQuery(thread.id));
+function FocusReport({ hob, channel }: { hob: Agent; channel: Channel }) {
+  const focus = useQuery(focusQuery(channel.id));
   if (focus.isPending) {
     return (
       <span role="status" className="text-ui text-text-secondary">
@@ -73,14 +73,14 @@ function FocusReport({ hob, thread }: { hob: Agent; thread: Thread }) {
       </span>
     );
   }
-  return <FocusRows hob={hob} thread={thread} read={focus.data} />;
+  return <FocusRows hob={hob} channel={channel} read={focus.data} />;
 }
 
-function FocusRows({ hob, thread, read }: { hob: Agent; thread: Thread; read: FocusRead }) {
+function FocusRows({ hob, channel, read }: { hob: Agent; channel: Channel; read: FocusRead }) {
   const { report } = read;
   const used = { used: report.tokens, budget: report.budget };
   // A chat started fresh from an earlier one shows that chat as Archived: nothing reads it.
-  const rows = focusRows(report, thread.kind === "chat" && thread.origin !== null);
+  const rows = focusRows(report, channel.kind === "chat" && channel.origin !== null);
   return (
     <>
       <span className="text-meta text-label">
@@ -88,7 +88,7 @@ function FocusRows({ hob, thread, read }: { hob: Agent; thread: Thread; read: Fo
       </span>
       <ul aria-label={copy.heading({ name: hob.name })} className="m-0 flex list-none flex-col gap-2 p-0">
         {rows.map((row) => (
-          <FocusRowItem key={row.group} hob={hob} camp={thread.kind === "camp"} row={row} />
+          <FocusRowItem key={row.group} hob={hob} camp={channel.kind === "camp"} row={row} />
         ))}
       </ul>
     </>

@@ -1,4 +1,4 @@
-import type { ThreadId } from "@hobbots/domain";
+import type { ChannelId } from "@hobbots/domain";
 import { useReducer } from "react";
 import { restoreDraft, writeDraft } from "../../api/drafts.ts";
 import { useWriteNote } from "../../api/notes.ts";
@@ -18,12 +18,12 @@ export interface NoteMode {
 
 /**
  * Notes to self from the composer (ADR 037): the draft clears as the note is saved and comes back
- * if it fails. A thread not made yet takes no note.
+ * if it fails. A channel not made yet takes no note.
  */
-export const useNoteToSelf = (threadId: ThreadId | undefined, place: WaitingPlace): NoteMode | undefined => {
+export const useNoteToSelf = (channelId: ChannelId | undefined, place: WaitingPlace): NoteMode | undefined => {
   const [flow, dispatch] = useReducer(noteStep, NOTE_OFF);
-  const write = useWriteNote(threadId ?? ("" as ThreadId));
-  if (threadId === undefined) return undefined;
+  const write = useWriteNote(channelId ?? ("" as ChannelId));
+  if (channelId === undefined) return undefined;
   return {
     on: writesNote(flow),
     saving: flow.step === "saving",

@@ -1,4 +1,4 @@
-import { AgentId, DEFAULT_WEB_SETTINGS, EMPTY_HOB_POLICY, type HobPolicy, MessageId, ThreadId } from "@hobbots/domain";
+import { AgentId, DEFAULT_WEB_SETTINGS, EMPTY_HOB_POLICY, type HobPolicy, MessageId, ChannelId } from "@hobbots/domain";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import {
@@ -62,7 +62,7 @@ describe("Search the web", () => {
 
 const place = {
   agentId: AgentId.make("ada"),
-  threadId: ThreadId.make("t1"),
+  channelId: ChannelId.make("t1"),
   messageId: MessageId.make("m1"),
   runtime: "codex",
   work: "thread:t1",

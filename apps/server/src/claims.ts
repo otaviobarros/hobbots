@@ -24,7 +24,7 @@ export const ClaimsHandlers = HttpApiBuilder.group(HobbotsApi, "claims", (handle
       clashes: ({ params }) =>
         Option.match(register, {
           onNone: () => Effect.succeed([]),
-          onSome: (claims) => claims.clashesIn(params.threadId),
+          onSome: (claims) => claims.clashesIn(params.channelId),
         }),
       taskClaims: ({ params }) =>
         Option.match(register, {

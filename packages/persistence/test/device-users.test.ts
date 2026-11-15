@@ -1,5 +1,5 @@
 import { DeviceRepository, HobbotsRepository } from "@hobbots/agents";
-import { DeviceId, Message, MessageId, OWNER_USER_ID, ThreadId, WINDOW_DEVICE_ID } from "@hobbots/domain";
+import { DeviceId, Message, MessageId, OWNER_USER_ID, ChannelId, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { Effect, Exit, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
@@ -141,7 +141,7 @@ describe("devices and users", () => {
           return yield* repo.upsertMessage(
             new Message({
               id: MessageId.make("m1"),
-              threadId: ThreadId.make("t1"),
+              channelId: ChannelId.make("t1"),
               role: "user",
               content: "hello",
               status: "complete",

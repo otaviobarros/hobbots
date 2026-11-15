@@ -1,5 +1,5 @@
 import { HOB_COLORS } from "@hobbots/art/look";
-import type { Agent, Thread } from "@hobbots/domain";
+import type { Agent, Channel } from "@hobbots/domain";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
@@ -33,18 +33,18 @@ const ground =
 export function HobCard({
   hob,
   state,
-  threads,
+  channels,
   activity,
 }: {
   hob: Agent;
   state: HobState;
-  threads: ReadonlyArray<Thread>;
+  channels: ReadonlyArray<Channel>;
   activity: ActivityMap;
 }) {
-  const doing = doingOf(state, threads, activity, useNeedLine(hob.id));
-  const last = lastChat(threads);
+  const doing = doingOf(state, channels, activity, useNeedLine(hob.id));
+  const last = lastChat(channels);
   const needs = doing?.kind === "needs-you";
-  const fresh = useIsNewHob(hob.id, threads.length);
+  const fresh = useIsNewHob(hob.id, channels.length);
   return (
     <Link
       to="/hobs/$hobId"
@@ -81,7 +81,7 @@ export function HobCard({
         >
           {doing?.kind === "live" && <span aria-hidden className="mt-1.5 size-2 flex-none rounded-dot bg-mint" />}
           {needs && <span aria-hidden className="mt-1.5 size-2 flex-none rotate-45 rounded-[2px] bg-lantern" />}
-          <span className="line-clamp-2 min-w-0">{cardLine(doing, threads, fresh)}</span>
+          <span className="line-clamp-2 min-w-0">{cardLine(doing, channels, fresh)}</span>
         </span>
         <span className="flex min-w-0 items-center gap-2 border-t border-line pt-2.5 text-detail leading-[18px] text-text-secondary">
           <ChatIcon />

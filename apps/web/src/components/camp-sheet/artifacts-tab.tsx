@@ -1,4 +1,4 @@
-import { type Artifact, MessageId, type Thread, type ThreadId } from "@hobbots/domain";
+import { type Artifact, MessageId, type Channel, type ChannelId } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Dialog, DialogContent, DialogTitle } from "@hobbots/ui/components/dialog";
@@ -26,22 +26,22 @@ const madeAt = (artifact: Artifact): MessageId | null =>
  * kind with its versions, in the sheet or the full viewer, and settles its review (#1422, #1434).
  */
 export function ArtifactsTab({
-  thread,
+  channel,
   hobName,
   onJump,
 }: {
-  thread: Thread;
+  channel: Channel;
   hobName: string;
   onJump: (messageId: MessageId) => void;
 }) {
-  const artifacts = useQuery(artifactsQuery(thread.id));
+  const artifacts = useQuery(artifactsQuery(channel.id));
   const [reading, dispatch] = useReducer(readArtifacts, ARTIFACT_LIST);
   const all = artifacts.data ?? [];
   const opened = reading.step === "list" ? undefined : all.find((artifact) => artifact.id === reading.artifactId);
   if (reading.step !== "list" && opened !== undefined) {
     const panel = (
       <ArtifactPanel
-        threadId={thread.id}
+        channelId={channel.id}
         artifact={opened}
         hobName={hobName}
         picked={reading.version}
@@ -87,7 +87,7 @@ export function ArtifactsTab({
         {shown.map((artifact) => (
           <ArtifactRow
             key={artifact.id}
-            threadId={thread.id}
+            channelId={channel.id}
             artifact={artifact}
             onOpen={() => dispatch({ _tag: "Open", artifactId: artifact.id })}
           />
@@ -98,10 +98,10 @@ export function ArtifactsTab({
   );
 }
 
-function ArtifactRow({ threadId, artifact, onOpen }: { threadId: ThreadId; artifact: Artifact; onOpen: () => void }) {
+function ArtifactRow({ channelId, artifact, onOpen }: { channelId: ChannelId; artifact: Artifact; onOpen: () => void }) {
   return (
     <li className="flex items-start gap-2.5 rounded-control px-2 py-2 [content-visibility:auto] hover:bg-hover">
-      <RowMark threadId={threadId} artifact={artifact} />
+      <RowMark channelId={channelId} artifact={artifact} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="truncate text-ui font-semibold text-text-strong">{artifact.title}</span>
         <span className="truncate text-meta text-label">
@@ -111,7 +111,7 @@ function ArtifactRow({ threadId, artifact, onOpen }: { threadId: ThreadId; artif
             when: formatAgo(artifact.updatedAt),
           })}
         </span>
-        <RowPreview threadId={threadId} artifact={artifact} />
+        <RowPreview channelId={channelId} artifact={artifact} />
       </span>
       {artifact.review === "waiting" && <Badge variant="waiting">{copy.review.toReview}</Badge>}
       <Button variant="text" size="xs" aria-label={copy.openOf({ title: artifact.title })} onClick={onOpen}>

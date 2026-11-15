@@ -1,17 +1,17 @@
-import type { Agent, AgentId, TaskId, TaskTree, ThreadId } from "@hobbots/domain";
+import type { Agent, AgentId, TaskId, TaskTree, ChannelId } from "@hobbots/domain";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import { agentsQuery } from "../../api/queries.ts";
-import { taskTreeQuery, threadTasksQuery } from "../../api/tasks.ts";
+import { taskTreeQuery, channelTasksQuery } from "../../api/tasks.ts";
 import { readStored, writeStored } from "../../lib/storage.ts";
 import { messages } from "./messages.ts";
 
-/** The trees of the Tasks this thread's requests started, empty while they load. */
-export const useThreadTrees = (threadId: ThreadId | undefined) =>
+/** The trees of the Tasks this channel's requests started, empty while they load. */
+export const useChannelTrees = (channelId: ChannelId | undefined) =>
   useQuery({
-    ...threadTasksQuery(threadId ?? ("" as ThreadId)),
-    enabled: threadId !== undefined,
+    ...channelTasksQuery(channelId ?? ("" as ChannelId)),
+    enabled: channelId !== undefined,
     select: (read) => read.trees,
   }).data ?? [];
 
@@ -32,7 +32,7 @@ const PINS_KEY = "quest.pinned";
 /** The hub answered that it has no such Task, as opposed to a read that failed on the way. */
 const isTaskNotFound = (error: unknown): boolean => error instanceof ApiError && error.tag === "TaskNotFound";
 
-/** The top Tasks you pinned, kept on this device, so their Quests stay in view in every thread. */
+/** The top Tasks you pinned, kept on this device, so their Quests stay in view in every channel. */
 export interface Pins {
   readonly pinned: ReadonlyArray<TaskId>;
   readonly toggle: (taskId: TaskId) => void;
@@ -79,21 +79,21 @@ export const sortPinnedReads = (taskIds: ReadonlyArray<TaskId>, results: Readonl
 };
 
 /**
- * The trees a thread follows: the Tasks its own requests started, and the pinned ones that started
- * elsewhere, in the order they were pinned. Pins are read once the thread's own trees are known, so
+ * The trees a channel follows: the Tasks its own requests started, and the pinned ones that started
+ * elsewhere, in the order they were pinned. Pins are read once the channel's own trees are known, so
  * its own pinned tree never shows as from elsewhere. A pinned Task the hub says it no longer has is
  * listed in `missing`, so it can be unpinned; one whose read failed otherwise is in `failed`, kept
  * pinned, with a way to read it again.
  */
-export const useFollowedTrees = (threadId: ThreadId | undefined, pinned: ReadonlyArray<TaskId>) => {
+export const useFollowedTrees = (channelId: ChannelId | undefined, pinned: ReadonlyArray<TaskId>) => {
   const read = useQuery({
-    ...threadTasksQuery(threadId ?? ("" as ThreadId)),
-    enabled: threadId !== undefined,
+    ...channelTasksQuery(channelId ?? ("" as ChannelId)),
+    enabled: channelId !== undefined,
     select: (each) => each.trees,
   });
-  const thread = read.data ?? [];
-  const known = threadId === undefined || read.isSuccess;
-  const others = known ? pinned.filter((id) => !thread.some((tree) => tree.tasks[0]?.id === id)) : [];
+  const channel = read.data ?? [];
+  const known = channelId === undefined || read.isSuccess;
+  const others = known ? pinned.filter((id) => !channel.some((tree) => tree.tasks[0]?.id === id)) : [];
   const { elsewhere, missing, failed } = useQueries({
     queries: others.map((taskId) => ({
       ...taskTreeQuery(taskId),
@@ -101,5 +101,5 @@ export const useFollowedTrees = (threadId: ThreadId | undefined, pinned: Readonl
     })),
     combine: (results) => sortPinnedReads(others, results),
   });
-  return { thread, elsewhere, missing, failed };
+  return { channel, elsewhere, missing, failed };
 };

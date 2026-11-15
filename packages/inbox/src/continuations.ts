@@ -11,34 +11,34 @@ import {
   type Question,
   skillProposalText,
   type Task,
-  type ThreadId,
+  type ChannelId,
 } from "@hobbots/domain";
 import { heldUnder } from "./dispatcher.ts";
 
 /**
- * The thread whose next turn carries a backpack item (ADR 019), or null when it goes to another
+ * The channel whose next turn carries a backpack item (ADR 019), or null when it goes to another
  * session. An item goes to the session that owns the Task its recipient holds it under: for the
- * Task you asked for, that is its thread, where its owner chats with you. A Task's own item, and
+ * Task you asked for, that is its channel, where its owner chats with you. A Task's own item, and
  * anything held under a step or a member's Task, goes to the session that works that Task instead.
- * An item outside any Task goes to its thread. An item whose Task has ended still routes there, so
+ * An item outside any Task goes to its channel. An item whose Task has ended still routes there, so
  * the dispatcher can settle it as late.
  */
-export const carryingThread = (item: BackpackItem, tree: ReadonlyArray<Task>): ThreadId | null => {
-  if (item.taskId === null) return item.threadId;
+export const carryingChannel = (item: BackpackItem, tree: ReadonlyArray<Task>): ChannelId | null => {
+  if (item.taskId === null) return item.channelId;
   const held = heldUnder(item, tree);
-  return held !== undefined && held.parentId === null ? held.threadId : null;
+  return held !== undefined && held.parentId === null ? held.channelId : null;
 };
 
 /**
- * The thread whose chat a backpack item continues: its carrying thread, for an actionable item.
- * Routine progress never wakes a hob (IN-005); it rides along the thread's next turn instead.
+ * The channel whose chat a backpack item continues: its carrying channel, for an actionable item.
+ * Routine progress never wakes a hob (IN-005); it rides along the channel's next turn instead.
  */
-export const continuationThread = (item: BackpackItem, tree: ReadonlyArray<Task>): ThreadId | null =>
-  item.actionable ? carryingThread(item, tree) : null;
+export const continuationChannel = (item: BackpackItem, tree: ReadonlyArray<Task>): ChannelId | null =>
+  item.actionable ? carryingChannel(item, tree) : null;
 
 /**
  * The member's Task whose session carries a backpack item (ADR 019), or undefined when it goes to a
- * thread: an item its recipient holds under a Task another hob gave it, such as the Task itself, a
+ * channel: an item its recipient holds under a Task another hob gave it, such as the Task itself, a
  * hand-off, an answer, a result of its own steps, or progress from a member it leads in a nested
  * Quest. Items held under a step go to the step's own session, which starts from its brief.
  */

@@ -2,7 +2,7 @@ import type { Agent } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { useHobPresence } from "../../api/hub-status.ts";
-import { useKnownUnreadThreads } from "../../api/thread-reads.ts";
+import { useKnownUnreadChannels } from "../../api/channel-reads.ts";
 import { formatCount } from "../../lib/format.ts";
 import { presenceState } from "../../lib/hob-state.ts";
 import { HobTile } from "../hob-sprite/hob-sprite.tsx";
@@ -27,14 +27,14 @@ const DOT: Partial<Record<SidebarState, string>> = {
 const isOpen = (pathname: string, row: DirectRow) =>
   pathname === `/hobs/${row.hob.id}` ||
   pathname === `/hobs/${row.hob.id}/chat` ||
-  (row.chat !== undefined && pathname === `/hobs/${row.hob.id}/threads/${row.chat.id}`);
+  (row.chat !== undefined && pathname === `/hobs/${row.hob.id}/channels/${row.chat.id}`);
 
 /**
  * Direct messages (ADR 039, The sidebar): one row per hob, with its state dot, its last line and its
  * time, closed by All your hobs. A hob's row opens its chat. The + summons a hob.
  */
 export function SidebarHobs({ data, pathname, wide }: { data: SidebarData; pathname: string; wide: boolean }) {
-  const rows = directRows({ hobs: data.hobs, places: data.read?.sidebar.directMessages ?? [], threads: data.threads });
+  const rows = directRows({ hobs: data.hobs, places: data.read?.sidebar.directMessages ?? [], channels: data.channels });
   return (
     <>
       <div className={sidebarSection}>
@@ -80,7 +80,7 @@ export function SidebarHobs({ data, pathname, wide }: { data: SidebarData; pathn
 
 function DirectLink({ row, current, wide }: { row: DirectRow; current: boolean; wide: boolean }) {
   const presence = useHobPresence();
-  const known = useKnownUnreadThreads();
+  const known = useKnownUnreadChannels();
   const { hob, place, chat } = row;
   const state = sidebarState(presenceState(presence[hob.id], hob.status));
   const word = copy.state[state];

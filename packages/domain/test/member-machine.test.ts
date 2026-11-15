@@ -10,9 +10,9 @@ import {
   MemberState as MemberStates,
   planMemberAdd,
   planMemberRemove,
-  ThreadId,
-  ThreadMember,
-  ThreadMembers,
+  ChannelId,
+  ChannelMember,
+  ChannelMembers,
 } from "../src/index.ts";
 import { agreesWithModel } from "../testing/machine-model.ts";
 
@@ -22,8 +22,8 @@ import { agreesWithModel } from "../testing/machine-model.ts";
 const at = "2026-11-13T10:00:00.000Z";
 
 const member = (state: MemberState, actor: Actor = { kind: "hob", id: "aldric" }) =>
-  new ThreadMember({
-    threadId: ThreadId.make("camp"),
+  new ChannelMember({
+    channelId: ChannelId.make("camp"),
     actor,
     role: actor.kind === "user" ? "owner" : "member",
     state,
@@ -48,7 +48,7 @@ const stepModel = (state: MemberState, e: MemberEvent): MemberState | "refused" 
 };
 
 /** Everything a rule writes is the state; the rest of the member must stay as it was. */
-const view = (m: ThreadMember) => m.state;
+const view = (m: ChannelMember) => m.state;
 
 const events: fc.Arbitrary<MemberEvent> = fc.constantFrom<MemberEvent>(
   { _tag: "Leave" },
@@ -70,9 +70,9 @@ describe("MemberMachine", () => {
 
   // covers ADR 039 (Members)
   it("changes only the state, and names the member it refuses (#1453)", () => {
-    const left = ThreadMembers.transition(member("active"), { _tag: "Leave" });
-    expect(left).toEqual(new ThreadMember({ ...member("active"), state: "left" }));
-    const refused = ThreadMembers.transition(member("left"), { _tag: "Remove" });
+    const left = ChannelMembers.transition(member("active"), { _tag: "Leave" });
+    expect(left).toEqual(new ChannelMember({ ...member("active"), state: "left" }));
+    const refused = ChannelMembers.transition(member("left"), { _tag: "Remove" });
     expect(refused).toBeInstanceOf(IllegalMemberTransition);
     expect(refused).toMatchObject({ from: "left", to: "removed", actor: { kind: "hob", id: "aldric" } });
     expect(MemberMachine.table.map((row) => [row.event, row.from, row.to])).toEqual([

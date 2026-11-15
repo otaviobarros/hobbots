@@ -8,7 +8,7 @@ import {
   TaskId,
   type TaskState,
   TaskTree,
-  ThreadId,
+  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { memberReminder } from "../src/briefs.ts";
@@ -28,7 +28,7 @@ const task = (id: string, ownerId: AgentId, state: TaskState, dependsOn: string[
     ownerId,
     parentId: id === "app" ? null : TaskId.make("app"),
     rootId: TaskId.make("app"),
-    threadId: ThreadId.make("chat"),
+    channelId: ChannelId.make("chat"),
     brief: `Brief for ${id}\nMore detail`,
     state,
     dependsOn: dependsOn.map((each) => TaskId.make(each)),

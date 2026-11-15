@@ -47,7 +47,7 @@ export class Backpack extends Context.Service<
     ) => Effect.Effect<Committed<BackpackItem>, BackpackItemMissing | BackpackItemUnclaimable>;
     /** Extends the lease of a claim that still holds. */
     readonly renew: (itemId: BackpackItemId, held: HeldClaim, lease: Duration.Input) => Guarded;
-    /** Records that the item was put into a turn: `target` is its thread or session, `turnId` its message or Attempt. */
+    /** Records that the item was put into a turn: `target` is its channel or session, `turnId` its message or Attempt. */
     readonly deliver: (
       itemId: BackpackItemId,
       held: HeldClaim,

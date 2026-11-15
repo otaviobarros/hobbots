@@ -71,8 +71,8 @@ const pipAsks = async (page: Page, prompt: string, safetyPreset = "balanced") =>
   await composer.press("Enter");
   const card = page.getByRole("region", { name: "Pip asks permission" });
   await expect(card).toBeVisible();
-  const thread = page.url().match(/threads\/([^/?#]+)/)?.[1] ?? "";
-  return { current, card, thread };
+  const channel = page.url().match(/channels\/([^/?#]+)/)?.[1] ?? "";
+  return { current, card, channel };
 };
 
 test("the card shows the exact action and why, and Allow once by keyboard resumes the paused reply", {
@@ -144,8 +144,8 @@ test("Deny with a reason works by keyboard and the reply shows the reason", asyn
 });
 
 test("the card follows a decision made elsewhere, and a stopped reply's request expires", async ({ page }) => {
-  const { current, card, thread } = await pipAsksToPush(page);
-  const [pending] = await api<ReadonlyArray<Approval>>(current, "GET", `/api/threads/${thread}/approvals`);
+  const { current, card, channel } = await pipAsksToPush(page);
+  const [pending] = await api<ReadonlyArray<Approval>>(current, "GET", `/api/channels/${channel}/approvals`);
   if (pending === undefined) throw new Error("No approval request");
   // Another window approves; this page only hears about it.
   await api(current, "POST", `/api/approvals/${pending.id}/decision`, {

@@ -1,11 +1,11 @@
-import { Artifact, ChapterId, RegisteredArtifactId, ThreadId } from "@hobbots/domain";
+import { Artifact, ChapterId, RegisteredArtifactId, ChannelId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { filterArtifacts, filterInEffect, isArtifactFilter, linkOf, shownFilters } from "./artifact-rows.ts";
 
 const artifact = (id: string, kind: Artifact["kind"], locator = `/work/${id}`) =>
   new Artifact({
     id: RegisteredArtifactId.make(id),
-    threadId: ThreadId.make("camp-1"),
+    channelId: ChannelId.make("camp-1"),
     chapterId: ChapterId.make("c1"),
     kind,
     title: id,

@@ -1,4 +1,4 @@
-import type { Agent, AgentId, ThreadId } from "@hobbots/domain";
+import type { Agent, AgentId, ChannelId } from "@hobbots/domain";
 import { Effect, Semaphore } from "effect";
 import type { HobbotsRepository } from "./repository.ts";
 import type { ToolAccess } from "./runtime.ts";
@@ -11,21 +11,21 @@ import { accessNow, type HobTools, narrows } from "./tools.ts";
 export const makeTurnGrants = (repo: HobbotsRepository["Service"], hobTools: HobTools["Service"]) =>
   Effect.gen(function* () {
     const authority = yield* Semaphore.make(1);
-    const granted = new Map<ThreadId, { readonly agentId: AgentId; readonly access: ToolAccess | null }>();
+    const granted = new Map<ChannelId, { readonly agentId: AgentId; readonly access: ToolAccess | null }>();
     const currentAccess = (agentId: AgentId) => accessNow(repo, hobTools, agentId);
 
-    const grant = (threadId: ThreadId, agent: Agent) =>
+    const grant = (channelId: ChannelId, agent: Agent) =>
       Semaphore.withPermit(
         authority,
         // The turn starts here, so a question about it goes to this chat (#741).
-        accessNow(repo, hobTools, agent.id, { chat: { agentId: agent.id, threadId } }).pipe(
-          Effect.tap((access) => Effect.sync(() => granted.set(threadId, { agentId: agent.id, access }))),
+        accessNow(repo, hobTools, agent.id, { chat: { agentId: agent.id, channelId } }).pipe(
+          Effect.tap((access) => Effect.sync(() => granted.set(channelId, { agentId: agent.id, access }))),
         ),
       );
 
-    const release = (threadId: ThreadId) => Effect.sync(() => granted.delete(threadId));
+    const release = (channelId: ChannelId) => Effect.sync(() => granted.delete(channelId));
 
-    /** The threads whose turn was granted more than the hob's policy now allows. */
+    /** The channels whose turn was granted more than the hob's policy now allows. */
     const narrowed = (agentId?: AgentId) =>
       // The grants are listed once the permit is held, so a grant that was being read is listed too.
       Semaphore.withPermit(
@@ -36,7 +36,7 @@ export const makeTurnGrants = (repo: HobbotsRepository["Service"], hobTools: Hob
             ([, turn]) => Effect.map(currentAccess(turn.agentId), (access) => narrows(turn.access, access)),
           ),
         ),
-      ).pipe(Effect.map((turns) => turns.map(([threadId]) => threadId)));
+      ).pipe(Effect.map((turns) => turns.map(([channelId]) => channelId)));
 
     return { currentAccess, grant, release, narrowed } as const;
   });

@@ -18,7 +18,7 @@ import {
   QuestRead,
   QuestSummariesRead,
   TaskTreeRead,
-  ThreadTasksRead,
+  ChannelTasksRead,
 } from "@hobbots/api";
 import {
   Agent,
@@ -30,8 +30,8 @@ import {
   QuestId,
   QuestionId,
   TaskId,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
@@ -136,7 +136,7 @@ const post = async (path: string, body: unknown, device = true) => {
 const now = "2026-11-01T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 
 /** Aldric leads a Quest on the Task you asked for, with Quill drafting the copy. */
 const quest = Effect.gen(function* () {
@@ -161,15 +161,15 @@ const quest = Effect.gen(function* () {
       }),
     );
   }
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
   );
   const tasks = yield* TaskRepository;
   const task = (id: string, ownerId: AgentId, parentId: string | null, createdAt: string) => ({
     id: TaskId.make(id),
     ownerId,
     parentId: parentId === null ? null : TaskId.make(parentId),
-    threadId,
+    channelId,
     brief: id,
     dependsOn: [],
     createdAt,
@@ -239,7 +239,7 @@ describe("Task and Quest reads", () => {
   it("serves each Quest's summary as the sync snapshot, with a cursor the stream resumes from with its next change (#1373)", async () => {
     const copy = await runtime.runPromise(quest);
 
-    const response = await get(`/api/quest-summaries?threadId=${threadId}`);
+    const response = await get(`/api/quest-summaries?channelId=${channelId}`);
     expect(response.status).toBe(200);
     const read = Schema.decodeUnknownSync(QuestSummariesRead)(response.body);
     expect(read.summaries).toMatchObject([
@@ -247,7 +247,7 @@ describe("Task and Quest reads", () => {
         questId: "q1",
         taskId: "campaign",
         leadId: ALDRIC,
-        threadId,
+        channelId,
         state: "active",
         tones: { needs: 0, working: 0, waiting: 0, done: 0, problem: 0, idle: 1 },
         needsYou: 0,
@@ -258,7 +258,7 @@ describe("Task and Quest reads", () => {
     const active = Schema.decodeUnknownSync(QuestSummariesRead)((await get("/api/quest-summaries")).body);
     expect(active.summaries).toEqual(read.summaries);
     expect(
-      Schema.decodeUnknownSync(QuestSummariesRead)((await get("/api/quest-summaries?threadId=t2")).body).summaries,
+      Schema.decodeUnknownSync(QuestSummariesRead)((await get("/api/quest-summaries?channelId=t2")).body).summaries,
     ).toEqual([]);
     expect((await get("/api/quest-summaries", false)).status).toBe(401);
 
@@ -284,14 +284,14 @@ describe("Task and Quest reads", () => {
       _tag: "QuestSummaryChanged",
       summary: { questId: "q1", tones: { working: 1, idle: 0 }, revision: changed?.sequence },
     });
-    expect(changed?.correlation).toEqual({ agentId: ALDRIC, threadId, messageId: null });
+    expect(changed?.correlation).toEqual({ agentId: ALDRIC, channelId, messageId: null });
     const after = Schema.decodeUnknownSync(QuestSummariesRead)(
-      (await get(`/api/quest-summaries?threadId=${threadId}`)).body,
+      (await get(`/api/quest-summaries?channelId=${channelId}`)).body,
     );
     expect(after.summaries).toEqual(changed?.payload._tag === "QuestSummaryChanged" ? [changed.payload.summary] : []);
   });
 
-  it("reads the Tasks a thread's requests started, each with its tree, oldest first", async () => {
+  it("reads the Tasks a channel's requests started, each with its tree, oldest first", async () => {
     await runtime.runPromise(
       Effect.gen(function* () {
         yield* quest;
@@ -301,7 +301,7 @@ describe("Task and Quest reads", () => {
             id: TaskId.make("follow-up"),
             ownerId: ALDRIC,
             parentId: null,
-            threadId,
+            channelId,
             brief: "Plan the follow-up",
             dependsOn: [],
             createdAt: "2026-11-01T00:00:02.000Z",
@@ -312,16 +312,16 @@ describe("Task and Quest reads", () => {
       }),
     );
 
-    const response = await get("/api/threads/t1/tasks");
+    const response = await get("/api/channels/t1/tasks");
     expect(response.status).toBe(200);
-    const read = Schema.decodeUnknownSync(ThreadTasksRead)(response.body);
+    const read = Schema.decodeUnknownSync(ChannelTasksRead)(response.body);
     expect(read.trees.map((tree) => tree.tasks.map((task) => task.id))).toEqual([["campaign", "copy"], ["follow-up"]]);
     expect(read.trees[0]?.quests).toMatchObject([{ id: "q1", leadId: ALDRIC }]);
     expect(read.cursor).toBe(Schema.decodeUnknownSync(TaskTreeRead)((await get("/api/tasks/campaign")).body).cursor);
 
-    expect(await get("/api/threads/nope/tasks")).toEqual({
+    expect(await get("/api/channels/nope/tasks")).toEqual({
       status: 404,
-      body: { _tag: "ThreadNotFound", threadId: "nope" },
+      body: { _tag: "ChannelNotFound", channelId: "nope" },
     });
   });
 
@@ -493,8 +493,8 @@ describe("Task and Quest reads", () => {
       {
         task: { id: "copy", ownerId: QUILL, state: "queued" },
         delegation: { leadId: ALDRIC, brief: "Draft the copy" },
-        quest: { id: "q1", leadId: ALDRIC, threadId, state: "active" },
-        threadAgentId: ALDRIC,
+        quest: { id: "q1", leadId: ALDRIC, channelId, state: "active" },
+        channelAgentId: ALDRIC,
       },
     ]);
     expect(Schema.decodeUnknownSync(MemberWorkRead)((await get("/api/agents/aldric/quest-work")).body).work).toEqual(

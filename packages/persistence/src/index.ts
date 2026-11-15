@@ -41,7 +41,7 @@ export * from "./sqlite.ts";
 export * from "./supervision.ts";
 export * from "./task-tool-calls.ts";
 export * from "./tasks.ts";
-export * from "./thread-members.ts";
+export * from "./channel-members.ts";
 export * from "./usage.ts";
 export * from "./users.ts";
 export * from "./web-found-urls.ts";

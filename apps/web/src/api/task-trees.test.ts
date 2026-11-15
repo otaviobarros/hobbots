@@ -15,11 +15,11 @@ import {
   QUILL,
   quest,
   question,
-  THREAD,
+  CHANNEL,
   task,
   tree,
 } from "../test/quests.ts";
-import { applyToThreadTrees, applyToTree, type TaskEvent } from "./task-trees.ts";
+import { applyToChannelTrees, applyToTree, type TaskEvent } from "./task-trees.ts";
 
 describe("applyToTree", () => {
   it("adds a member's Task with its delegation and milestones under a Task in the tree", () => {
@@ -275,17 +275,17 @@ describe("applyToTree with notes", () => {
   });
 });
 
-describe("applyToThreadTrees", () => {
-  it("adds a tree for a top Task started in the thread, once, and nothing for another thread's", () => {
+describe("applyToChannelTrees", () => {
+  it("adds a tree for a top Task started in the channel, once, and nothing for another channel's", () => {
     const top: TaskEvent = {
       _tag: "TaskCreated",
       task: task(CAMPAIGN, { parentId: null }),
       delegation: null,
       milestones: [],
     };
-    const trees = applyToThreadTrees(THREAD, [], top);
+    const trees = applyToChannelTrees(CHANNEL, [], top);
     expect(trees.map((each) => each.tasks[0]?.id)).toEqual([CAMPAIGN]);
-    expect(applyToThreadTrees(THREAD, trees, top)).toEqual(trees);
-    expect(applyToThreadTrees("other" as typeof THREAD, [], top)).toEqual([]);
+    expect(applyToChannelTrees(CHANNEL, trees, top)).toEqual(trees);
+    expect(applyToChannelTrees("other" as typeof CHANNEL, [], top)).toEqual([]);
   });
 });

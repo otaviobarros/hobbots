@@ -8,7 +8,7 @@ import {
   QuestId,
   RuntimeHealth,
   TaskId,
-  ThreadId,
+  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
@@ -40,7 +40,7 @@ const backpackItem = (id: string, overrides: Partial<BackpackItem> = {}): Backpa
     taskId: TaskId.make("build"),
     questId: QuestId.make("q1"),
     attemptId: null,
-    threadId: ThreadId.make("t1"),
+    channelId: ChannelId.make("t1"),
     dedupeKey: id,
     payload: null as never,
     notBefore: null,

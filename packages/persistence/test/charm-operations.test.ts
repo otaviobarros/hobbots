@@ -9,8 +9,8 @@ import {
   MessageId,
   QuestId,
   TaskId,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -31,13 +31,13 @@ import { TestDatabaseAt } from "../src/testing.ts";
 const now = "2026-11-07T00:00:00.000Z";
 const agentId = AgentId.make("nettle");
 const memberId = AgentId.make("quill");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 const messageId = MessageId.make("m1");
 const project = "/work/project";
 const repository = "otaviobarros/hobbots";
 
 // Keeps 0076, 0079, 0080, 0082, 0083, 0084, 0095, 0099, 0100 to 0102, 0114, 20261114003022, 20261114004439, 20261114193617 and 20261115002636 too: the repository that seeds the hobs writes their Charms, whether
-// other hobs see them, their good at and who made and summoned them, and their Summoning scope, and seeds each thread
+// other hobs see them, their good at and who made and summoned them, and their Summoning scope, and seeds each channel
 // with the draft it tries, its kind and state and its first chapter; the journal registers artifacts
 // and weighs camp suggestions, each message its mentions and read-the-web mark, and each Task its pause.
 const before = Object.fromEntries(
@@ -84,11 +84,11 @@ const seed = Effect.gen(function* () {
       createdAt: now,
     }),
   );
-  yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "t", createdAt: now, updatedAt: now }));
+  yield* repo.upsertChannel(new Channel({ id: channelId, agentId, title: "t", createdAt: now, updatedAt: now }));
   yield* repo.upsertMessage(
     new Message({
       id: messageId,
-      threadId,
+      channelId,
       role: "assistant",
       content: "",
       status: "streaming",
@@ -122,7 +122,7 @@ const delegated = Effect.gen(function* () {
     id: TaskId.make(id),
     ownerId,
     parentId: parentId === null ? null : TaskId.make(parentId),
-    threadId,
+    channelId,
     brief: `Brief for ${id}`,
     dependsOn: [],
     createdAt: at,
@@ -170,7 +170,7 @@ const oldRows = Effect.gen(function* () {
     yield* sql`INSERT INTO approval_requests ${sql.insert({
       id,
       agent_id: agentId,
-      thread_id: threadId,
+      channel_id: channelId,
       message_id: messageId,
       step_id: `tool-${id}`,
       tool: "github_comment",
@@ -364,7 +364,7 @@ describe("0071_charm_operations", () => {
     const approval = {
       id: "a2",
       agentId: "nettle",
-      threadId: "t1",
+      channelId: "t1",
       messageId: "m1",
       stepId: "tool-a2",
       tool: "github_comment",

@@ -55,7 +55,7 @@ export const unreadUse = (text) => {
   const calls = [...text.matchAll(CALLED)].length;
   const declared = declarationsIn(text).length;
   if (calls > declared)
-    return "calls defineMachine other than as `export const XMachine = defineMachine<…>(…)`; declare the machine on its own and add helpers as separate exports, such as `export const ThreadRun = { ...ThreadRunMachine, isRunning }`";
+    return "calls defineMachine other than as `export const XMachine = defineMachine<…>(…)`; declare the machine on its own and add helpers as separate exports, such as `export const ChannelRun = { ...ChannelRunMachine, isRunning }`";
   return undefined;
 };
 

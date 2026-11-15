@@ -113,10 +113,10 @@ const hob = {
 const search = (q: string) => request("GET", `/api/search?q=${encodeURIComponent(q)}`);
 
 describe("the search API", () => {
-  it("finds a thread by a word from its messages once the reply finishes", async () => {
+  it("finds a channel by a word from its messages once the reply finishes", async () => {
     const agent = (await request("POST", "/api/agents", hob)).body;
-    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
-    await request("POST", `/api/threads/${thread.id}/messages`, { content: "Where did I put the lanterns?" });
+    const channel = (await request("POST", `/api/agents/${agent.id}/channels`)).body;
+    await request("POST", `/api/channels/${channel.id}/messages`, { content: "Where did I put the lanterns?" });
 
     // The fake runtime echoes the prompt; both the prompt and the finished reply match.
     const hits = await Effect.runPromise(
@@ -130,7 +130,7 @@ describe("the search API", () => {
     );
     expect(hits.status).toBe(200);
     const [hit] = hits.body as Array<SearchHit>;
-    expect(hit?.thread).toMatchObject({ id: thread.id, agentId: agent.id });
+    expect(hit?.channel).toMatchObject({ id: channel.id, agentId: agent.id });
     expect(hit?.matches.map((m) => m.role)).toEqual(["assistant", "user"]);
 
     expect((await search("")).body).toEqual([]);
@@ -140,43 +140,43 @@ describe("the search API", () => {
 });
 
 describe("the archive API", () => {
-  it("archives and restores over HTTP: archived threads listed apart, sends refused", async () => {
+  it("archives and restores over HTTP: archived channels listed apart, sends refused", async () => {
     const agent = (await request("POST", "/api/agents", hob)).body;
-    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+    const channel = (await request("POST", `/api/agents/${agent.id}/channels`)).body;
 
-    const archived = await request("POST", `/api/threads/${thread.id}/archive`);
+    const archived = await request("POST", `/api/channels/${channel.id}/archive`);
     expect(archived.status).toBe(200);
     expect(archived.body.archivedAt).toEqual(expect.any(String));
-    expect((await request("GET", `/api/agents/${agent.id}/threads`)).body).toEqual([]);
-    const listed = (await request("GET", `/api/agents/${agent.id}/threads?archived=true`)).body;
-    expect(listed.map((t: { id: string }) => t.id)).toEqual([thread.id]);
+    expect((await request("GET", `/api/agents/${agent.id}/channels`)).body).toEqual([]);
+    const listed = (await request("GET", `/api/agents/${agent.id}/channels?archived=true`)).body;
+    expect(listed.map((t: { id: string }) => t.id)).toEqual([channel.id]);
 
-    const sent = await request("POST", `/api/threads/${thread.id}/messages`, { content: "More" });
+    const sent = await request("POST", `/api/channels/${channel.id}/messages`, { content: "More" });
     expect(sent.status).toBe(409);
-    expect(sent.body).toMatchObject({ _tag: "ThreadArchived", threadId: thread.id });
+    expect(sent.body).toMatchObject({ _tag: "ChannelArchived", channelId: channel.id });
 
-    const restored = await request("POST", `/api/threads/${thread.id}/restore`);
+    const restored = await request("POST", `/api/channels/${channel.id}/restore`);
     expect(restored.body.archivedAt).toBeNull();
-    expect((await request("GET", `/api/agents/${agent.id}/threads`)).body).toHaveLength(1);
+    expect((await request("GET", `/api/agents/${agent.id}/channels`)).body).toHaveLength(1);
 
     await request("POST", `/api/agents/${agent.id}/retire`, { activeWork: "finish" });
-    const refused = await request("POST", `/api/threads/${thread.id}/archive`);
+    const refused = await request("POST", `/api/channels/${channel.id}/archive`);
     expect(refused.status).toBe(409);
-    expect(refused.body).toMatchObject({ _tag: "ThreadArchiveRefused", reason: "hob-retired" });
+    expect(refused.body).toMatchObject({ _tag: "ChannelArchiveRefused", reason: "hob-retired" });
   });
 
-  it("never changes the hob's default brain for a thread archived while the switch waits", async () => {
+  it("never changes the hob's default brain for a channel archived while the switch waits", async () => {
     const agent = (await request("POST", "/api/agents", hob)).body;
-    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+    const channel = (await request("POST", `/api/agents/${agent.id}/channels`)).body;
     const brain = { brain: { runtime: "claude-code", model: "fake-quick", effort: null }, makeDefault: true };
     // While the hob's lock is held, the archive queues first and the switch after it.
     const pending = await Effect.runPromise(
       admission.withHob(
         agent.id,
         Effect.promise(async () => {
-          const archived = request("POST", `/api/threads/${thread.id}/archive`);
+          const archived = request("POST", `/api/channels/${channel.id}/archive`);
           await new Promise((resolve) => setTimeout(resolve, 20));
-          const switched = request("PUT", `/api/threads/${thread.id}/brain`, brain);
+          const switched = request("PUT", `/api/channels/${channel.id}/brain`, brain);
           await new Promise((resolve) => setTimeout(resolve, 20));
           return { archived, switched };
         }),
@@ -185,7 +185,7 @@ describe("the archive API", () => {
     expect((await pending.archived).status).toBe(200);
     const switched = await pending.switched;
     expect(switched.status).toBe(409);
-    expect(switched.body).toMatchObject({ _tag: "ThreadArchived" });
+    expect(switched.body).toMatchObject({ _tag: "ChannelArchived" });
     const after = (await request("GET", "/api/agents")).body[0];
     expect([after.configVersion, after.model]).toEqual([agent.configVersion, agent.model]);
   });

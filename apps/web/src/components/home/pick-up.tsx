@@ -1,4 +1,4 @@
-import type { Agent, AgentId, QuestId, QuestSummary, Thread } from "@hobbots/domain";
+import type { Agent, AgentId, QuestId, QuestSummary, Channel } from "@hobbots/domain";
 import { Empty } from "@hobbots/ui/components/empty";
 import { Progress } from "@hobbots/ui/components/progress";
 import { Link } from "@tanstack/react-router";
@@ -28,7 +28,7 @@ export function PickUp({
   hobs,
   activity,
 }: {
-  chats: ReadonlyArray<{ readonly hob: Agent; readonly thread: Thread }>;
+  chats: ReadonlyArray<{ readonly hob: Agent; readonly channel: Channel }>;
   quests: ReadonlyArray<QuestInProgress>;
   hobs: ReadonlyMap<AgentId, Agent>;
   activity: ActivityMap;
@@ -54,7 +54,7 @@ export function PickUp({
         <ul className="m-0 flex list-none flex-col overflow-hidden rounded-card bg-card p-0">
           {rows.map((row) => (
             <li
-              key={row.kind === "thread" ? row.thread.id : row.group.quest.id}
+              key={row.kind === "channel" ? row.channel.id : row.group.quest.id}
               className="border-t border-line first:border-t-0"
             >
               <Row row={row} hobs={hobs} activity={activity} summaries={summaries} />
@@ -72,20 +72,20 @@ function Row({
   activity,
   summaries,
 }: {
-  row: PickUpRow<Agent, Thread>;
+  row: PickUpRow<Agent, Channel>;
   hobs: ReadonlyMap<AgentId, Agent>;
   activity: ActivityMap;
   summaries: ReadonlyMap<QuestId, QuestSummary>;
 }) {
-  if (row.kind === "thread") {
-    const { hob, thread } = row;
-    const now = activity[thread.id];
+  if (row.kind === "channel") {
+    const { hob, channel } = row;
+    const now = activity[channel.id];
     return (
-      <Link to="/hobs/$hobId/threads/$threadId" params={{ hobId: hob.id, threadId: thread.id }} className={rowClass}>
+      <Link to="/hobs/$hobId/channels/$channelId" params={{ hobId: hob.id, channelId: channel.id }} className={rowClass}>
         <HobTile hob={hob} tile="lg" />
-        <Body title={thread.title} who={hob.name}>
+        <Body title={channel.title} who={hob.name}>
           {now === undefined
-            ? thread.lastLine
+            ? channel.lastLine
             : now === "working"
               ? copy.writing
               : now === "waiting"
@@ -100,7 +100,7 @@ function Row({
   const lead = hobs.get(group.quest.leadId);
   const { done, total, needs } = questProgress(summaries.get(group.quest.id));
   return (
-    <QuestLink quest={group.quest} threadAgentId={group.threadAgentId} taskId={group.quest.taskId} className={rowClass}>
+    <QuestLink quest={group.quest} channelAgentId={group.channelAgentId} taskId={group.quest.taskId} className={rowClass}>
       {lead ? <HobTile hob={lead} tile="lg" /> : <span />}
       <span className="flex min-w-0 flex-col gap-0.5">
         <Body title={group.quest.goal} who={lead?.name ?? ""}>

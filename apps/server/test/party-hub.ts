@@ -37,8 +37,8 @@ import {
   type SafetyPreset,
   type Task,
   type TaskTree,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { waitUntil } from "@hobbots/domain/testing";
@@ -55,7 +55,7 @@ import {
   SupervisionRecordsLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
-  ThreadMemberRepositoryLive,
+  ChannelMemberRepositoryLive,
   UsageLedger,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -79,7 +79,7 @@ export const QUILL = AgentId.make("quill");
 export const ROOK = AgentId.make("rook");
 export const PIP = AgentId.make("pip");
 export const NETTLE = AgentId.make("nettle");
-export const threadId = ThreadId.make("first-run");
+export const channelId = ChannelId.make("first-run");
 
 const hob = (id: AgentId, name: string, runtime: RuntimeKind) =>
   new Agent({
@@ -267,8 +267,8 @@ export const partyHub = (
           hob(id, name, id === FRODO ? (options.lead ?? "claude-code") : (options.members ?? "claude-code")),
         );
       }
-      yield* repo.upsertThread(
-        new Thread({ id: threadId, agentId: FRODO, title: "First run", createdAt: now, updatedAt: now }),
+      yield* repo.upsertChannel(
+        new Channel({ id: channelId, agentId: FRODO, title: "First run", createdAt: now, updatedAt: now }),
       );
     }),
   );
@@ -344,7 +344,7 @@ export const partyHub = (
       Layer.mergeAll(
         HobbotsRepositoryLive,
         TaskRepositoryLive,
-        ThreadMemberRepositoryLive,
+        ChannelMemberRepositoryLive,
         UsageLedger.layer,
         TaskToolCallsLive,
         ApprovalRepositoryLive,
@@ -383,15 +383,15 @@ export const partyHub = (
 
 export const isLive = (state: string) => state === "starting" || state === "running";
 
-/** Sends your message to Frodo in his thread. */
+/** Sends your message to Frodo in his channel. */
 export const send = (lines: ReadonlyArray<string>) =>
-  ChatService.use((chat) => chat.sendPrompt(threadId, lines.join("\n")));
+  ChatService.use((chat) => chat.sendPrompt(channelId, lines.join("\n")));
 
 /** The request's whole tree once `ready` holds for it. */
 export const treeWhen = (ready: (tree: TaskTree) => boolean) =>
   waitUntil(
     Effect.map(
-      TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)),
+      TaskRepository.use((tasks) => tasks.readChannelTrees(channelId)),
       ([tree]) => tree,
     ),
     (tree): tree is TaskTree => tree !== undefined && ready(tree),
@@ -408,12 +408,12 @@ export const firstPending = waitUntil(
   { what: "an approval request" },
 );
 
-/** The thread's messages once `ready` holds for them, every reply ended. */
+/** The channel's messages once `ready` holds for them, every reply ended. */
 export const messagesWhen = (ready: (all: ReadonlyArray<Message>) => boolean) =>
   waitUntil(
-    HobbotsRepository.use((repo) => repo.listMessages(threadId)),
+    HobbotsRepository.use((repo) => repo.listMessages(channelId)),
     (all) => all.every((m) => m.status !== "streaming" && m.status !== "stopping") && ready(all),
-    { what: "the thread's messages" },
+    { what: "the channel's messages" },
   );
 
 /** A reply with no message of yours before it: a continuation Hobbots started. */

@@ -1,4 +1,4 @@
-import type { Agent, AgentId, Thread, ThreadId } from "@hobbots/domain";
+import type { Agent, AgentId, Channel, ChannelId } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@hobbots/ui/components/empty";
@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { agentsQuery, archivedAgentsQuery, archivedThreadsQuery, threadsQuery } from "../../api/queries.ts";
+import { agentsQuery, archivedAgentsQuery, archivedChannelsQuery, channelsQuery } from "../../api/queries.ts";
 import { useSearch } from "../../api/search.ts";
 import { ARCHIVE_CHEST, archiveChestPalette } from "../../art/icons.ts";
 import { formatCount } from "../../lib/format.ts";
@@ -48,7 +48,7 @@ export function ArchivePage({ tab, hobId }: { tab: ArchiveTab; hobId: AgentId | 
   const hobs = useQuery(agentsQuery);
   const retired = useQuery(archivedAgentsQuery);
   const archived = useQueries({
-    queries: (hobs.data ?? []).map((hob) => archivedThreadsQuery(hob.id)),
+    queries: (hobs.data ?? []).map((hob) => archivedChannelsQuery(hob.id)),
     combine: (results) => ({
       lists: results.map((result) => result.data),
       pending: results.some((result) => result.isPending),
@@ -58,7 +58,7 @@ export function ArchivePage({ tab, hobId }: { tab: ArchiveTab; hobId: AgentId | 
       },
     }),
   });
-  const byHob = new Map<AgentId, ReadonlyArray<Thread>>();
+  const byHob = new Map<AgentId, ReadonlyArray<Channel>>();
   (hobs.data ?? []).forEach((hob, index) => {
     const list = archived.lists[index];
     if (list) byHob.set(hob.id, list);
@@ -158,8 +158,8 @@ function ArchivedChats({
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const search = useSearch(query);
-  const messageHits = new Set<ThreadId>(
-    search.hits.filter((hit) => hit.thread.archivedAt !== null).map((hit) => hit.thread.id),
+  const messageHits = new Set<ChannelId>(
+    search.hits.filter((hit) => hit.channel.archivedAt !== null).map((hit) => hit.channel.id),
   );
   const scope = scopeChips(hobs, chats, hobId);
   const chosen = hobs.find((hob) => hob.id === hobId);
@@ -263,7 +263,7 @@ function ChatList({ chats, focus }: { chats: ReadonlyArray<ArchivedChat>; focus:
     <>
       <ul aria-label={copy.chats.list} className="cut m-0 flex list-none flex-col bg-card p-0">
         {shown.map((chat) => (
-          <ChatRow key={chat.thread.id} chat={chat} focus={focus} />
+          <ChatRow key={chat.channel.id} chat={chat} focus={focus} />
         ))}
       </ul>
       {!all && chats.length > SHOWN && (
@@ -275,42 +275,42 @@ function ChatList({ chats, focus }: { chats: ReadonlyArray<ArchivedChat>; focus:
   );
 }
 
-function ChatRow({ chat: { hob, thread }, focus }: { chat: ArchivedChat; focus: RestoreFocus }) {
+function ChatRow({ chat: { hob, channel }, focus }: { chat: ArchivedChat; focus: RestoreFocus }) {
   const actions = useArchiveActions();
-  const busy = actions.busy(thread);
+  const busy = actions.busy(channel);
   return (
     <li className="border-b border-line last:border-b-0">
       <div className="relative grid grid-cols-[36px_minmax(0,1fr)_auto] items-center gap-3 px-3.5 py-3 hover:bg-hover">
         <DimPortrait hob={hob} />
         <span className="flex min-w-0 flex-col gap-0.5">
           <Link
-            to="/archive/chats/$hobId/$threadId"
-            params={{ hobId: hob.id, threadId: thread.id }}
-            aria-label={copy.chats.open({ title: thread.title })}
-            title={thread.title}
+            to="/archive/chats/$hobId/$channelId"
+            params={{ hobId: hob.id, channelId: channel.id }}
+            aria-label={copy.chats.open({ title: channel.title })}
+            title={channel.title}
             className="truncate font-semibold text-text-strong no-underline after:absolute after:inset-0 hover:text-text-strong"
           >
-            {thread.title}
+            {channel.title}
           </Link>
-          {thread.lastLine && (
-            <span title={thread.lastLine} className="truncate text-ui text-text-secondary">
-              {thread.lastLine}
+          {channel.lastLine && (
+            <span title={channel.lastLine} className="truncate text-ui text-text-secondary">
+              {channel.lastLine}
             </span>
           )}
           <span className="truncate text-meta text-label">
-            {copy.chats.meta({ name: hob.name, day: formatDay(thread.archivedAt ?? thread.updatedAt) })}
+            {copy.chats.meta({ name: hob.name, day: formatDay(channel.archivedAt ?? channel.updatedAt) })}
           </span>
         </span>
         {/* Never disabled while it restores, so it keeps the focus; its label says Restoring and a press meanwhile does nothing. */}
         <Button
-          ref={focus.button(thread.id)}
+          ref={focus.button(channel.id)}
           variant="outline"
           size="sm"
           className="relative z-[1]"
           aria-disabled={busy}
-          aria-label={copy.chats.restoreLabel({ title: thread.title })}
+          aria-label={copy.chats.restoreLabel({ title: channel.title })}
           onClick={() => {
-            if (!busy) actions.restore(hob, thread, () => focus.restored(thread.id));
+            if (!busy) actions.restore(hob, channel, () => focus.restored(channel.id));
           }}
         >
           <RestoreIcon />
@@ -401,9 +401,9 @@ function RetiredHobs({ hobs }: { hobs: ReadonlyArray<Agent> }) {
 }
 
 function RetiredCard({ hob }: { hob: Agent }) {
-  const threads = useQuery(threadsQuery(hob.id));
+  const channels = useQuery(channelsQuery(hob.id));
   // What it did: the chat it worked on last, as its list puts the latest first.
-  const last = threads.data?.[0]?.title;
+  const last = channels.data?.[0]?.title;
   return (
     <li className="cut relative flex min-w-0 flex-col overflow-hidden bg-card">
       <span aria-hidden className="relative flex h-[104px] items-end justify-center" style={doorStyle}>
@@ -432,12 +432,12 @@ function RetiredCard({ hob }: { hob: Agent }) {
         {last && <span className="line-clamp-2 text-ui text-text-secondary">{copy.hobs.lastDid({ title: last })}</span>}
         <span className="flex min-w-0 flex-wrap items-end justify-between gap-x-3 gap-y-2">
           <span className="flex min-w-0 flex-col text-ui">
-            <span className="truncate">{threads.data ? copy.hobs.kept({ count: threads.data.length }) : " "}</span>
+            <span className="truncate">{channels.data ? copy.hobs.kept({ count: channels.data.length }) : " "}</span>
             <span className="truncate text-meta text-label">
               {hob.retiredAt ? copy.hobs.retired({ day: formatDay(hob.retiredAt) }) : copy.hobs.retiredUnknown}
             </span>
           </span>
-          <BringBackButton hob={hob} chats={threads.data?.length ?? 0} quiet />
+          <BringBackButton hob={hob} chats={channels.data?.length ?? 0} quiet />
         </span>
       </span>
     </li>

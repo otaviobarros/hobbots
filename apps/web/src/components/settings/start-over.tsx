@@ -4,8 +4,8 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { backupQuery, backupRunning, type StartOverStep, useStartOver } from "../../api/backup.ts";
-import { useThreadReplies } from "../../api/hub-status.ts";
-import { agentsQuery, archivedAgentsQuery, threadsQuery } from "../../api/queries.ts";
+import { useChannelReplies } from "../../api/hub-status.ts";
+import { agentsQuery, archivedAgentsQuery, channelsQuery } from "../../api/queries.ts";
 import { formatAgo, formatList } from "../../lib/format.ts";
 import { messages } from "./messages.ts";
 import { AllClear, Deleting, Failed, startFresh } from "./start-over-steps.tsx";
@@ -194,11 +194,11 @@ function List({
 /** The hobs replying right now, which stop at once. Nothing when none is. */
 function Working() {
   const hobs = useQuery(agentsQuery).data ?? [];
-  const threads = useQueries({ queries: hobs.map((hob) => threadsQuery(hob.id)) });
-  const replies = useThreadReplies();
+  const channels = useQueries({ queries: hobs.map((hob) => channelsQuery(hob.id)) });
+  const replies = useChannelReplies();
   // A paused hob may still finish a reply it started before the pause, and Start over stops it too.
   const names = hobs
-    .filter((_, index) => (threads[index]?.data ?? []).some((thread) => replies[thread.id] !== undefined))
+    .filter((_, index) => (channels[index]?.data ?? []).some((channel) => replies[channel.id] !== undefined))
     .map((hob) => hob.name);
   if (names.length === 0) return null;
   return (

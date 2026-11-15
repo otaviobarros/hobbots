@@ -76,7 +76,7 @@ function ChangeAddress({ address, onDone }: { address: string; onDone: () => voi
 
 /**
  * The reconnecting banner on a connected desktop (ADR 025): why the hub cannot be reached, in the
- * app's words, and what the user can do. The page stays, so the open thread and its unsent message
+ * app's words, and what the user can do. The page stays, so the open channel and its unsent message
  * stay too.
  */
 export function ConnectionBanner({ view, onRetry }: { view: ConnectionReason; onRetry: () => void }) {

@@ -1,12 +1,12 @@
 import { Schema } from "effect";
 import { Actor } from "./actor.ts";
-import { ThreadId } from "./ids.ts";
+import { ChannelId } from "./ids.ts";
 import { Revision } from "./revision.ts";
 
 /**
  * A chat's or camp's brief (ADR 037, Records): a short "Where we are" the hub writes itself, so it
- * costs no hob turn and keeps up while a hob is paused. One per thread, rewritten by the brief
- * projector at chapter ends and Quest steps, on the hub's brain or, under No AI, from the thread's
+ * costs no hob turn and keeps up while a hob is paused. One per channel, rewritten by the brief
+ * projector at chapter ends and Quest steps, on the hub's brain or, under No AI, from the channel's
  * decisions and artifacts. A turn's context pack carries it, and the camp sheet shows it.
  *
  * A brief has no lifecycle of its own: it is written, then written again. What a rewrite may do is
@@ -18,7 +18,7 @@ export const BriefSource = Schema.Literals(["brain", "rule"]);
 export type BriefSource = typeof BriefSource.Type;
 
 export class Brief extends Schema.Class<Brief>("Brief")({
-  threadId: ThreadId,
+  channelId: ChannelId,
   /**
    * What the brief says, already cut at its share of the context pack. Empty once nothing it said
    * holds any more, such as when the last decision of a plain brief was crossed out: the pack then
@@ -40,14 +40,14 @@ export class Brief extends Schema.Class<Brief>("Brief")({
  * rule's text, which never replaces a brief the brain wrote.
  */
 export interface BriefDraft {
-  readonly threadId: ThreadId;
+  readonly channelId: ChannelId;
   readonly text: string;
   readonly basis: number;
   readonly source: BriefSource | "fallback";
 }
 
 /**
- * What a draft does to the thread's brief:
+ * What a draft does to the channel's brief:
  * - `write` replaces it, or writes the first one;
  * - `stale` changes nothing, because the stored brief was written from as far along the journal or
  *   further, as when a round replays a page it already wrote;

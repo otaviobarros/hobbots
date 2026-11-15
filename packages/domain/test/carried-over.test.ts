@@ -10,18 +10,18 @@ import {
   type QuestionId,
   Task,
   type TaskId,
-  type ThreadId,
+  type ChannelId,
 } from "../src/index.ts";
 
 const at = "2026-11-11T00:00:00.000Z";
-const chat = "chat-1" as ThreadId;
+const chat = "chat-1" as ChannelId;
 
 const task = new Task({
   id: "task-1" as TaskId,
   ownerId: "aldric" as AgentId,
   parentId: null,
   rootId: "task-1" as TaskId,
-  threadId: chat,
+  channelId: chat,
   brief: "Draft the launch post\nwith the screenshots",
   state: "active",
   dependsOn: [],
@@ -58,7 +58,7 @@ const item = (id: string, payload: BackpackItem["payload"], taskId: TaskId | nul
     taskId,
     questId: null,
     attemptId: null,
-    threadId: chat,
+    channelId: chat,
     dedupeKey: id,
     payload,
     notBefore: null,
@@ -100,8 +100,8 @@ describe("carriedOverBriefing", () => {
   it("is null when nothing was carried, and lists each carried item otherwise", () => {
     expect(carriedOverBriefing([])).toBeNull();
     const carried = new CarriedOver({
-      fromThreadId: chat,
-      toThreadId: "chat-2" as ThreadId,
+      fromChannelId: chat,
+      toChannelId: "chat-2" as ChannelId,
       ref: { _tag: "task", taskId: task.id },
       label: "Draft the launch post",
       carriedAt: at,

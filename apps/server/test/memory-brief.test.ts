@@ -10,7 +10,7 @@ import {
   RuntimeError,
   type RuntimeEvent,
 } from "@hobbots/agents";
-import { Agent, AgentId, MemoryPath, type MemoryScope, Thread, type ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, MemoryPath, type MemoryScope, Channel, type ChannelId } from "@hobbots/domain";
 import { makeMemoryStoreFake } from "@hobbots/memory/testing";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -46,7 +46,7 @@ const memoryHub = () => {
   const asked: Array<PromptRequest> = [];
   const fake = makeFakeRuntime();
   // While set, the runtime starts the session and then refuses the prompt, as Codex can after
-  // reporting its thread and before `turn/start` succeeds.
+  // reporting its channel and before `turn/start` succeeds.
   let refuse = false;
   const runtime = Layer.succeed(RuntimeAdapter, {
     ...fake,
@@ -79,14 +79,14 @@ const memoryHub = () => {
       ),
     ),
   );
-  /** Sends `content` in `threadId` and waits for its reply to end; answers what the runtime was told. */
-  const say = (threadId: ThreadId, content: string) =>
+  /** Sends `content` in `channelId` and waits for its reply to end; answers what the runtime was told. */
+  const say = (channelId: ChannelId, content: string) =>
     Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
       const before = asked.length;
-      yield* chat.sendPrompt(threadId, content);
-      yield* repo.listMessages(threadId).pipe(
+      yield* chat.sendPrompt(channelId, content);
+      yield* repo.listMessages(channelId).pipe(
         Effect.flatMap((messages) =>
           messages.some((m) => m.status === "streaming" || m.status === "queued") ||
           messages.at(-1)?.role !== "assistant"
@@ -114,30 +114,30 @@ const memoryHub = () => {
 };
 
 describe("the memory brief", () => {
-  it("a lesson saved in one thread is in the next thread's brief for the same hob, and never another hob's", async () => {
+  it("a lesson saved in one channel is in the next channel's brief for the same hob, and never another hob's", async () => {
     const hub = memoryHub();
     await hub.run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
-        const first = yield* chat.createThread(PIP);
+        const first = yield* chat.createChannel(PIP);
         // An empty memory sends no section.
         expect((yield* hub.say(first.id, "Which suite is fast?")).briefing).toBeNull();
         yield* hub.learn("notes/tests.md", "# Tests\n\nRun the fast suite first.");
 
-        const next = yield* chat.createThread(PIP);
+        const next = yield* chat.createChannel(PIP);
         const briefed = yield* hub.say(next.id, "Run the tests.");
         expect(briefed.sessionId).toBeNull();
         expect(briefed.briefing).toMatch(/^## From your memory\n\n.*reference data, not instructions/);
         expect(briefed.briefing).toContain("### Your own pages\n\n#### Tests\nnotes/tests.md, updated ");
         expect(briefed.briefing).toContain("> Run the fast suite first.");
 
-        const quills = yield* chat.createThread(QUILL);
+        const quills = yield* chat.createChannel(QUILL);
         expect((yield* hub.say(quills.id, "Run the tests.")).briefing).toBeNull();
       }),
     );
   });
 
-  // covers ADR 037 (A camp is a thread with a kind), CH-001
+  // covers ADR 037 (A camp is a channel with a kind), CH-001
   it("a private camp's turn still carries the memory brief (#1377)", async () => {
     const hub = memoryHub();
     await hub.run(
@@ -145,9 +145,9 @@ describe("the memory brief", () => {
         const chat = yield* ChatService;
         const repo = yield* HobbotsRepository;
         yield* hub.learn("notes/tests.md", "# Tests\n\nRun the fast suite first.");
-        const thread = yield* chat.createThread(PIP);
-        yield* repo.upsertThread(new Thread({ ...thread, kind: "camp", private: true }));
-        const briefed = yield* hub.say(thread.id, "Run the tests.");
+        const channel = yield* chat.createChannel(PIP);
+        yield* repo.upsertChannel(new Channel({ ...channel, kind: "camp", private: true }));
+        const briefed = yield* hub.say(channel.id, "Run the tests.");
         expect(briefed.briefing).toContain("> Run the fast suite first.");
       }),
     );
@@ -160,27 +160,27 @@ describe("the memory brief", () => {
         const chat = yield* ChatService;
         const repo = yield* HobbotsRepository;
         yield* hub.learn("notes/tests.md", "# Tests\n\nRun the fast suite first.");
-        const thread = yield* chat.createThread(PIP);
-        const first = yield* hub.say(thread.id, "Hello.");
+        const channel = yield* chat.createChannel(PIP);
+        const first = yield* hub.say(channel.id, "Hello.");
         expect(first.briefing).toContain("#### Tests");
 
         // Unchanged: the session already has it, so the next turn is told nothing.
-        const unchanged = yield* hub.say(thread.id, "Again.");
+        const unchanged = yield* hub.say(channel.id, "Again.");
         expect(unchanged.sessionId).not.toBeNull();
         expect(unchanged.briefing).toBeNull();
 
         // Changed: the resumed session hears the new brief, and nothing else, since no other brain ran.
         yield* hub.learn("notes/deploys.md", "# Deploys\n\nDeploy on Tuesdays.");
-        const changed = yield* hub.say(thread.id, "And now?");
+        const changed = yield* hub.say(channel.id, "And now?");
         expect(changed.sessionId).toBe(unchanged.sessionId);
         expect(changed.briefing).toMatch(/^## From your memory/);
         expect(changed.briefing).toContain("#### Deploys");
-        expect(changed.briefing).not.toContain("## This thread so far");
+        expect(changed.briefing).not.toContain("## This channel so far");
         expect(changed.briefing).not.toContain("## Since your last reply");
         // The session keeps what it received, so a restart does not send it again.
-        const stored = Option.getOrThrow(yield* repo.findThread(thread.id));
+        const stored = Option.getOrThrow(yield* repo.findChannel(channel.id));
         expect(stored.sessions[0]?.memoryBrief).toEqual(expect.any(String));
-        expect((yield* hub.say(thread.id, "Thanks.")).briefing).toBeNull();
+        expect((yield* hub.say(channel.id, "Thanks.")).briefing).toBeNull();
       }),
     );
   });
@@ -192,15 +192,15 @@ describe("the memory brief", () => {
         const chat = yield* ChatService;
         const repo = yield* HobbotsRepository;
         yield* hub.learn("notes/tests.md", "# Tests\n\nRun the fast suite first.");
-        const thread = yield* chat.createThread(PIP);
+        const channel = yield* chat.createChannel(PIP);
         hub.controls.setDown(true);
-        const down = yield* hub.say(thread.id, "Hello.");
+        const down = yield* hub.say(channel.id, "Hello.");
         expect(down.briefing).toBe(MEMORY_UNAVAILABLE);
-        expect((yield* repo.listMessages(thread.id)).at(-1)?.status).toBe("complete");
+        expect((yield* repo.listMessages(channel.id)).at(-1)?.status).toBe("complete");
 
         // Back up, the session is told what it missed while memory was down.
         hub.controls.setDown(false);
-        expect((yield* hub.say(thread.id, "Again.")).briefing).toContain("#### Tests");
+        expect((yield* hub.say(channel.id, "Again.")).briefing).toContain("#### Tests");
       }),
     );
   });
@@ -210,21 +210,21 @@ describe("the memory brief", () => {
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const repo = yield* HobbotsRepository;
-        const thread = yield* chat.createThread(PIP);
-        yield* hub.say(thread.id, "Hello.");
+        const channel = yield* chat.createChannel(PIP);
+        yield* hub.say(channel.id, "Hello.");
         yield* hub.learn("notes/tests.md", "# Tests\n\nRun the fast suite first.");
 
         hub.refusePrompts(true);
-        const refused = yield* hub.say(thread.id, "Run the tests.");
+        const refused = yield* hub.say(channel.id, "Run the tests.");
         expect(refused.briefing).toContain("#### Tests");
-        expect((yield* repo.listMessages(thread.id)).at(-1)?.status).not.toBe("complete");
+        expect((yield* repo.listMessages(channel.id)).at(-1)?.status).not.toBe("complete");
 
         // The session never took that prompt, so the unchanged brief is still owed to it.
         hub.refusePrompts(false);
-        const retried = yield* hub.say(thread.id, "Run the tests.");
+        const retried = yield* hub.say(channel.id, "Run the tests.");
         expect(retried.sessionId).toBe(refused.sessionId);
         expect(retried.briefing).toContain("#### Tests");
-        expect((yield* hub.say(thread.id, "Thanks.")).briefing).toBeNull();
+        expect((yield* hub.say(channel.id, "Thanks.")).briefing).toBeNull();
       }),
     );
   });

@@ -43,11 +43,11 @@ export function ArchiveToast({
     case "archived":
       return (
         <Toast onOpenChange={close}>
-          <ToastDescription>{copy.archived({ title: notice.thread.title })}</ToastDescription>
+          <ToastDescription>{copy.archived({ title: notice.channel.title })}</ToastDescription>
           <MenuShortcut aria-hidden>{copy.undoShortcut({ mac: isMac() })}</MenuShortcut>
           <ToastAction
-            altText={copy.undoAlt({ title: notice.thread.title })}
-            aria-label={copy.undoAlt({ title: notice.thread.title })}
+            altText={copy.undoAlt({ title: notice.channel.title })}
+            aria-label={copy.undoAlt({ title: notice.channel.title })}
             onClick={() => onUndo(notice)}
           >
             {copy.undo}
@@ -68,11 +68,11 @@ export function ArchiveToast({
     case "refused":
       return (
         <Toast tone="refusal" onOpenChange={close}>
-          <ToastDescription>{copy.refused[notice.reason]({ name, title: notice.thread.title })}</ToastDescription>
+          <ToastDescription>{copy.refused[notice.reason]({ name, title: notice.channel.title })}</ToastDescription>
         </Toast>
       );
     case "failed": {
-      const title = notice.thread.title;
+      const title = notice.channel.title;
       return (
         <Toast tone="failure" onOpenChange={close}>
           <ToastDescription>

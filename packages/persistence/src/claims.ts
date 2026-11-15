@@ -18,8 +18,8 @@ import {
   type JournaledEvent,
   pickNumber,
   sinceOf,
-  type ThreadId,
-  ThreadId as ThreadIds,
+  type ChannelId,
+  ChannelId as ChannelIds,
 } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
@@ -32,7 +32,7 @@ interface TaskHolder {
   readonly id: string;
   readonly ownerId: string;
   readonly brief: string;
-  readonly threadId: string | null;
+  readonly channelId: string | null;
 }
 
 /**
@@ -121,22 +121,22 @@ export const ClaimRegisterLive = Layer.effect(
         }),
       );
 
-    /** Who holds each Task's claims, its brief and the thread of its top Task. */
+    /** Who holds each Task's claims, its brief and the channel of its top Task. */
     const holders = (taskIds: ReadonlyArray<string>) =>
       taskIds.length === 0
         ? Effect.succeed(new Map<string, TaskHolder>())
         : Effect.map(
-            sql<TaskHolder>`SELECT t.id, t.owner_id, t.brief, r.thread_id FROM tasks t
+            sql<TaskHolder>`SELECT t.id, t.owner_id, t.brief, r.channel_id FROM tasks t
               JOIN tasks r ON r.id = t.root_id WHERE ${sql.in("t.id", taskIds)}`,
             (rows) => new Map(rows.map((row) => [row.id, row])),
           );
 
-    const clashesIn = (threadId: ThreadId) =>
+    const clashesIn = (channelId: ChannelId) =>
       Effect.gen(function* () {
-        // Only a contested claim clashes; the thread's are those of Tasks whose top Task is in it.
+        // Only a contested claim clashes; the channel's are those of Tasks whose top Task is in it.
         const ours = yield* Effect.flatMap(
           sql<ClaimRow>`SELECT c.* FROM claims c JOIN tasks t ON t.id = c.task_id JOIN tasks r ON r.id = t.root_id
-            WHERE r.thread_id = ${threadId} AND c.state = 'contested' ORDER BY c.created_at, c.id`,
+            WHERE r.channel_id = ${channelId} AND c.state = 'contested' ORDER BY c.created_at, c.id`,
           claimsFromRows,
         );
         if (ours.length === 0) return [];
@@ -160,7 +160,7 @@ export const ClaimRegisterLive = Layer.effect(
                         claim,
                         ownerId: AgentId.make(task.ownerId),
                         brief: task.brief,
-                        threadId: task.threadId === null ? null : ThreadIds.make(task.threadId),
+                        channelId: task.channelId === null ? null : ChannelIds.make(task.channelId),
                       }),
                     ];
               }),
@@ -266,7 +266,7 @@ export const ClaimRegisterLive = Layer.effect(
           (rows) => rows.map((row) => ({ key: row.claimKey, gitFolder: row.gitFolder })),
         ),
       ),
-      clashesIn: (threadId) => sqlOrDie(clashesIn(threadId)),
+      clashesIn: (channelId) => sqlOrDie(clashesIn(channelId)),
       claim,
       ofTask: (taskId) =>
         sqlOrDie(

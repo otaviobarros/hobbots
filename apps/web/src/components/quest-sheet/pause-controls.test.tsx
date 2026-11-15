@@ -14,7 +14,7 @@ const top = (state: TaskState) =>
     ownerId: AgentId.make("aldric"),
     parentId: null,
     rootId: TaskId.make("top"),
-    threadId: null,
+    channelId: null,
     brief: "Launch page",
     state,
     dependsOn: [],

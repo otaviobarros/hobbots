@@ -1,6 +1,6 @@
 # Privacy
 
-Hobbots runs on your computer. Your hobs, threads, Tasks, memory and settings are kept in the hub's database and data folder there. This page says what leaves your computer when your hobs work, and where it goes.
+Hobbots runs on your computer. Your hobs, channels, Tasks, memory and settings are kept in the hub's database and data folder there. This page says what leaves your computer when your hobs work, and where it goes.
 
 ## Your hobs' runtimes
 

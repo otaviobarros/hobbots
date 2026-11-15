@@ -8,7 +8,7 @@ import {
   type RuntimeEvent,
   type ToolStartedEvent,
 } from "@hobbots/agents";
-import { Agent, AgentId, isInProgress, type Message, type ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, isInProgress, type Message, type ChannelId } from "@hobbots/domain";
 import { EventJournal, HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { Context, Deferred, Effect, Layer, Schedule, Stream } from "effect";
@@ -81,9 +81,9 @@ const firstHub = ChatService.layer.pipe(
   ),
 );
 
-const lastReply = (threadId: ThreadId, check: (reply: Message) => boolean) =>
+const lastReply = (channelId: ChannelId, check: (reply: Message) => boolean) =>
   Effect.gen(function* () {
-    const reply = (yield* (yield* HobbotsRepository).listMessages(threadId)).at(-1);
+    const reply = (yield* (yield* HobbotsRepository).listMessages(channelId)).at(-1);
     return reply?.role === "assistant" && check(reply) ? reply : yield* Effect.fail("not yet" as const);
   }).pipe(Effect.retry({ schedule: Schedule.spaced("5 millis"), times: 400 }), Effect.orDie);
 
@@ -94,16 +94,16 @@ const lastReply = (threadId: ThreadId, check: (reply: Message) => boolean) =>
 const crashMidPush = (restart: Layer.Layer<RuntimeAdapter>) =>
   Effect.gen(function* () {
     const chat = yield* ChatService;
-    const thread = yield* chat.createThread(HOB_ID);
-    yield* chat.sendPrompt(thread.id, "Push the fix");
-    const running = yield* lastReply(thread.id, (reply) => reply.steps.some((step) => step.state === "running"));
+    const channel = yield* chat.createChannel(HOB_ID);
+    yield* chat.sendPrompt(channel.id, "Push the fix");
+    const running = yield* lastReply(channel.id, (reply) => reply.steps.some((step) => step.state === "running"));
     const restarted = yield* Layer.buildWithMemoMap(
       ChatService.layer.pipe(Layer.provide(HobTools.chatOnly), Layer.provide(Layer.mergeAll(EventBus.layer, restart))),
       yield* Layer.makeMemoMap,
       yield* Effect.scope,
     );
-    const recovered = yield* lastReply(thread.id, (reply) => reply.status === "interrupted");
-    return { thread, running, recovered, chat: Context.get(restarted, ChatService) };
+    const recovered = yield* lastReply(channel.id, (reply) => reply.status === "interrupted");
+    return { channel, running, recovered, chat: Context.get(restarted, ChatService) };
   });
 
 const completes = (text: string) =>
@@ -116,14 +116,14 @@ describe("a tool call cut off by a crash", () => {
   it("is recorded before it runs, comes back uncertain after a restart, and Continue is told to check it instead of running it again", async () => {
     const result = await Effect.gen(function* () {
       const prompts: Array<string> = [];
-      const { thread, running, recovered, chat } = yield* crashMidPush(
+      const { channel, running, recovered, chat } = yield* crashMidPush(
         runtime((request) => {
           prompts.push(request.prompt);
           return completes(" I checked: the push had landed.");
         }),
       );
-      yield* chat.continueReply(thread.id, recovered.id);
-      const continued = yield* lastReply(thread.id, (reply) => !isInProgress(reply.status));
+      yield* chat.continueReply(channel.id, recovered.id);
+      const continued = yield* lastReply(channel.id, (reply) => !isInProgress(reply.status));
       return { running, recovered, continued, prompts };
     }).pipe(Effect.provide(firstHub), Effect.scoped, Effect.runPromise);
 
@@ -154,7 +154,7 @@ describe("a tool call cut off by a crash", () => {
     const briefings = await Effect.gen(function* () {
       const told: Array<string | null> = [];
       const release = yield* Deferred.make<void>();
-      const { thread, chat } = yield* crashMidPush(
+      const { channel, chat } = yield* crashMidPush(
         runtime((request) => {
           told.push(request.briefing ?? null);
           // The first follow-up runs until it is stopped; the next ones complete.
@@ -173,14 +173,14 @@ describe("a tool call cut off by a crash", () => {
           Effect.orDie,
         );
       // A new message on the same brain, and one queued behind it that starts once it is stopped.
-      yield* chat.sendPrompt(thread.id, "Did it work?");
+      yield* chat.sendPrompt(channel.id, "Did it work?");
       yield* settled(1);
-      yield* chat.sendPrompt(thread.id, "And tag the release");
-      yield* chat.stop(thread.id);
+      yield* chat.sendPrompt(channel.id, "And tag the release");
+      yield* chat.stop(channel.id);
       yield* settled(2);
-      yield* lastReply(thread.id, (reply) => reply.status === "complete");
+      yield* lastReply(channel.id, (reply) => reply.status === "complete");
       // A reply that completes may not have checked it, so the next turn is told again.
-      yield* chat.sendPrompt(thread.id, "Thanks");
+      yield* chat.sendPrompt(channel.id, "Thanks");
       yield* settled(3);
       return told;
     }).pipe(Effect.provide(firstHub), Effect.scoped, Effect.runPromise);

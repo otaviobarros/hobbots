@@ -40,7 +40,7 @@ export const ChapterSummaryLogLive = Layer.effect(
           const events: Array<JournaledEvent> = [];
           for (const write of summaries) {
             const chapter = yield* summarized(write, first + events.length);
-            if (chapter !== null) events.push({ _tag: "ChapterSummarized", threadId: chapter.threadId, chapter });
+            if (chapter !== null) events.push({ _tag: "ChapterSummarized", channelId: chapter.channelId, chapter });
           }
           yield* moveProjectorCursor(sql, PROJECTOR, sequence);
           return { value: undefined, events };

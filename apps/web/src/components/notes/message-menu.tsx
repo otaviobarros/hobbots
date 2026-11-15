@@ -1,4 +1,4 @@
-import type { MessageId, ThreadId } from "@hobbots/domain";
+import type { MessageId, ChannelId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@hobbots/ui/components/menu";
 import { useQuery } from "@tanstack/react-query";
@@ -20,17 +20,17 @@ const pinSaid = (pin: unknown): string => (pin === null ? messages.unpinnedToast
  * message can start a chapter. A pinned message shows its ◆ beside the menu.
  */
 export function MessageMenu({
-  threadId,
+  channelId,
   messageId,
   onSplit,
 }: {
-  threadId: ThreadId;
+  channelId: ChannelId;
   messageId: MessageId;
   /** Left out where the message cannot start a chapter, such as a chapter's first. */
   onSplit?: (() => void) | undefined;
 }) {
-  const pins = useQuery(pinsQuery(threadId));
-  const setPinned = useSetPinned(threadId);
+  const pins = useQuery(pinsQuery(channelId));
+  const setPinned = useSetPinned(channelId);
   const pinned = pins.data?.some((pin) => pin.messageId === messageId) ?? false;
   const ofThis = setPinned.variables?.messageId === messageId;
   const pending = setPinned.isPending && ofThis;

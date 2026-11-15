@@ -1,4 +1,4 @@
-import type { AgentId, HobWebLimits, ThreadId, WebSettings, WebUsageSummary } from "@hobbots/domain";
+import type { AgentId, HobWebLimits, ChannelId, WebSettings, WebUsageSummary } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 
@@ -10,7 +10,7 @@ import { call } from "./client.ts";
 const webKey = ["web"] as const;
 
 const webKeys = {
-  thread: (threadId: ThreadId) => [...webKey, "thread", threadId] as const,
+  channel: (channelId: ChannelId) => [...webKey, "channel", channelId] as const,
   settings: [...webKey, "settings"] as const,
   hobLimits: (agentId: AgentId) => [...webKey, "hob-limits", agentId] as const,
   summary: (since: string) => [...webKey, "summary", since] as const,
@@ -18,13 +18,13 @@ const webKeys = {
 };
 
 /** The most records a chat's read lists; a chat that read more shows its newest. */
-const THREAD_RECORDS = 200;
+const CHANNEL_RECORDS = 200;
 
 /** What a chat's replies searched and read, newest first. The stream reads it again as each is recorded. */
-export const threadWebQuery = (threadId: ThreadId) =>
+export const channelWebQuery = (channelId: ChannelId) =>
   queryOptions({
-    queryKey: webKeys.thread(threadId),
-    queryFn: () => call((c) => c.web.usage({ query: { threadId, limit: THREAD_RECORDS } })),
+    queryKey: webKeys.channel(channelId),
+    queryFn: () => call((c) => c.web.usage({ query: { channelId, limit: CHANNEL_RECORDS } })),
   });
 
 /** Settings › Web: the limits every hob has and the sites hobs never read. */

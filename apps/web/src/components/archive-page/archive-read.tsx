@@ -1,4 +1,4 @@
-import type { Agent, AgentId, Thread, ThreadId } from "@hobbots/domain";
+import type { Agent, AgentId, Channel, ChannelId } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
@@ -8,9 +8,9 @@ import type { ReactNode } from "react";
 import {
   agentsQuery,
   archivedAgentsQuery,
-  archivedThreadsQuery,
+  archivedChannelsQuery,
   messagesQuery,
-  threadsQuery,
+  channelsQuery,
 } from "../../api/queries.ts";
 import { formatDay, formatWhen } from "../../lib/time.ts";
 import { MessageRow, useScrollToMessage } from "../chat/message-row.tsx";
@@ -41,28 +41,28 @@ const retiredCrumb: Crumb = { label: copy.tabs.hobs, to: "/archive", search: { t
  */
 export function ArchivedChatPage({
   hobId,
-  threadId,
+  channelId,
   focusMessageId,
 }: {
   hobId: AgentId;
-  threadId: ThreadId;
+  channelId: ChannelId;
   /** A search match to open the transcript on, in view and marked. */
   focusMessageId?: string | undefined;
 }) {
   const navigate = useNavigate();
   const actions = useArchiveActions();
   const hob = useQuery({ ...agentsQuery, select: (hobs) => hobs.find((h) => h.id === hobId) });
-  const archived = useQuery({ ...archivedThreadsQuery(hobId), select: (list) => list.find((t) => t.id === threadId) });
-  const live = useQuery({ ...threadsQuery(hobId), select: (list) => list.some((t) => t.id === threadId) });
-  const thread = archived.data;
+  const archived = useQuery({ ...archivedChannelsQuery(hobId), select: (list) => list.find((t) => t.id === channelId) });
+  const live = useQuery({ ...channelsQuery(hobId), select: (list) => list.some((t) => t.id === channelId) });
+  const channel = archived.data;
 
   if (hob.isError || archived.isError) return <Problem crumb={archiveCrumb} text={copy.read.loadFailed} />;
   if (hob.isPending || archived.isPending) return <Problem crumb={archiveCrumb} text={copy.read.loading} pending />;
-  if (!hob.data || !thread) {
+  if (!hob.data || !channel) {
     return (
       <Problem crumb={archiveCrumb} text={live.data ? copy.read.notArchived : copy.read.missing}>
         {hob.data && live.data ? (
-          <Link to="/hobs/$hobId/threads/$threadId" params={{ hobId, threadId }} className="text-link underline">
+          <Link to="/hobs/$hobId/channels/$channelId" params={{ hobId, channelId }} className="text-link underline">
             {copy.read.openIt}
           </Link>
         ) : (
@@ -74,21 +74,21 @@ export function ArchivedChatPage({
     );
   }
   const current = hob.data;
-  const day = formatDay(thread.archivedAt ?? thread.updatedAt);
-  const busy = actions.busy(thread);
+  const day = formatDay(channel.archivedAt ?? channel.updatedAt);
+  const busy = actions.busy(channel);
 
   return (
-    <ArchiveFrame label={thread.title} wide={false}>
-      <Crumbs trail={[archiveCrumb]} current={thread.title} />
-      <ReadHeader hob={current} title={thread.title} meta={copy.read.withHob({ name: current.name, day })} />
+    <ArchiveFrame label={channel.title} wide={false}>
+      <Crumbs trail={[archiveCrumb]} current={channel.title} />
+      <ReadHeader hob={current} title={channel.title} meta={copy.read.withHob({ name: current.name, day })} />
       <ArchiveNote icon={<BoxIcon />}>{copy.read.banner({ name: current.name, day })}</ArchiveNote>
-      <Transcript hob={current} threadId={thread.id} focusMessageId={focusMessageId} />
+      <Transcript hob={current} channelId={channel.id} focusMessageId={focusMessageId} />
       <ReadOnlyBar text={copy.read.bar}>
         <Button
           disabled={busy}
           className="min-w-0 max-w-[280px] flex-shrink"
           onClick={() =>
-            actions.restore(current, thread, () => void navigate({ to: "/archive", search: { hob: current.id } }))
+            actions.restore(current, channel, () => void navigate({ to: "/archive", search: { hob: current.id } }))
           }
         >
           <RestoreIcon />
@@ -142,19 +142,19 @@ export function RetiredHobPage({ hobId }: { hobId: AgentId }) {
         <p className="m-0 text-ui text-text-secondary">{copy.retired.none({ name: hob.name })}</p>
       ) : (
         <ul aria-label={copy.retired.chats({ name: hob.name })} className="cut m-0 flex list-none flex-col bg-card p-0">
-          {chats.map((thread) => (
-            <li key={thread.id} className="border-b border-line last:border-b-0">
+          {chats.map((channel) => (
+            <li key={channel.id} className="border-b border-line last:border-b-0">
               <Link
-                to="/archive/hobs/$hobId/$threadId"
-                params={{ hobId: hob.id, threadId: thread.id }}
-                aria-label={copy.retired.open({ title: thread.title })}
+                to="/archive/hobs/$hobId/$channelId"
+                params={{ hobId: hob.id, channelId: channel.id }}
+                aria-label={copy.retired.open({ title: channel.title })}
                 className="flex items-center gap-3 px-3.5 py-3 text-text-strong no-underline hover:bg-hover hover:text-text-strong"
               >
-                <span title={thread.title} className="min-w-0 flex-1 truncate font-semibold">
-                  {thread.title}
+                <span title={channel.title} className="min-w-0 flex-1 truncate font-semibold">
+                  {channel.title}
                 </span>
                 <span className="flex flex-none items-center gap-1.5 text-meta text-label">
-                  {formatWhen(thread.updatedAt)}
+                  {formatWhen(channel.updatedAt)}
                   <LockIcon label={copy.retired.readOnly} />
                 </span>
               </Link>
@@ -167,29 +167,29 @@ export function RetiredHobPage({ hobId }: { hobId: AgentId }) {
 }
 
 /** One of a retired hob's chats, read-only. */
-export function RetiredChatPage({ hobId, threadId }: { hobId: AgentId; threadId: ThreadId }) {
+export function RetiredChatPage({ hobId, channelId }: { hobId: AgentId; channelId: ChannelId }) {
   const found = useRetired(hobId);
   if (found.kind !== "found") return <Problem crumb={retiredCrumb} {...found} />;
   const { hob, chats } = found;
   const hobCrumb: Crumb = { label: hob.name, to: "/archive/hobs/$hobId", params: { hobId: hob.id } };
-  const thread = chats.find((t) => t.id === threadId);
-  // Messages load by thread id alone, so another hob's chat must not show under this hob.
-  if (!thread) return <Problem crumb={hobCrumb} text={copy.retired.notTheirs({ name: hob.name })} />;
+  const channel = chats.find((t) => t.id === channelId);
+  // Messages load by channel id alone, so another hob's chat must not show under this hob.
+  if (!channel) return <Problem crumb={hobCrumb} text={copy.retired.notTheirs({ name: hob.name })} />;
 
   return (
-    <ArchiveFrame label={thread.title} wide={false}>
-      <Crumbs trail={[retiredCrumb, hobCrumb]} current={thread.title} />
+    <ArchiveFrame label={channel.title} wide={false}>
+      <Crumbs trail={[retiredCrumb, hobCrumb]} current={channel.title} />
       <ReadHeader
         hob={hob}
-        title={thread.title}
+        title={channel.title}
         meta={copy.retired.line({
           role: hob.roleTitle,
           day: hob.retiredAt ? formatDay(hob.retiredAt) : null,
-          kept: formatWhen(thread.updatedAt),
+          kept: formatWhen(channel.updatedAt),
         })}
       />
       <ArchiveNote icon={<MoonIcon />}>{copy.retired.chatNote({ name: hob.name })}</ArchiveNote>
-      <Transcript hob={hob} threadId={thread.id} />
+      <Transcript hob={hob} channelId={channel.id} />
       <ReadOnlyBar text={copy.retired.bar({ name: hob.name })}>
         <BringBackButton hob={hob} chats={chats.length} />
       </ReadOnlyBar>
@@ -227,14 +227,14 @@ export function BringBackButton({ hob, chats, quiet = false }: { hob: Agent; cha
 }
 
 type Retired =
-  | { readonly kind: "found"; readonly hob: Agent; readonly chats: ReadonlyArray<Thread> }
+  | { readonly kind: "found"; readonly hob: Agent; readonly chats: ReadonlyArray<Channel> }
   | { readonly kind: "problem"; readonly text: string; readonly pending?: boolean };
 
 /** A retired hob and all its chats, archived ones too, newest first; or why there is none to show. */
 const useRetired = (hobId: AgentId): Retired => {
   const hob = useQuery({ ...archivedAgentsQuery, select: (hobs) => hobs.find((h) => h.id === hobId) });
-  const live = useQuery(threadsQuery(hobId));
-  const archived = useQuery(archivedThreadsQuery(hobId));
+  const live = useQuery(channelsQuery(hobId));
+  const archived = useQuery(archivedChannelsQuery(hobId));
   if (hob.isError || live.isError || archived.isError) return { kind: "problem", text: copy.retired.loadFailed };
   if (hob.isPending) return { kind: "problem", text: copy.retired.loading, pending: true };
   if (!hob.data) return { kind: "problem", text: copy.retired.notHere };
@@ -263,15 +263,15 @@ function ReadHeader({ hob, title, meta }: { hob: Agent; title: string; meta: str
 /** The chat's messages as they were, with nothing to answer, opened on a search match when there is one. */
 function Transcript({
   hob,
-  threadId,
+  channelId,
   focusMessageId,
 }: {
   hob: Agent;
-  threadId: ThreadId;
+  channelId: ChannelId;
   focusMessageId?: string | undefined;
 }) {
   const transcript = useQuery({
-    ...messagesQuery(threadId),
+    ...messagesQuery(channelId),
     select: (all) => all.filter((m) => m.status !== "queued"),
   });
   useScrollToMessage(transcript.data, focusMessageId);

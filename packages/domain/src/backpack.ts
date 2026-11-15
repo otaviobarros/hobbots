@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import { ApprovalRequest } from "./approval.ts";
 import { Claim } from "./claim.ts";
 import { HobProposal } from "./hob-proposals.ts";
-import { AgentId, ThreadId } from "./ids.ts";
+import { AgentId, ChannelId } from "./ids.ts";
 import { ArtifactRef, Checkpoint, Delegation, HandOff, NoteDelivery, NoteId, QuestId, Question } from "./quest.ts";
 import { Revision } from "./revision.ts";
 import { SkillProposal } from "./skill-proposals.ts";
@@ -169,7 +169,7 @@ export type BackpackClaim = typeof BackpackClaim.Type;
 export class BackpackDelivery extends Schema.Class<BackpackDelivery>("BackpackDelivery")({
   /** 1 for the first delivery, one more for each retry. */
   number: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
-  /** The thread or Attempt session the turn runs in. */
+  /** The channel or Attempt session the turn runs in. */
   target: Schema.String,
   /** The turn: its reply message or Attempt id. */
   turnId: Schema.String,
@@ -200,7 +200,7 @@ export const blockerNextAction = (reason: BlockerReason): BlockerAction =>
  */
 /**
  * How a turn that carried an item ended early, as a code the client words (STD-I18N-005): the
- * runtime never accepted it, its hob or thread no longer took work, you stopped it, it was cut off,
+ * runtime never accepted it, its hob or channel no longer took work, you stopped it, it was cut off,
  * it failed, or the provider's usage limit ended it.
  */
 export const BackpackTurnEnd = Schema.Literals([
@@ -252,8 +252,8 @@ export class BackpackItem extends Schema.Class<BackpackItem>("BackpackItem")({
   taskId: Schema.NullOr(TaskId),
   questId: Schema.NullOr(QuestId),
   attemptId: Schema.NullOr(AttemptId),
-  /** The thread its Task's tree belongs to. */
-  threadId: Schema.NullOr(ThreadId),
+  /** The channel its Task's tree belongs to. */
+  channelId: Schema.NullOr(ChannelId),
   /** Unique per recipient: a second item with the same key is never recorded (ADR 019). */
   dedupeKey: Schema.String,
   payload: BackpackPayload,
@@ -293,7 +293,7 @@ export interface NewBackpackItem {
   readonly taskId: TaskId | null;
   readonly questId: QuestId | null;
   readonly attemptId: AttemptId | null;
-  readonly threadId: ThreadId | null;
+  readonly channelId: ChannelId | null;
   readonly dedupeKey: string;
   readonly payload: BackpackPayload;
   readonly notBefore: string | null;

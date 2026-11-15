@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import { Actor } from "./actor.ts";
 import { ApprovalRequest } from "./approval.ts";
 import { DeviceId } from "./device.ts";
-import { AgentId, MessageId, ThreadId } from "./ids.ts";
+import { AgentId, MessageId, ChannelId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { StoredPolicyLayer } from "./policy.ts";
 import { Revision } from "./revision.ts";
@@ -83,8 +83,8 @@ export class Quest extends Schema.Class<Quest>("Quest")({
   leadId: AgentId,
   /** The Quest it sits in, for a member's own Quest; null for a top Quest. */
   parentQuestId: Schema.NullOr(QuestId),
-  /** The thread that started it: its Task's thread. */
-  threadId: Schema.NullOr(ThreadId),
+  /** The channel that started it: its Task's channel. */
+  channelId: Schema.NullOr(ChannelId),
   goal: Schema.String,
   /** What has to hold for the Quest to be done, as its lead wrote it. */
   acceptance: Schema.Array(Schema.String),
@@ -597,7 +597,7 @@ export const TaskRefusal = Schema.Literals([
   "question-missing",
   "artifact-missing",
   "owner-missing",
-  "thread-missing",
+  "channel-missing",
   "parent-missing",
   "parent-ended",
   "step-owner",
@@ -746,8 +746,8 @@ export const handedFrom = (tree: TaskTree, taskId: TaskId): ReadonlyArray<TaskId
   ),
 ];
 
-/** The latest request asked of the hob in a thread for which `keep` holds, with its tree. `trees` are the thread's, oldest first. */
-const lastThreadTask = (
+/** The latest request asked of the hob in a channel for which `keep` holds, with its tree. `trees` are the channel's, oldest first. */
+const lastChannelTask = (
   trees: ReadonlyArray<TaskTree>,
   agentId: AgentId,
   keep: (top: Task) => boolean,
@@ -759,13 +759,13 @@ const lastThreadTask = (
     })
     .at(-1);
 
-/** The Task a hob's chat turns work on in a thread, with its tree: the latest Task asked of the hob there that has not ended. */
-export const openThreadTask = (trees: ReadonlyArray<TaskTree>, agentId: AgentId) =>
-  lastThreadTask(trees, agentId, (top) => !isTerminalTask(top.state));
+/** The Task a hob's chat turns work on in a channel, with its tree: the latest Task asked of the hob there that has not ended. */
+export const openChannelTask = (trees: ReadonlyArray<TaskTree>, agentId: AgentId) =>
+  lastChannelTask(trees, agentId, (top) => !isTerminalTask(top.state));
 
-/** The latest Task asked of the hob in a thread, ended or not, with its tree: what it can still read (#666). */
-export const latestThreadTask = (trees: ReadonlyArray<TaskTree>, agentId: AgentId) =>
-  lastThreadTask(trees, agentId, () => true);
+/** The latest Task asked of the hob in a channel, ended or not, with its tree: what it can still read (#666). */
+export const latestChannelTask = (trees: ReadonlyArray<TaskTree>, agentId: AgentId) =>
+  lastChannelTask(trees, agentId, () => true);
 
 /** The hobs a Quest brought in, in the order they joined: its party. */
 export const partyOf = (quest: Quest, delegations: ReadonlyArray<Delegation>): ReadonlyArray<AgentId> => [
@@ -774,15 +774,15 @@ export const partyOf = (quest: Quest, delegations: ReadonlyArray<Delegation>): R
 
 /**
  * A party member's Task on another hob's Quest, with the Delegation that brought it in and the
- * Quest it serves. Home and the member's panel show it as "On Aldric's quest", never as a thread.
+ * Quest it serves. Home and the member's panel show it as "On Aldric's quest", never as a channel.
  */
 export class MemberWork extends Schema.Class<MemberWork>("MemberWork")({
   task: Task,
   delegation: Delegation,
   quest: Quest,
   /**
-   * The hob whose thread the request came from, where the Quest is followed. A nested Quest's lead
-   * is a member, but its thread is still that hob's; null when the Quest has no thread.
+   * The hob whose channel the request came from, where the Quest is followed. A nested Quest's lead
+   * is a member, but its channel is still that hob's; null when the Quest has no channel.
    */
-  threadAgentId: Schema.NullOr(AgentId),
+  channelAgentId: Schema.NullOr(AgentId),
 }) {}

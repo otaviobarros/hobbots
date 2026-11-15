@@ -7,7 +7,7 @@ const GLOSSARY = `# Glossary
 
 | Term | Meaning | Owner |
 |---|---|---|
-| Thread | A conversation. | x |
+| Channel | A conversation. | x |
 
 ## Words and code names
 
@@ -16,7 +16,7 @@ Some words.
 | UI | Code | Never in the UI | Never in the docs |
 | --- | --- | --- | --- |
 | hob | \`Agent\` | | |
-| chat, camp | \`Thread\` | \`thread\` | |
+| chat, camp | \`Channel\` | \`channel\` | |
 | (not shown) | \`Attempt\` | \`execution\` | \`execution\` except "execution environment", "execution rules" |
 
 ## After
@@ -30,19 +30,19 @@ test("reads the table's UI words, code names and the words each never uses", () 
     rows.map((row) => [row.ui, row.code]),
     [
       [["hob"], "Agent"],
-      [["chat", "camp"], "Thread"],
+      [["chat", "camp"], "Channel"],
       [[], "Attempt"],
     ],
   );
   assert.deepEqual(rows[2].never.docs, { words: ["execution"], except: ["execution environment", "execution rules"] });
-  assert.deepEqual(rows[1].never.ui, { words: ["thread"], except: [] });
+  assert.deepEqual(rows[1].never.ui, { words: ["channel"], except: [] });
 });
 
 // covers #1423
 test("a code name no source exports any more fails (#1423)", () => {
   const problems = checkTable(
     rows,
-    new Set(["Agent", "Thread"]),
+    new Set(["Agent", "Channel"]),
     copy(`export const m = { a: "Ask a hob in a chat or camp" };`),
   );
   assert.deepEqual(problems, [
@@ -53,24 +53,24 @@ test("a code name no source exports any more fails (#1423)", () => {
 test("a UI word no message module uses any more fails (#1423)", () => {
   const problems = checkTable(
     rows,
-    new Set(["Agent", "Thread", "Attempt"]),
+    new Set(["Agent", "Channel", "Attempt"]),
     copy(`export const m = { a: "Ask a hob in a chat" };`),
   );
   assert.deepEqual(problems, ['docs/product/glossary.md: no message module says "camp" any more (STD-DOCS-011)']);
 });
 
 test("copy that says a word the UI never shows fails, with its line (#1423)", () => {
-  const text = `export const m = {\n  title: "Chats",\n  open: ({ n }: { n: number }) => \`Open \${n} threads\`,\n};`;
+  const text = `export const m = {\n  title: "Chats",\n  open: ({ n }: { n: number }) => \`Open \${n} channels\`,\n};`;
   assert.deepEqual(checkCopy("m.ts", copy(text), rows), [
-    'm.ts:3: the UI never says "thread", which the code calls Thread: say "chat" or "camp" (STD-DOCS-011)',
+    'm.ts:3: the UI never says "channel", which the code calls Channel: say "chat" or "camp" (STD-DOCS-011)',
   ]);
 });
 
 test("copy with a slash in it is still copy, in a string and in a template (#1423)", () => {
   const text = [
     "export const m = {",
-    '  open: "Open this thread/camp",',
-    "  move: ({ n }: { n: number }) => `Move ${n} to another thread/camp`,",
+    '  open: "Open this channel/camp",',
+    "  move: ({ n }: { n: number }) => `Move ${n} to another channel/camp`,",
     "};",
   ].join("\n");
   assert.deepEqual(
@@ -81,9 +81,9 @@ test("copy with a slash in it is still copy, in a string and in a template (#142
 
 test("keys, codes, paths, types and imports are not copy", () => {
   const text = [
-    'import { thread } from "./thread.ts";',
-    "type Thread = { thread: string };",
-    'export const m = { thread: "Chat", "thread-closed": "Closed", code: "same-thread", path: "~/thread/x" } as const;',
+    'import { channel } from "./channel.ts";',
+    "type Channel = { channel: string };",
+    'export const m = { channel: "Chat", "channel-closed": "Closed", code: "same-channel", path: "~/channel/x" } as const;',
   ].join("\n");
   assert.deepEqual(checkCopy("m.ts", copy(text), rows), []);
   assert.deepEqual(
@@ -106,8 +106,8 @@ test("a doc that uses a retired word fails, except in its phrases and in code (#
 });
 
 test("finds the names a module exports", () => {
-  const text = "export class Agent {}\nexport const Thread = 1;\nexport type Attempt = string;\nconst Hidden = 2;";
-  assert.deepEqual(exportsOf(text), ["Agent", "Thread", "Attempt"]);
+  const text = "export class Agent {}\nexport const Channel = 1;\nexport type Attempt = string;\nconst Hidden = 2;";
+  assert.deepEqual(exportsOf(text), ["Agent", "Channel", "Attempt"]);
 });
 
 test("a glossary without the table is refused", () => {

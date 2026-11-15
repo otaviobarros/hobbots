@@ -16,7 +16,7 @@ const sendLabelOf = (noting: boolean, busy: boolean): string => {
   return busy ? copy.sendAfterReply : copy.send;
 };
 
-/** The input's placeholder: a note's, a closed paused hob's, or the thread's own. */
+/** The input's placeholder: a note's, a closed paused hob's, or the channel's own. */
 const placeholderOf = (own: string, noting: boolean, closedBy: PausedHob | undefined): string => {
   if (noting) return noteCopy.placeholder;
   return closedBy ? copy.pausedPlaceholder(closedBy) : own;
@@ -25,7 +25,7 @@ const placeholderOf = (own: string, noting: boolean, closedBy: PausedHob | undef
 /**
  * Plain text in, exactly as typed: no Markdown, and a paste keeps its text, line breaks and tabs.
  * The input grows with its text up to its height limit and then scrolls. Enter sends, Shift+Enter
- * adds a line, and a key that finishes an IME composition never sends. Each thread keeps its own
+ * adds a line, and a key that finishes an IME composition never sends. Each channel keeps its own
  * unsent draft, and Up on an empty input brings back the last message sent there to edit.
  */
 export function Composer({
@@ -44,12 +44,12 @@ export function Composer({
 }: {
   /** The hob's name, which the hint and Stop's description use. */
   name: string;
-  /** Whose draft this is: the thread, or the hob's fresh page. */
+  /** Whose draft this is: the channel, or the hob's fresh page. */
   place: WaitingPlace;
-  /** The last message sent in this thread, which Up brings back. */
+  /** The last message sent in this channel, which Up brings back. */
   lastSent: string | undefined;
   placeholder: string;
-  /** The thread's reply: none, at work, waiting only on commands (#1056), or stopping. */
+  /** The channel's reply: none, at work, waiting only on commands (#1056), or stopping. */
   run: ReplyRun;
   sending: boolean;
   onSend: (content: string) => void;
@@ -59,7 +59,7 @@ export function Composer({
   paused?: PausedHob | undefined;
   /** The hob's skills, which `/` picks one of (ADR 029); absent, `/` is plain text. */
   skills?: SkillPicking | undefined;
-  /** Notes to self (ADR 037): the composer writes one while it is on. Absent before the thread exists. */
+  /** Notes to self (ADR 037): the composer writes one while it is on. Absent before the channel exists. */
   note?: NoteMode | undefined;
 }) {
   const draft = useDraft(place);

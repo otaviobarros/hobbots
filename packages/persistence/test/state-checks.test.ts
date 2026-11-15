@@ -29,7 +29,7 @@ const agent = new Agent({
 
 // Keeps 0047, 0076, 0079, 0080, 0082 and 0083 too: the repository that seeds the hob writes its name with
 // each version, its Charms, whether other hobs see it, its good at and who made and summoned it, and its Summoning scope;
-// 0053 and 0114 too: the journal moves a retired hob's thread members (ADR 039), which need both.
+// 0053 and 0114 too: the journal moves a retired hob's channel members (ADR 039), which need both.
 const migrationsBefore = (id: string) =>
   Object.fromEntries(
     Object.entries(migrations).filter(

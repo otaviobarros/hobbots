@@ -320,11 +320,11 @@ const questSetup = () => {
 
 const asked = (id: string) => ({
   question: { id, askerId: "ada", chain: ["aldric"], text: "Which store should the campaign use?" },
-  task: { id: "build", threadId: "t1", rootId: "campaign" },
+  task: { id: "build", channelId: "t1", rootId: "campaign" },
 });
 
 const failedTask = (id: string) => ({
-  task: { id, ownerId: "ada", threadId: "t1", brief: "Build the campaign\nin the shop's own store" },
+  task: { id, ownerId: "ada", channelId: "t1", brief: "Build the campaign\nin the shop's own store" },
   leadId: "aldric",
 });
 
@@ -343,7 +343,7 @@ describe("Quest notifications", () => {
     await check();
     expect(notices[0]?.closed).toBe(true);
     notices[0]?.click();
-    expect(tasks).toEqual([{ hobId: "aldric", threadId: "t1", taskId: "build" }]);
+    expect(tasks).toEqual([{ hobId: "aldric", channelId: "t1", taskId: "build" }]);
   });
 
   it("announces a member's failed Task with its brief, and closes it once retried, reassigned or its work ended", async () => {
@@ -358,7 +358,7 @@ describe("Quest notifications", () => {
     await check();
     expect(notices[0]?.closed).toBe(true);
     notices[0]?.click();
-    expect(tasks).toEqual([{ hobId: "aldric", threadId: "t1", taskId: "build" }]);
+    expect(tasks).toEqual([{ hobId: "aldric", channelId: "t1", taskId: "build" }]);
   });
 
   it("announces a top Quest that finished once, and nothing for a nested one, one that failed, or while a window is focused", async () => {
@@ -370,7 +370,7 @@ describe("Quest notifications", () => {
         id,
         taskId: `task-${id}`,
         leadId: "aldric",
-        threadId: "t1",
+        channelId: "t1",
         goal: "Spring launch\nwith a party",
         state,
         parentQuestId,
@@ -395,7 +395,7 @@ describe("Quest notifications", () => {
       await expect.poll(() => notices.length).toBe(1);
       expect(notices[0]).toMatchObject({ title: "Spring launch is done", body: "Open Aldric's chat for the summary." });
       notices[0]?.click();
-      expect(tasks).toEqual([{ hobId: "aldric", threadId: "t1", taskId: "task-q1" }]);
+      expect(tasks).toEqual([{ hobId: "aldric", channelId: "t1", taskId: "task-q1" }]);
       await finished({ id: "q1", goal: "Spring launch", leadId: "aldric", link: null });
       hub.focused = true;
       await finished({ id: "q2", goal: "Summer launch", leadId: "aldric", link: null });
@@ -411,12 +411,12 @@ describe("Quest notifications", () => {
         id: "q1",
         askerId: "ada",
         text: "Which store should the campaign use?",
-        link: { hobId: "aldric", threadId: "t1", taskId: "build" },
+        link: { hobId: "aldric", channelId: "t1", taskId: "build" },
       },
     ]);
     expect(waitingQuestions([])).toBeNull();
     expect(
-      failedTasks({ tasks: [{ task: { id: "x", ownerId: "ada", threadId: null, brief: "" }, leadId: null }] }),
+      failedTasks({ tasks: [{ task: { id: "x", ownerId: "ada", channelId: null, brief: "" }, leadId: null }] }),
     ).toEqual([{ id: "x", ownerId: "ada", brief: "", link: null }]);
     const long = questionNoticeText({ id: "q", askerId: "ada", text: "é".repeat(400), link: null }, "Ada");
     expect(new TextEncoder().encode(long.title + long.body).length).toBeLessThanOrEqual(240);

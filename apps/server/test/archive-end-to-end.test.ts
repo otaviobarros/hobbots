@@ -19,7 +19,7 @@ import {
   type Message,
   roleFields,
   type SearchHit,
-  type Thread,
+  type Channel,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -119,26 +119,26 @@ const eventually = <A>(read: () => Promise<A | undefined>) =>
     ),
   );
 
-const messages = async (thread: Thread) =>
-  (await request<ReadonlyArray<Message>>("GET", `/api/threads/${thread.id}/messages`)).body;
+const messages = async (channel: Channel) =>
+  (await request<ReadonlyArray<Message>>("GET", `/api/channels/${channel.id}/messages`)).body;
 
 const listed = async (hobId: string, archived = false) =>
   (
-    await request<ReadonlyArray<Thread>>("GET", `/api/agents/${hobId}/threads${archived ? "?archived=true" : ""}`)
-  ).body.map((thread) => thread.id);
+    await request<ReadonlyArray<Channel>>("GET", `/api/agents/${hobId}/channels${archived ? "?archived=true" : ""}`)
+  ).body.map((channel) => channel.id);
 
-const archive = (thread: Thread) =>
-  request<Thread & { _tag?: string; reason?: string }>("POST", `/api/threads/${thread.id}/archive`);
+const archive = (channel: Channel) =>
+  request<Channel & { _tag?: string; reason?: string }>("POST", `/api/channels/${channel.id}/archive`);
 
-/** Waits until the thread's last message is a reply that has ended. */
-const replyEnded = (thread: Thread) =>
+/** Waits until the channel's last message is a reply that has ended. */
+const replyEnded = (channel: Channel) =>
   eventually(async () => {
-    const last = (await messages(thread)).at(-1);
+    const last = (await messages(channel)).at(-1);
     return last?.role === "assistant" && !isInProgress(last.status) ? last : undefined;
   });
 
-/** A finished setup on `preset` sharing a project folder, with Pip and one empty thread. */
-const pipWithThread = async (preset: "careful" | "balanced" = "balanced") => {
+/** A finished setup on `preset` sharing a project folder, with Pip and one empty channel. */
+const pipWithChannel = async (preset: "careful" | "balanced" = "balanced") => {
   await request("PATCH", "/api/setup", { completed: true, safetyPreset: preset, approvedFolders: [project] });
   const pip = (
     await request<Agent>("POST", "/api/agents", {
@@ -152,104 +152,104 @@ const pipWithThread = async (preset: "careful" | "balanced" = "balanced") => {
       instructions: "",
     })
   ).body;
-  const thread = (await request<Thread>("POST", `/api/agents/${pip.id}/threads`)).body;
-  return { pip, thread };
+  const channel = (await request<Channel>("POST", `/api/agents/${pip.id}/channels`)).body;
+  return { pip, channel };
 };
 
 /** Sends `content` and waits until its reply has ended. */
-const exchange = async (thread: Thread, content: string) => {
-  const sent = await request("POST", `/api/threads/${thread.id}/messages`, { content });
+const exchange = async (channel: Channel, content: string) => {
+  const sent = await request("POST", `/api/channels/${channel.id}/messages`, { content });
   expect(sent.status).toBe(200);
-  return replyEnded(thread);
+  return replyEnded(channel);
 };
 
 // Long enough that the fake runtime is still writing it when the archive is asked.
 const LONG_PROMPT = Array.from({ length: 60 }, (_, i) => `word${i}`).join(" ");
 
-describe("archiving threads, end to end", () => {
-  it("an archived thread leaves the hob's list, is found in the archived list and by search, is read-only, and comes back whole on restore", async () => {
-    const { pip, thread } = await pipWithThread();
-    await exchange(thread, "Rename the kettle newsletter");
-    const other = (await request<Thread>("POST", `/api/agents/${pip.id}/threads`)).body;
+describe("archiving channels, end to end", () => {
+  it("an archived channel leaves the hob's list, is found in the archived list and by search, is read-only, and comes back whole on restore", async () => {
+    const { pip, channel } = await pipWithChannel();
+    await exchange(channel, "Rename the kettle newsletter");
+    const other = (await request<Channel>("POST", `/api/agents/${pip.id}/channels`)).body;
     await exchange(other, "Plan my week");
-    const before = await messages(thread);
+    const before = await messages(channel);
 
-    const archived = await archive(thread);
+    const archived = await archive(channel);
     expect(archived.status).toBe(200);
     expect(archived.body.archivedAt).toEqual(expect.any(String));
     expect(await listed(pip.id)).toEqual([other.id]);
-    expect(await listed(pip.id, true)).toEqual([thread.id]);
+    expect(await listed(pip.id, true)).toEqual([channel.id]);
 
     // Search still finds it, marked archived.
     const hits = (await request<ReadonlyArray<SearchHit>>("GET", "/api/search?q=newsletter")).body;
-    expect(hits.map((hit) => ({ id: hit.thread.id, archived: hit.thread.archivedAt !== null }))).toEqual([
-      { id: thread.id, archived: true },
+    expect(hits.map((hit) => ({ id: hit.channel.id, archived: hit.channel.archivedAt !== null }))).toEqual([
+      { id: channel.id, archived: true },
     ]);
 
     // Read-only: the transcript reads as before, and a message is refused.
-    expect(await messages(thread)).toEqual(before);
-    const sent = await request("POST", `/api/threads/${thread.id}/messages`, { content: "One more idea" });
+    expect(await messages(channel)).toEqual(before);
+    const sent = await request("POST", `/api/channels/${channel.id}/messages`, { content: "One more idea" });
     expect(sent.status).toBe(409);
-    expect(sent.body).toMatchObject({ _tag: "ThreadArchived", threadId: thread.id });
+    expect(sent.body).toMatchObject({ _tag: "ChannelArchived", channelId: channel.id });
 
     // Restored: back in its place in the list with its history, and it takes messages again.
-    const restored = await request<Thread>("POST", `/api/threads/${thread.id}/restore`);
+    const restored = await request<Channel>("POST", `/api/channels/${channel.id}/restore`);
     expect(restored.body.archivedAt).toBeNull();
     expect(restored.body.updatedAt).toBe(archived.body.updatedAt);
-    expect(await listed(pip.id)).toEqual([other.id, thread.id]);
+    expect(await listed(pip.id)).toEqual([other.id, channel.id]);
     expect(await listed(pip.id, true)).toEqual([]);
-    const reply = await exchange(thread, "Try a shorter name");
+    const reply = await exchange(channel, "Try a shorter name");
     expect(reply.status).toBe("complete");
-    expect((await messages(thread)).slice(0, before.length)).toEqual(before);
+    expect((await messages(channel)).slice(0, before.length)).toEqual(before);
   });
 
-  it("refuses to archive while a reply runs, keeps the thread listed, and archives once the reply ends", async () => {
-    const { pip, thread } = await pipWithThread();
-    await request("POST", `/api/threads/${thread.id}/messages`, { content: LONG_PROMPT });
-    await eventually(async () => ((await messages(thread)).at(-1)?.status === "streaming" ? true : undefined));
+  it("refuses to archive while a reply runs, keeps the channel listed, and archives once the reply ends", async () => {
+    const { pip, channel } = await pipWithChannel();
+    await request("POST", `/api/channels/${channel.id}/messages`, { content: LONG_PROMPT });
+    await eventually(async () => ((await messages(channel)).at(-1)?.status === "streaming" ? true : undefined));
 
-    const refused = await archive(thread);
+    const refused = await archive(channel);
     expect(refused.status).toBe(409);
-    expect(refused.body).toMatchObject({ _tag: "ThreadArchiveRefused", threadId: thread.id, reason: "reply-running" });
-    expect(await listed(pip.id)).toEqual([thread.id]);
+    expect(refused.body).toMatchObject({ _tag: "ChannelArchiveRefused", channelId: channel.id, reason: "reply-running" });
+    expect(await listed(pip.id)).toEqual([channel.id]);
     // The refusal did not interrupt the reply.
-    const reply = await replyEnded(thread);
+    const reply = await replyEnded(channel);
     expect(reply.status).toBe("complete");
     expect(reply.content).toBe(`Echo: ${LONG_PROMPT}`);
 
-    expect((await archive(thread)).status).toBe(200);
+    expect((await archive(channel)).status).toBe(200);
     expect(await listed(pip.id)).toEqual([]);
   });
 
   it("refuses to archive while an approval waits, and archives once the user decides and the reply ends", async () => {
-    const { pip, thread } = await pipWithThread("balanced");
+    const { pip, channel } = await pipWithChannel("balanced");
     // Balanced asks before a push; the fake runtime makes the scripted call.
-    await request("POST", `/api/threads/${thread.id}/messages`, {
+    await request("POST", `/api/channels/${channel.id}/messages`, {
       content: ["Ship it", "fake:tool Bash git push origin feature"].join("\n"),
     });
     const [pending] = await eventually(async () => {
-      const all = (await request<ReadonlyArray<ApprovalRequest>>("GET", `/api/threads/${thread.id}/approvals`)).body;
+      const all = (await request<ReadonlyArray<ApprovalRequest>>("GET", `/api/channels/${channel.id}/approvals`)).body;
       return all.length > 0 ? all : undefined;
     });
     expect(pending).toMatchObject({ state: "pending" });
 
     // The reply is held open too, and the approval is the reason the user sees.
-    const refused = await archive(thread);
+    const refused = await archive(channel);
     expect(refused.status).toBe(409);
     expect(refused.body).toMatchObject({
-      _tag: "ThreadArchiveRefused",
-      threadId: thread.id,
+      _tag: "ChannelArchiveRefused",
+      channelId: channel.id,
       reason: "approval-pending",
     });
-    expect(await listed(pip.id)).toEqual([thread.id]);
-    expect((await messages(thread)).at(-1)?.status).toBe("streaming");
+    expect(await listed(pip.id)).toEqual([channel.id]);
+    expect((await messages(channel)).at(-1)?.status).toBe("streaming");
 
     await request("POST", `/api/approvals/${pending?.id}/decision`, {
       decision: "deny",
       actionDigest: pending?.actionDigest,
     });
-    expect((await replyEnded(thread)).status).toBe("complete");
-    expect((await archive(thread)).status).toBe(200);
-    expect(await listed(pip.id, true)).toEqual([thread.id]);
+    expect((await replyEnded(channel)).status).toBe("complete");
+    expect((await archive(channel)).status).toBe(200);
+    expect(await listed(pip.id, true)).toEqual([channel.id]);
   });
 });

@@ -1,4 +1,4 @@
-import type { Thread } from "@hobbots/domain";
+import type { Channel } from "@hobbots/domain";
 import { Schema } from "effect";
 import type { HobState } from "../../lib/hob-state.ts";
 import type { Doing } from "../hob-page/hob-page-model.ts";
@@ -43,9 +43,9 @@ export const shownCrew = <T extends { readonly state: HobState }>(
 ): ReadonlyArray<T> => (filter === "all" ? crew : crew.filter((member) => filterOf(member.state) === filter));
 
 /** The hob's most recently active chat, or undefined when it has none. */
-export const lastChat = <T extends Pick<Thread, "updatedAt">>(threads: ReadonlyArray<T>): T | undefined =>
-  threads.reduce<T | undefined>(
-    (newest, thread) => (newest && newest.updatedAt >= thread.updatedAt ? newest : thread),
+export const lastChat = <T extends Pick<Channel, "updatedAt">>(channels: ReadonlyArray<T>): T | undefined =>
+  channels.reduce<T | undefined>(
+    (newest, channel) => (newest && newest.updatedAt >= channel.updatedAt ? newest : channel),
     undefined,
   );
 
@@ -55,10 +55,10 @@ export const lastChat = <T extends Pick<Thread, "updatedAt">>(threads: ReadonlyA
  */
 export const cardLine = (
   doing: Doing | null,
-  threads: ReadonlyArray<Pick<Thread, "updatedAt" | "lastLine">>,
+  channels: ReadonlyArray<Pick<Channel, "updatedAt" | "lastLine">>,
   fresh: boolean,
 ): string => {
   if (doing) return doing.text;
   if (fresh) return messages.card.arrived;
-  return lastChat(threads)?.lastLine ?? messages.card.resting;
+  return lastChat(channels)?.lastLine ?? messages.card.resting;
 };

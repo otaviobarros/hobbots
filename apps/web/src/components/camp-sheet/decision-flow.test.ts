@@ -1,4 +1,4 @@
-import { ChapterId, DECISION_TEXT_MAX, Decision, DecisionId, ThreadId } from "@hobbots/domain";
+import { ChapterId, DECISION_TEXT_MAX, Decision, DecisionId, ChannelId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client.ts";
 import {
@@ -14,7 +14,7 @@ import {
 
 const old = new Decision({
   id: DecisionId.make("d1"),
-  threadId: ThreadId.make("camp-1"),
+  channelId: ChannelId.make("camp-1"),
   chapterId: ChapterId.make("c1"),
   sourceMessageId: null,
   text: "Ship on Fridays.",

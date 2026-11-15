@@ -12,7 +12,7 @@ import {
   TaskId,
   type TaskState,
   TaskTree,
-  ThreadId,
+  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { type BriefPart, fixed, renderBrief, rule, SINCE_LAST_TURN } from "../src/brief-parts.ts";
@@ -34,7 +34,7 @@ const task = (id: string, ownerId: AgentId, state: TaskState, summary?: string) 
     ownerId,
     parentId: id === "app" ? null : TaskId.make("app"),
     rootId: TaskId.make("app"),
-    threadId: ThreadId.make("chat"),
+    channelId: ChannelId.make("chat"),
     brief: `Brief for ${id}`,
     state,
     dependsOn: [],
@@ -50,7 +50,7 @@ const quest = new Quest({
   taskId: TaskId.make("app"),
   leadId: FRODO,
   parentQuestId: null,
-  threadId: ThreadId.make("chat"),
+  channelId: ChannelId.make("chat"),
   goal: "Build the app",
   acceptance: [],
   limits: DEFAULT_QUEST_LIMITS,

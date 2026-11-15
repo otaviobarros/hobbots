@@ -5,12 +5,12 @@ import {
   deciderOf,
   hobActor,
   type Sidebar,
-  type SidebarThread,
+  type SidebarChannel,
   sameActor,
   sidebarOf,
-  type Thread,
-  type ThreadId,
-  threadsNeedingYou,
+  type Channel,
+  type ChannelId,
+  channelsNeedingYou,
   User,
   UserId,
   userIdOf,
@@ -20,21 +20,21 @@ import { ApprovalRepository } from "./approvals.ts";
 import { ForYouRepository } from "./for-you.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { TaskRepository } from "./tasks.ts";
-import { ThreadMemberRepository } from "./thread-members.ts";
+import { ChannelMemberRepository } from "./channel-members.ts";
 import { hubOwner, sessionActor, UserRepository } from "./users.ts";
 
 /**
- * The sidebar (ADR 039, The sidebar; #1469), for the person whose session asks: every open thread
+ * The sidebar (ADR 039, The sidebar; #1469), for the person whose session asks: every open channel
  * of every hob they can talk to, with its members, what they have not read and what waits on them
  * there as its decider (as For you decides it), sorted by the pure `sidebarOf`. Nothing of it is
  * stored. A hub built without members, users or For you's reads, as in some tests, counts each
- * thread as yours and its hob's and leaves every decision to its owner.
+ * channel as yours and its hob's and leaves every decision to its owner.
  */
 
 /** Blocked work that waits for a person's choice: the Backpack's, which the app provides. */
 export class BlockedWork extends Context.Service<
   BlockedWork,
-  { readonly list: Effect.Effect<ReadonlyArray<Pick<BackpackItem, "threadId">>> }
+  { readonly list: Effect.Effect<ReadonlyArray<Pick<BackpackItem, "channelId">>> }
 >()("@hobbots/agents/BlockedWork") {}
 
 /** Who you are when the hub has no list of users: your session's actor, named after its id. */
@@ -47,8 +47,8 @@ export const unlistedUser = (actor: Actor) =>
     state: "active",
   });
 
-const counts = (rows: ReadonlyArray<{ readonly threadId: ThreadId; readonly count: number }>) =>
-  new Map(rows.map((row) => [row.threadId, row.count]));
+const counts = (rows: ReadonlyArray<{ readonly channelId: ChannelId; readonly count: number }>) =>
+  new Map(rows.map((row) => [row.channelId, row.count]));
 
 /**
  * The people the sidebar's rows name: every row's other members, and whoever wrote a camp's last
@@ -56,13 +56,13 @@ const counts = (rows: ReadonlyArray<{ readonly threadId: ThreadId; readonly coun
  */
 export const namedPeople = (
   sidebar: Sidebar,
-  threads: ReadonlyArray<Pick<Thread, "id" | "lastAuthor">>,
+  channels: ReadonlyArray<Pick<Channel, "id" | "lastAuthor">>,
 ): ReadonlySet<UserId> => {
-  const lastAuthors = new Map(threads.map((thread) => [thread.id, thread.lastAuthor]));
+  const lastAuthors = new Map(channels.map((channel) => [channel.id, channel.lastAuthor]));
   return new Set(
     [
       ...[...sidebar.camps, ...sidebar.directMessages].flatMap((place) => place.others),
-      ...sidebar.camps.flatMap((place) => Option.toArray(Option.fromNullishOr(lastAuthors.get(place.threadId)))),
+      ...sidebar.camps.flatMap((place) => Option.toArray(Option.fromNullishOr(lastAuthors.get(place.channelId)))),
     ].flatMap((actor) => Option.toArray(userIdOf(actor))),
   );
 };
@@ -77,20 +77,20 @@ export class SidebarList extends Context.Service<SidebarList, { readonly current
       const approvals = yield* ApprovalRepository;
       const tasks = yield* TaskRepository;
       const blocked = yield* BlockedWork;
-      const members = yield* Effect.serviceOption(ThreadMemberRepository);
+      const members = yield* Effect.serviceOption(ChannelMemberRepository);
       const users = yield* Effect.serviceOption(UserRepository);
       const forYou = yield* Effect.serviceOption(ForYouRepository);
-      const membersOf = (thread: Thread, you: Actor): Effect.Effect<SidebarThread["members"]> =>
+      const membersOf = (channel: Channel, you: Actor): Effect.Effect<SidebarChannel["members"]> =>
         Option.match(members, {
           onNone: () =>
-            Effect.succeed<SidebarThread["members"]>([
+            Effect.succeed<SidebarChannel["members"]>([
               { actor: you, state: "active" as const },
-              // standards-allow STD-ARCH-021: with no member list, the thread's members are you and the hob it belongs to
-              { actor: hobActor(thread.agentId), state: "active" as const },
+              // standards-allow STD-ARCH-021: with no member list, the channel's members are you and the hob it belongs to
+              { actor: hobActor(channel.agentId), state: "active" as const },
             ]),
-          onSome: (repository) => repository.list(thread.id),
+          onSome: (repository) => repository.list(channel.id),
         });
-      // What waits on `you`, thread by thread, where you are the decider.
+      // What waits on `you`, channel by channel, where you are the decider.
       const needingYou = (you: Actor) =>
         Effect.gen(function* () {
           const [pending, blockers, questions, failed] = yield* Effect.all([
@@ -100,18 +100,18 @@ export class SidebarList extends Context.Service<SidebarList, { readonly current
             tasks.listFailedTasks,
           ]);
           const owners = yield* Option.match(forYou, {
-            onNone: () => Effect.succeed<ReadonlyMap<ThreadId, Actor>>(new Map()),
+            onNone: () => Effect.succeed<ReadonlyMap<ChannelId, Actor>>(new Map()),
             onSome: (reads) => reads.owners,
           });
-          const decides = (threadId: ThreadId) =>
-            sameActor(deciderOf({ requester: null, owner: owners.get(threadId) ?? null, hubOwner }), you);
-          return threadsNeedingYou({ approvals: pending, blockers, questions, failed, decides });
+          const decides = (channelId: ChannelId) =>
+            sameActor(deciderOf({ requester: null, owner: owners.get(channelId) ?? null, hubOwner }), you);
+          return channelsNeedingYou({ approvals: pending, blockers, questions, failed, decides });
         });
       return SidebarList.of({
         current: Effect.gen(function* () {
           const you = yield* sessionActor;
           const hobs = yield* repo.listAgentsWithStatus(["active", "paused"]);
-          const threads = (yield* Effect.forEach(hobs, (hob) => repo.listThreads(hob.id))).flat();
+          const channels = (yield* Effect.forEach(hobs, (hob) => repo.listChannels(hob.id))).flat();
           const unread = counts(
             yield* Option.match(members, { onNone: () => Effect.succeed([]), onSome: (m) => m.unreadReplies(you) }),
           );
@@ -119,22 +119,22 @@ export class SidebarList extends Context.Service<SidebarList, { readonly current
             yield* Option.match(members, { onNone: () => Effect.succeed([]), onSome: (m) => m.unreadMentions(you) }),
           );
           const needing = yield* needingYou(you);
-          const entries: ReadonlyArray<SidebarThread> = yield* Effect.forEach(threads, (thread) =>
-            Effect.map(membersOf(thread, you), (list) => ({
-              thread,
+          const entries: ReadonlyArray<SidebarChannel> = yield* Effect.forEach(channels, (channel) =>
+            Effect.map(membersOf(channel, you), (list) => ({
+              channel,
               members: list,
-              unread: unread.get(thread.id) ?? 0,
-              mentions: mentions.get(thread.id) ?? 0,
-              needsYou: needing.has(thread.id),
+              unread: unread.get(channel.id) ?? 0,
+              mentions: mentions.get(channel.id) ?? 0,
+              needsYou: needing.has(channel.id),
             })),
           );
-          const sidebar = sidebarOf({ you, threads: entries });
+          const sidebar = sidebarOf({ you, channels: entries });
           const everyone = yield* Option.match(users, {
             onNone: () => Effect.succeed<ReadonlyArray<User>>([]),
             onSome: (repository) => repository.list,
           });
           const yours = Option.getOrUndefined(userIdOf(you));
-          const named = namedPeople(sidebar, threads);
+          const named = namedPeople(sidebar, channels);
           return {
             you: everyone.find((user) => user.id === yours) ?? unlistedUser(you),
             people: everyone.filter((user) => named.has(user.id)),

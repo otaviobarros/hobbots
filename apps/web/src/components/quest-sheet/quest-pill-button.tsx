@@ -1,5 +1,5 @@
-import type { ThreadId } from "@hobbots/domain";
-import { useThreadSummaries } from "../../api/quest-summaries.ts";
+import type { ChannelId } from "@hobbots/domain";
+import { useChannelSummaries } from "../../api/quest-summaries.ts";
 import { FlagIcon } from "../quest/flag-icon.tsx";
 import { messages } from "./messages.ts";
 import { questPill } from "./quest-pill.ts";
@@ -11,8 +11,8 @@ const copy = messages.pill;
  * hub's quest summaries say, opening the camp's sheet where each quest is listed. Hidden while no
  * quest of the camp is under way.
  */
-export function QuestPillButton({ threadId, open, onOpen }: { threadId: ThreadId; open: boolean; onOpen: () => void }) {
-  const pill = questPill(threadId, useThreadSummaries(threadId));
+export function QuestPillButton({ channelId, open, onOpen }: { channelId: ChannelId; open: boolean; onOpen: () => void }) {
+  const pill = questPill(channelId, useChannelSummaries(channelId));
   if (pill === null) return null;
   return (
     <button

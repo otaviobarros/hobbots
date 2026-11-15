@@ -174,7 +174,7 @@ export function UseSkillButton({
   onClick,
 }: {
   picking: SkillPicking | undefined;
-  /** While the composer is closed, as for a paused hob's new thread. */
+  /** While the composer is closed, as for a paused hob's new channel. */
   hidden: boolean;
   onClick: () => void;
 }) {

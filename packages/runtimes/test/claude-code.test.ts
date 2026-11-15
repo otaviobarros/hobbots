@@ -308,8 +308,8 @@ describe("a hob's instructions on a resumed Claude Code session", () => {
   });
 
   it("delivers a briefing on what the session missed after the instructions and before the prompt", () => {
-    expect(turnPrompt({ ...request, sessionId: null, briefing: "## This thread so far" })).toBe(
-      "## This thread so far\n\nhi",
+    expect(turnPrompt({ ...request, sessionId: null, briefing: "## This channel so far" })).toBe(
+      "## This channel so far\n\nhi",
     );
     expect(turnPrompt({ ...request, sessionId: "s1", briefing: "## Since your last reply" })).toMatch(
       /<\/current-instructions>\n\n## Since your last reply\n\nhi$/,

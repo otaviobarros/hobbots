@@ -35,7 +35,7 @@ test("makes a private camp with a goal, sends in it, and archives and restores i
   const composer = page.getByRole("textbox", { name: "Message Aldric…" });
   await composer.fill("first");
   await composer.press("Enter");
-  await expect(page).toHaveURL(new RegExp(`#/hobs/${aldric}/threads/`));
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${aldric}/channels/`));
   await expect(main.getByText("Echo: first")).toBeVisible();
   const chatAddress = page.url();
   await expect(chat).toHaveAttribute("aria-current", "page");
@@ -58,9 +58,9 @@ test("makes a private camp with a goal, sends in it, and archives and restores i
   await expect.poll(() => campNames(rail)).toEqual(["2027 taxes"]);
   await expect(rail.getByRole("link", { name: "2027 taxes" })).toHaveAttribute("aria-current", "page");
   const listed = (await (
-    await fetch(`${url}/api/agents/${aldric}/threads`, { headers: hub.headers })
+    await fetch(`${url}/api/agents/${aldric}/channels`, { headers: hub.headers })
   ).json()) as ReadonlyArray<{ readonly title: string }>;
-  expect(listed.find((thread) => thread.title === "2027 taxes")).toMatchObject({
+  expect(listed.find((channel) => channel.title === "2027 taxes")).toMatchObject({
     kind: "camp",
     goal: "File my taxes on time",
     private: true,
@@ -123,15 +123,15 @@ test("starts the chat fresh from its menu, and the open question carries over to
 
   // The new chat opens with the question still waiting there, and the old one went to the Archive.
   await expect(page).not.toHaveURL(oldChat);
-  await expect(page).toHaveURL(new RegExp(`#/hobs/${aldric}/threads/`));
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${aldric}/channels/`));
   // The old messages stay behind; the Quest they started comes along with its question.
   await expect(main.getByText(/fake:hub start_quest/)).toBeHidden();
   await expect(page.getByRole("region", { name: "Aldric asks you" })).toContainText("Should the headings be short?");
   await expect(aldricsChat(page)).toHaveAttribute("aria-current", "page");
   const archived = (await (
-    await fetch(`${url}/api/agents/${aldric}/threads?archived=true`, { headers: hub.headers })
+    await fetch(`${url}/api/agents/${aldric}/channels?archived=true`, { headers: hub.headers })
   ).json()) as ReadonlyArray<{ readonly id: string; readonly state: string }>;
-  expect(archived.map((thread) => thread.state)).toEqual(["superseded"]);
+  expect(archived.map((channel) => channel.state)).toEqual(["superseded"]);
   expect(oldChat).toContain(archived[0]?.id);
 });
 

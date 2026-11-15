@@ -1,4 +1,4 @@
-import { AgentId, ApprovalId, ApprovalRequest, MessageId, ThreadId } from "@hobbots/domain";
+import { AgentId, ApprovalId, ApprovalRequest, MessageId, ChannelId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client.ts";
 import { decisionErrorText, expiryText, resultText } from "./approval-text.ts";
@@ -7,7 +7,7 @@ const request = (fields: Partial<ApprovalRequest> = {}) =>
   new ApprovalRequest({
     id: ApprovalId.make("a1"),
     agentId: AgentId.make("pip"),
-    threadId: ThreadId.make("t1"),
+    channelId: ChannelId.make("t1"),
     messageId: MessageId.make("m1"),
     stepId: "s1",
     tool: "Bash",

@@ -20,7 +20,7 @@ export interface MemoryCallRow {
   readonly tags: string;
   readonly state: string;
   readonly version: string | null;
-  readonly threadId: string | null;
+  readonly channelId: string | null;
   readonly messageId: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -41,7 +41,7 @@ export const memoryCallFields = (row: MemoryCallRow) => ({
   tags: JSON.parse(row.tags),
   state: row.state,
   version: row.version,
-  threadId: row.threadId,
+  channelId: row.channelId,
   messageId: row.messageId,
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
@@ -60,7 +60,7 @@ export const memoryCallColumns = (call: MemoryCall) => ({
   tags: JSON.stringify(call.tags),
   state: call.state,
   version: call.version,
-  thread_id: call.threadId,
+  channel_id: call.channelId,
   message_id: call.messageId,
   created_at: call.createdAt,
   updated_at: call.updatedAt,

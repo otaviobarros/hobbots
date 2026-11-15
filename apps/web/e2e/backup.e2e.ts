@@ -58,7 +58,7 @@ test("backs up from Settings, and Welcome restores it after the data folder is d
   const party = await partyHub(dataDir);
   hub = party.hub;
 
-  // Aldric's Quest runs until Ada asks a question, and the thread and its Tasks are saved.
+  // Aldric's Quest runs until Ada asks a question, and the channel and its Tasks are saved.
   await page.goto(`${hub.url}/#/hobs/${party.aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
@@ -90,7 +90,7 @@ test("backs up from Settings, and Welcome restores it after the data folder is d
   await dialog.getByRole("textbox", { name: "Backup folder" }).fill(backup);
   await dialog.getByRole("button", { name: "Read the backup" }).click();
   await expect(dialog).toContainText("This backup holds");
-  await expect(dialog).toContainText(/3 hobs, 1 thread, 1 quest, \d+ tasks and 0 skills/);
+  await expect(dialog).toContainText(/3 hobs, 1 channel, 1 quest, \d+ tasks and 0 skills/);
   await expect(dialog).toContainText("Devices, keychain items and runtime sign-ins do not come back");
   // Once the restored hub answers, the page loads again by itself. The test waits for that load
   // before it goes anywhere, since a navigation of its own meanwhile would be aborted (#985).
@@ -118,7 +118,7 @@ test("backs up from Settings, and Welcome restores it after the data folder is d
   await admit(context, { ...hub, headers: { authorization: `Bearer ${key}` } });
   await page.goto(hub.url);
 
-  // Home holds the work from the backup until it is resumed, and the thread and its Quest are back.
+  // Home holds the work from the backup until it is resumed, and the channel and its Quest are back.
   const held = page.getByRole("region", { name: "Work is held after a restore" });
   await expect(held).toBeVisible({ timeout: 20_000 });
   await page.goto(`${hub.url}/#/settings/data`);

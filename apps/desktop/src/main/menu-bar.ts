@@ -25,9 +25,9 @@ import { reveal } from "./single-instance.ts";
 
 const copy = messages.remoteAccess;
 
-/** A hob with a turn in progress, and the thread it runs in. */
+/** A hob with a turn in progress, and the channel it runs in. */
 interface WorkingHob {
-  readonly threadId: string;
+  readonly channelId: string;
   readonly name: string;
 }
 
@@ -78,9 +78,9 @@ export const startMenuBar = ({ supervisor, settings, hub, fetchHub, createWindow
       if (!response.ok) return null;
       const body = (await response.json()) as { working?: unknown };
       if (!Array.isArray(body.working)) return null;
-      return body.working.flatMap((hob: { name?: unknown; threadId?: unknown }) =>
-        typeof hob?.name === "string" && typeof hob.threadId === "string"
-          ? [{ name: hob.name, threadId: hob.threadId }]
+      return body.working.flatMap((hob: { name?: unknown; channelId?: unknown }) =>
+        typeof hob?.name === "string" && typeof hob.channelId === "string"
+          ? [{ name: hob.name, channelId: hob.channelId }]
           : [],
       );
     } catch {

@@ -1,6 +1,6 @@
 import { AgentId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { hobNeeds, presenceState, sceneOrder, threadState } from "./hob-state.ts";
+import { hobNeeds, presenceState, sceneOrder, channelState } from "./hob-state.ts";
 
 describe("presenceState", () => {
   it("shows the presence the hub published", () => {
@@ -12,16 +12,16 @@ describe("presenceState", () => {
     expect(presenceState(undefined, "paused")).toBe("paused"));
 });
 
-describe("threadState", () => {
-  it("follows what the thread's reply is doing", () =>
-    expect(threadState("working", "thinking", "active")).toBe("thinking"));
-  it("rests when no reply runs", () => expect(threadState("needs-you", undefined, "active")).toBe("idle"));
+describe("channelState", () => {
+  it("follows what the channel's reply is doing", () =>
+    expect(channelState("working", "thinking", "active")).toBe("thinking"));
+  it("rests when no reply runs", () => expect(channelState("needs-you", undefined, "active")).toBe("idle"));
   it("waits on a command once the reply only waits on one", () =>
-    expect(threadState("on-command", "waiting", "active")).toBe("on-command"));
+    expect(channelState("on-command", "waiting", "active")).toBe("on-command"));
   it("shows paused over a reply still running", () =>
-    expect(threadState("paused", "working", "active")).toBe("paused"));
+    expect(channelState("paused", "working", "active")).toBe("paused"));
   it("shows a paused hob paused while its presence is unread", () =>
-    expect(threadState(undefined, undefined, "paused")).toBe("paused"));
+    expect(channelState(undefined, undefined, "paused")).toBe("paused"));
 });
 
 describe("sceneOrder", () => {

@@ -1,4 +1,4 @@
-import { QuestId, type QuestState, type QuestSummary, ThreadId } from "@hobbots/domain";
+import { QuestId, type QuestState, type QuestSummary, ChannelId } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import fc from "fast-check";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -15,12 +15,12 @@ vi.mock("./client.ts", () => ({
 const { activeSummariesQuery, questSummaryChanged } = await import("./quest-summaries.ts");
 
 const QUESTS = [QuestId.make("q1"), QuestId.make("q2"), QuestId.make("q3")];
-const chat = ThreadId.make("t1");
+const chat = ChannelId.make("t1");
 
 const summary = (questId: QuestId, revision: number, done: number, state: QuestState = "active") =>
   ({
     questId,
-    threadId: chat,
+    channelId: chat,
     state,
     tones: { needs: 0, working: 1, waiting: 0, done, problem: 0, idle: 0 },
     needsYou: 0,

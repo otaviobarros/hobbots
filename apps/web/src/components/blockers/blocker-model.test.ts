@@ -48,7 +48,7 @@ const item = (
       options.taskId === undefined ? TaskId.make("t1") : options.taskId === null ? null : TaskId.make(options.taskId),
     questId: null,
     attemptId: null,
-    threadId: null,
+    channelId: null,
     dedupeKey: id,
     payload: options.payload ?? { _tag: "message", senderId: null, text: "Hi" },
     notBefore: null,
@@ -95,7 +95,7 @@ describe("blockers", () => {
     const trees = [blackFriday()];
     expect(reassignable(trees, item("member", { taskId: COPY }))?.task.id).toBe(COPY);
     expect(reassignable(trees, item("waiting", { taskId: BUILD }))?.task.id).toBe(BUILD);
-    // The lead's own Task is asked again, never handed on; a Task the thread does not hold offers nothing.
+    // The lead's own Task is asked again, never handed on; a Task the channel does not hold offers nothing.
     expect(reassignable(trees, item("lead", { taskId: CAMPAIGN }))).toBeNull();
     expect(reassignable(trees, item("elsewhere", { taskId: "t9" }))).toBeNull();
   });

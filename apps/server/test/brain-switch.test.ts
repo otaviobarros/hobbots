@@ -22,7 +22,7 @@ import {
   type RuntimeKind,
   RuntimeModels,
   roleFields,
-  type Thread,
+  type Channel,
 } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
@@ -177,31 +177,31 @@ const request = async (method: string, path: string, body?: unknown) => {
 };
 
 const summon = async (): Promise<Agent> => (await request("POST", "/api/agents", hob)).body;
-const newThread = async (agent: Agent): Promise<Thread> =>
-  (await request("POST", `/api/agents/${agent.id}/threads`)).body;
-const thread = async (agent: Agent, id: string): Promise<Thread> =>
-  (await request("GET", `/api/agents/${agent.id}/threads`)).body.find((t: Thread) => t.id === id);
-const messages = async (threadId: string): Promise<Array<Message>> =>
-  (await request("GET", `/api/threads/${threadId}/messages`)).body;
-const settled = (threadId: string) =>
+const newChannel = async (agent: Agent): Promise<Channel> =>
+  (await request("POST", `/api/agents/${agent.id}/channels`)).body;
+const channel = async (agent: Agent, id: string): Promise<Channel> =>
+  (await request("GET", `/api/agents/${agent.id}/channels`)).body.find((t: Channel) => t.id === id);
+const messages = async (channelId: string): Promise<Array<Message>> =>
+  (await request("GET", `/api/channels/${channelId}/messages`)).body;
+const settled = (channelId: string) =>
   vi.waitFor(async () => {
-    const all = await messages(threadId);
+    const all = await messages(channelId);
     // A message sent just as a turn ends may wait for it; it starts once the turn has drained.
     expect(all.some((m) => isInProgress(m.status) || m.status === "queued")).toBe(false);
     return all;
   });
-const say = async (threadId: string, content: string) => {
-  await request("POST", `/api/threads/${threadId}/messages`, { content });
-  return (await settled(threadId)).at(-1) as Message;
+const say = async (channelId: string, content: string) => {
+  await request("POST", `/api/channels/${channelId}/messages`, { content });
+  return (await settled(channelId)).at(-1) as Message;
 };
-const switchTo = (threadId: string, brain: unknown, makeDefault?: boolean) =>
-  request("PUT", `/api/threads/${threadId}/brain`, { brain, ...(makeDefault === undefined ? {} : { makeDefault }) });
+const switchTo = (channelId: string, brain: unknown, makeDefault?: boolean) =>
+  request("PUT", `/api/channels/${channelId}/brain`, { brain, ...(makeDefault === undefined ? {} : { makeDefault }) });
 
-describe("switching a thread's brain", () => {
-  it("continues on another runtime, whose first turn is briefed with the thread so far", async () => {
+describe("switching a channel's brain", () => {
+  it("continues on another runtime, whose first turn is briefed with the channel so far", async () => {
     start();
     const agent = await summon();
-    const { id } = await newThread(agent);
+    const { id } = await newChannel(agent);
     const first = await say(id, "My cat is called Miso.");
     expect(first).toMatchObject({ runtime: "claude-code", model: "fake-thinker", status: "complete" });
 
@@ -222,7 +222,7 @@ describe("switching a thread's brain", () => {
     // The fake echoes what it was told, so this shows the fact reached Codex's turn. A real model
     // using it is for the Codex adapter to prove (#12).
     expect(reply.content).toContain("Miso");
-    const sessions = (await thread(agent, id)).sessions;
+    const sessions = (await channel(agent, id)).sessions;
     expect(sessions.map((s) => s.runtime)).toEqual(["claude-code", "codex"]);
     expect(sessions[1]?.sessionId).toMatch(/^fake-codex-/);
 
@@ -234,15 +234,15 @@ describe("switching a thread's brain", () => {
   it("switching back resumes the first runtime's session and tells it only what it missed", async () => {
     start();
     const agent = await summon();
-    const { id } = await newThread(agent);
+    const { id } = await newChannel(agent);
     await say(id, "My cat is called Miso.");
     const claudeSession = asked["claude-code"].length;
-    const claudeId = (await thread(agent, id)).sessions[0]?.sessionId;
+    const claudeId = (await channel(agent, id)).sessions[0]?.sessionId;
     await switchTo(id, codex);
     await say(id, "She is three.");
 
     await switchTo(id, null);
-    expect((await thread(agent, id)).brain).toBeNull();
+    expect((await channel(agent, id)).brain).toBeNull();
     const reply = await say(id, "How old is she?");
 
     const resumed = asked["claude-code"][claudeSession] as PromptRequest;
@@ -260,11 +260,11 @@ describe("switching a thread's brain", () => {
     expect(asked["claude-code"].at(-1)).toMatchObject({ prompt: "Thanks.", briefing: null, sessionId: claudeId });
   });
 
-  it("the picker changes only its thread; making it the hob's default edits the hob", async () => {
+  it("the picker changes only its channel; making it the hob's default edits the hob", async () => {
     start();
     const agent = await summon();
-    const mine = await newThread(agent);
-    const other = await newThread(agent);
+    const mine = await newChannel(agent);
+    const other = await newChannel(agent);
     await switchTo(mine.id, codex);
 
     const unchanged = (await request("GET", "/api/agents")).body[0];
@@ -278,16 +278,16 @@ describe("switching a thread's brain", () => {
     const edited = (await request("GET", "/api/agents")).body[0];
     expect(edited).toMatchObject({ runtime: "codex", model: "fake-coder", effort: null, configVersion: 2 });
     expect((await say(other.id, "again")).runtime).toBe("codex");
-    expect((await say((await newThread(agent)).id, "hi")).runtime).toBe("codex");
+    expect((await say((await newChannel(agent)).id, "hi")).runtime).toBe("codex");
 
-    // Picking the hob's brain in a thread follows the hob again.
+    // Picking the hob's brain in a channel follows the hob again.
     expect((await switchTo(mine.id, codex)).body.brain).toBeNull();
   });
 
   it("a switch away from a limited or unavailable Claude Code still works without asking it", async () => {
     start();
     const agent = await summon();
-    const { id } = await newThread(agent);
+    const { id } = await newChannel(agent);
     claudeWorks = true;
     const limited = await say(id, `${FAKE_DIRECTIVES.limit} write a poem about Miso`);
     claudeWorks = false;
@@ -297,7 +297,7 @@ describe("switching a thread's brain", () => {
     await switchTo(id, codex);
     // Continue is refused until the limited turn has fully ended.
     await vi.waitFor(async () =>
-      expect((await request("POST", `/api/threads/${id}/messages/${limited.id}/continue`)).status).toBe(200),
+      expect((await request("POST", `/api/channels/${id}/messages/${limited.id}/continue`)).status).toBe(200),
     );
     const done = (await settled(id)).at(-1) as Message;
     expect(done).toMatchObject({ id: limited.id, status: "complete", runtime: "codex" });
@@ -310,8 +310,8 @@ describe("switching a thread's brain", () => {
     expect(handoff).toContain("Tools: Running pnpm publish (done)");
     expect(asked["claude-code"]).toHaveLength(claudeTurns);
 
-    // Down altogether, Claude Code is not asked either once the thread has moved on.
-    const other = await newThread(agent);
+    // Down altogether, Claude Code is not asked either once the channel has moved on.
+    const other = await newChannel(agent);
     await say(other.id, "hello");
     claudeDown = true;
     const before = asked["claude-code"].length;
@@ -323,14 +323,14 @@ describe("switching a thread's brain", () => {
   it("refuses a brain the hub cannot run, or a model or effort its runtime does not offer", async () => {
     start({ codex: false });
     const agent = await summon();
-    const { id } = await newThread(agent);
+    const { id } = await newChannel(agent);
     const runtime = await switchTo(id, codex);
     expect(runtime).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "runtime" } });
     const model = await switchTo(id, { runtime: "claude-code", model: "nope", effort: null });
     expect(model).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "model" } });
     const effort = await switchTo(id, { runtime: "claude-code", model: "fake-quick", effort: "high" });
     expect(effort).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "effort" } });
-    expect((await thread(agent, id)).brain).toBeNull();
+    expect((await channel(agent, id)).brain).toBeNull();
 
     const health = (await request("GET", "/api/runtimes")).body;
     expect(health.map((h: { runtime: string; availability: string }) => [h.runtime, h.availability])).toEqual([
@@ -347,10 +347,10 @@ describe("switching a thread's brain", () => {
   it("refuses a runtime that offers no models, as Codex does until its turns run", async () => {
     start({ codex: "noModels" });
     const agent = await summon();
-    const { id } = await newThread(agent);
+    const { id } = await newChannel(agent);
     const picked = await switchTo(id, { runtime: "codex", model: null, effort: null }, true);
     expect(picked).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "runtime" } });
-    expect((await thread(agent, id)).brain).toBeNull();
+    expect((await channel(agent, id)).brain).toBeNull();
     expect((await request("POST", "/api/agents", { ...hob, runtime: "codex", model: null, effort: null })).status).toBe(
       400,
     );

@@ -2,7 +2,7 @@ import { mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { CharmCalls, type ChatTaskTurn, HobbotsRepository, HobTools, TaskRepository } from "@hobbots/agents";
-import { Agent, AgentId, CharmCall, MessageId, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, CharmCall, MessageId, Channel, ChannelId } from "@hobbots/domain";
 import { TaskTools } from "@hobbots/orchestration";
 import {
   BackpackLive,
@@ -25,7 +25,7 @@ import { NodeFolderChecks } from "../src/folders.ts";
 
 const now = "2026-11-03T00:00:00.000Z";
 const FRODO = AgentId.make("frodo");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 
 let work: string;
 
@@ -77,7 +77,7 @@ afterEach(() => runtime.dispose());
 
 const run = <A, E>(effect: Effect.Effect<A, E, Layer.Success<typeof App>>) => runtime.runPromise(effect);
 
-/** Frodo, in a thread where he works on no Task yet. */
+/** Frodo, in a channel where he works on no Task yet. */
 const seed = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
   yield* repo.insertAgent(
@@ -95,8 +95,8 @@ const seed = Effect.gen(function* () {
       createdAt: now,
     }),
   );
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: FRODO, title: "Quest", createdAt: now, updatedAt: now }),
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, agentId: FRODO, title: "Quest", createdAt: now, updatedAt: now }),
   );
 });
 
@@ -105,7 +105,7 @@ const chatTurn = (message: string) =>
     Effect.flatMap(Effect.service(TaskTools), (tools) =>
       tools.forChat({
         agentId: FRODO,
-        threadId,
+        channelId,
         messageId: MessageId.make(message),
         prompt: "Start the Quest",
         runtime: "claude-code",
@@ -134,7 +134,7 @@ const comment = (turn: ChatTaskTurn, message: string) =>
         appliedText: "Commented.",
         state: "sending",
         result: null,
-        threadId,
+        channelId,
         messageId: MessageId.make(message),
         stepId: null,
         createdAt: now,
@@ -171,7 +171,7 @@ describe("tool call keys across a Task's replies", () => {
     const other = await answer(second, "report_checkpoint", { ...report, summary: "Something else" });
     expect(other).toMatchObject({ refused: true, text: expect.stringContaining("key-reused") });
 
-    const trees = await run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
+    const trees = await run(TaskRepository.use((tasks) => tasks.readChannelTrees(channelId)));
     expect(trees).toHaveLength(1);
     expect(trees[0]?.checkpoints.filter((each) => each.summary === "Under way")).toHaveLength(1);
   });

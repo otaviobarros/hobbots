@@ -5,7 +5,7 @@ import {
   ForYouRepository,
   HobbotsRepository,
   RecordRepository,
-  ThreadMemberRepository,
+  ChannelMemberRepository,
 } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
 import {
@@ -21,8 +21,8 @@ import {
   MessageId,
   OWNER_ACTOR,
   OWNER_USER_ID,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
   UserId,
 } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
@@ -36,23 +36,23 @@ import {
   HobbotsRepositoryLive,
   RecordRepositoryLive,
   TaskRepositoryLive,
-  ThreadMemberRepositoryLive,
+  ChannelMemberRepositoryLive,
 } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 
-// Issue #1456 (ADR 039, Cards every thread shares › For you): each person's For you list comes from
+// Issue #1456 (ADR 039, Cards every channel shares › For you): each person's For you list comes from
 // the records past their own read marker, and its While you were away is the catch-up each of them
 // sees in that camp. On SQLite and PostgreSQL alike (STD-TEST-006).
 
 const NOW = "2026-11-14T10:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
-const CAMP = ThreadId.make("winter-market");
+const CAMP = ChannelId.make("winter-market");
 const BRUNA: Actor = { kind: "user", id: "bruna" };
 const LEO: Actor = { kind: "user", id: "leo" };
 
 const stores = Layer.mergeAll(
   HobbotsRepositoryLive,
-  ThreadMemberRepositoryLive,
+  ChannelMemberRepositoryLive,
   RecordRepositoryLive,
   ApprovalRepositoryLive,
   TaskRepositoryLive,
@@ -69,7 +69,7 @@ const run = <A, E>(
     | CatchUps
     | ForYouRepository
     | HobbotsRepository
-    | ThreadMemberRepository
+    | ChannelMemberRepository
     | RecordRepository
     | ApprovalRepository
     | SqlClient.SqlClient
@@ -95,7 +95,7 @@ let next = 0;
 const message = (actor: Actor | null, content: string) =>
   new Message({
     id: MessageId.make(`m${++next}`),
-    threadId: CAMP,
+    channelId: CAMP,
     actor,
     role: actor === null ? "assistant" : "user",
     content,
@@ -109,7 +109,7 @@ const message = (actor: Actor | null, content: string) =>
 const approval = new ApprovalRequest({
   id: ApprovalId.make("rm-notes"),
   agentId: ALDRIC,
-  threadId: CAMP,
+  channelId: CAMP,
   messageId: null,
   stepId: "tool-1",
   tool: "Bash",
@@ -154,16 +154,16 @@ const seed = Effect.gen(function* () {
   ] as const)
     yield* sql`INSERT INTO users ${sql.insert({ id, name, initials: name[0] ?? "", color: "moss", state: "active" })}`;
   yield* repo.makeCamp(
-    new Thread({ id: CAMP, agentId: ALDRIC, title: "Winter Market", kind: "camp", createdAt: NOW, updatedAt: NOW }),
+    new Channel({ id: CAMP, agentId: ALDRIC, title: "Winter Market", kind: "camp", createdAt: NOW, updatedAt: NOW }),
   );
-  const members = yield* ThreadMemberRepository;
+  const members = yield* ChannelMemberRepository;
   yield* members.add(CAMP, BRUNA, OWNER_ACTOR);
   yield* members.add(CAMP, LEO, OWNER_ACTOR);
   const asked = yield* repo.upsertMessage(message(LEO, "@Bruna can you check the map?"));
   const answered = yield* repo.upsertMessage(message(null, "@Leo the photos are in"));
   yield* (yield* RecordRepository).recordDecision({
     id: DecisionId.make("price"),
-    threadId: CAMP,
+    channelId: CAMP,
     sourceMessageId: null,
     text: "Tickets cost 12",
     replaces: null,
@@ -173,12 +173,12 @@ const seed = Effect.gen(function* () {
     at: NOW,
   });
   yield* (yield* ApprovalRepository).insert(approval);
-  yield* repo.markThreadRead(CAMP, asked.value.id, asked.value.revision).pipe(as(LEO));
+  yield* repo.markChannelRead(CAMP, asked.value.id, asked.value.revision).pipe(as(LEO));
   return { asked: asked.value.id, answered: answered.value.id };
 });
 
 describe("For you", () => {
-  // covers ADR 039 (Cards every thread shares › For you; Users as actors)
+  // covers ADR 039 (Cards every channel shares › For you; Users as actors)
   it("gives Bruna, Leo and the owner their own lists from the same camp, each item for its person (#1456)", async () => {
     const result = await run(
       Effect.gen(function* () {
@@ -193,7 +193,7 @@ describe("For you", () => {
     const summary = (items: ReadonlyArray<{ readonly _tag: string; readonly for: Actor }>) =>
       items.map((item) => [item._tag, item.for.id]);
     expect(summary(bruna.forYou.items)).toEqual([["Mention", "bruna"]]);
-    expect(bruna.forYou.items[0]).toMatchObject({ messageId: ids.asked, author: LEO, threadId: CAMP });
+    expect(bruna.forYou.items[0]).toMatchObject({ messageId: ids.asked, author: LEO, channelId: CAMP });
     expect(summary(leo.forYou.items)).toEqual([["Mention", "leo"]]);
     expect(leo.forYou.items[0]).toMatchObject({ messageId: ids.answered, author: hobActor(ALDRIC) });
     // The approval is the camp owner's to decide: nobody else's list has it.
@@ -201,7 +201,7 @@ describe("For you", () => {
     // While you were away is what each person's catch-up of the camp lists, and Bruna's own
     // decision is news only to the others.
     for (const { forYou, catchUp } of [bruna, leo, owner]) {
-      expect(forYou.away.map((part) => [part.threadId, part.items, part.more])).toEqual([
+      expect(forYou.away.map((part) => [part.channelId, part.items, part.more])).toEqual([
         [CAMP, catchUp.items, catchUp.more],
       ]);
     }
@@ -211,27 +211,27 @@ describe("For you", () => {
     expect(leo.forYou.away[0]?.readRevision).toBeGreaterThan(0);
   });
 
-  // covers ADR 039 (Cards every thread shares › Approval: the decider)
-  it("reads each thread's owner, and lists only the threads a person is an active member of (#1456)", async () => {
+  // covers ADR 039 (Cards every channel shares › Approval: the decider)
+  it("reads each channel's owner, and lists only the channels a person is an active member of (#1456)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
         const reads = yield* ForYouRepository;
         return {
           owners: yield* reads.owners,
-          bruna: yield* reads.threads(BRUNA),
-          stranger: yield* reads.threads({ kind: "user", id: "nobody" }),
-          hob: yield* reads.threads(hobActor(ALDRIC)),
+          bruna: yield* reads.channels(BRUNA),
+          stranger: yield* reads.channels({ kind: "user", id: "nobody" }),
+          hob: yield* reads.channels(hobActor(ALDRIC)),
         };
       }),
     );
     expect(result.owners.get(CAMP)).toEqual(OWNER_ACTOR);
-    expect(result.bruna.map((thread) => [thread.threadId, thread.marker, thread.messages.length])).toEqual([
+    expect(result.bruna.map((channel) => [channel.channelId, channel.marker, channel.messages.length])).toEqual([
       [CAMP, null, 1],
     ]);
     expect(result.bruna[0]?.decisions.map((decision) => decision.id)).toEqual(["price"]);
     expect(result.stranger).toEqual([]);
     // A hob is a member too, though nothing here mentions it.
-    expect(result.hob.map((thread) => [thread.threadId, thread.messages.length])).toEqual([[CAMP, 0]]);
+    expect(result.hob.map((channel) => [channel.channelId, channel.messages.length])).toEqual([[CAMP, 0]]);
   });
 });

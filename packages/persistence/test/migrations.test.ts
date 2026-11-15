@@ -11,21 +11,21 @@ import hobRoles from "../src/migrations/0010_hob_roles.ts";
 import hobIdentity from "../src/migrations/0013_hob_identity.ts";
 import hobTone from "../src/migrations/0014_hob_tone.ts";
 import hobPolicy from "../src/migrations/0015_hob_policy.ts";
-import threadBrains from "../src/migrations/0020_thread_brains.ts";
+import channelBrains from "../src/migrations/0020_thread_brains.ts";
 import hobSignCommits from "../src/migrations/0021_hob_sign_commits.ts";
-import threadArchivedAt from "../src/migrations/0023_thread_archived_at.ts";
+import channelArchivedAt from "../src/migrations/0023_thread_archived_at.ts";
 import githubCharm from "../src/migrations/0027_github_charm.ts";
 import backpackBlockers from "../src/migrations/0029_backpack_blockers.ts";
 import withdrawnQuestions from "../src/migrations/0033_withdrawn_questions.ts";
 import taskGrants from "../src/migrations/0035_task_grants.ts";
 import versionedName from "../src/migrations/0047_versioned_name.ts";
-import threadReads from "../src/migrations/0053_thread_reads.ts";
+import channelReads from "../src/migrations/0053_thread_reads.ts";
 import milestoneReachedBy from "../src/migrations/0074_milestone_reached_by.ts";
 import hobVisibility from "../src/migrations/0079_hob_visibility.ts";
 import hobGoodAt from "../src/migrations/0080_hob_good_at.ts";
 import hobActors from "../src/migrations/0082_hob_actors.ts";
 import summoning from "../src/migrations/0083_summoning.ts";
-import threadSkillTrial from "../src/migrations/0084_thread_skill_trial.ts";
+import channelSkillTrial from "../src/migrations/0084_thread_skill_trial.ts";
 import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const decodeDisposition = Schema.decodeUnknownSync(Schema.fromJsonString(BackpackDisposition));
@@ -93,7 +93,7 @@ describe("0007_hob_config_versions", () => {
         lookColor: "moss",
         createdAt: "2026-10-28T00:00:00.000Z",
       })}`;
-      yield* sql`INSERT INTO threads ${sql.insert({
+      yield* sql`INSERT INTO channels ${sql.insert({
         id: "t1",
         agentId: "aldric",
         title: "Hi",
@@ -106,7 +106,7 @@ describe("0007_hob_config_versions", () => {
       ] as const) {
         yield* sql`INSERT INTO messages ${sql.insert({
           id: `m${seq}`,
-          threadId: "t1",
+          channelId: "t1",
           role,
           content: "",
           status: "complete",
@@ -542,7 +542,7 @@ describe("0015_hob_policy", () => {
 });
 
 describe("0020_thread_brains", () => {
-  it("moves each thread's Claude Code session into its sessions and records each reply's brain", async () => {
+  it("moves each channel's Claude Code session into its sessions and records each reply's brain", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({
@@ -569,7 +569,7 @@ describe("0020_thread_brains", () => {
         ["bound", "s1"],
         ["fresh", null],
       ] as const) {
-        yield* sql`INSERT INTO threads ${sql.insert({
+        yield* sql`INSERT INTO channels ${sql.insert({
           id,
           agentId: "pip",
           title: id,
@@ -586,20 +586,20 @@ describe("0020_thread_brains", () => {
       for (const m of messages) {
         yield* sql`INSERT INTO messages ${sql.insert({
           ...m,
-          threadId: "bound",
+          channelId: "bound",
           content: m.id,
           createdAt: "2026-10-28T00:00:00.000Z",
         })}`;
       }
-      yield* threadBrains;
+      yield* channelBrains;
       return {
-        threads: yield* sql`SELECT id, sessions, brain FROM threads ORDER BY id`,
+        channels: yield* sql`SELECT id, sessions, brain FROM channels ORDER BY id`,
         messages: yield* sql`SELECT id, runtime, model FROM messages ORDER BY seq`,
         versions: yield* sql`SELECT runtime FROM agent_config_versions`,
       };
     }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0020"))), Effect.runPromise);
 
-    expect(result.threads).toEqual([
+    expect(result.channels).toEqual([
       {
         id: "bound",
         sessions: JSON.stringify([{ runtime: "claude-code", sessionId: "s1", seenThrough: "a1" }]),
@@ -615,10 +615,10 @@ describe("0020_thread_brains", () => {
     expect(result.versions).toEqual([{ runtime: "claude-code" }]);
   });
 
-  it("still reads a thread event journaled before brains existed, with no sessions and no brain", async () => {
+  it("still reads a channel event journaled before brains existed, with no sessions and no brain", async () => {
     const before = {
-      _tag: "ThreadUpserted",
-      thread: {
+      _tag: "ChannelUpserted",
+      channel: {
         id: "t1",
         agentId: "pip",
         title: "Hello",
@@ -635,18 +635,18 @@ describe("0020_thread_brains", () => {
       yield* sql`INSERT INTO event_journal ${sql.insert({
         sequence: 1,
         id: "0b6f2c1e-7a3d-4e8f-9b0a-1c2d3e4f5a6b",
-        type: "ThreadUpserted",
+        type: "ChannelUpserted",
         schemaVersion: 1,
         occurredAt: "2026-10-28T00:00:00.000Z",
-        threadId: "t1",
+        channelId: "t1",
         payload: JSON.stringify(before),
       })}`;
-      yield* threadBrains;
+      yield* channelBrains;
       return yield* (yield* EventJournal).readAfter(0);
     }).pipe(Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(database))), Effect.scoped, Effect.runPromise);
 
     expect(entries.map((e) => e.payload)).toMatchObject([
-      { _tag: "ThreadUpserted", thread: { id: "t1", sessions: [], brain: null } },
+      { _tag: "ChannelUpserted", channel: { id: "t1", sessions: [], brain: null } },
     ]);
   });
 });
@@ -688,10 +688,10 @@ describe("0021_hob_sign_commits", () => {
 });
 
 describe("0023_thread_archived_at", () => {
-  it("keeps every existing thread live, and still reads thread events journaled before archiving", async () => {
+  it("keeps every existing channel live, and still reads channel events journaled before archiving", async () => {
     const before = {
-      _tag: "ThreadUpserted",
-      thread: {
+      _tag: "ChannelUpserted",
+      channel: {
         id: "t1",
         agentId: "pip",
         title: "Hello",
@@ -715,7 +715,7 @@ describe("0023_thread_archived_at", () => {
         lookColor: "moss",
         createdAt: "2026-10-28T00:00:00.000Z",
       })}`;
-      yield* sql`INSERT INTO threads ${sql.insert({
+      yield* sql`INSERT INTO channels ${sql.insert({
         id: "t1",
         agentId: "pip",
         title: "Hello",
@@ -726,22 +726,22 @@ describe("0023_thread_archived_at", () => {
       yield* sql`INSERT INTO event_journal ${sql.insert({
         sequence: 1,
         id: "5d1e2f3a-4b5c-4d6e-8f70-8192a3b4c5d6",
-        type: "ThreadUpserted",
+        type: "ChannelUpserted",
         schemaVersion: 2,
         occurredAt: "2026-10-28T00:00:00.000Z",
-        threadId: "t1",
+        channelId: "t1",
         payload: JSON.stringify(before),
       })}`;
-      yield* threadArchivedAt;
+      yield* channelArchivedAt;
       return {
-        threads: yield* sql`SELECT archived_at FROM threads`,
+        channels: yield* sql`SELECT archived_at FROM channels`,
         entries: yield* (yield* EventJournal).readAfter(0),
       };
     }).pipe(Effect.provide(EventJournal.layer.pipe(Layer.provideMerge(database))), Effect.scoped, Effect.runPromise);
 
-    expect(result.threads).toEqual([{ archivedAt: null }]);
+    expect(result.channels).toEqual([{ archivedAt: null }]);
     expect(result.entries.map((e) => e.payload)).toMatchObject([
-      { _tag: "ThreadUpserted", thread: { id: "t1", archivedAt: null } },
+      { _tag: "ChannelUpserted", channel: { id: "t1", archivedAt: null } },
     ]);
   });
 });
@@ -1064,8 +1064,8 @@ describe("0047_versioned_name", () => {
 });
 
 describe("0053_thread_reads", () => {
-  it("counts every thread from before it as read through its last message", async () => {
-    const threads = await Effect.gen(function* () {
+  it("counts every channel from before it as read through its last message", async () => {
+    const channels = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({
         id: "hob1",
@@ -1079,7 +1079,7 @@ describe("0053_thread_reads", () => {
         createdAt: "2026-11-04T00:00:00.000Z",
       })}`;
       for (const id of ["t1", "t2"]) {
-        yield* sql`INSERT INTO threads ${sql.insert({
+        yield* sql`INSERT INTO channels ${sql.insert({
           id,
           agentId: "hob1",
           title: "Plan",
@@ -1093,7 +1093,7 @@ describe("0053_thread_reads", () => {
       ] as const) {
         yield* sql`INSERT INTO messages ${sql.insert({
           id,
-          threadId: "t1",
+          channelId: "t1",
           role: id === "m1" ? "user" : "assistant",
           content: "Hello",
           status: "complete",
@@ -1102,13 +1102,13 @@ describe("0053_thread_reads", () => {
           revision,
         })}`;
       }
-      yield* threadReads;
-      const rows = yield* sql<{ id: string; readRevision: unknown }>`SELECT id, read_revision FROM threads ORDER BY id`;
+      yield* channelReads;
+      const rows = yield* sql<{ id: string; readRevision: unknown }>`SELECT id, read_revision FROM channels ORDER BY id`;
       // PostgreSQL reads BIGINT as text.
       return rows.map((row) => ({ ...row, readRevision: row.readRevision === null ? null : Number(row.readRevision) }));
     }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0053"))), Effect.runPromise);
 
-    expect(threads).toEqual([
+    expect(channels).toEqual([
       { id: "t1", readRevision: 9 },
       { id: "t2", readRevision: null },
     ]);
@@ -1500,8 +1500,8 @@ describe("0083_summoning", () => {
 
 describe("0084_thread_skill_trial", () => {
   // covers ADR 029 (Try in a chat), #1099
-  it("keeps every thread from before it as an ordinary chat, trying no draft (#1099)", async () => {
-    const threads = await Effect.gen(function* () {
+  it("keeps every channel from before it as an ordinary chat, trying no draft (#1099)", async () => {
+    const channels = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`INSERT INTO agents ${sql.insert({
         id: "hob1",
@@ -1514,17 +1514,17 @@ describe("0084_thread_skill_trial", () => {
         configVersion: 1,
         createdAt: "2026-11-08T00:00:00.000Z",
       })}`;
-      yield* sql`INSERT INTO threads ${sql.insert({
+      yield* sql`INSERT INTO channels ${sql.insert({
         id: "t1",
         agentId: "hob1",
         title: "Plan",
         createdAt: "2026-11-08T00:00:00.000Z",
         updatedAt: "2026-11-08T00:00:00.000Z",
       })}`;
-      yield* threadSkillTrial;
-      return yield* sql<{ id: string; skillTrial: unknown }>`SELECT id, skill_trial FROM threads`;
+      yield* channelSkillTrial;
+      return yield* sql<{ id: string; skillTrial: unknown }>`SELECT id, skill_trial FROM channels`;
     }).pipe(Effect.provide(TestDatabaseAt(migrationsBefore("0084"))), Effect.runPromise);
 
-    expect(threads).toEqual([{ id: "t1", skillTrial: null }]);
+    expect(channels).toEqual([{ id: "t1", skillTrial: null }]);
   });
 });

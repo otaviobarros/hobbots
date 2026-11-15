@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { Actor } from "./actor.ts";
-import { AgentId, MessageId, ThreadId } from "./ids.ts";
+import { AgentId, MessageId, ChannelId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 
 /**
@@ -14,20 +14,20 @@ export const TurnRequestId = Schema.String.pipe(Schema.brand("TurnRequestId"));
 export type TurnRequestId = typeof TurnRequestId.Type;
 
 /**
- * One conversation of a thread (ADR 039): its main line, with no root message, or one of its reply
- * threads, named by the message it replies under. Each has its own floor.
+ * One conversation of a channel (ADR 039): its main line, with no root message, or one of its reply
+ * channels, named by the message it replies under. Each has its own floor.
  */
 export interface Line {
-  readonly threadId: ThreadId;
+  readonly channelId: ChannelId;
   readonly rootMessageId: MessageId | null;
 }
 
-/** A thread's main line. */
-export const mainLine = (threadId: ThreadId): Line => ({ threadId, rootMessageId: null });
+/** A channel's main line. */
+export const mainLine = (channelId: ChannelId): Line => ({ channelId, rootMessageId: null });
 
 /** The line as one string, to key what is kept per line. */
 export const lineKey = (line: Line): string =>
-  line.rootMessageId === null ? line.threadId : `${line.threadId}/${line.rootMessageId}`;
+  line.rootMessageId === null ? line.channelId : `${line.channelId}/${line.rootMessageId}`;
 
 /** Why the hob owes the answer, as `answerersFor` decided it; the turn's header says it. */
 export const TurnCause = Schema.Literals(["mention", "reply", "relay", "only-hob", "lead"]);
@@ -39,8 +39,8 @@ export type TurnRequestState = typeof TurnRequestState.Type;
 
 export class TurnRequest extends Schema.Class<TurnRequest>("TurnRequest")({
   id: TurnRequestId,
-  threadId: ThreadId,
-  /** The conversation it is owed in: null for the thread's main line. */
+  channelId: ChannelId,
+  /** The conversation it is owed in: null for the channel's main line. */
   rootMessageId: Schema.NullOr(MessageId),
   /** The hob that owes the answer. */
   hobId: AgentId,

@@ -11,9 +11,9 @@ ${body}
 
 // covers ADR 037 (Validation), #1360
 test("a Set keyed by an id in a service's body fails (#1360)", () => {
-  const problems = checkFile("a.ts", service("  const busy = new Set<ThreadId>();"));
+  const problems = checkFile("a.ts", service("  const busy = new Set<ChannelId>();"));
   assert.equal(problems.length, 1);
-  assert.match(problems[0], /^a\.ts:3: `busy` .*ThreadId.*\(STD-ARCH-013\)$/);
+  assert.match(problems[0], /^a\.ts:3: `busy` .*ChannelId.*\(STD-ARCH-013\)$/);
 });
 
 test("a Map keyed by an id at module level fails", () => {
@@ -40,7 +40,7 @@ test("an opt-out with a reason on the line above passes", () => {
 });
 
 test("a collection keyed by an id in its declared type fails", () => {
-  assert.equal(checkFile("a.ts", service("  const busy: Set<ThreadId> = new Set();")).length, 1);
+  assert.equal(checkFile("a.ts", service("  const busy: Set<ChannelId> = new Set();")).length, 1);
   assert.equal(checkFile("a.ts", "const waiting: Map<TaskId, number> = new Map();").length, 1);
 });
 

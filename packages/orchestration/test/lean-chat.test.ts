@@ -12,7 +12,7 @@ import {
   TaskId,
   type TaskState,
   TaskTree,
-  ThreadId,
+  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { CHECKPOINT_RULE, memberPrompt, memberReminder, ownerBriefing, planNote, stepPrompt } from "../src/briefs.ts";
@@ -25,13 +25,13 @@ const at = "2026-11-04T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
 
-const task = (id: string, ownerId: AgentId, state: TaskState, parent: string | null, thread: boolean) =>
+const task = (id: string, ownerId: AgentId, state: TaskState, parent: string | null, channel: boolean) =>
   new Task({
     id: TaskId.make(id),
     ownerId,
     parentId: parent === null ? null : TaskId.make(parent),
     rootId: TaskId.make("campaign"),
-    threadId: thread ? ThreadId.make("chat") : null,
+    channelId: channel ? ChannelId.make("chat") : null,
     brief: `Brief for ${id}`,
     state,
     dependsOn: [],
@@ -51,7 +51,7 @@ const quest = new Quest({
   taskId: campaign.id,
   leadId: ALDRIC,
   parentQuestId: null,
-  threadId: ThreadId.make("chat"),
+  channelId: ChannelId.make("chat"),
   goal: "A Black Friday campaign",
   acceptance: [],
   limits: DEFAULT_QUEST_LIMITS,

@@ -1,4 +1,4 @@
-import type { QuestSummary, ThreadId } from "@hobbots/domain";
+import type { QuestSummary, ChannelId } from "@hobbots/domain";
 
 /** What a camp's quest pill says (ADR 037): its quests under way, what is ready for review and what needs you. */
 export interface QuestPill {
@@ -12,9 +12,9 @@ export interface QuestPill {
  * states (STD-REACT-028): each quest still under way that the camp started itself, not a Quest a
  * member leads inside one, which its lead's quest already counts. Null while none is under way.
  */
-export const questPill = (threadId: ThreadId, summaries: ReadonlyArray<QuestSummary>): QuestPill | null => {
+export const questPill = (channelId: ChannelId, summaries: ReadonlyArray<QuestSummary>): QuestPill | null => {
   const running = summaries.filter(
-    (summary) => summary.threadId === threadId && summary.parentQuestId === null && summary.state === "active",
+    (summary) => summary.channelId === channelId && summary.parentQuestId === null && summary.state === "active",
   );
   if (running.length === 0) return null;
   return {

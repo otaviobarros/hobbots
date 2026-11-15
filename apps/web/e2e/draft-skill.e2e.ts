@@ -82,9 +82,9 @@ const draftWith = async (page: Page, url: string, name: string, skill: string) =
     `${prefilled.replace("What it is for: ", "What it is for: how we release")}\nfake:hub skill_propose ${JSON.stringify(call)}`,
   );
   await composer.press("Enter");
-  await expect(page).toHaveURL(/threads\/[^/?#]+/, { timeout: 20_000 });
+  await expect(page).toHaveURL(/channels\/[^/?#]+/, { timeout: 20_000 });
   await expectAccessible(page);
-  return /threads\/([^/?#]+)/.exec(page.url())?.[1] ?? "";
+  return /channels\/([^/?#]+)/.exec(page.url())?.[1] ?? "";
 };
 
 // covers ADR 029 (Proactive hobs, The Skills page), #1144
@@ -161,7 +161,7 @@ for (const [name, runtime] of [
   }) => {
     const started = await draftHub();
     const hobId = name === "Ada" ? started.ada.id : started.cody.id;
-    const threadId = await draftWith(page, started.url, name, "release-steps");
+    const channelId = await draftWith(page, started.url, name, "release-steps");
 
     await page.goto(`${started.url}/#/skills`);
     const main = page.getByRole("main", { name: "Skills" });
@@ -174,7 +174,7 @@ for (const [name, runtime] of [
     await expectAccessible(page);
     await expect(open.getByRole("link", { name: "Open the chat" })).toHaveAttribute(
       "href",
-      `/#/hobs/${hobId}/threads/${threadId}`,
+      `/#/hobs/${hobId}/channels/${channelId}`,
     );
 
     await open.getByRole("button", { name: `Add it for ${name}` }).click();

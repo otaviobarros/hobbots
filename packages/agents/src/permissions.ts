@@ -83,7 +83,7 @@ export class PermissionSummary extends Context.Service<
               folders: yield* effectiveFolders(folders, approvedFolders, agent.policy),
               decisions: effectiveDecisions(safetyPreset, agent.policy, charmOperations),
               presets: effectiveDecisions(safetyPreset, EMPTY_HOB_POLICY, charmOperations),
-              // What the hob's own runtime enforces; a thread on another brain runs under that one's.
+              // What the hob's own runtime enforces; a channel on another brain runs under that one's.
               enforcement: yield* adapters(agent.runtime)?.enforcement ??
                 Effect.succeed(missingRuntimeHealth(agent.runtime).enforcement),
             } satisfies HobPermissions;
@@ -137,8 +137,8 @@ export const reachOf =
   (before: ReachHob, after: ReachHob & { readonly id: AgentId; readonly runtime: RuntimeKind }) =>
     Effect.gen(function* () {
       const { safetyPreset } = yield* services.setup.get;
-      const threads = yield* services.repo.listThreads(after.id);
-      const runtimes = [...new Set([after.runtime, ...threads.flatMap((thread) => thread.brain?.runtime ?? [])])];
+      const channels = yield* services.repo.listChannels(after.id);
+      const runtimes = [...new Set([after.runtime, ...channels.flatMap((channel) => channel.brain?.runtime ?? [])])];
       return changeReach({
         before,
         after,

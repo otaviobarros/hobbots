@@ -249,7 +249,7 @@ export const MemoryToolsLive = Layer.effect(
           tags: draft.tags,
           state: "sending",
           version: null,
-          threadId: turn.threadId,
+          channelId: turn.channelId,
           messageId: turn.messageId,
           ...(turn.attemptId === undefined ? {} : { attemptId: turn.attemptId }),
           createdAt: at,
@@ -316,7 +316,7 @@ export const MemoryToolsLive = Layer.effect(
       (input: MemorySaveInput, { turn, access }: HubPlanContext) =>
         Effect.gen(function* () {
           // A private camp keeps nothing in memory: a save, or a share, from it is refused before anything is asked.
-          const work = { threadId: turn.threadId, ...(turn.taskId === undefined ? {} : { taskId: turn.taskId }) };
+          const work = { channelId: turn.channelId, ...(turn.taskId === undefined ? {} : { taskId: turn.taskId }) };
           if (yield* privateCamps.holds(work)) return yield* new HubRefusal({ message: PRIVATE_CAMP_SAVE });
           // What the session read of the web, which the page names as its source (ADR 036).
           const read = mark === undefined ? null : yield* mark.current;

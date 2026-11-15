@@ -1,9 +1,9 @@
 import { Schema } from "effect";
 import { type BackpackItem, BackpackItemId } from "./backpack.ts";
-import { ThreadId } from "./ids.ts";
+import { ChannelId } from "./ids.ts";
 import { type Question, QuestionId } from "./quest.ts";
 import { type Task, TaskId } from "./task.ts";
-import { Thread } from "./thread.ts";
+import { Channel } from "./channel.ts";
 
 /**
  * What Start fresh carries from a chat into the one that replaces it (ADR 037): the work it still
@@ -26,8 +26,8 @@ export const CARRIED_OVER_LABEL_MAX = 200;
  * was about when it moved, as one line, so the new chat's first turn can name it.
  */
 export class CarriedOver extends Schema.Class<CarriedOver>("CarriedOver")({
-  fromThreadId: ThreadId,
-  toThreadId: ThreadId,
+  fromChannelId: ChannelId,
+  toChannelId: ChannelId,
   ref: CarriedOverRef,
   label: Schema.String,
   carriedAt: Schema.String,
@@ -35,8 +35,8 @@ export class CarriedOver extends Schema.Class<CarriedOver>("CarriedOver")({
 
 /** What Start fresh did: the chat as it left it, the new chat, and what it carried from one to the other. */
 export class StartedFresh extends Schema.Class<StartedFresh>("StartedFresh")({
-  superseded: Thread,
-  chat: Thread,
+  superseded: Channel,
+  chat: Channel,
   carried: Schema.Array(CarriedOver),
 }) {}
 

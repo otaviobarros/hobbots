@@ -102,7 +102,7 @@ test("editing instructions in the profile changes the next reply", async ({ page
   await expect(page.getByText(/^Saved\. Pip gets this from its next turn/)).toBeVisible();
   await expect(page.getByText(/· Version 2$/)).toBeVisible();
 
-  // Back in the chat, the same thread's next reply runs on the edited configuration.
+  // Back in the chat, the same channel's next reply runs on the edited configuration.
   await page.goto(`${current.url}/#/hobs/${pip.id}`);
   await openOnlyChat(page);
   await expect(page.getByRole("main").getByText("Echo: first")).toBeVisible();
@@ -110,11 +110,11 @@ test("editing instructions in the profile changes the next reply", async ({ page
 
   const [saved] = await api<ReadonlyArray<Hob>>(current, "GET", "/api/agents");
   expect(saved).toMatchObject({ instructions: "Write long answers.", configVersion: 2 });
-  const [thread] = await api<ReadonlyArray<{ id: string }>>(current, "GET", `/api/agents/${pip.id}/threads`);
+  const [channel] = await api<ReadonlyArray<{ id: string }>>(current, "GET", `/api/agents/${pip.id}/channels`);
   // The page shows the reply while it streams; it is stored once it completes.
   await expect
     .poll(async () => {
-      const messages = await api<ReadonlyArray<Message>>(current, "GET", `/api/threads/${thread?.id}/messages`);
+      const messages = await api<ReadonlyArray<Message>>(current, "GET", `/api/channels/${channel?.id}/messages`);
       return messages.filter((m) => m.role === "assistant").map((m) => [m.content, m.configVersion]);
     })
     .toEqual([

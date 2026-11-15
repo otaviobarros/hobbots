@@ -1,4 +1,4 @@
-import { HobbotsRepository, TaskControls, ThreadMemberRepository } from "@hobbots/agents";
+import { HobbotsRepository, TaskControls, ChannelMemberRepository } from "@hobbots/agents";
 import { hobActor, mainLine, noteReceipt, OWNER_ACTOR, type RuntimeKind, type TaskTree } from "@hobbots/domain";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
@@ -13,7 +13,7 @@ import {
   QUILL,
   ROOK,
   send,
-  threadId,
+  channelId,
   treeWhen,
 } from "./party-hub.ts";
 
@@ -101,7 +101,7 @@ describe.each(RUNTIMES)("pausing a Quest, on %s", (runtime) => {
     if (note === undefined) throw new Error("no note");
     expect(noteReceipt(note, tree)).toEqual({ _tag: "Held", reason: "turn-running" });
     // The member takes it from its note, so nothing is owed in the lead's chat (ADR 039, #1461).
-    expect(await run(HobbotsRepository.use((repo) => repo.openTurnRequests(mainLine(threadId))))).toEqual([]);
+    expect(await run(HobbotsRepository.use((repo) => repo.openTurnRequests(mainLine(channelId))))).toEqual([]);
     // Your next message to the lead is answered after anything your mention could have woken, so
     // once its reply is in, the lead has answered that message only (STD-TEST-009).
     const asked = await run(send(["How is it going?"]));
@@ -110,11 +110,11 @@ describe.each(RUNTIMES)("pausing a Quest, on %s", (runtime) => {
     );
     expect(replies.filter((each) => each.promptId === userMessage.id)).toEqual([]);
     expect(leadTurns()).toBe(before + 1);
-    // A mention of a hob that cannot hear the thread refuses the whole message, as any message's does
+    // A mention of a hob that cannot hear the channel refuses the whole message, as any message's does
     // (ADR 039): it is not stored, and the member it also mentions gets no note.
     const refused = await run(Effect.flip(send(["@Pip @Rook use the red theme"])));
     expect(refused).toMatchObject({ _tag: "MentionRefused", hobs: [ROOK] });
-    const messages = await run(HobbotsRepository.use((repo) => repo.listMessages(threadId)));
+    const messages = await run(HobbotsRepository.use((repo) => repo.listMessages(channelId)));
     expect(messages.map((each) => each.id)).toEqual(replies.map((each) => each.id));
     expect((await run(treeWhen(() => true))).notes.filter((each) => each.text.includes("red theme"))).toEqual([]);
   }, 30_000);
@@ -129,7 +129,7 @@ describe.each(RUNTIMES)("pausing a Quest, on %s", (runtime) => {
     await run(treeWhen(pipRuns));
     // Rook joins the lead's chat and holds no Task in its Quest.
     await run(
-      Effect.orDie(ThreadMemberRepository.use((members) => members.add(threadId, hobActor(ROOK), OWNER_ACTOR))),
+      Effect.orDie(ChannelMemberRepository.use((members) => members.add(channelId, hobActor(ROOK), OWNER_ACTOR))),
     );
 
     const { userMessage } = await run(send(["@Pip @Rook pick a theme"]));

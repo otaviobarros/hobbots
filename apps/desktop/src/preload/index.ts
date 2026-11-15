@@ -38,7 +38,7 @@ const onOpenRequest = (listener: (requestId: string) => void) => {
 /** A Task in its lead's chat, as a notification names it (ADR 027). */
 interface TaskLink {
   readonly hobId: string;
-  readonly threadId: string;
+  readonly channelId: string;
   readonly taskId: string;
 }
 
@@ -48,7 +48,7 @@ const isTaskLink = (value: unknown): value is TaskLink => {
     typeof link === "object" &&
     link !== null &&
     typeof link.hobId === "string" &&
-    typeof link.threadId === "string" &&
+    typeof link.channelId === "string" &&
     typeof link.taskId === "string"
   );
 };
@@ -58,9 +58,9 @@ let waitingTask: TaskLink | undefined;
 let taskListener: ((link: TaskLink) => void) | undefined;
 ipcRenderer.on(openTaskChannel, (_event, link: unknown) => {
   if (!isTaskLink(link)) return;
-  const { hobId, threadId, taskId } = link;
-  if (taskListener) taskListener({ hobId, threadId, taskId });
-  else waitingTask = { hobId, threadId, taskId };
+  const { hobId, channelId, taskId } = link;
+  if (taskListener) taskListener({ hobId, channelId, taskId });
+  else waitingTask = { hobId, channelId, taskId };
 });
 
 /** Calls `listener` with each Task to open in its lead's chat; answers a function that stops it. */

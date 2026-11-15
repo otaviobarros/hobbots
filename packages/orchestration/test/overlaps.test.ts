@@ -7,7 +7,7 @@ import {
   TaskId,
   type TaskState,
   TaskTree,
-  ThreadId,
+  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { othersAtWork, overlapCheckpointId, overlapsOf } from "../src/overlaps.ts";
@@ -27,7 +27,7 @@ const task = (id: string, ownerId: AgentId, state: TaskState = "active", attempt
     ownerId,
     parentId: id === "site" ? null : TaskId.make("site"),
     rootId: TaskId.make("site"),
-    threadId: ThreadId.make("chat"),
+    channelId: ChannelId.make("chat"),
     brief: id,
     state,
     dependsOn: [],

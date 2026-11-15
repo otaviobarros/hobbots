@@ -1,4 +1,4 @@
-import { type Actor, type Agent, searchTerms, type Thread } from "@hobbots/domain";
+import { type Actor, type Agent, searchTerms, type Channel } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { SearchField } from "@hobbots/ui/components/search-field";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
@@ -46,12 +46,12 @@ export function FindButton({ open, onToggle }: { open: boolean; onToggle: () => 
  */
 export function FindBox({
   hob,
-  thread,
+  channel,
   onClose,
   onPick,
 }: {
   hob: Agent;
-  thread: Thread;
+  channel: Channel;
   onClose: () => void;
   /** Told of each pick, even of the message already open, which the address alone would not say. */
   onPick?: () => void;
@@ -61,7 +61,7 @@ export function FindBox({
   const input = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   useEffect(() => input.current?.focus(), []);
-  const inScope = scope === "here" ? thread.id : null;
+  const inScope = scope === "here" ? channel.id : null;
   const find = useFind(query, inScope);
   const found = useDeferredValue(find.found);
   const ask = useAsk();
@@ -96,8 +96,8 @@ export function FindBox({
     onClose();
     // Told once the address names the message, so the pick never acts on the one open before it.
     void navigate({
-      to: "/hobs/$hobId/threads/$threadId",
-      params: { hobId: row.target.hobId, threadId: row.target.threadId },
+      to: "/hobs/$hobId/channels/$channelId",
+      params: { hobId: row.target.hobId, channelId: row.target.channelId },
       search: row.target.messageId === null ? {} : { message: row.target.messageId },
     }).then(() => onPick?.());
   };
@@ -123,7 +123,7 @@ export function FindBox({
           trailing={
             <>
               <SegmentedControl size="sm" aria-label={copy.scope} value={scope} onValueChange={setScope}>
-                <SegmentedControlItem value="here">{copy.here({ kind: thread.kind })}</SegmentedControlItem>
+                <SegmentedControlItem value="here">{copy.here({ kind: channel.kind })}</SegmentedControlItem>
                 <SegmentedControlItem value="everywhere">{copy.everywhere}</SegmentedControlItem>
               </SegmentedControl>
               {/* Borderless and inset from the field's edge, like the field's own clear button. */}

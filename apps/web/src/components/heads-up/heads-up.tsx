@@ -1,4 +1,4 @@
-import type { Message, MessageId, ThreadId } from "@hobbots/domain";
+import type { Message, MessageId, ChannelId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { clashesQuery } from "../../api/clashes.ts";
@@ -51,14 +51,14 @@ const NONE: ReadonlyArray<HeadsUp> = [];
  * message, `after(id)` under the message with that id. A failed read says so at the end, with a way
  * to read again.
  */
-export const useHeadsUps = (threadId: ThreadId | undefined, transcript: ReadonlyArray<Message>) => {
-  const read = useQuery({ ...clashesQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== undefined });
+export const useHeadsUps = (channelId: ChannelId | undefined, transcript: ReadonlyArray<Message>) => {
+  const read = useQuery({ ...clashesQuery(channelId ?? ("" as ChannelId)), enabled: channelId !== undefined });
   const hobs = useHobLookup();
   const headsUps =
-    threadId === undefined
+    channelId === undefined
       ? NONE
       : (read.data ?? []).flatMap((clash) => {
-          const headsUp = headsUpOf(clash, threadId);
+          const headsUp = headsUpOf(clash, channelId);
           return headsUp === null ? [] : [headsUp];
         });
   const placed = placeHeadsUps(transcript, headsUps);

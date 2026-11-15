@@ -1,4 +1,4 @@
-import { HobbotsRepository, type SentTo, ThreadMemberRepository } from "@hobbots/agents";
+import { HobbotsRepository, type SentTo, ChannelMemberRepository } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
@@ -7,14 +7,14 @@ import {
   MessageId,
   mainLine,
   OWNER_ACTOR,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
   type TurnRequest,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { HobbotsRepositoryLive, ThreadMemberRepositoryLive } from "../src/index.ts";
+import { HobbotsRepositoryLive, ChannelMemberRepositoryLive } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 
 // Issue #1462 (ADR 039, One hob speaks at a time): a hob asked to answer that has nothing to add
@@ -25,14 +25,14 @@ import { TestDatabase } from "../src/testing.ts";
 const NOW = "2026-11-14T10:00:00.000Z";
 const QUILL = AgentId.make("quill");
 const PIP = AgentId.make("pip");
-const CAMP = ThreadId.make("camp");
+const CAMP = ChannelId.make("camp");
 
-type Services = HobbotsRepository | ThreadMemberRepository | SqlClient.SqlClient;
+type Services = HobbotsRepository | ChannelMemberRepository | SqlClient.SqlClient;
 
 const run = <A, E>(effect: Effect.Effect<A, E, Services>) =>
   effect.pipe(
     Effect.provide(
-      Layer.mergeAll(HobbotsRepositoryLive, ThreadMemberRepositoryLive).pipe(Layer.provideMerge(TestDatabase)),
+      Layer.mergeAll(HobbotsRepositoryLive, ChannelMemberRepositoryLive).pipe(Layer.provideMerge(TestDatabase)),
     ),
     Effect.runPromise,
   );
@@ -55,17 +55,17 @@ const hob = (id: AgentId) =>
 /** Quill's camp, which Pip joined, with your message that mentions Pip, then Quill. */
 const asked = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
-  const members = yield* ThreadMemberRepository;
+  const members = yield* ChannelMemberRepository;
   for (const id of [QUILL, PIP]) yield* repo.insertAgent(hob(id));
-  yield* repo.upsertThread(
-    new Thread({ id: CAMP, agentId: QUILL, title: "Plans", kind: "camp", createdAt: NOW, updatedAt: NOW }),
+  yield* repo.upsertChannel(
+    new Channel({ id: CAMP, agentId: QUILL, title: "Plans", kind: "camp", createdAt: NOW, updatedAt: NOW }),
   );
   yield* members.add(CAMP, hobActor(PIP), OWNER_ACTOR);
   const sent: SentTo = { mentions: [hobActor(PIP), hobActor(QUILL)], repliesTo: null };
   yield* repo.sendMessage(
     new Message({
       id: MessageId.make("plan"),
-      threadId: CAMP,
+      channelId: CAMP,
       actor: OWNER_ACTOR,
       role: "user",
       content: "What should we plant?",
@@ -85,7 +85,7 @@ const pipSpeaks = Effect.gen(function* () {
   if (pip === undefined) throw new Error("Pip owes an answer");
   const reply = new Message({
     id: MessageId.make("reply-pip"),
-    threadId: CAMP,
+    channelId: CAMP,
     actor: hobActor(PIP),
     role: "assistant",
     content: "",
@@ -104,7 +104,7 @@ const stored = Effect.flatMap(SqlClient.SqlClient, (sql) =>
     readonly hobId: string;
     readonly state: string;
     readonly passReason: string | null;
-  }>`SELECT hob_id, state, pass_reason FROM turn_requests WHERE thread_id = ${CAMP}
+  }>`SELECT hob_id, state, pass_reason FROM turn_requests WHERE channel_id = ${CAMP}
     ORDER BY queued_at, position`.pipe(Effect.orDie),
 );
 
@@ -120,7 +120,7 @@ describe("passing", () => {
         const sql = yield* SqlClient.SqlClient;
         yield* sql`INSERT INTO turn_requests ${sql.insert({
           id: "relayed",
-          thread_id: CAMP,
+          channel_id: CAMP,
           root_message_id: null,
           hob_id: QUILL,
           message_id: replyId,
@@ -147,7 +147,7 @@ describe("passing", () => {
           rows: yield* stored,
           messages: (yield* repo.listMessages(CAMP)).map((m) => m.id),
           reply: yield* repo.findMessage(replyId),
-          kept: yield* sql`SELECT reply_id, thread_id, agent_id FROM passed_turns`,
+          kept: yield* sql`SELECT reply_id, channel_id, agent_id FROM passed_turns`,
           versions: yield* repo.passedConfigVersions(CAMP, PIP),
           open: yield* repo.openTurnRequests(mainLine(CAMP)),
         };
@@ -160,7 +160,7 @@ describe("passing", () => {
     expect(result.passed.entries.map((entry) => entry.payload)).toEqual([
       {
         _tag: "TurnPassed",
-        threadId: CAMP,
+        channelId: CAMP,
         messageId: "reply-pip",
         request: expect.objectContaining({ hobId: PIP, state: "passed", passReason: "Quill covered it" }),
       },
@@ -175,7 +175,7 @@ describe("passing", () => {
     expect(result.messages).toEqual(["plan"]);
     expect(Option.isNone(result.reply)).toBe(true);
     // What the removed reply's turn used stays, under the hob that passed (OP-002).
-    expect(result.kept).toEqual([{ replyId: "reply-pip", threadId: CAMP, agentId: PIP }]);
+    expect(result.kept).toEqual([{ replyId: "reply-pip", channelId: CAMP, agentId: PIP }]);
     // The configuration its session ran on stays too, so changed instructions still reach it.
     expect(result.versions).toEqual([1]);
     expect(result.open.map((r: TurnRequest) => [r.hobId, r.state])).toEqual([[QUILL, "waiting"]]);
@@ -215,7 +215,7 @@ describe("passing", () => {
         yield* sql`INSERT INTO approval_requests ${sql.insert({
           id: "approval-1",
           agent_id: PIP,
-          thread_id: CAMP,
+          channel_id: CAMP,
           message_id: replyId,
           step_id: "step-1",
           tool: "Bash",

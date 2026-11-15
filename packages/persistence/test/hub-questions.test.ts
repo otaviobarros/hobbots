@@ -1,5 +1,5 @@
 import { HobbotsRepository, HubQuestionRepository } from "@hobbots/agents";
-import { Agent, AgentId, DeviceId, HubQuestionId, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, DeviceId, HubQuestionId, Channel, ChannelId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import type { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
@@ -20,7 +20,7 @@ const run = <A, E>(
 const NOW = "2026-11-05T10:00:00.000Z";
 const LATER = "2026-11-05T10:05:00.000Z";
 const FRODO = AgentId.make("frodo");
-const CHAT = ThreadId.make("first-run");
+const CHAT = ChannelId.make("first-run");
 const DEVICE = DeviceId.make("window");
 const ask = {
   kind: "commit-identity",
@@ -47,8 +47,8 @@ const seed = Effect.gen(function* () {
       createdAt: NOW,
     }),
   );
-  yield* repo.upsertThread(
-    new Thread({ id: CHAT, agentId: FRODO, title: "First run", createdAt: NOW, updatedAt: NOW }),
+  yield* repo.upsertChannel(
+    new Channel({ id: CHAT, agentId: FRODO, title: "First run", createdAt: NOW, updatedAt: NOW }),
   );
 });
 
@@ -57,7 +57,7 @@ const raise = (id: string, chat = true) =>
     questions.raise({
       id: HubQuestionId.make(id),
       key: "default",
-      ...(chat ? { chat: { agentId: FRODO, threadId: CHAT } } : {}),
+      ...(chat ? { chat: { agentId: FRODO, channelId: CHAT } } : {}),
       ask,
       options,
       recommended: "github",
@@ -82,7 +82,7 @@ describe("HubQuestionRepository", () => {
       id: "q1",
       key: "default",
       ask,
-      chat: { agentId: FRODO, threadId: CHAT },
+      chat: { agentId: FRODO, channelId: CHAT },
       options,
       recommended: "github",
       state: "open",
@@ -95,7 +95,7 @@ describe("HubQuestionRepository", () => {
     expect(open.map((each) => each.id)).toEqual(["q1"]);
     const journaled = events.filter((each) => each.type.startsWith("HubQuestion"));
     expect(journaled).toHaveLength(1);
-    expect(journaled[0]?.correlation).toMatchObject({ agentId: FRODO, threadId: CHAT });
+    expect(journaled[0]?.correlation).toMatchObject({ agentId: FRODO, channelId: CHAT });
   });
 
   it("records a picked choice by its key, a typed answer as typed, and what the hub applied", async () => {

@@ -1,4 +1,4 @@
-import { HobbotsRepository, type SentTo, ThreadMemberRepository } from "@hobbots/agents";
+import { HobbotsRepository, type SentTo, ChannelMemberRepository } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
@@ -8,13 +8,13 @@ import {
   MessageId,
   type MessageStatus,
   OWNER_ACTOR,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { EventJournal, HobbotsRepositoryLive, ThreadMemberRepositoryLive } from "../src/index.ts";
+import { EventJournal, HobbotsRepositoryLive, ChannelMemberRepositoryLive } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 
 // Issue #1460 (ADR 039, Who answers): the hub decides who answers a message you send in the same
@@ -26,12 +26,12 @@ const QUILL = AgentId.make("quill");
 const PIP = AgentId.make("pip");
 const ROOK = AgentId.make("rook");
 
-type Services = HobbotsRepository | ThreadMemberRepository | EventJournal | SqlClient.SqlClient;
+type Services = HobbotsRepository | ChannelMemberRepository | EventJournal | SqlClient.SqlClient;
 
 const run = <A, E>(effect: Effect.Effect<A, E, Services>) =>
   effect.pipe(
     Effect.provide(
-      Layer.mergeAll(HobbotsRepositoryLive, ThreadMemberRepositoryLive, EventJournal.layer).pipe(
+      Layer.mergeAll(HobbotsRepositoryLive, ChannelMemberRepositoryLive, EventJournal.layer).pipe(
         Layer.provideMerge(TestDatabase),
       ),
     ),
@@ -54,21 +54,21 @@ const hob = (id: AgentId) =>
   });
 
 /** Quill, Pip and Rook, and a camp of Quill's for each id. */
-const setUp = (...camps: ReadonlyArray<ThreadId>) =>
+const setUp = (...camps: ReadonlyArray<ChannelId>) =>
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
     for (const id of [QUILL, PIP, ROOK]) yield* repo.insertAgent(hob(id));
     for (const id of camps) {
-      yield* repo.upsertThread(
-        new Thread({ id, agentId: QUILL, title: id, kind: "camp", createdAt: NOW, updatedAt: NOW }),
+      yield* repo.upsertChannel(
+        new Channel({ id, agentId: QUILL, title: id, kind: "camp", createdAt: NOW, updatedAt: NOW }),
       );
     }
   });
 
-const yours = (threadId: ThreadId, status: MessageStatus = "complete") =>
+const yours = (channelId: ChannelId, status: MessageStatus = "complete") =>
   new Message({
     id: MessageId.make(crypto.randomUUID()),
-    threadId,
+    channelId,
     actor: OWNER_ACTOR,
     role: "user",
     content: "morning",
@@ -81,15 +81,15 @@ const yours = (threadId: ThreadId, status: MessageStatus = "complete") =>
 const NOBODY: SentTo & { readonly mentions: readonly [] } = { mentions: [], repliesTo: null };
 const send = (message: Message, to: SentTo) =>
   Effect.flatMap(HobbotsRepository, (repo) => repo.sendMessage(message, to));
-const addPip = (threadId: ThreadId) =>
-  Effect.flatMap(ThreadMemberRepository, (members) => members.add(threadId, hobActor(PIP), OWNER_ACTOR));
+const addPip = (channelId: ChannelId) =>
+  Effect.flatMap(ChannelMemberRepository, (members) => members.add(channelId, hobActor(PIP), OWNER_ACTOR));
 const answered = (sent: { readonly value: { readonly answerers: ReadonlyArray<{ readonly hobId: string }> } }) =>
   sent.value.answerers.map((answerer) => answerer.hobId);
 
 describe("deciding who answers as a message is stored", () => {
   // covers ADR 039 (Who answers, rules 2 and 4)
   it("answers with the only hob, nobody once a second joins, a mentioned hob, and refuses a non-member (#1460)", async () => {
-    const camp = ThreadId.make("camp");
+    const camp = ChannelId.make("camp");
     const result = await run(
       Effect.gen(function* () {
         yield* setUp(camp);
@@ -108,14 +108,14 @@ describe("deciding who answers as a message is stored", () => {
     expect(result.together.value.message.status).toBe("complete");
     expect(result.together.entries.map((entry) => entry.type)).toEqual(["MessageUpserted"]);
     expect(answered(result.mentioned)).toEqual([PIP, QUILL]);
-    expect(result.refused).toEqual(Exit.fail(new MentionRefused({ threadId: camp, hobs: [ROOK] })));
+    expect(result.refused).toEqual(Exit.fail(new MentionRefused({ channelId: camp, hobs: [ROOK] })));
     // The refused message was never stored.
     expect(result.stored).toHaveLength(3);
   });
 
   // covers ADR 039 (Who answers, rule 5)
   it("reaches a running Quest's lead with no mention, and its party member by mention (#1460)", async () => {
-    const camp = ThreadId.make("quest-camp");
+    const camp = ChannelId.make("quest-camp");
     const result = await run(
       Effect.gen(function* () {
         yield* setUp(camp);
@@ -127,7 +127,7 @@ describe("deciding who answers as a message is stored", () => {
             owner_id: owner,
             parent_id: parent,
             root_id: "k-lead",
-            thread_id: camp,
+            channel_id: camp,
             brief: id,
             state: "active",
             created_at: NOW,
@@ -140,7 +140,7 @@ describe("deciding who answers as a message is stored", () => {
           task_id: "k-lead",
           lead_id: QUILL,
           parent_quest_id: null,
-          thread_id: camp,
+          channel_id: camp,
           goal: "Plan the week",
           limits: "{}",
           depth: 1,
@@ -173,7 +173,7 @@ describe("deciding who answers as a message is stored", () => {
 
   // covers ADR 039 (Who answers), STD-ARCH-014
   it("decides from the members as the journal orders them when a hob joins at the same moment (#1460)", async () => {
-    const camps = Array.from({ length: 12 }, (_, index) => ThreadId.make(`race-${index}`));
+    const camps = Array.from({ length: 12 }, (_, index) => ChannelId.make(`race-${index}`));
     const results = await run(
       Effect.gen(function* () {
         yield* setUp(...camps);

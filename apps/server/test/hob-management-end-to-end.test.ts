@@ -36,7 +36,7 @@ import {
   roleFields,
   SUMMONING_DEFAULTS,
   type TaskTree,
-  type Thread,
+  type Channel,
 } from "@hobbots/domain";
 import { Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
@@ -267,33 +267,33 @@ const hobNamed = (name: string) => eventually(() => named(name));
 const stored = (hob: Agent) =>
   hobs.runPromise(HobbotsRepository.use((repo) => repo.findAgent(hob.id)).pipe(Effect.map(Option.getOrThrow)));
 
-const messages = async (thread: Thread) =>
-  (await request<ReadonlyArray<Message>>("GET", `/api/threads/${thread.id}/messages`)).body;
+const messages = async (channel: Channel) =>
+  (await request<ReadonlyArray<Message>>("GET", `/api/channels/${channel.id}/messages`)).body;
 
-/** Sends `lines` to `hob` in a new thread of its own. */
+/** Sends `lines` to `hob` in a new channel of its own. */
 const send = async (hob: Agent, lines: ReadonlyArray<string>) => {
-  const thread = (await request<Thread>("POST", `/api/agents/${hob.id}/threads`)).body;
-  expect((await request("POST", `/api/threads/${thread.id}/messages`, { content: lines.join("\n") })).status).toBe(200);
-  return thread;
+  const channel = (await request<Channel>("POST", `/api/agents/${hob.id}/channels`)).body;
+  expect((await request("POST", `/api/channels/${channel.id}/messages`, { content: lines.join("\n") })).status).toBe(200);
+  return channel;
 };
 
-/** The thread's reply once `ready` holds for it. */
-const replyWhen = (thread: Thread, ready: (reply: Message) => boolean) =>
+/** The channel's reply once `ready` holds for it. */
+const replyWhen = (channel: Channel, ready: (reply: Message) => boolean) =>
   eventually(async () => {
-    const reply = (await messages(thread)).filter((message) => message.role === "assistant").at(-1);
+    const reply = (await messages(channel)).filter((message) => message.role === "assistant").at(-1);
     return reply !== undefined && ready(reply) ? reply : undefined;
   });
 
-const ended = (thread: Thread) => replyWhen(thread, (reply) => !isInProgress(reply.status));
+const ended = (channel: Channel) => replyWhen(channel, (reply) => !isInProgress(reply.status));
 
 /** The request's Task tree once `ready` holds for it. */
-const treeWhen = (thread: Thread, ready: (tree: TaskTree) => boolean) =>
+const treeWhen = (channel: Channel, ready: (tree: TaskTree) => boolean) =>
   eventually(async () => {
-    const [tree] = await hobs.runPromise(TaskRepository.use((tasks) => tasks.readThreadTrees(thread.id)));
+    const [tree] = await hobs.runPromise(TaskRepository.use((tasks) => tasks.readChannelTrees(channel.id)));
     return tree !== undefined && ready(tree) ? tree : undefined;
   });
 
-/** The proposal a manager's call waits on, once it does: from its step in `thread`, or in the Inbox. */
+/** The proposal a manager's call waits on, once it does: from its step in `channel`, or in the Inbox. */
 const proposalBy = (manager: Agent) =>
   eventually(async () => {
     const listed = await request<{ proposals: ReadonlyArray<HobProposalView> }>("GET", "/api/hob-proposals");
@@ -323,7 +323,7 @@ describe("hob management, end to end", () => {
 
   // covers ADR 034 (Finding who can summon), ADR 032 (The roster), #412
   it("a hob without the Charm is told who holds it, hands the summon to that hob, and the hob is summoned for that Task (#412)", async () => {
-    const thread = await send(plain, [
+    const channel = await send(plain, [
       "Hire Mo for the launch",
       hub("delegate_task", {
         key: "hire-mo",
@@ -347,7 +347,7 @@ describe("hob management, end to end", () => {
     expect(told.briefing).toContain("hand that work with delegate_task to a hob listed below with the Summoning Charm");
 
     const mo = await hobNamed("Mo");
-    const tree = await treeWhen(thread, (each) => each.tasks.some((task) => task.ownerId === chief.id));
+    const tree = await treeWhen(channel, (each) => each.tasks.some((task) => task.ownerId === chief.id));
     const chiefTask = tree.tasks.find((task) => task.ownerId === chief.id);
     expect(mo).toMatchObject({ summonedBy: chief.id, summonedFor: chiefTask?.id, summonedUnattended: true });
     // On the Task it was handed, the manager changes the hob too, as a version that names its call there.
@@ -364,7 +364,7 @@ describe("hob management, end to end", () => {
   it("when two hobs hold the Charm, a hob asks who should be responsible, you pick one, and that hob summons (#412)", async () => {
     const bram = await create("Bram", 5003);
     await manages(bram, { "summoning.summon": "allow" });
-    const thread = await send(plain, [
+    const channel = await send(plain, [
       "Hire Nia",
       hub("start_quest", { key: "quest", goal: "Nia is on the team" }),
       hub("ask", {
@@ -389,7 +389,7 @@ describe("hob management, end to end", () => {
     expect(told.briefing).toContain("Bram");
     expect(told.briefing).toContain("first ask who should be responsible, with ask and those hobs as the choices");
     // Plain has no lead, so the question reaches you as a pick card with both hobs.
-    const asked = await treeWhen(thread, (tree) => tree.questions.some((question) => question.recipientId === null));
+    const asked = await treeWhen(channel, (tree) => tree.questions.some((question) => question.recipientId === null));
     const question = asked.questions[0] as Question;
     expect(question.options.map((option) => option.label)).toEqual(["Chief", "Bram"]);
     const picked = await answer(question, "Bram");
@@ -413,7 +413,7 @@ describe("hob management, end to end", () => {
       `fake:then ${hub("complete_task", { key: "three-done", summary: "Hired three" })}`,
     ];
     await manages(chief, {});
-    const thread = await send(lead, [
+    const channel = await send(lead, [
       "Have Chief hire three engineers",
       hub("delegate_task", { key: "hire", hob: "Chief", brief: brief.join("\n") }),
       hub("wait_for", { key: "wait", tasks: ["$hire.task_id"] }),
@@ -424,7 +424,7 @@ describe("hob management, end to end", () => {
       requests.find((each) => each.prompt.includes("was answered by hob") && each.prompt.includes("Ravi")),
     );
     expect(checked).toBeDefined();
-    const heard = await treeWhen(thread, (tree) => tree.questions[0]?.state === "answered");
+    const heard = await treeWhen(channel, (tree) => tree.questions[0]?.state === "answered");
     expect(heard.questions[0]).toMatchObject({
       askerId: chief.id,
       chain: [],
@@ -463,7 +463,7 @@ describe("hob management, end to end", () => {
   // covers ADR 034 (Never twice), ADR 031 (keyed calls), #660, #412
   it("a summon retried after its call moved into the Task the reply started returns the same hob, and the same key from another manager summons its own (#412)", async () => {
     await manages(chief, { "summoning.summon": "allow" });
-    const thread = await send(chief, [
+    const channel = await send(chief, [
       "Hire Uma",
       hub("summoning_summon", { key: "hire-uma", hobs: [draft("Uma")] }),
       hub("start_quest", { key: "quest", goal: "Uma is on the team" }),
@@ -472,7 +472,7 @@ describe("hob management, end to end", () => {
     ]);
     // The reply to your message, not a turn the started Quest wakes later.
     const reply = await eventually(async () => {
-      const first = (await messages(thread)).find((message) => message.role === "assistant");
+      const first = (await messages(channel)).find((message) => message.role === "assistant");
       return first !== undefined && !isInProgress(first.status) ? first : undefined;
     });
     const [, first, retried] = reply.content.split("summoning_summon: ");
@@ -481,7 +481,7 @@ describe("hob management, end to end", () => {
     expect(retried).toContain("You made this call before, so it was not sent again.");
     expect(retried).toContain(`id ${id}`);
     // The call's record moved into the Task's work with the reply's other calls.
-    const [tree] = await hobs.runPromise(TaskRepository.use((tasks) => tasks.readThreadTrees(thread.id)));
+    const [tree] = await hobs.runPromise(TaskRepository.use((tasks) => tasks.readChannelTrees(channel.id)));
     expect(tree?.tasks[0]?.ownerId).toBe(chief.id);
 
     const bram = (await named("Bram")) as Agent;
@@ -500,8 +500,8 @@ describe("hob management, end to end", () => {
 
   /** `name`, summoned by the chief without a card, with a reply of its own left running. */
   const busy = async (name: string) => {
-    const thread = await send(chief, [hub("summoning_summon", { key: `hire-${name}`, hobs: [draft(name)] })]);
-    await ended(thread);
+    const channel = await send(chief, [hub("summoning_summon", { key: `hire-${name}`, hobs: [draft(name)] })]);
+    await ended(channel);
     const made = (await named(name)) as Agent;
     gate = Deferred.makeUnsafe<void>();
     const running = await send(made, ["Draft the launch post", HOLD]);
@@ -511,10 +511,10 @@ describe("hob management, end to end", () => {
 
   /** The chief asks to retire `name`, with `replies` for its running replies, and waits on the card. */
   const retiring = async (name: string, replies: "finish" | "stop") => {
-    const thread = await send(chief, [
+    const channel = await send(chief, [
       hub("summoning_retire", { key: `retire-${name}`, hob: name, running_replies: replies }),
     ]);
-    return { thread, card: await proposalBy(chief) };
+    return { channel, card: await proposalBy(chief) };
   };
 
   // covers ADR 034 (Retiring; Retire is high risk), AG-006, #412
@@ -527,7 +527,7 @@ describe("hob management, end to end", () => {
     expect((await onProposal(finish.card, "allow-all")).status).toBe(422);
     expect((await onProposal(finish.card, "always-allow", { operations: ["summoning.retire"] })).status).toBe(409);
     expect((await onProposal(finish.card, "allow-all", { confirmed: true })).status).toBe(200);
-    expect((await ended(finish.thread)).content).toContain("Rex is retired now.");
+    expect((await ended(finish.channel)).content).toContain("Rex is retired now.");
     expect((await stored(rex.made)).status).toBe("retired");
     // Once only: the settled card is never decided again.
     expect((await onProposal(finish.card, "allow-all", { confirmed: true })).status).toBe(409);
@@ -540,7 +540,7 @@ describe("hob management, end to end", () => {
     const stop = await retiring("Sid", "stop");
     expect(stop.card.proposal.rows[0]).toMatchObject({ label: "Sid", runningReplies: "stop" });
     expect((await onProposal(stop.card, "allow-all", { confirmed: true })).status).toBe(200);
-    expect((await ended(stop.thread)).content).toContain("Sid is retired now.");
+    expect((await ended(stop.channel)).content).toContain("Sid is retired now.");
     // Sid's reply was stopped, without waiting for it to go on.
     expect((await ended(sid.running)).status).not.toBe("complete");
     expect((await stored(sid.made)).status).toBe("retired");
@@ -567,7 +567,7 @@ describe("hob management, end to end", () => {
   it("reading a change call back finds only the versions that call made, never another Task's call with the same key (#412)", async () => {
     await manages(chief, { "summoning.summon": "allow", "summoning.instructions": "allow" });
     // A change the chief made in a chat to hobs it summoned reads back from the versions it made.
-    const thread = await send(chief, [
+    const channel = await send(chief, [
       hub("summoning_summon", { key: "hire-pair", hobs: [draft("Xan"), draft("Yul")] }),
       hub("summoning_change", {
         key: "update",
@@ -577,9 +577,9 @@ describe("hob management, end to end", () => {
         ],
       }),
     ]);
-    await ended(thread);
+    await ended(channel);
     const [xan, yul] = [(await named("Xan")) as Agent, (await named("Yul")) as Agent];
-    const calls = await hobs.runPromise(CharmCalls.use((records) => records.listForThread(thread.id)));
+    const calls = await hobs.runPromise(CharmCalls.use((records) => records.listForChannel(channel.id)));
     const made = calls.find((call) => call.tool === "summoning_change") as CharmCall;
     expect(made.state).toBe("applied");
     expect(await readBack(made)).toBe(true);

@@ -41,7 +41,7 @@ import {
   SUMMONING_DEFAULTS,
   SUMMONING_SELF_DEFAULTS,
   TaskId,
-  type Thread,
+  type Channel,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -200,39 +200,39 @@ const eventually = <A>(read: () => Promise<A | undefined>) =>
     ),
   );
 
-const messages = async (thread: Thread) =>
-  (await request<ReadonlyArray<Message>>("GET", `/api/threads/${thread.id}/messages`)).body;
+const messages = async (channel: Channel) =>
+  (await request<ReadonlyArray<Message>>("GET", `/api/channels/${channel.id}/messages`)).body;
 
-const approvalsOf = async (thread: Thread) =>
-  (await request<ReadonlyArray<ApprovalRequest>>("GET", `/api/threads/${thread.id}/approvals`)).body;
+const approvalsOf = async (channel: Channel) =>
+  (await request<ReadonlyArray<ApprovalRequest>>("GET", `/api/channels/${channel.id}/approvals`)).body;
 
-const settled = (thread: Thread) =>
+const settled = (channel: Channel) =>
   eventually(async () => {
-    const reply = (await messages(thread)).at(-1);
+    const reply = (await messages(channel)).at(-1);
     return reply?.role === "assistant" && !isInProgress(reply.status) ? reply : undefined;
   });
 
 const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-/** The hob makes the scripted calls in a new thread: the request it waits on, or its finished reply. */
+/** The hob makes the scripted calls in a new channel: the request it waits on, or its finished reply. */
 const turn = async (hob: Agent, ...calls: Array<string>) => {
-  const thread = (await request<Thread>("POST", `/api/agents/${hob.id}/threads`)).body;
+  const channel = (await request<Channel>("POST", `/api/agents/${hob.id}/channels`)).body;
   const asked = requests.length;
   expect(
-    (await request("POST", `/api/threads/${thread.id}/messages`, { content: ["Go", ...calls].join("\n") })).status,
+    (await request("POST", `/api/channels/${channel.id}/messages`, { content: ["Go", ...calls].join("\n") })).status,
   ).toBe(200);
   return eventually(async () => {
-    const pending = (await approvalsOf(thread)).find((approval) => approval.state === "pending");
-    if (pending) return { thread, pending, proposal: undefined, reply: undefined, sent: requests[asked] };
-    const reply = (await messages(thread)).at(-1);
+    const pending = (await approvalsOf(channel)).find((approval) => approval.state === "pending");
+    if (pending) return { channel, pending, proposal: undefined, reply: undefined, sent: requests[asked] };
+    const reply = (await messages(channel)).at(-1);
     // A call whose Ask became a proposal waits on its step until you decide its rows (ADR 034).
     const waiting = reply?.steps?.find((step) => step.state === "awaiting" && step.proposalId !== undefined);
     if (waiting?.proposalId !== undefined) {
       const proposal = await proposalOf(waiting.proposalId);
-      return { thread, pending: undefined, proposal, reply: undefined, sent: requests[asked] };
+      return { channel, pending: undefined, proposal, reply: undefined, sent: requests[asked] };
     }
     return reply?.role === "assistant" && !isInProgress(reply.status)
-      ? { thread, pending: undefined, proposal: undefined, reply, sent: requests[asked] }
+      ? { channel, pending: undefined, proposal: undefined, reply, sent: requests[asked] }
       : undefined;
   });
 };
@@ -259,7 +259,7 @@ const onProposal = async (
 
 /** Decides every row of the proposal a turn waits on, and waits for the reply to end. */
 const decideProposal = async (
-  asked: { readonly thread: Thread; readonly proposal?: HobProposalView | undefined },
+  asked: { readonly channel: Channel; readonly proposal?: HobProposalView | undefined },
   decision: "allow-all" | "deny-all",
   body: object = {},
 ) => {
@@ -268,7 +268,7 @@ const decideProposal = async (
   const decided = await onProposal(proposal, decision, body);
   expect(decided.status).toBe(200);
   expect(decided.body.proposal.state).toBe("settled");
-  return settled(asked.thread);
+  return settled(asked.channel);
 };
 
 const create = async (name: string, lookSeed: number) => {
@@ -617,7 +617,7 @@ describe("the Summoning Charm, end to end", () => {
       lifetime: "always",
     });
     expect(decided.status).toBe(200);
-    await settled(asked.thread);
+    await settled(asked.channel);
     const grantsOf = () => hobs.runPromise(GrantService.use((grants) => grants.list({ agentId: bo.id, all: true })));
     expect((await grantsOf()).filter((grant) => grant.revokedAt === null)).toHaveLength(1);
 
@@ -782,7 +782,7 @@ describe("the Summoning Charm, end to end", () => {
           const order: Array<string> = [];
           const charmTurn: CharmTurn = {
             agentId: manager.id,
-            threadId: null,
+            channelId: null,
             messageId: null,
             scope: () => `reply:${runtime.name}-${records}`,
             also: `reply:${runtime.name}-${records}`,
@@ -851,7 +851,7 @@ describe("the Summoning Charm, end to end", () => {
         );
         const charmTurn: CharmTurn = {
           agentId: by.id,
-          threadId: null,
+          channelId: null,
           messageId: null,
           scope: () => scope,
           also: scope,
@@ -993,7 +993,7 @@ describe("the Summoning Charm, end to end", () => {
           id: TaskId.make(id),
           ownerId: owner.id,
           parentId: parentId === null ? null : TaskId.make(parentId),
-          threadId: null,
+          channelId: null,
           brief: `Brief for ${id}`,
           dependsOn: [],
           createdAt: new Date().toISOString(),
@@ -1016,7 +1016,7 @@ describe("the Summoning Charm, end to end", () => {
     );
     return {
       agentId: by.id,
-      threadId: null,
+      channelId: null,
       messageId: null,
       scope: () => `task:${task}`,
       also: `task:${task}`,
@@ -1211,7 +1211,7 @@ describe("the Summoning Charm, end to end", () => {
     expect(stale.body).toMatchObject({ _tag: "HobProposalChangedSince" });
     expect((await onProposal(view, `rows/${jules?.id}/allow`)).status).toBe(200);
     expect((await onProposal(view, `rows/${kai?.id}/deny`)).status).toBe(200);
-    const reply = await settled(asked.thread);
+    const reply = await settled(asked.channel);
     expect(reply.content).toContain(
       "- Iris: the user allowed it. Changed instructions. It gets this from its next turn, in a chat or a Task. A turn already running finishes the old way, unless this takes something away: then it stops.",
     );
@@ -1294,8 +1294,8 @@ describe("the Summoning Charm, end to end", () => {
     );
     expect(anonymous.status).not.toBe(200);
     expect((await proposalOf(view.proposal.id)).proposal.state).toBe("open");
-    expect((await request("POST", `/api/threads/${asked.thread.id}/interrupt`)).status).toBeLessThan(300);
-    await settled(asked.thread);
+    expect((await request("POST", `/api/channels/${asked.channel.id}/interrupt`)).status).toBeLessThan(300);
+    await settled(asked.channel);
     // The proposal outlives its turn, in the Inbox.
     const listed = await request<{ proposals: ReadonlyArray<HobProposalView> }>("GET", "/api/hob-proposals");
     expect(listed.body.proposals.some((each) => each.proposal.id === view.proposal.id)).toBe(true);

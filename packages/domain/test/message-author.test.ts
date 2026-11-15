@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { type Actor, AgentId, authorOf, Message, MessageId, replyHobOf, ThreadId } from "../src/index.ts";
+import { type Actor, AgentId, authorOf, Message, MessageId, replyHobOf, ChannelId } from "../src/index.ts";
 
 // Issue #1549 (ADR 039, A member hob works as itself; STD-ARCH-021): a message's author is its
-// actor, and only a message not stored yet falls back to the hob the thread belongs to.
+// actor, and only a message not stored yet falls back to the hob the channel belongs to.
 
 const CAMP = { agentId: AgentId.make("wren") };
 const QUILL: Actor = { kind: "hob", id: "quill" };
@@ -11,7 +11,7 @@ const LEO: Actor = { kind: "user", id: "leo" };
 const message = (role: "user" | "assistant" | "note", actor: Actor | null) =>
   new Message({
     id: MessageId.make(`${role}-${actor?.id ?? "none"}`),
-    threadId: ThreadId.make("camp"),
+    channelId: ChannelId.make("camp"),
     actor,
     role,
     content: "Hello",

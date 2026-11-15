@@ -20,7 +20,7 @@ import {
   type Message,
   type ReplyStep,
   roleFields,
-  type Thread,
+  type Channel,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -130,8 +130,8 @@ const eventually = <A>(read: () => Promise<A | undefined>) =>
     ),
   );
 
-const forThread = async (thread: Thread) =>
-  (await request<ReadonlyArray<ApprovalRequest>>("GET", `/api/threads/${thread.id}/approvals`)).body;
+const forChannel = async (channel: Channel) =>
+  (await request<ReadonlyArray<ApprovalRequest>>("GET", `/api/channels/${channel.id}/approvals`)).body;
 
 /** The Inbox's list: every pending request and the most recently closed ones. */
 const inbox = async () => (await request<ReadonlyArray<ApprovalRequest>>("GET", "/api/approvals")).body;
@@ -163,25 +163,25 @@ const hobInProject = async () => {
   return hob.body;
 };
 
-/** Sends the command in a new thread of the hob: the request it waits on, or its finished reply. */
+/** Sends the command in a new channel of the hob: the request it waits on, or its finished reply. */
 const runCommand = async (hob: Agent, line: string) => {
-  const thread = (await request<Thread>("POST", `/api/agents/${hob.id}/threads`)).body;
-  const sent = await request("POST", `/api/threads/${thread.id}/messages`, { content: `Go\nfake:tool Bash ${line}` });
+  const channel = (await request<Channel>("POST", `/api/agents/${hob.id}/channels`)).body;
+  const sent = await request("POST", `/api/channels/${channel.id}/messages`, { content: `Go\nfake:tool Bash ${line}` });
   expect(sent.status).toBe(200);
   return eventually(async () => {
-    const pending = (await forThread(thread)).find((approval) => approval.state === "pending");
-    if (pending) return { thread, pending, reply: undefined };
-    const reply = (await request<ReadonlyArray<Message>>("GET", `/api/threads/${thread.id}/messages`)).body.at(-1);
+    const pending = (await forChannel(channel)).find((approval) => approval.state === "pending");
+    if (pending) return { channel, pending, reply: undefined };
+    const reply = (await request<ReadonlyArray<Message>>("GET", `/api/channels/${channel.id}/messages`)).body.at(-1);
     return reply?.role === "assistant" && !isInProgress(reply.status)
-      ? { thread, pending: undefined, reply }
+      ? { channel, pending: undefined, reply }
       : undefined;
   });
 };
 
-/** Waits until the thread's reply has ended. */
-const settled = (thread: Thread) =>
+/** Waits until the channel's reply has ended. */
+const settled = (channel: Channel) =>
   eventually(async () => {
-    const reply = (await request<ReadonlyArray<Message>>("GET", `/api/threads/${thread.id}/messages`)).body.at(-1);
+    const reply = (await request<ReadonlyArray<Message>>("GET", `/api/channels/${channel.id}/messages`)).body.at(-1);
     return reply?.role === "assistant" && !isInProgress(reply.status) ? reply : undefined;
   });
 
@@ -194,7 +194,7 @@ describe("approvals, end to end", () => {
 
     const approved = await decide(asked, { decision: "approve", lifetime: "always" });
     expect(approved.body).toMatchObject({ state: "approved", lifetime: "always" });
-    expect(toolSteps(await settled(first.thread))).toMatchObject([{ state: "done" }]);
+    expect(toolSteps(await settled(first.channel))).toMatchObject([{ state: "done" }]);
 
     // History lists the rule, live, with the request that saved it.
     const [saved] = await history();
@@ -237,9 +237,9 @@ describe("approvals, end to end", () => {
       [200, "approved"],
     ]);
     expect(twice[1]?.body.revision).toBe(twice[0]?.body.revision);
-    const onceReply = await settled(once.thread);
+    const onceReply = await settled(once.channel);
     expect(toolSteps(onceReply)).toMatchObject([{ state: "done", call: { operation: "push" } }]);
-    expect(await forThread(once.thread)).toHaveLength(1);
+    expect(await forChannel(once.channel)).toHaveLength(1);
 
     // Always, doubled: one rule.
     const always = await runCommand(hob, "rm build");
@@ -249,7 +249,7 @@ describe("approvals, end to end", () => {
       decide(alwaysRequest, { decision: "approve", lifetime: "always" }),
     ]);
     expect(doubled.map(({ status }) => status)).toEqual([200, 200]);
-    expect(toolSteps(await settled(always.thread))).toMatchObject([{ state: "done" }]);
+    expect(toolSteps(await settled(always.channel))).toMatchObject([{ state: "done" }]);
     expect(await history()).toHaveLength(1);
   });
 
@@ -262,15 +262,15 @@ describe("approvals, end to end", () => {
     // A day less a minute later it still waits.
     advanceClock("1439 minutes");
     await Effect.runPromise(Effect.sleep("50 millis"));
-    expect(await forThread(asked.thread)).toMatchObject([{ id: pending.id, state: "pending" }]);
+    expect(await forChannel(asked.channel)).toMatchObject([{ id: pending.id, state: "pending" }]);
 
     // Past the day, the turn goes on without running it and the request is expired, in chat and in the Inbox.
     advanceClock("2 minutes");
-    const reply = await settled(asked.thread);
+    const reply = await settled(asked.channel);
     expect(reply.status).toBe("complete");
     expect(toolSteps(reply)).toMatchObject([{ state: "denied" }]);
     const expired = await eventually(async () => {
-      const [stored] = await forThread(asked.thread);
+      const [stored] = await forChannel(asked.channel);
       return stored?.state === "expired" ? stored : undefined;
     });
     expect(await inbox()).toMatchObject([{ id: pending.id, state: "expired" }]);
@@ -289,13 +289,13 @@ describe("approvals, end to end", () => {
     const fromChat = await runCommand(hob, "rm build");
     const fromInbox = await runCommand(hob, "rm dist");
 
-    // The Inbox lists exactly what each thread shows.
+    // The Inbox lists exactly what each channel shows.
     const listed = await inbox();
-    expect(listed).toEqual([...(await forThread(fromChat.thread)), ...(await forThread(fromInbox.thread))]);
+    expect(listed).toEqual([...(await forChannel(fromChat.channel)), ...(await forChannel(fromInbox.channel))]);
 
     // The same decision, one made on the chat's copy and one on the Inbox's.
-    const chatCopy = (await forThread(fromChat.thread))[0] as ApprovalRequest;
-    const inboxCopy = listed.find((approval) => approval.threadId === fromInbox.thread.id) as ApprovalRequest;
+    const chatCopy = (await forChannel(fromChat.channel))[0] as ApprovalRequest;
+    const inboxCopy = listed.find((approval) => approval.channelId === fromInbox.channel.id) as ApprovalRequest;
     const decision = { decision: "deny", reason: "Keep it for now" };
     const decidedInChat = await decide(chatCopy, decision);
     const decidedInInbox = await decide(inboxCopy, decision);
@@ -305,7 +305,7 @@ describe("approvals, end to end", () => {
     expect(outcome(decidedInInbox.body)).toEqual(outcome(decidedInChat.body));
 
     // Each reply ends the same way, with the reason going back to the hob.
-    const replies = [await settled(fromChat.thread), await settled(fromInbox.thread)];
+    const replies = [await settled(fromChat.channel), await settled(fromInbox.channel)];
     for (const reply of replies) {
       expect(reply.status).toBe("complete");
       expect(toolSteps(reply)).toMatchObject([
@@ -315,9 +315,9 @@ describe("approvals, end to end", () => {
 
     // Both lists read the stored decisions the same.
     const after = await inbox();
-    for (const thread of [fromChat.thread, fromInbox.thread]) {
-      const [inThread] = await forThread(thread);
-      expect(after.find((approval) => approval.id === inThread?.id)).toEqual(inThread);
+    for (const channel of [fromChat.channel, fromInbox.channel]) {
+      const [inChannel] = await forChannel(channel);
+      expect(after.find((approval) => approval.id === inChannel?.id)).toEqual(inChannel);
     }
   });
 });

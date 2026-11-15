@@ -12,19 +12,19 @@ import {
   type RunningQuest,
   replyHobOf,
   sameActor,
-  type Thread,
-  type ThreadMember,
-  ThreadMembers,
+  type Channel,
+  type ChannelMember,
+  ChannelMembers,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { HobbotsRepository } from "./repository.ts";
 import type { Speaker } from "./speaker.ts";
 import { TaskRepository } from "./tasks.ts";
-import { ThreadMemberRepository } from "./thread-members.ts";
+import { ChannelMemberRepository } from "./channel-members.ts";
 import { UserRepository } from "./users.ts";
 
 // Who a hob's turn hears from and why it runs (ADR 039, The context pack with several hobs): every
-// speaker named, the thread's members, and the reason for the turn.
+// speaker named, the channel's members, and the reason for the turn.
 
 /**
  * Why a turn runs, as `answerersFor` decided it: its cause and who caused it, or null when no actor
@@ -42,29 +42,29 @@ export interface PackMember {
   readonly kind: "person" | "hob";
   /** The member is the hob whose turn it is. */
   readonly you: boolean;
-  /** The member is the thread's owner. */
+  /** The member is the channel's owner. */
   readonly owner: boolean;
 }
 
-/** What the pack says of the people and hobs in a thread, for one hob's turn. */
+/** What the pack says of the people and hobs in a channel, for one hob's turn. */
 export interface PackPeople {
   /** The hob whose turn it is. */
   readonly you: AgentId;
-  /** The thread's active members, the owner first, then in the order they joined. */
+  /** The channel's active members, the owner first, then in the order they joined. */
   readonly members: ReadonlyArray<PackMember>;
   /** A message's author as the transcript names them: "Marina (person)", "Quill (hob)" or "You". */
   readonly speaker: (message: Message) => string;
   /** An actor's name alone, such as "Marina". */
   readonly nameOf: (actor: Actor) => string;
-  /** The thread's member rows as stored, in every state, which `turnReasonOf` reads. */
-  readonly rows: ReadonlyArray<ThreadMember>;
+  /** The channel's member rows as stored, in every state, which `turnReasonOf` reads. */
+  readonly rows: ReadonlyArray<ChannelMember>;
   /**
-   * Whether the thread is shared: more than one hob, or more than one person (ADR 039). Only a
-   * shared thread's pack lists who is here: in a direct message it says nothing a hob does not know.
+   * Whether the channel is shared: more than one hob, or more than one person (ADR 039). Only a
+   * shared channel's pack lists who is here: in a direct message it says nothing a hob does not know.
    */
   readonly shared: boolean;
   /**
-   * The latest top Quest under way in a shared thread, with the hobs it brought in, which
+   * The latest top Quest under way in a shared channel, with the hobs it brought in, which
    * `turnReasonOf` reads; null in a direct message, whose pack says no reason.
    */
   readonly quest: RunningQuest | null;
@@ -75,33 +75,33 @@ export const UNKNOWN_PERSON = "User";
 
 /**
  * A message's author as the pack names them: `authorOf`, and for a person's message not stored yet,
- * the thread's owner, `owner`: null when the thread has no owner member stored.
+ * the channel's owner, `owner`: null when the channel has no owner member stored.
  */
-const packAuthorOf = (message: Message, thread: Thread, owner: Actor | null): Actor | null =>
-  authorOf(message, thread) ?? owner;
+const packAuthorOf = (message: Message, channel: Channel, owner: Actor | null): Actor | null =>
+  authorOf(message, channel) ?? owner;
 
 /** The hob's own replies, as `replyHobOf` names their hob. */
-export const isOwnReply = (message: Message, thread: Thread, agentId: AgentId): boolean =>
-  replyHobOf(message, thread) === agentId;
+export const isOwnReply = (message: Message, channel: Channel, agentId: AgentId): boolean =>
+  replyHobOf(message, channel) === agentId;
 
-/** The thread's owner, as its member rows record them, or null when none is stored. */
-const ownerOf = (members: ReadonlyArray<ThreadMember>): Actor | null =>
+/** The channel's owner, as its member rows record them, or null when none is stored. */
+const ownerOf = (members: ReadonlyArray<ChannelMember>): Actor | null =>
   members.find((member) => member.role === "owner")?.actor ?? null;
 
 /**
- * The people and hobs of the speaker's thread as its turn names them. Without members stored, only
- * the thread's hob is listed. A person with no user record is named "User".
+ * The people and hobs of the speaker's channel as its turn names them. Without members stored, only
+ * the channel's hob is listed. A person with no user record is named "User".
  */
 export const makePackPeople = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
-  const memberRepo = yield* Effect.serviceOption(ThreadMemberRepository);
+  const memberRepo = yield* Effect.serviceOption(ChannelMemberRepository);
   const users = yield* Effect.serviceOption(UserRepository);
   const tasks = yield* Effect.serviceOption(TaskRepository);
   // As `answerersFor` reads it when a message is stored: the latest top Quest under way, and its party.
-  const runningQuest = (thread: Thread) =>
+  const runningQuest = (channel: Channel) =>
     Effect.gen(function* () {
       if (Option.isNone(tasks)) return null;
-      const summary = (yield* tasks.value.listQuestSummaries(thread.id))
+      const summary = (yield* tasks.value.listQuestSummaries(channel.id))
         .filter((each) => each.parentQuestId === null && isActiveQuest(each.state))
         .at(-1);
       if (summary === undefined) return null;
@@ -112,15 +112,15 @@ export const makePackPeople = Effect.gen(function* () {
       });
       return { leadId: summary.leadId, party: [...new Set(party)] } satisfies RunningQuest;
     });
-  return ({ thread, agent }: Pick<Speaker, "thread"> & { readonly agent: Pick<Speaker["agent"], "id"> }) =>
+  return ({ channel, agent }: Pick<Speaker, "channel"> & { readonly agent: Pick<Speaker["agent"], "id"> }) =>
     Effect.gen(function* () {
       const agentId = agent.id;
-      const stored = Option.isNone(memberRepo) ? [] : yield* memberRepo.value.list(thread.id);
-      const active = stored.filter(ThreadMembers.isActive);
+      const stored = Option.isNone(memberRepo) ? [] : yield* memberRepo.value.list(channel.id);
+      const active = stored.filter(ChannelMembers.isActive);
       const owner = ownerOf(stored);
       const actors: ReadonlyArray<Actor> =
-        // standards-allow STD-ARCH-021: without members stored, the thread is the hob's it belongs to, alone
-        active.length > 0 ? active.map((member) => member.actor) : [hobActor(thread.agentId)];
+        // standards-allow STD-ARCH-021: without members stored, the channel is the hob's it belongs to, alone
+        active.length > 0 ? active.map((member) => member.actor) : [hobActor(channel.agentId)];
       const people = Option.isNone(users) ? [] : yield* users.value.list;
       const agents = yield* repo.listAgents;
       const nameOf = (actor: Actor): string => {
@@ -135,7 +135,7 @@ export const makePackPeople = Effect.gen(function* () {
       };
       const you = hobActor(agentId);
       const speaker = (message: Message): string => {
-        const author = packAuthorOf(message, thread, owner);
+        const author = packAuthorOf(message, channel, owner);
         if (author === null) return `${UNKNOWN_PERSON} (person)`;
         if (sameActor(author, you)) {
           return message.runtime === null ? "You" : `You, thinking with ${brainLabel(message.runtime, message.model)}`;
@@ -152,8 +152,8 @@ export const makePackPeople = Effect.gen(function* () {
       );
       const shared =
         members.filter((m) => m.kind === "hob").length > 1 || members.filter((m) => m.kind === "person").length > 1;
-      // Only a shared thread says why its hob answers, so only it reads the Quest under way.
-      const quest = shared ? yield* runningQuest(thread) : null;
+      // Only a shared channel says why its hob answers, so only it reads the Quest under way.
+      const quest = shared ? yield* runningQuest(channel) : null;
       return { you: agentId, members, speaker, nameOf, rows: stored, shared, quest } satisfies PackPeople;
     });
 });
@@ -161,19 +161,19 @@ export const makePackPeople = Effect.gen(function* () {
 /**
  * Why `agentId` answers `prompt`, worked out as the floor decides it (ADR 039, Who answers): its
  * own entry in `answerersFor`. Null for a turn no message caused, such as a continuation, or one the
- * rule gives to nobody, as when the thread changed hands.
+ * rule gives to nobody, as when the channel changed hands.
  */
 export const turnReasonOf = (
   prompt: Message | null,
-  thread: Thread,
-  members: ReadonlyArray<ThreadMember>,
+  channel: Channel,
+  members: ReadonlyArray<ChannelMember>,
   agentId: AgentId,
   quest: RunningQuest | null = null,
 ): TurnReason | null => {
   if (prompt === null) return null;
   const decided = answerersFor(
     { role: prompt.role, actor: prompt.actor, mentions: prompt.mentions, repliesTo: null },
-    { id: thread.id, kind: thread.kind, quest },
+    { id: channel.id, kind: channel.kind, quest },
     members,
   );
   if (decided instanceof MentionRefused) return null;

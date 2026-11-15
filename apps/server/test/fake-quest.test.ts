@@ -8,8 +8,8 @@ import {
   OWNER_ACTOR,
   type Task,
   type TaskTree,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import {
   BackpackLive,
@@ -32,7 +32,7 @@ const now = "2026-11-02T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
 const ADA = AgentId.make("ada");
-const threadId = ThreadId.make("black-friday-thread");
+const channelId = ChannelId.make("black-friday-channel");
 
 const hob = (id: AgentId, name: string) =>
   new Agent({
@@ -53,9 +53,9 @@ const Party = Layer.effectDiscard(
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
     for (const each of [hob(ALDRIC, "Aldric"), hob(QUILL, "Quill"), hob(ADA, "Ada")]) yield* repo.insertAgent(each);
-    yield* repo.upsertThread(
-      new Thread({
-        id: threadId,
+    yield* repo.upsertChannel(
+      new Channel({
+        id: channelId,
         agentId: ALDRIC,
         title: "Black Friday",
         kind: "chat",
@@ -88,13 +88,13 @@ afterEach(async () => {
   runtime = undefined;
 });
 
-/** The thread's Task tree, once the play has started it. */
-const treeIn = (thread: ThreadId) =>
+/** The channel's Task tree, once the play has started it. */
+const treeIn = (channel: ChannelId) =>
   Effect.gen(function* () {
     const tasks = yield* TaskRepository;
-    return (yield* tasks.readThreadTrees(thread))[0];
+    return (yield* tasks.readChannelTrees(channel))[0];
   });
-const treeNow = treeIn(threadId);
+const treeNow = treeIn(channelId);
 
 const named = (tree: TaskTree | undefined, brief: string): Task | undefined =>
   tree?.tasks.find((task) => task.brief.startsWith(brief));
@@ -117,7 +117,7 @@ const askForCampaign = Effect.gen(function* () {
   const asked = yield* repo.upsertMessage(
     new Message({
       id: MessageId.make("request"),
-      threadId,
+      channelId,
       actor: OWNER_ACTOR,
       role: "user",
       content: "Plan a Black Friday campaign for the shop",
@@ -145,20 +145,20 @@ describe("FakeQuestLive", () => {
         yield* askForCampaign;
         // Quill is at the copy: the Quest runs. You move the chat's chapter, which started it, into a camp.
         yield* until(Effect.map(treeNow, (tree) => named(tree, "Draft the landing copy")));
-        const [chapter] = yield* chapters.listChapters(threadId);
-        const camp = ThreadId.make("black-friday-camp");
+        const [chapter] = yield* chapters.listChapters(channelId);
+        const camp = ChannelId.make("black-friday-camp");
         const moved = yield* repo.moveChapter({
-          threadId,
+          channelId,
           chapterId: (chapter as { readonly id: ChapterId }).id,
           target: {
             _tag: "new",
-            camp: new Thread({
+            camp: new Channel({
               id: camp,
               agentId: ALDRIC,
               title: "Black Friday",
               kind: "camp",
               goal: "Run the campaign",
-              origin: { threadId, chapterId: null },
+              origin: { channelId, chapterId: null },
               createdAt: now,
               updatedAt: now,
             }),
@@ -183,7 +183,7 @@ describe("FakeQuestLive", () => {
         );
         expect((yield* treeIn(camp))?.tasks[0]?.state).toBe("completed");
         expect(yield* treeNow).toBeUndefined();
-        expect((yield* repo.listMessages(threadId)).map((m) => m.content)).toEqual([]);
+        expect((yield* repo.listMessages(channelId)).map((m) => m.content)).toEqual([]);
       }),
     );
   }, 20_000);

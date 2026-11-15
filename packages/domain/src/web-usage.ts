@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { RuntimeKind } from "./agent.ts";
-import { AgentId, MessageId, TaskId, ThreadId } from "./ids.ts";
+import { AgentId, MessageId, TaskId, ChannelId } from "./ids.ts";
 import { QuestId } from "./quest.ts";
 import { AttemptId } from "./task.ts";
 
@@ -92,7 +92,7 @@ export type WebRecordId = typeof WebRecordId.Type;
 const WebRecordPlace = {
   id: WebRecordId,
   agentId: AgentId,
-  threadId: Schema.NullOr(ThreadId),
+  channelId: Schema.NullOr(ChannelId),
   messageId: Schema.NullOr(MessageId),
   taskId: Schema.NullOr(TaskId),
   attemptId: Schema.NullOr(AttemptId),
@@ -170,7 +170,7 @@ export type WebUsageTotals = typeof WebUsageTotals.Type;
 /** Which records to count or list: every field set narrows them, and none counts every record. */
 export const WebUsageFilter = Schema.Struct({
   agentId: Schema.optionalKey(AgentId),
-  threadId: Schema.optionalKey(ThreadId),
+  channelId: Schema.optionalKey(ChannelId),
   messageId: Schema.optionalKey(MessageId),
   taskId: Schema.optionalKey(TaskId),
   attemptId: Schema.optionalKey(AttemptId),
@@ -201,11 +201,11 @@ export const WebTurnUsage = Schema.Struct({
   /** The turn, as `webTurnKey` names it. */
   turn: Schema.String,
   agentId: AgentId,
-  threadId: Schema.NullOr(ThreadId),
+  channelId: Schema.NullOr(ChannelId),
   messageId: Schema.NullOr(MessageId),
   taskId: Schema.NullOr(TaskId),
   /** The title of the chat it belongs to, when it has one. */
-  threadTitle: Schema.NullOr(Schema.String),
+  channelTitle: Schema.NullOr(Schema.String),
   /** When its last search or page was recorded. */
   at: Schema.String,
   searches: Schema.Int,
@@ -245,7 +245,7 @@ export type WebUsageSummary = typeof WebUsageSummary.Type;
 export interface WebTurnCount {
   readonly turn: string;
   readonly agentId: AgentId;
-  readonly threadId: ThreadId | null;
+  readonly channelId: ChannelId | null;
   readonly messageId: MessageId | null;
   readonly taskId: TaskId | null;
   readonly at: string;

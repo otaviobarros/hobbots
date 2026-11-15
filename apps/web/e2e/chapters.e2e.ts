@@ -5,7 +5,7 @@ import { expectAccessible } from "./accessibility.ts";
 import { expect, test } from "./hub.ts";
 import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
-// Issue #1382 (ADR 037): a thread's chapters in the browser, on the fake runtime. A divider marks
+// Issue #1382 (ADR 037): a channel's chapters in the browser, on the fake runtime. A divider marks
 // where each chapter starts; a resting chapter folds to its summary and opens on Show; Merge with
 // previous sits on a divider's ⋯ menu and Split here on a message's. The Focus chip in the header
 // lists what the hob reads each turn, as that turn's `PackReport` says.
@@ -25,7 +25,7 @@ const say = async (page: Page, lines: ReadonlyArray<string>) => {
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
 };
 
-const threadOf = (page: Page) => new URL(page.url()).hash.split("/threads/")[1] ?? "";
+const channelOf = (page: Page) => new URL(page.url()).hash.split("/channels/")[1] ?? "";
 
 // covers ADR 037 (Chapters)
 test("shows a divider after start_chapter, folds and opens a resting chapter, and merges and splits (#1382)", async ({
@@ -35,7 +35,7 @@ test("shows a divider after start_chapter, folds and opens a resting chapter, an
   const main = page.getByRole("main", { name: "Chat" });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await say(page, ["My cat is called Miso."]);
-  await expect(page).toHaveURL(new RegExp(`#/hobs/${aldric}/threads/`));
+  await expect(page).toHaveURL(new RegExp(`#/hobs/${aldric}/channels/`));
   // One topic so far: no divider, and the chip names no chapter.
   await expect(main.getByRole("region", { name: "Chapter 1" })).toHaveCount(0);
   await expect(main.getByRole("button", { name: "Focus", exact: true })).toBeVisible();
@@ -66,7 +66,7 @@ test("shows a divider after start_chapter, folds and opens a resting chapter, an
   const chapters = async () =>
     (
       (await (
-        await fetch(`${url}/api/threads/${threadOf(page)}/chapters`, { headers: hub.headers })
+        await fetch(`${url}/api/channels/${channelOf(page)}/chapters`, { headers: hub.headers })
       ).json()) as ReadonlyArray<Chapter>
     ).map((chapter) => [chapter.title, chapter.state]);
   await expect.poll(chapters).toEqual([[null, "live"]]);
@@ -121,7 +121,7 @@ test("a chat whose chapters can't be read says so and reads them again, and a na
   await expect(main.getByRole("region", { name: "The garden" })).toBeVisible();
 
   // The chapters read fails: the transcript still shows, undivided, and says why.
-  const list = "**/api/threads/*/chapters";
+  const list = "**/api/channels/*/chapters";
   await page.route(list, (route) => route.fulfill({ status: 500, body: "" }));
   await page.reload();
   const failed = main.getByText("Couldn't read this chat's chapters, so it shows without them.");
@@ -155,9 +155,9 @@ test("the Focus chip lists the parts and sizes of the turn's PackReport, with it
   // their share, so the pack cuts the last one in the middle.
   await say(page, [`The long read. ${"a".repeat(60_000)}`]);
   const [, longOne] = (await (
-    await fetch(`${url}/api/threads/${threadOf(page)}/messages`, { headers: hub.headers })
+    await fetch(`${url}/api/channels/${channelOf(page)}/messages`, { headers: hub.headers })
   ).json()) as ReadonlyArray<{ readonly id: string }>;
-  const split = await fetch(`${url}/api/threads/${threadOf(page)}/chapters/split`, {
+  const split = await fetch(`${url}/api/channels/${channelOf(page)}/chapters/split`, {
     method: "POST",
     headers: { "content-type": "application/json", ...hub.headers },
     body: JSON.stringify({ key: "long", messageId: longOne?.id, title: "A long read" }),
@@ -166,7 +166,7 @@ test("the Focus chip lists the parts and sizes of the turn's PackReport, with it
   await say(page, ["Next."]);
 
   const read = (await (
-    await fetch(`${url}/api/threads/${threadOf(page)}/focus`, { headers: hub.headers })
+    await fetch(`${url}/api/channels/${channelOf(page)}/focus`, { headers: hub.headers })
   ).json()) as FocusRead;
   expect(read.of).toBe("last-turn");
   const live = read.report.parts.find((part) => part.part === "live-chapter");

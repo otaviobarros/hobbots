@@ -1,7 +1,7 @@
 import { ExportScope } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
-import { AgentNotFound, InvalidFolder, ThreadNotFound } from "./errors.ts";
+import { AgentNotFound, InvalidFolder, ChannelNotFound } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
 export const ExportPayload = Schema.Struct({
@@ -14,7 +14,7 @@ export type ExportPayload = typeof ExportPayload.Type;
 /** A finished export: its folder on the hub, and how much it holds. */
 export const ExportResult = Schema.Struct({
   folder: Schema.String,
-  threads: Schema.Int,
+  channels: Schema.Int,
   quests: Schema.Int,
   /** File artifacts copied into `files/`. */
   files: Schema.Int,
@@ -44,7 +44,7 @@ export class ExportsGroup extends HttpApiGroup.make("exports")
     HttpApiEndpoint.post("create", "/exports", {
       payload: ExportPayload,
       success: ExportResult,
-      error: [InvalidFolder, AgentNotFound, ThreadNotFound, ExportFailed],
+      error: [InvalidFolder, AgentNotFound, ChannelNotFound, ExportFailed],
     }),
   )
   .middleware(DeviceSession)

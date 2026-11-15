@@ -1,11 +1,11 @@
-import { AgentId, ThreadId, ThreadMember } from "@hobbots/domain";
+import { AgentId, ChannelId, ChannelMember } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { campRuntimes } from "./people-sections.tsx";
 
 const now = "2026-11-15T00:00:00.000Z";
 const hobMember = (id: string) =>
-  new ThreadMember({
-    threadId: ThreadId.make("camp"),
+  new ChannelMember({
+    channelId: ChannelId.make("camp"),
     actor: { kind: "hob", id },
     role: "member",
     state: "active",

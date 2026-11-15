@@ -27,7 +27,7 @@ interface Row {
   readonly plannedAfter: string | null;
   readonly plannedAs: string | null;
   readonly memoryPages: string;
-  readonly threadId: string | null;
+  readonly channelId: string | null;
   readonly messageId: string | null;
   readonly attemptId: string | null;
   readonly createdAt: string;
@@ -42,7 +42,7 @@ interface FeedbackRow {
   readonly kind: string;
   readonly note: string;
   readonly revision: string | null;
-  readonly threadId: string | null;
+  readonly channelId: string | null;
   readonly messageId: string | null;
   readonly createdAt: string;
 }
@@ -76,7 +76,7 @@ const fromRow = (row: Row) =>
     added: addedOf(row),
     planned: row.plannedHash === null ? null : { hash: row.plannedHash, after: row.plannedAfter, as: row.plannedAs },
     memoryPages: JSON.parse(row.memoryPages),
-    threadId: row.threadId,
+    channelId: row.channelId,
     messageId: row.messageId,
     attemptId: row.attemptId,
     createdAt: row.createdAt,
@@ -111,7 +111,7 @@ const toRow = (proposal: SkillProposal) => ({
   edited: proposal.edited ? 1 : 0,
   ...addedRow(proposal),
   memory_pages: JSON.stringify(proposal.memoryPages),
-  thread_id: proposal.threadId,
+  channel_id: proposal.channelId,
   message_id: proposal.messageId,
   attempt_id: proposal.attemptId,
   created_at: proposal.createdAt,
@@ -206,7 +206,7 @@ export const SkillProposalLogLive = Layer.effect(
             kind: feedback.kind,
             note: feedback.note,
             revision: feedback.revision,
-            thread_id: feedback.threadId,
+            channel_id: feedback.channelId,
             message_id: feedback.messageId,
             created_at: feedback.createdAt,
           })}`.pipe(Effect.as({ value: feedback, events: [{ _tag: "SkillFeedbackLeft", feedback }] as const })),

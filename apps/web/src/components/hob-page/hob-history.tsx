@@ -257,8 +257,8 @@ function EventActions({ row }: { row: HistoryRow }) {
       )}
       {row.bench !== null && (
         <Link
-          to="/hobs/$hobId/threads/$threadId"
-          params={{ hobId: row.bench.hobId, threadId: row.bench.threadId }}
+          to="/hobs/$hobId/channels/$channelId"
+          params={{ hobId: row.bench.hobId, channelId: row.bench.channelId }}
           search={questSearch(row.bench.taskId, { tab: "changes", attemptId: row.bench.attemptId })}
           className={linkClass}
         >
@@ -267,8 +267,8 @@ function EventActions({ row }: { row: HistoryRow }) {
       )}
       {row.chat !== null && (
         <Link
-          to="/hobs/$hobId/threads/$threadId"
-          params={{ hobId: row.chat.hobId, threadId: row.chat.threadId }}
+          to="/hobs/$hobId/channels/$channelId"
+          params={{ hobId: row.chat.hobId, channelId: row.chat.channelId }}
           className={linkClass}
         >
           {copy.chat}

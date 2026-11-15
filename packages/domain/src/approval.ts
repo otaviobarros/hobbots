@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { DeviceId } from "./device.ts";
 import { ApprovalLifetime, GrantRule } from "./grant-rule.ts";
-import { AgentId, MessageId, ThreadId } from "./ids.ts";
+import { AgentId, MessageId, ChannelId } from "./ids.ts";
 import { StoredOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
 import { TaskId } from "./task.ts";
@@ -36,7 +36,7 @@ export type ApprovalDecidedVia = typeof ApprovalDecidedVia.Type;
 export class ApprovalRequest extends Schema.Class<ApprovalRequest>("ApprovalRequest")({
   id: ApprovalId,
   agentId: AgentId,
-  threadId: ThreadId,
+  channelId: ChannelId,
   /** The reply whose turn is paused, or null for a party member's turn, which runs outside the chat (ADR 018). */
   messageId: Schema.NullOr(MessageId),
   /**

@@ -18,7 +18,7 @@ import {
   SecretRedaction,
 } from "@hobbots/agents";
 import { fakeCharm, memoryCharmCalls } from "@hobbots/agents/testing";
-import { type Agent, isInProgress, type Message, READ_HOB_LABEL, roleFields, type Thread } from "@hobbots/domain";
+import { type Agent, isInProgress, type Message, READ_HOB_LABEL, roleFields, type Channel } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
   ActivityRepositoryLive,
@@ -150,17 +150,17 @@ const eventually = <A>(read: () => Promise<A | undefined>) =>
     ),
   );
 
-const messages = async (thread: Thread) =>
-  (await request<ReadonlyArray<Message>>("GET", `/api/threads/${thread.id}/messages`)).body;
+const messages = async (channel: Channel) =>
+  (await request<ReadonlyArray<Message>>("GET", `/api/channels/${channel.id}/messages`)).body;
 
 /** Sends `lines` as one message and waits until its reply has ended; answers the reply and the runtime's request. */
-const exchange = async (thread: Thread, ...lines: Array<string>) => {
-  const before = (await messages(thread)).length;
+const exchange = async (channel: Channel, ...lines: Array<string>) => {
+  const before = (await messages(channel)).length;
   const asked = requests.length;
-  const sent = await request("POST", `/api/threads/${thread.id}/messages`, { content: lines.join("\n") });
+  const sent = await request("POST", `/api/channels/${channel.id}/messages`, { content: lines.join("\n") });
   expect(sent.status).toBe(200);
   const reply = await eventually(async () => {
-    const all = await messages(thread);
+    const all = await messages(channel);
     const last = all.at(-1);
     return all.length >= before + 2 && last?.role === "assistant" && !isInProgress(last.status) ? last : undefined;
   });
@@ -193,7 +193,7 @@ let pip: Agent;
 let quill: Agent;
 let wren: Agent;
 let rook: Agent;
-let thread: Thread;
+let channel: Channel;
 
 describe("the hob directory, end to end", () => {
   beforeAll(async () => {
@@ -210,12 +210,12 @@ describe("the hob directory, end to end", () => {
     for (const hob of [ada, quill, wren, rook]) await permissions(hob, { charms: { granted: [] } });
     await request("POST", `/api/agents/${quill.id}/pause`);
     await request("POST", `/api/agents/${rook.id}/retire`, { activeWork: "stop" });
-    thread = (await request<Thread>("POST", `/api/agents/${ada.id}/threads`)).body;
+    channel = (await request<Channel>("POST", `/api/agents/${ada.id}/channels`)).body;
   });
 
   // covers ADR 032 (The roster, Outside data)
   it("a chat turn's roster lists the visible hobs with their Charms, labeled as data and redacted, and never an instruction (#1234)", async () => {
-    const { sent } = await exchange(thread, "Who on the team can push to GitHub?");
+    const { sent } = await exchange(channel, "Who on the team can push to GitHub?");
     const roster = sent.briefing ?? "";
     expect(roster).toMatch(/^## Other hobs on this hub\n\nHobbots collected this about the other hobs/);
     expect(roster).toContain("the hob's line below, and its Allow, Ask or Never answer for each operation");
@@ -236,36 +236,36 @@ describe("the hob directory, end to end", () => {
 
   // covers ADR 032 (The roster, Sent again only when it changed; It applies at once)
   it("the roster is sent again only when it changed, and an edited good at or a hidden hob reaches the next turn (#1234)", async () => {
-    const unchanged = await exchange(thread, "And now?");
+    const unchanged = await exchange(channel, "And now?");
     expect(unchanged.sent.sessionId).not.toBeNull();
     expect(unchanged.sent.briefing).toBeNull();
 
     expect((await request("PATCH", `/api/agents/${pip.id}`, { goodAt: "Release notes." })).status).toBe(200);
-    const edited = await exchange(thread, "And now?");
+    const edited = await exchange(channel, "And now?");
     expect(edited.sent.briefing).toContain('good at "Release notes."');
 
     expect((await request("PATCH", `/api/agents/${pip.id}`, { visibleToHobs: false })).status).toBe(200);
-    const hidden = await exchange(thread, "And now?", hub("read_hob", { hob: "Pip" }));
+    const hidden = await exchange(channel, "And now?", hub("read_hob", { hob: "Pip" }));
     expect(hidden.sent.briefing).not.toContain('"Pip"');
     expect(hidden.reply.content).toContain("read_hob: There is no hob named Pip.");
 
     expect((await request("PATCH", `/api/agents/${pip.id}`, { visibleToHobs: true })).status).toBe(200);
-    const back = await exchange(thread, "And now?");
+    const back = await exchange(channel, "And now?");
     expect(back.sent.briefing).toContain('"Pip"');
 
     // With its last other hobs hidden, the session is told its list no longer holds, once.
     for (const hob of [pip, quill]) await request("PATCH", `/api/agents/${hob.id}`, { visibleToHobs: false });
-    const emptied = await exchange(thread, "And now?");
+    const emptied = await exchange(channel, "And now?");
     expect(emptied.sent.briefing).toBe(ROSTER_WITHDRAWN);
-    expect((await exchange(thread, "And now?")).sent.briefing).toBeNull();
+    expect((await exchange(channel, "And now?")).sent.briefing).toBeNull();
     for (const hob of [pip, quill]) await request("PATCH", `/api/agents/${hob.id}`, { visibleToHobs: true });
-    expect((await exchange(thread, "And now?")).sent.briefing).toContain('- "Quill"');
+    expect((await exchange(channel, "And now?")).sent.briefing).toContain('- "Quill"');
   });
 
   // covers ADR 032 (read_hob), EX-004
   it("read_hob by name or id returns the card with its step, and treats a hidden, retired or unknown hob alike (#1234)", async () => {
     const { reply } = await exchange(
-      thread,
+      channel,
       "Tell me about Pip",
       hub("read_hob", { hob: " pip " }),
       hub("read_hob", { hob: quill.id }),
@@ -295,7 +295,7 @@ describe("the hob directory, end to end", () => {
 
   // covers ADR 032 (Visible to other hobs)
   it("a hidden hob still sees the others, and reads its own card (#1234)", async () => {
-    const own = (await request<Thread>("POST", `/api/agents/${wren.id}/threads`)).body;
+    const own = (await request<Channel>("POST", `/api/agents/${wren.id}/channels`)).body;
     const { sent, reply } = await exchange(own, "Who is here?", hub("read_hob", { hob: "Wren" }));
     expect(sent.briefing).toContain('- "Ada"');
     expect(sent.briefing).toContain('- "Pip"');
@@ -306,7 +306,7 @@ describe("the hob directory, end to end", () => {
   it("under Ask the roster is left out and read_hob still offered; under Never neither, and a call is refused (#1234)", async () => {
     const tools = (sent: PromptRequest) => sent.hubTools?.tools.map((tool) => tool.name) ?? [];
     await permissions(ada, { overrides: { "read-hobs": "ask" } });
-    const asked = (await request<Thread>("POST", `/api/agents/${ada.id}/threads`)).body;
+    const asked = (await request<Channel>("POST", `/api/agents/${ada.id}/channels`)).body;
     const ask = await exchange(asked, "Who is here?");
     expect(ask.sent.briefing ?? "").not.toContain("Other hobs");
     expect(tools(ask.sent)).toContain("read_hob");

@@ -12,7 +12,7 @@ import {
   PIP,
   partyHub,
   send,
-  threadId,
+  channelId,
   treeWhen,
 } from "./party-hub.ts";
 
@@ -69,7 +69,7 @@ describe("what a party spends", () => {
       expect(row === undefined ? 0 : usageTokens(row)).toBeGreaterThan(0);
     }
     // Frodo's own row counts only his chat replies.
-    const replies = await run(HobbotsRepository.use((repo) => repo.listMessages(threadId)));
+    const replies = await run(HobbotsRepository.use((repo) => repo.listMessages(channelId)));
     const frodoReplies = replies.filter((m) => m.role === "assistant").length;
     expect(spent(FRODO).reduce((sum, row) => sum + row.replies, 0)).toBe(frodoReplies);
 

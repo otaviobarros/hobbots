@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { messages } from "./messages.ts";
 
-// ADR 039 (Who answers): the hub refuses a mention of a hob that is not in the thread with the
+// ADR 039 (Who answers): the hub refuses a mention of a hob that is not in the channel with the
 // hobs' ids; the composer says it in words.
 describe("the words for a refused mention", () => {
   it("names who is not in the camp and offers to add them", () => {

@@ -35,7 +35,7 @@ export const messages = {
     seeEverywhere: "See everywhere",
   },
   questGroup: ({ name, goal }: { name: string; goal: string }) => `${name}'s quest · ${goal}`,
-  untitledThread: "A thread",
+  untitledChannel: "A channel",
   unknownHob: "A hob",
   unknownDevice: "a device",
   kind: {
@@ -98,7 +98,7 @@ export const messages = {
   detail: {
     label: ({ name, action }: { name: string; action: string }) => `Request from ${name}: ${action}`,
     quest: "Quest",
-    thread: "Thread",
+    channel: "Channel",
     task: "Task",
     work: "Work",
     tries: "Tries",
@@ -130,7 +130,7 @@ export const messages = {
     intro: `Your latest ${formatCount(INBOX_HISTORY)} decisions, most recent first, with who asked and what it was for.`,
     verdict: { once: "Once", always: "Always", task: "Task", denied: "Denied", expired: "Expired" },
     expiredNote: "Expired requests never run. The hob asks again with what is true now.",
-    meta: ({ when, thread }: { when: string; thread: string }) => `${when} · ${thread}`,
+    meta: ({ when, channel }: { when: string; channel: string }) => `${when} · ${channel}`,
     action: ({ name, action }: { name: string; action: string }) => `${name}: ${action}`,
     /**
      * Who decided a request and where (#598), one whole sentence per decision and surface; `unknown`

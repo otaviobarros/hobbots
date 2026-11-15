@@ -33,8 +33,8 @@ export const SkillTrialsHandlers = HttpApiBuilder.group(HobbotsApi, "skillTrials
       )
       .handle("draft", ({ params }) =>
         Option.isNone(trials)
-          ? Effect.fail(new SkillDraftGone({ threadId: params.threadId }))
-          : trials.value.draft(params.threadId),
+          ? Effect.fail(new SkillDraftGone({ channelId: params.channelId }))
+          : trials.value.draft(params.channelId),
       );
   }),
 );

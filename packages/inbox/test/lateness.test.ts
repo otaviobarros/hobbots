@@ -6,7 +6,7 @@ import {
   Task,
   TaskId,
   type TaskState,
-  ThreadId,
+  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { lateness, lateWorkOf } from "../src/index.ts";
@@ -16,7 +16,7 @@ const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
 const ADA = AgentId.make("ada");
 const ROOK = AgentId.make("rook");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 
 const task = (id: string, ownerId: AgentId, parentId: string | null, state: TaskState = "active", revision = 1) =>
   new Task({
@@ -24,7 +24,7 @@ const task = (id: string, ownerId: AgentId, parentId: string | null, state: Task
     ownerId,
     parentId: parentId === null ? null : TaskId.make(parentId),
     rootId: TaskId.make("campaign"),
-    threadId,
+    channelId,
     brief: id,
     state,
     dependsOn: [],
@@ -47,7 +47,7 @@ const item = (recipientId: AgentId, taskId: string | null, kind: "result" | "mes
     taskId: taskId === null ? null : TaskId.make(taskId),
     questId: null,
     attemptId: AttemptId.make("a1"),
-    threadId,
+    channelId,
     dedupeKey: "k",
     payload: { _tag: "message", senderId: null, text: "hi" },
     notBefore: null,

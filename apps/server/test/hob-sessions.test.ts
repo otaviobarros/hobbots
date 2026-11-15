@@ -10,7 +10,7 @@ import {
   type PromptRequest,
   RuntimeAdapter,
   type RuntimeAdapterShape,
-  ThreadMemberRepository,
+  ChannelMemberRepository,
 } from "@hobbots/agents";
 import {
   Agent,
@@ -23,8 +23,8 @@ import {
   OWNER_ACTOR,
   type RuntimeKind,
   roleFields,
-  type Thread,
-  type ThreadId,
+  type Channel,
+  type ChannelId,
 } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
@@ -33,7 +33,7 @@ import {
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   TaskRepositoryLive,
-  ThreadMemberRepositoryLive,
+  ChannelMemberRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { makeFakeRuntime } from "@hobbots/runtimes";
@@ -42,7 +42,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
 
-// Issue #1464 (ADR 039): a runtime session belongs to one hob. In a thread two hobs speak in, each
+// Issue #1464 (ADR 039): a runtime session belongs to one hob. In a channel two hobs speak in, each
 // resumes only its own session, on Claude Code and on Codex alike, and a hob that has not spoken in
 // the live chapter starts a new session from the context pack. The test passes the floor from one hob
 // to the other by @mention (#1461).
@@ -82,7 +82,7 @@ const hubLayer = () =>
           ApprovalRepositoryLive,
           GrantRepositoryLive,
           TaskRepositoryLive,
-          ThreadMemberRepositoryLive,
+          ChannelMemberRepositoryLive,
           EventJournal.layer,
         ).pipe(Layer.provideMerge(TestDatabase)),
         EventBus.layer,
@@ -128,7 +128,7 @@ const hob = (id: AgentId, name: string, runtime: RuntimeKind) =>
   });
 
 /** A hub with Wren and Quill, both thinking with `runtime`, and a camp of Wren's, Wren alone in it. */
-const start = async (runtime: RuntimeKind): Promise<ThreadId> => {
+const start = async (runtime: RuntimeKind): Promise<ChannelId> => {
   asked = { "claude-code": [], codex: [] };
   hub = ManagedRuntime.make(hubLayer());
   return run(
@@ -137,21 +137,21 @@ const start = async (runtime: RuntimeKind): Promise<ThreadId> => {
       yield* repo.insertAgent(hob(WREN, "Wren", runtime));
       yield* repo.insertAgent(hob(QUILL, "Quill", runtime));
       const chat = yield* ChatService;
-      // Wren's first thread is the direct chat; a second one is a camp, which other hobs can join.
-      yield* chat.createThread(WREN);
-      return (yield* chat.createThread(WREN)).id;
+      // Wren's first channel is the direct chat; a second one is a camp, which other hobs can join.
+      yield* chat.createChannel(WREN);
+      return (yield* chat.createChannel(WREN)).id;
     }),
   );
 };
 
-const thread = (id: ThreadId): Promise<Thread> =>
-  run(HobbotsRepository.use((repo) => repo.findThread(id)).pipe(Effect.map(Option.getOrThrow)));
+const channel = (id: ChannelId): Promise<Channel> =>
+  run(HobbotsRepository.use((repo) => repo.findChannel(id)).pipe(Effect.map(Option.getOrThrow)));
 
 /**
  * Sends `content` and waits for its turn to end, and for the turns hobs it mentioned relay to each
  * other after it, until the relay budget pauses them (ADR 039).
  */
-const say = async (id: ThreadId, content: string): Promise<Message> => {
+const say = async (id: ChannelId, content: string): Promise<Message> => {
   await run(ChatService.use((chat) => chat.sendPrompt(id, content)));
   return vi.waitFor(async () => {
     const all = await run(HobbotsRepository.use((repo) => repo.listMessages(id)));
@@ -163,19 +163,19 @@ const say = async (id: ThreadId, content: string): Promise<Message> => {
 };
 
 /** Brings Quill into the camp, so a mention of Quill gives Quill the floor. */
-const join = (id: ThreadId) =>
-  run(ThreadMemberRepository.use((members) => members.add(id, hobActor(QUILL), OWNER_ACTOR)));
+const join = (id: ChannelId) =>
+  run(ChannelMemberRepository.use((members) => members.add(id, hobActor(QUILL), OWNER_ACTOR)));
 
 describe("runtime sessions keyed by hob", () => {
   // covers ADR 039 (The context pack with several hobs), RT-001
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "on %s, each hob in a thread resumes its own session, and a new one starts from the pack (#1464)",
+    "on %s, each hob in a channel resumes its own session, and a new one starts from the pack (#1464)",
     async (runtime) => {
       const id = await start(runtime);
       await say(id, "My cat is called Miso.");
-      const wren = liveSession(await thread(id), runtime, WREN);
+      const wren = liveSession(await channel(id), runtime, WREN);
       expect(wren?.sessionId).toMatch(/^fake-/);
-      expect(liveSession(await thread(id), runtime, QUILL)).toBeUndefined();
+      expect(liveSession(await channel(id), runtime, QUILL)).toBeUndefined();
 
       await join(id);
       await say(id, "@quill what should I plant?");
@@ -183,11 +183,11 @@ describe("runtime sessions keyed by hob", () => {
       // Quill has not spoken in the chapter: a new session, briefed from the pack, never Wren's.
       expect(fresh.sessionId).toBeNull();
       expect(fresh.briefing).toContain("My cat is called Miso.");
-      const quill = liveSession(await thread(id), runtime, QUILL);
+      const quill = liveSession(await channel(id), runtime, QUILL);
       expect(quill?.sessionId).toMatch(/^fake-/);
       expect(quill?.sessionId).not.toBe(wren?.sessionId);
       // Wren's session is kept as it was.
-      expect(liveSession(await thread(id), runtime, WREN)).toEqual(wren);
+      expect(liveSession(await channel(id), runtime, WREN)).toEqual(wren);
 
       await say(id, "@quill and when?");
       expect(asked[runtime][2]?.sessionId).toBe(quill?.sessionId);
@@ -208,12 +208,12 @@ describe("runtime sessions keyed by hob", () => {
         wrenSession,
         quillSession,
       ]);
-      const sessions = (await thread(id)).sessions;
+      const sessions = (await channel(id)).sessions;
       expect(sessions.map((s) => [s.runtime, s.agentId, s.sessionId])).toEqual([
         [runtime, WREN, wren?.sessionId],
         [runtime, QUILL, quill?.sessionId],
       ]);
-      // Each session has seen the thread through its own hob's last reply.
+      // Each session has seen the channel through its own hob's last reply.
       const messages = await run(HobbotsRepository.use((repo) => repo.listMessages(id)));
       const lastReplyOf = (agentId: AgentId) =>
         messages.findLast((m) => m.role === "assistant" && m.actor?.kind === "hob" && m.actor.id === agentId)?.id;

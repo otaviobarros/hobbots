@@ -16,7 +16,7 @@ import { DateTime, Effect, Option, Semaphore } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 
 /**
- * Memory in a chat and on a hob's page (ADR 028, #961): the saves a thread's replies made, Undo for
+ * Memory in a chat and on a hob's page (ADR 028, #961): the saves a channel's replies made, Undo for
  * one of them, and the scopes a hob reads. Everything goes through `MemoryStore` as you.
  */
 export const HobMemoryHandlers = HttpApiBuilder.group(HobbotsApi, "hobMemory", (handlers) =>
@@ -32,7 +32,7 @@ export const HobMemoryHandlers = HttpApiBuilder.group(HobbotsApi, "hobMemory", (
     // One Undo at a time, so two clicks never both write the earlier version back.
     const undoing = yield* Semaphore.make(1);
     return handlers.handleAll({
-      threadSaves: ({ params }) => (Option.isNone(saves) ? Effect.succeed([]) : saves.value.inThread(params.threadId)),
+      channelSaves: ({ params }) => (Option.isNone(saves) ? Effect.succeed([]) : saves.value.inChannel(params.channelId)),
       undoSave: ({ params }) =>
         Effect.gen(function* () {
           if (Option.isNone(saves)) return yield* new MemorySaveNotFound();

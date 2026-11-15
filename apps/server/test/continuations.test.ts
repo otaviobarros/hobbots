@@ -13,7 +13,7 @@ import {
   RuntimeAdapter,
   TaskControls,
   TaskRepository,
-  ThreadMemberRepository,
+  ChannelMemberRepository,
   TurnSlots,
 } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
@@ -35,8 +35,8 @@ import {
   OWNER_USER_ID,
   QuestId,
   TaskId,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { waitUntil } from "@hobbots/domain/testing";
@@ -56,7 +56,7 @@ import {
   HobbotsRepositoryLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
-  ThreadMemberRepositoryLive,
+  ChannelMemberRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
@@ -69,7 +69,7 @@ import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
 
 // The one wake path of ADR 019: work that arrives for a hob whose turn has ended starts a
-// continuation in its thread, with the fake runtime scripting what that turn does.
+// continuation in its channel, with the fake runtime scripting what that turn does.
 
 const now = "2026-11-02T00:00:00.000Z";
 const FRODO = AgentId.make("frodo");
@@ -158,9 +158,9 @@ const observed = Layer.effect(
     const live = yield* Continuations;
     return Continuations.of({
       ...live,
-      deliver: (threadId, agentId, turn) => {
+      deliver: (channelId, agentId, turn) => {
         const carried = holding(turn);
-        return live.deliver(threadId, agentId, carried.turn).pipe(
+        return live.deliver(channelId, agentId, carried.turn).pipe(
           Effect.tap(() => {
             dispatches += 1;
             const took = carried.took();
@@ -185,7 +185,7 @@ const NoTools = Layer.succeed(HobTools, HobTools.of({ access: () => Effect.succe
 type Before = Layer.Layer<
   never,
   never,
-  HobbotsRepository | TaskRepository | ApprovalRepository | ThreadMemberRepository
+  HobbotsRepository | TaskRepository | ApprovalRepository | ChannelMemberRepository
 >;
 
 /** Quick retries, so a test that exhausts them stays short. */
@@ -211,7 +211,7 @@ const makeApp = (
     Layer.provideMerge(
       Layer.mergeAll(
         HobbotsRepositoryLive,
-        ThreadMemberRepositoryLive,
+        ChannelMemberRepositoryLive,
         TaskRepositoryLive,
         TaskToolCallsLive,
         ApprovalRepositoryLive,
@@ -263,15 +263,15 @@ const frodo = new Agent({
   configVersion: 1,
   createdAt: now,
 });
-const threadId = ThreadId.make("shire");
+const channelId = ChannelId.make("shire");
 
-/** Frodo and his thread, stored before the hub starts. */
+/** Frodo and his channel, stored before the hub starts. */
 const Frodo: Before = Layer.effectDiscard(
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
     yield* repo.insertAgent(frodo);
-    yield* repo.upsertThread(
-      new Thread({ id: threadId, agentId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
+    yield* repo.upsertChannel(
+      new Channel({ id: channelId, agentId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
     );
   }),
 );
@@ -284,10 +284,10 @@ const SamsCamp: Before = Layer.effectDiscard(
     const repo = yield* HobbotsRepository;
     yield* repo.insertAgent(frodo);
     yield* repo.insertAgent(new Agent({ ...frodo, id: SAM, name: "Sam", roleTitle: "Gardener" }));
-    yield* repo.upsertThread(
-      new Thread({ id: threadId, agentId: SAM, title: "The quest", kind: "camp", createdAt: now, updatedAt: now }),
+    yield* repo.upsertChannel(
+      new Channel({ id: channelId, agentId: SAM, title: "The quest", kind: "camp", createdAt: now, updatedAt: now }),
     );
-    yield* Effect.orDie(ThreadMemberRepository.use((members) => members.add(threadId, hobActor(FRODO), OWNER_ACTOR)));
+    yield* Effect.orDie(ChannelMemberRepository.use((members) => members.add(channelId, hobActor(FRODO), OWNER_ACTOR)));
   }),
 );
 
@@ -303,23 +303,23 @@ const setUp = (before: Before = Frodo, limits: DispatchLimits = LIMITS, turnCap:
 const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.retry({ schedule: Schedule.spaced("10 millis"), times: 500 }));
 
-const messages = () => HobbotsRepository.use((repo) => repo.listMessages(threadId));
+const messages = () => HobbotsRepository.use((repo) => repo.listMessages(channelId));
 
 /**
- * Waits until the thread has nothing running, dispatching or draining, so whatever a wake or a
+ * Waits until the channel has nothing running, dispatching or draining, so whatever a wake or a
  * turn's end was going to start has started (STD-TEST-009).
  */
 const settledRun = () =>
   retry(
     Effect.gen(function* () {
       const chat = yield* ChatService;
-      const { runs } = yield* chat.threadRuns;
-      const busy = runs.some((each) => each.threadId === threadId && each.run !== "idle");
-      return busy || (yield* chat.activeThreads).includes(threadId) ? yield* Effect.fail("busy" as const) : undefined;
+      const { runs } = yield* chat.channelRuns;
+      const busy = runs.some((each) => each.channelId === channelId && each.run !== "idle");
+      return busy || (yield* chat.activeChannels).includes(channelId) ? yield* Effect.fail("busy" as const) : undefined;
     }),
   );
 
-/** The thread's messages once `ready` holds for them, every reply ended. */
+/** The channel's messages once `ready` holds for them, every reply ended. */
 const messagesWhen = (ready: (all: ReadonlyArray<Message>) => boolean) =>
   retry(
     Effect.gen(function* () {
@@ -351,7 +351,7 @@ const failedStepOf = (owner: AgentId, prefix = "") =>
       id: TaskId.make(`${prefix}${id}`),
       ownerId: owner,
       parentId: parentId === null ? null : TaskId.make(`${prefix}${parentId}`),
-      threadId,
+      channelId,
       brief: `Brief for ${id}`,
       dependsOn: [],
       createdAt: now,
@@ -381,13 +381,13 @@ describe("continuing a hob when work arrives", () => {
       hub("plan_steps", { key: "plan", steps: [{ brief: "Walk to Mordor" }] }),
       `fake:then ${hub("complete_task", { delivered: true, key: "done", summary: "The ring is destroyed" })}`,
     ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, prompt)));
 
     // Nobody writes again: the step's result wakes Frodo, and his continuation completes the Task.
     const tree = await run(
       retry(
         Effect.gen(function* () {
-          const [found] = yield* TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
+          const [found] = yield* TaskRepository.use((tasks) => tasks.readChannelTrees(channelId));
           return found?.tasks[0]?.state === "completed" ? found : yield* Effect.fail("not yet" as const);
         }),
       ),
@@ -399,7 +399,7 @@ describe("continuing a hob when work arrives", () => {
     const [continuation] = continuations(all);
     expect(continuation?.content).toContain("complete_task: ");
 
-    // Its prompt was Hobbots' own, naming what arrived, in the thread's session.
+    // Its prompt was Hobbots' own, naming what arrived, in the channel's session.
     const asked = requests.find((request) => request.prompt.startsWith("Hobbots wrote this, not the user."));
     expect(asked?.prompt).toContain(`finished. ${RESULT_IN_BRIEFING}`);
     expect(asked?.sessionId).not.toBeNull();
@@ -414,7 +414,7 @@ describe("continuing a hob when work arrives", () => {
     await run(
       ChatService.use((chat) =>
         chat.sendPrompt(
-          threadId,
+          channelId,
           ["Carry the ring", HOLD, hub("plan_steps", { key: "plan", steps: [{ brief: "Walk" }] })].join("\n"),
         ),
       ),
@@ -429,7 +429,7 @@ describe("continuing a hob when work arrives", () => {
         }),
       ),
     );
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, "Where are we?")));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, "Where are we?")));
     await release();
 
     const all = await run(messagesWhen((each) => each.length === 4));
@@ -473,7 +473,7 @@ describe("continuing a hob when work arrives", () => {
     const failure = await run(failedStep);
     if (failure === undefined) throw new Error("no Failure recorded");
     // A wake now finds no hob that can carry it: Frodo is paused, and Sam has nothing there.
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     await run(settledRun());
     expect(await run(messages())).toEqual([]);
 
@@ -489,11 +489,11 @@ describe("continuing a hob when work arrives", () => {
   // covers ADR 039 (One hob speaks at a time)
   it("the oldest request is answered before another hob's work, which then starts (#1461)", async () => {
     const { run, release } = setUp(SamsCamp);
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, ["@sam plan the road", HOLD].join("\n"))));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, ["@sam plan the road", HOLD].join("\n"))));
     // While Sam's turn runs, Frodo's step fails and you ask Sam again.
     const failure = await run(failedStep);
     if (failure === undefined) throw new Error("no Failure recorded");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, "@sam where are we?")));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, "@sam where are we?")));
     await release();
 
     // Sam answers you first, though his dispatch finds no work of his; then Frodo carries his.
@@ -516,7 +516,7 @@ describe("continuing a hob when work arrives", () => {
     const failure = await run(failedStep);
     if (failure === undefined) throw new Error("no Failure recorded");
     // The arrival wakes the camp, as the hub's wake on arrival does.
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
 
     const all = await run(messagesWhen((each) => each.length === 1));
     expect(all[0]?.actor).toMatchObject({ kind: "hob", id: FRODO });
@@ -531,7 +531,7 @@ describe("continuing a hob when work arrives", () => {
   ) => {
     holdContinuations = true;
     await run(failedStep);
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     // Frodo's continuation starts in Sam's camp, and you stop it before it writes.
     await run(
       retry(
@@ -544,12 +544,12 @@ describe("continuing a hob when work arrives", () => {
     await run(
       retry(
         Effect.flatMap(
-          ChatService.use((chat) => chat.activeThreads),
-          (active) => (active.includes(threadId) ? Effect.void : Effect.fail("not yet" as const)),
+          ChatService.use((chat) => chat.activeChannels),
+          (active) => (active.includes(channelId) ? Effect.void : Effect.fail("not yet" as const)),
         ),
       ),
     );
-    await run(ChatService.use((chat) => chat.stop(threadId)));
+    await run(ChatService.use((chat) => chat.stop(channelId)));
     await run(messagesWhen((all) => all.at(-1)?.status === "stopped"));
     holdContinuations = false;
     await release();
@@ -581,7 +581,7 @@ describe("continuing a hob when work arrives", () => {
 
     // Sam's step fails in his camp: his work starts, and Frodo's stays held.
     await run(failedStepOf(SAM, "sam-"));
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     const all = await run(messagesWhen((each) => each.length === 2 && each[1]?.status === "complete"));
     expect(all.map((m) => [m.status, m.actor?.kind === "hob" ? m.actor.id : null])).toEqual([
       ["stopped", FRODO],
@@ -606,21 +606,21 @@ describe("continuing a hob when work arrives", () => {
       await run(
         retry(
           Effect.flatMap(
-            ChatService.use((chat) => chat.activeThreads),
-            (active) => (active.includes(threadId) ? Effect.void : Effect.fail("not yet" as const)),
+            ChatService.use((chat) => chat.activeChannels),
+            (active) => (active.includes(channelId) ? Effect.void : Effect.fail("not yet" as const)),
           ),
         ),
       );
-      await run(ChatService.use((chat) => chat.stop(threadId)));
+      await run(ChatService.use((chat) => chat.stop(channelId)));
       await run(messagesWhen((all) => all.length === count && all.at(-1)?.status === "stopped"));
     };
     holdContinuations = true;
     await run(failedStep);
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     await stopLatest(1);
     // Sam's work starts while Frodo's stays held, and you stop Sam's too.
     await run(failedStepOf(SAM, "sam-"));
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     await stopLatest(2);
     holdContinuations = false;
     await release();
@@ -640,7 +640,7 @@ describe("continuing a hob when work arrives", () => {
     if (failure === undefined) throw new Error("no Failure recorded");
     // Frodo's Task is open, so he retires only once it ends.
     expect((await run(HobLifecycle.use((hobs) => hobs.retireWhenDone(FRODO)))).retiring).not.toBeNull();
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
 
     const all = await run(messagesWhen((each) => each.length === 1));
     expect(all[0]?.actor).toMatchObject({ kind: "hob", id: FRODO });
@@ -652,7 +652,7 @@ describe("continuing a hob when work arrives", () => {
     const { run } = setUp(SamsCamp);
     await run(HobLifecycle.use((hobs) => hobs.pause(FRODO)));
     await run(failedStep);
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     await run(settledRun());
     // At most the one dispatch the wake started, which found nothing of Sam's.
     expect(dispatches).toBeLessThanOrEqual(1);
@@ -666,8 +666,8 @@ describe("continuing a hob when work arrives", () => {
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
         yield* repo.insertAgent(frodo);
-        yield* repo.upsertThread(
-          new Thread({ id: threadId, agentId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
+        yield* repo.upsertChannel(
+          new Channel({ id: channelId, agentId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
         );
         const tasks = yield* TaskRepository;
         const root = yield* tasks.createTask({
@@ -675,7 +675,7 @@ describe("continuing a hob when work arrives", () => {
             id: TaskId.make("ring"),
             ownerId: FRODO,
             parentId: null,
-            threadId,
+            channelId,
             brief: "Carry the ring to Mordor",
             dependsOn: [],
             createdAt: now,
@@ -734,7 +734,7 @@ describe("continuing a hob when work arrives", () => {
     const pending = new ApprovalRequest({
       id: ApprovalId.make("push"),
       agentId: FRODO,
-      threadId,
+      channelId,
       messageId: MessageId.make("before-restart"),
       stepId: "tool-1",
       tool: "Bash",
@@ -756,14 +756,14 @@ describe("continuing a hob when work arrives", () => {
         Effect.gen(function* () {
           const repo = yield* HobbotsRepository;
           yield* repo.insertAgent(frodo);
-          yield* repo.upsertThread(
-            new Thread({ id: threadId, agentId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
+          yield* repo.upsertChannel(
+            new Channel({ id: channelId, agentId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
           );
           // The reply that asked was still running when Hobbots stopped.
           yield* repo.upsertMessage(
             new Message({
               id: MessageId.make("before-restart"),
-              threadId,
+              channelId,
               role: "assistant",
               content: "Pushing the ring's map",
               status: "streaming",
@@ -787,7 +787,7 @@ describe("continuing a hob when work arrives", () => {
     holdContinuations = true;
     const { run, requests, release } = setUp();
     const prompt = ["Carry the ring", hub("plan_steps", { key: "plan", steps: [{ brief: "Walk" }] })].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, prompt)));
     // The step's result starts a continuation, which you stop before it writes.
     const started = await run(
       retry(
@@ -801,11 +801,11 @@ describe("continuing a hob when work arrives", () => {
         }),
       ),
     );
-    await run(ChatService.use((chat) => chat.stop(threadId)));
+    await run(ChatService.use((chat) => chat.stop(channelId)));
     await run(messagesWhen((all) => all.at(-1)?.status === "stopped"));
     await release();
 
-    // Nothing starts again: the work waits, pending, for you, and the thread is idle once the
+    // Nothing starts again: the work waits, pending, for you, and the channel is idle once the
     // dispatch that the stop ended has returned.
     await run(retry(Effect.suspend(() => (dispatches > 0 ? Effect.void : Effect.fail("not yet" as const)))));
     await run(Effect.sleep("300 millis"));
@@ -820,7 +820,7 @@ describe("continuing a hob when work arrives", () => {
     expect(waiting?.state).toBe("pending");
 
     // Your next message takes it along, and its turn consumes it: no second continuation starts.
-    const sent = await run(ChatService.use((chat) => chat.sendPrompt(threadId, "Go on")));
+    const sent = await run(ChatService.use((chat) => chat.sendPrompt(channelId, "Go on")));
     // It starts through the dispatcher, which puts the work into its turn.
     expect(sent.assistantMessage).toBeNull();
     const all = await run(messagesWhen((each) => each.length === 5));
@@ -837,13 +837,13 @@ describe("continuing a hob when work arrives", () => {
     const { run } = setUp();
     // A step fails: its continuation runs, and its dispatch has not yet freed the line.
     await run(failedStep);
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     await run(Deferred.await(reached));
 
     // A step of another Task of Frodo's fails now: its Failure arrives, and its wake finds the line busy.
     const failure = await run(failedStepOf(FRODO, "later-"));
     if (failure === undefined) throw new Error("no Failure recorded");
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     await run(Deferred.succeed(proceed, undefined));
 
     // Freed, the line looks again: the second Failure starts a continuation of its own.
@@ -857,7 +857,7 @@ describe("continuing a hob when work arrives", () => {
   /**
    * Frodo plans one step and scripts his next turn to plan another. The step's result is claimed
    * for a continuation, which `holdCarry` holds at `at`; you cancel the request meanwhile. Returns
-   * the items the continuation held, and the thread's messages once it settled.
+   * the items the continuation held, and the channel's messages once it settled.
    */
   const cancelWhileHeld = async (at: "claimed" | "checked") => {
     const reached = Deferred.makeUnsafe<ReadonlyArray<BackpackItem["id"]>>();
@@ -870,16 +870,16 @@ describe("continuing a hob when work arrives", () => {
       hub("plan_steps", { key: "plan", steps: [{ brief: "Walk" }] }),
       `fake:then ${hub("plan_steps", { key: "again", steps: [{ brief: "Walk again" }] })}`,
     ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, prompt)));
     const held = await run(Deferred.await(reached));
-    const [tree] = await run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
+    const [tree] = await run(TaskRepository.use((tasks) => tasks.readChannelTrees(channelId)));
     const top = tree?.tasks[0];
     if (top === undefined) throw new Error("no Task");
     await run(TaskControls.use((controls) => controls.cancel(top.id)));
     await run(
       retry(
         Effect.gen(function* () {
-          const [now] = yield* TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
+          const [now] = yield* TaskRepository.use((tasks) => tasks.readChannelTrees(channelId));
           return now?.tasks[0]?.state === "cancelled" ? undefined : yield* Effect.fail("not yet" as const);
         }),
       ),
@@ -892,9 +892,9 @@ describe("continuing a hob when work arrives", () => {
     expect(items.map((item) => item.disposition?._tag)).toEqual(held.map(() => "late"));
     await run(Deferred.await(settled));
     await run(settledRun());
-    expect(await run(ChatService.use((chat) => chat.activeThreads))).toEqual([]);
+    expect(await run(ChatService.use((chat) => chat.activeChannels))).toEqual([]);
     expect(requests.filter((request) => request.prompt.startsWith("Hobbots wrote this"))).toEqual([]);
-    const trees = await run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
+    const trees = await run(TaskRepository.use((tasks) => tasks.readChannelTrees(channelId)));
     expect(trees.map((each) => each.tasks.map((task) => [task.brief.split("\n")[0], task.state]))).toEqual([
       [
         ["Carry the ring", "cancelled"],
@@ -923,7 +923,7 @@ describe("continuing a hob when work arrives", () => {
   });
 });
 
-/** Frodo and his thread, and Sam, who works a Task under Frodo's: stored before the hub starts. */
+/** Frodo and his channel, and Sam, who works a Task under Frodo's: stored before the hub starts. */
 const FrodoAndSam: Before = Layer.effectDiscard(
   Effect.gen(function* () {
     yield* Layer.build(Frodo).pipe(Effect.scoped);
@@ -940,7 +940,7 @@ const samsTask = Effect.gen(function* () {
     id: TaskId.make(id),
     ownerId,
     parentId: parentId === null ? null : TaskId.make(parentId),
-    threadId,
+    channelId,
     brief: `Brief for ${id}`,
     dependsOn: [],
     createdAt: now,
@@ -994,19 +994,19 @@ describe("coalescing routine progress", () => {
     expect(progress).toHaveLength(30);
     expect(progress.every((item) => item.recipientId === FRODO && !item.actionable)).toBe(true);
 
-    // Even woken, Frodo's thread starts nothing for progress alone, not even a dispatch: it waits, pending.
+    // Even woken, Frodo's channel starts nothing for progress alone, not even a dispatch: it waits, pending.
     // The wake decides the floor before it returns, so a dispatch it started would show here already.
-    await run(ChatService.use((chat) => chat.wake(threadId)));
-    const { runs } = await run(ChatService.use((chat) => chat.threadRuns));
-    expect(runs.filter((each) => each.threadId === threadId && each.run !== "idle")).toEqual([]);
+    await run(ChatService.use((chat) => chat.wake(channelId)));
+    const { runs } = await run(ChatService.use((chat) => chat.channelRuns));
+    expect(runs.filter((each) => each.channelId === channelId && each.run !== "idle")).toEqual([]);
     expect(dispatches).toBe(0);
     expect(await run(messages())).toEqual([]);
     expect((await run(itemsOf(progress.map((item) => item.id)))).every((item) => item.state === "pending")).toBe(true);
 
     // Sam's Task fails: that is actionable, and starts one continuation carrying the progress too.
     await run(TaskRepository.use((tasks) => tasks.moveTask(cook.id, cook.revision, "failed", now)));
-    // A repository write here announces nothing, so the test wakes the thread as its announcement would.
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    // A repository write here announces nothing, so the test wakes the channel as its announcement would.
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     const all = await run(messagesWhen((each) => each.length === 1));
     expect(all[0]?.content).toContain("ended as failed.");
     // Frodo's reply does nothing about the failure, so the hub then wakes him once about his idle
@@ -1033,7 +1033,7 @@ describe("coalescing routine progress", () => {
     await run(samsTask);
     const progress = await run(reportProgress(3));
 
-    const sent = await run(ChatService.use((chat) => chat.sendPrompt(threadId, "How is Sam doing?")));
+    const sent = await run(ChatService.use((chat) => chat.sendPrompt(channelId, "How is Sam doing?")));
     // It starts through the dispatcher, which puts the progress into its turn.
     expect(sent.assistantMessage).toBeNull();
     const all = await run(messagesWhen((each) => each.length === 2));
@@ -1064,7 +1064,7 @@ describe("coalescing routine progress", () => {
     // Three of your messages are cut off, each carrying the progress: it goes back to pending every
     // time. Each waits for the last to send it back, so every one of them carries it.
     for (let round = 1; round <= 3; round++) {
-      await run(ChatService.use((chat) => chat.sendPrompt(threadId, `fake:cut-off try ${round}`)));
+      await run(ChatService.use((chat) => chat.sendPrompt(channelId, `fake:cut-off try ${round}`)));
       await run(messagesWhen((each) => each.length === round * 2));
       await run(pendingAfter(round));
     }
@@ -1073,7 +1073,7 @@ describe("coalescing routine progress", () => {
 
     // You stop the next one: that holds back nothing, so work that needs Frodo still starts at once.
     holdPrompt = "Stew?";
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, "Stew?")));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, "Stew?")));
     // Its runtime has the prompt, so the turn is registered and the stop reaches it.
     await run(
       retry(
@@ -1087,7 +1087,7 @@ describe("coalescing routine progress", () => {
     // A stop sent in the instant the turn starts can miss it (seen on PostgreSQL), so it is sent again until it lands.
     await run(
       retry(
-        ChatService.use((chat) => chat.stop(threadId)).pipe(
+        ChatService.use((chat) => chat.stop(channelId)).pipe(
           Effect.andThen(messages()),
           Effect.flatMap((all) => (all.at(-1)?.status === "stopped" ? Effect.void : Effect.fail("not yet" as const))),
         ),
@@ -1095,7 +1095,7 @@ describe("coalescing routine progress", () => {
     );
     await release();
     await run(TaskRepository.use((tasks) => tasks.moveTask(cook.id, cook.revision, "failed", now)));
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     const all = await run(messagesWhen((each) => each.length === 9));
     expect(all[8]?.content).toContain("ended as failed.");
     const asked = requests.filter((request) => request.prompt.startsWith("Hobbots wrote this"));
@@ -1116,7 +1116,7 @@ describe("blockers", () => {
     const { run } = setUp();
     const failure = await run(failedStep);
     if (failure === undefined) throw new Error("no Failure recorded");
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     const [blocked] = await run(settledItems([failure.id]));
     expect(blocked).toMatchObject({ state: "failed" });
     expect(blocked?.blockers).toMatchObject([
@@ -1152,7 +1152,7 @@ describe("blockers", () => {
     const { run } = setUp(Frodo, { ...LIMITS, firstRetry: "500 millis", maxRetry: "500 millis" });
     const failure = await run(failedStep);
     if (failure === undefined) throw new Error("no Failure recorded");
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     await run(messagesWhen((all) => all.some((m) => m.status === "interrupted")));
     // You pause the Quest before the dispatcher tries again: it holds the work and claims nothing.
     const before = dispatches;
@@ -1169,7 +1169,7 @@ describe("blockers", () => {
     const { run, requests, release } = setUp(Frodo, { ...LIMITS, maxDeliveries: 1 });
     const failure = await run(failedStep);
     if (failure === undefined) throw new Error("no Failure recorded");
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     // The continuation reached the runtime and waits there, before it writes, when you stop it.
     await run(
       retry(
@@ -1178,7 +1178,7 @@ describe("blockers", () => {
         ),
       ),
     );
-    await run(ChatService.use((chat) => chat.stop(threadId)));
+    await run(ChatService.use((chat) => chat.stop(channelId)));
     await run(messagesWhen((all) => all.at(-1)?.status === "stopped"));
     await release();
     const [blocked] = await run(settledItems([failure.id]));
@@ -1222,13 +1222,13 @@ describe("blockers", () => {
 
 describe("turn limits", () => {
   it("answers every one of many chats sent at once to one hob, four turns at a time (#1448, #1590)", async () => {
-    const ids = Array.from({ length: 13 }, (_, n) => ThreadId.make(`chat-${n + 1}`));
+    const ids = Array.from({ length: 13 }, (_, n) => ChannelId.make(`chat-${n + 1}`));
     const ManyChats: Before = Layer.effectDiscard(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
         yield* repo.insertAgent(frodo);
         for (const id of ids) {
-          yield* repo.upsertThread(new Thread({ id, agentId: FRODO, title: id, createdAt: now, updatedAt: now }));
+          yield* repo.upsertChannel(new Channel({ id, agentId: FRODO, title: id, createdAt: now, updatedAt: now }));
         }
       }),
     );
@@ -1240,7 +1240,7 @@ describe("turn limits", () => {
     );
     expect(sent.filter((each) => each.userMessage.status === "queued")).toHaveLength(ids.length - cap);
     await release();
-    // A thread that finds no backpack work keeps its slot for your message, so every chat is
+    // A channel that finds no backpack work keeps its slot for your message, so every chat is
     // answered, never more than four at once.
     for (const id of ids) {
       await run(

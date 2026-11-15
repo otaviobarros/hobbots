@@ -28,7 +28,7 @@ import {
   ruleOperation,
   stableJson,
   type TaskId,
-  type ThreadId,
+  type ChannelId,
 } from "@hobbots/domain";
 import { Context, DateTime, Deferred, Duration, Effect, Layer, Option, Semaphore } from "effect";
 import { unguarded, type WriteGuard } from "./devices.ts";
@@ -43,8 +43,8 @@ export class ApprovalRepository extends Context.Service<
   ApprovalRepository,
   {
     readonly find: (id: ApprovalId) => Effect.Effect<Option.Option<ApprovalRequest>>;
-    /** The thread's requests, oldest first. */
-    readonly listForThread: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<ApprovalRequest>>;
+    /** The channel's requests, oldest first. */
+    readonly listForChannel: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<ApprovalRequest>>;
     readonly listPending: Effect.Effect<ReadonlyArray<ApprovalRequest>>;
     /** Every pending request and the `limit` most recently decided or expired ones, oldest first. */
     readonly listRecent: (limit: number) => Effect.Effect<ReadonlyArray<ApprovalRequest>>;
@@ -83,12 +83,12 @@ export const actionDigest = (action: Pick<ApprovalAction, "tool" | "operation" |
   ).pipe(Effect.map((hash) => Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("")));
 
 /**
- * The turn a request pauses: its hob and thread, and its reply, or for a party member's turn, which
+ * The turn a request pauses: its hob and channel, and its reply, or for a party member's turn, which
  * runs outside the chat, the member's Task instead (ADR 018).
  */
 export type ApprovalOwner =
-  | { readonly agentId: AgentId; readonly threadId: ThreadId; readonly messageId: MessageId }
-  | { readonly agentId: AgentId; readonly threadId: ThreadId; readonly messageId: null; readonly taskId: TaskId };
+  | { readonly agentId: AgentId; readonly channelId: ChannelId; readonly messageId: MessageId }
+  | { readonly agentId: AgentId; readonly channelId: ChannelId; readonly messageId: null; readonly taskId: TaskId };
 
 /** What the user sends to decide a request. `actionDigest` is the one they were shown. */
 export interface ApprovalDecisionInput {
@@ -236,7 +236,7 @@ export class ApprovalService extends Context.Service<
     >;
     /** Expires the hob's pending requests, as when it retires: a retired hob is never approved anything. */
     readonly expireForAgent: (agentId: AgentId) => Effect.Effect<void>;
-    readonly listForThread: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<ApprovalRequest>>;
+    readonly listForChannel: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<ApprovalRequest>>;
     /** The Inbox's requests (PE-003): every pending one and the most recent closed ones, oldest first. */
     readonly listInbox: Effect.Effect<ReadonlyArray<ApprovalRequest>>;
     /** One request as stored now, such as the one open in the Inbox after it left the list. */
@@ -611,7 +611,7 @@ export class ApprovalService extends Context.Service<
         forStep,
         decide,
         expireForAgent,
-        listForThread: repo.listForThread,
+        listForChannel: repo.listForChannel,
         listInbox: repo.listRecent(INBOX_HISTORY),
         get: (id) =>
           repo

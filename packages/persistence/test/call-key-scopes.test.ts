@@ -1,5 +1,5 @@
 import { CharmCalls, HobbotsRepository, TaskToolCalls } from "@hobbots/agents";
-import { Agent, AgentId, CharmCall, MessageId, TaskToolRefused, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, CharmCall, MessageId, TaskToolRefused, ChannelId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
@@ -151,7 +151,7 @@ describe("tool call keys per Task", () => {
         appliedText: "Pushed.",
         state: "sending",
         result: null,
-        threadId: ThreadId.make("t1"),
+        channelId: ChannelId.make("t1"),
         messageId: MessageId.make(messageId),
         stepId: null,
         createdAt: now,
@@ -193,7 +193,7 @@ describe("tool call keys per Task", () => {
           appliedText: "Pushed.",
           state: "sending",
           result: null,
-          threadId: ThreadId.make("t1"),
+          channelId: ChannelId.make("t1"),
           messageId: MessageId.make("m1"),
           stepId: null,
           createdAt: now,
@@ -217,7 +217,7 @@ describe("tool call keys per Task", () => {
   it("0045 keeps every stored call and refusal readable, each in the work its input names, compared without its turn", async () => {
     // Keeps 0047, 0076, 0079, 0080, 0082 and 0083 too: the repository that seeds the hob writes its name with
     // each version, its Charms, whether other hobs see it, its good at and who made and summoned it, and its Summoning scope;
-    // 0053 and 0114 too: the journal moves a retired hob's thread members (ADR 039), which need both.
+    // 0053 and 0114 too: the journal moves a retired hob's channel members (ADR 039), which need both.
     const earlier = Object.fromEntries(
       Object.entries(migrations).filter(
         ([id]) =>
@@ -276,7 +276,7 @@ describe("tool call keys per Task", () => {
         plan: "{}",
         state: "applied",
         result: null,
-        threadId: null,
+        channelId: null,
         messageId: "m2",
         stepId: null,
         createdAt: now,

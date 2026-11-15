@@ -84,10 +84,10 @@ export const hobNeeds = ({
 };
 
 /**
- * One thread's state for the chat header, from what the hub published: the hob's presence when it is
- * paused, since its lifecycle comes first, then what the thread's running reply is doing.
+ * One channel's state for the chat header, from what the hub published: the hob's presence when it is
+ * paused, since its lifecycle comes first, then what the channel's running reply is doing.
  */
-export const threadState = (
+export const channelState = (
   presence: HobPresenceState | undefined,
   reply: ReplyActivity | undefined,
   status: AgentStatus,

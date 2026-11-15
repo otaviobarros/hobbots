@@ -44,7 +44,7 @@ import {
   type Message,
   type ReplyStep,
   roleFields,
-  type Thread,
+  type Channel,
 } from "@hobbots/domain";
 import { MemoryProjectsLive, MemoryToolsLive } from "@hobbots/memory";
 import { makeMemoryStoreFake } from "@hobbots/memory/testing";
@@ -132,8 +132,8 @@ const sends: Array<{
   readonly calls: ReadonlyArray<CharmCall>;
 }> = [];
 
-/** The step and the never-twice records a call's thread held when the Charm sent it, read over the API. */
-let seenFrom: (threadId: string | null) => Promise<Pick<(typeof sends)[number], "step" | "calls">> = async () => ({
+/** The step and the never-twice records a call's channel held when the Charm sent it, read over the API. */
+let seenFrom: (channelId: string | null) => Promise<Pick<(typeof sends)[number], "step" | "calls">> = async () => ({
   step: undefined,
   calls: [],
 });
@@ -168,7 +168,7 @@ const ShelfCharm = Effect.gen(function* () {
             request: shelfRequest("read", shelf),
             card: { arguments: { shelf } },
             send: Effect.promise(async () => {
-              sends.push({ tool: "shelf_read", input: { shelf }, ...(await seenFrom(context.turn.threadId)) });
+              sends.push({ tool: "shelf_read", input: { shelf }, ...(await seenFrom(context.turn.channelId)) });
               // Someone left a token on the shelf: the hob must never read it.
               return `The ${shelf} shelf holds: ${(shelves.get(shelf) ?? []).join("; ") || "nothing"}. Key: ${TOKEN}`;
             }),
@@ -204,7 +204,7 @@ const ShelfCharm = Effect.gen(function* () {
               appliedText: `The note is on the ${shelf} shelf.`,
               // The note lands, but the answer is lost on the way back, so the hub must read the shelf.
               send: Effect.promise(async () => {
-                sends.push({ tool: "shelf_write", input: { shelf, note }, ...(await seenFrom(context.turn.threadId)) });
+                sends.push({ tool: "shelf_write", input: { shelf, note }, ...(await seenFrom(context.turn.channelId)) });
                 shelves.set(shelf, [...(shelves.get(shelf) ?? []), note]);
                 return { _tag: "Uncertain", text: "The shelf did not answer." } as const;
               }),
@@ -415,10 +415,10 @@ beforeAll(async () => {
   );
   handler = (request) => web.handler(request);
   dispose = web.dispose;
-  seenFrom = async (threadId) => {
-    if (threadId === null) return { step: undefined, calls: [] };
-    const reply = (await request<ReadonlyArray<Message>>("GET", `/api/threads/${threadId}/messages`)).body.at(-1);
-    const calls = (await request<ReadonlyArray<CharmCall>>("GET", `/api/threads/${threadId}/charm-calls`)).body;
+  seenFrom = async (channelId) => {
+    if (channelId === null) return { step: undefined, calls: [] };
+    const reply = (await request<ReadonlyArray<Message>>("GET", `/api/channels/${channelId}/messages`)).body.at(-1);
+    const calls = (await request<ReadonlyArray<CharmCall>>("GET", `/api/channels/${channelId}/charm-calls`)).body;
     return { step: reply?.steps.filter((step) => step.kind === "tool").at(-1), calls };
   };
 }, 120_000);
@@ -451,15 +451,15 @@ const eventually = <A>(read: () => Promise<A | undefined>) =>
     ),
   );
 
-const messages = async (thread: Thread) =>
-  (await request<ReadonlyArray<Message>>("GET", `/api/threads/${thread.id}/messages`)).body;
-const approvalsOf = async (thread: Thread) =>
-  (await request<ReadonlyArray<ApprovalRequest>>("GET", `/api/threads/${thread.id}/approvals`)).body;
+const messages = async (channel: Channel) =>
+  (await request<ReadonlyArray<Message>>("GET", `/api/channels/${channel.id}/messages`)).body;
+const approvalsOf = async (channel: Channel) =>
+  (await request<ReadonlyArray<ApprovalRequest>>("GET", `/api/channels/${channel.id}/approvals`)).body;
 
-/** The last reply of the thread once it has ended. */
-const settled = (thread: Thread) =>
+/** The last reply of the channel once it has ended. */
+const settled = (channel: Channel) =>
   eventually(async () => {
-    const reply = (await messages(thread)).at(-1);
+    const reply = (await messages(channel)).at(-1);
     return reply?.role === "assistant" && !isInProgress(reply.status) ? reply : undefined;
   });
 
@@ -498,17 +498,17 @@ const summon = async (name: string, charms: ReadonlyArray<string>): Promise<Agen
 
 const call = (tool: string, input: Record<string, unknown>) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-/** The hob makes the scripted calls in a new thread: the request it waits on, or its finished reply. */
+/** The hob makes the scripted calls in a new channel: the request it waits on, or its finished reply. */
 const turn = async (hob: Agent, ...calls: Array<string>) => {
-  const thread = (await request<Thread>("POST", `/api/agents/${hob.id}/threads`)).body;
+  const channel = (await request<Channel>("POST", `/api/agents/${hob.id}/channels`)).body;
   const content = ["Go", ...calls].join("\n");
-  expect((await request("POST", `/api/threads/${thread.id}/messages`, { content })).status).toBe(200);
+  expect((await request("POST", `/api/channels/${channel.id}/messages`, { content })).status).toBe(200);
   return eventually(async () => {
-    const pending = (await approvalsOf(thread)).find((approval) => approval.state === "pending");
-    if (pending) return { thread, pending, reply: undefined };
-    const reply = (await messages(thread)).at(-1);
+    const pending = (await approvalsOf(channel)).find((approval) => approval.state === "pending");
+    if (pending) return { channel, pending, reply: undefined };
+    const reply = (await messages(channel)).at(-1);
     return reply?.role === "assistant" && !isInProgress(reply.status)
-      ? { thread, pending: undefined, reply }
+      ? { channel, pending: undefined, reply }
       : undefined;
   });
 };
@@ -521,7 +521,7 @@ const decide = (approval: ApprovalRequest, decision: Record<string, unknown>) =>
 
 /** Approves the request it waits on, for `lifetime`, and waits for the reply to end. */
 const approve = async (
-  asked: { readonly thread: Thread; readonly pending?: ApprovalRequest | undefined },
+  asked: { readonly channel: Channel; readonly pending?: ApprovalRequest | undefined },
   lifetime?: "always",
 ) => {
   expect(asked.pending).toBeDefined();
@@ -530,7 +530,7 @@ const approve = async (
     ...(lifetime === undefined ? {} : { lifetime }),
   });
   expect(decided.body).toMatchObject({ state: "approved" });
-  return settled(asked.thread);
+  return settled(asked.channel);
 };
 
 /** What the runtime of the last turn was answered for each hub call, in order. */
@@ -594,7 +594,7 @@ describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
       );
       expect(answer?.text, runtime).toContain(`The ${shelf} shelf holds: Water the plants. Key: ${REDACTED}`);
       expect(answer?.text, runtime).not.toContain(TOKEN);
-      expect(JSON.stringify(await messages(asked.thread)), runtime).not.toContain(TOKEN);
+      expect(JSON.stringify(await messages(asked.channel)), runtime).not.toContain(TOKEN);
 
       // The grant saved for the shelf answers the next read of it, without asking.
       const again = await turn(hob, call("shelf_read", { shelf }));
@@ -605,7 +605,7 @@ describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
       const other = await turn(hob, call("shelf_read", { shelf: `bottom-${runtime}` }));
       expect(other.pending, runtime).toMatchObject({ tool: "shelf_read", arguments: { shelf: `bottom-${runtime}` } });
       await decide(other.pending as ApprovalRequest, { decision: "deny", reason: "Not that one" });
-      await settled(other.thread);
+      await settled(other.channel);
       expect(
         sends.map((sent) => sent.input.shelf),
         runtime,
@@ -655,14 +655,14 @@ describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
         ["shelf_write", false],
       ]);
       for (const answer of lastAnswers()) expect(answer.text, runtime).toContain(`The note is on the ${shelf} shelf.`);
-      expect((await approvalsOf(asked.thread)).length, runtime).toBe(1);
-      const [stored] = (await request<ReadonlyArray<CharmCall>>("GET", `/api/threads/${asked.thread.id}/charm-calls`))
+      expect((await approvalsOf(asked.channel)).length, runtime).toBe(1);
+      const [stored] = (await request<ReadonlyArray<CharmCall>>("GET", `/api/channels/${asked.channel.id}/charm-calls`))
         .body;
       expect(stored, runtime).toMatchObject({ state: "applied", charm: "Shelf" });
       expect(JSON.parse(stored?.input ?? "{}"), runtime).toEqual({ shelf, note: `Call Ada, her token is ${REDACTED}` });
       // Only the hob's own message holds the token: not its step, its card or its record.
       expect(JSON.stringify(toolSteps(reply)), runtime).not.toContain(TOKEN);
-      expect(JSON.stringify(await approvalsOf(asked.thread)), runtime).not.toContain(TOKEN);
+      expect(JSON.stringify(await approvalsOf(asked.channel)), runtime).not.toContain(TOKEN);
       expect(JSON.stringify(stored), runtime).not.toContain(TOKEN);
       expect(sends, runtime).toHaveLength(1);
       expect(shelves.get(shelf), runtime).toEqual([`Call Ada, her token is ${REDACTED}`]);
@@ -683,9 +683,9 @@ describe("a fake second Charm beside the GitHub Charm, through the hub", () => {
       // Taken away while the user has not decided: the turn stops.
       const narrowed = await request("PATCH", `/api/agents/${hob.id}/permissions`, { charms: { granted: ["github"] } });
       expect(narrowed.body.policy.charms.granted, runtime).toEqual(["github"]);
-      const reply = await settled(asked.thread);
+      const reply = await settled(asked.channel);
       expect(reply.status, runtime).toBe("interrupted");
-      const approval = (await approvalsOf(asked.thread)).find((one) => one.id === asked.pending?.id);
+      const approval = (await approvalsOf(asked.channel)).find((one) => one.id === asked.pending?.id);
       expect(approval?.state, runtime).not.toBe("pending");
       // The next turn is not offered the Shelf Charm, and a call to it is refused.
       const after = await turn(hob, call("shelf_read", { shelf }));
@@ -863,7 +863,7 @@ describe("a GitHub comment after the session read the web (#1272)", () => {
       reasonCode: "read-the-web",
     });
     await decide(marked.pending as ApprovalRequest, { decision: "deny" });
-    await settled(marked.thread);
+    await settled(marked.channel);
     const bodies = (github.items("octo/workshop").find((it) => it.number === item?.number)?.comments ?? []).map(
       (posted) => posted.body,
     );

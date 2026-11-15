@@ -48,7 +48,7 @@ test("Bruna and Leo sign in on two devices, see each other's messages in one cam
   }
 
   // Each message names the person whose device sent it, never the owner.
-  const response = await people[1]?.context.request.get(`${hub.url}/api/threads/${camp.id}/messages`);
+  const response = await people[1]?.context.request.get(`${hub.url}/api/channels/${camp.id}/messages`);
   expect(response?.ok()).toBe(true);
   const messages = ((await response?.json()) ?? []) as ReadonlyArray<Pick<Message, "content" | "actor">>;
   const writerOf = (text: string): Actor | null | undefined =>

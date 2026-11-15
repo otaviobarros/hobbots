@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { Effort, RUNTIME_NAMES, RuntimeKind } from "./agent.ts";
-import { AgentId, ChapterId, MessageId, ThreadId } from "./ids.ts";
+import { AgentId, ChapterId, MessageId, ChannelId } from "./ids.ts";
 import { TaskId } from "./task.ts";
 import { WebReadMark } from "./web-mark.ts";
 
@@ -43,19 +43,19 @@ export const RosterMark = Schema.Struct({
 export type RosterMark = typeof RosterMark.Type;
 
 /**
- * A thread's binding to one runtime's session (ADR 017), keyed by thread, chapter (ADR 037), runtime
- * and hob (ADR 039). A thread keeps one per hob and runtime it has used, so switching back inside a
- * chapter resumes that hob's session on that runtime, and each hob in a shared thread resumes only
+ * A channel's binding to one runtime's session (ADR 017), keyed by channel, chapter (ADR 037), runtime
+ * and hob (ADR 039). A channel keeps one per hob and runtime it has used, so switching back inside a
+ * chapter resumes that hob's session on that runtime, and each hob in a shared channel resumes only
  * its own. A session belongs to the chapter it started in: a turn in a later chapter starts a new one
- * in its place and never resumes it. ADR 039 also keys it by reply thread, which is not built yet.
+ * in its place and never resumes it. ADR 039 also keys it by thread, which is not built yet.
  */
 export const RuntimeSession = Schema.Struct({
   runtime: RuntimeKind,
-  /** The hob whose turns run in the session; migration 20261114005209_hob_sessions gave every earlier session its thread's hob. */
+  /** The hob whose turns run in the session; migration 20261114005209_hob_sessions gave every earlier session its channel's hob. */
   agentId: AgentId,
   /** The runtime's own id for the session. */
   sessionId: Schema.String,
-  /** The chapter the session belongs to; migration 0099 gave every earlier session its thread's first. */
+  /** The chapter the session belongs to; migration 0099 gave every earlier session its channel's first. */
   chapterId: ChapterId,
   /**
    * How many chapters had been merged into its chapter when the session started there (ADR 037).
@@ -71,7 +71,7 @@ export const RuntimeSession = Schema.Struct({
    */
   memoryBrief: Schema.optionalKey(Schema.NullOr(Schema.String)),
   /**
-   * What the session was last told of the Task its hob works on in the thread (#1027). Absent or
+   * What the session was last told of the Task its hob works on in the channel (#1027). Absent or
    * null when it is not known, and the next turn sends the whole briefing.
    */
   taskBrief: Schema.optionalKey(Schema.NullOr(TaskBriefMark)),
@@ -95,11 +95,11 @@ export const RuntimeSession = Schema.Struct({
 export type RuntimeSession = typeof RuntimeSession.Type;
 
 /**
- * The stored summary of a thread's older messages, reused by the next handoff so history is not
+ * The stored summary of a channel's older messages, reused by the next handoff so history is not
  * summarized again on every switch (ADR 017).
  */
-export class ThreadCheckpoint extends Schema.Class<ThreadCheckpoint>("ThreadCheckpoint")({
-  threadId: ThreadId,
+export class ChannelCheckpoint extends Schema.Class<ChannelCheckpoint>("ChannelCheckpoint")({
+  channelId: ChannelId,
   /** The last message the summary covers. */
   throughMessageId: MessageId,
   /** One line per message summarized, oldest first. */

@@ -12,20 +12,20 @@ export const messages = {
   export: "Export",
   exporting: "Exporting…",
   dialogTitle: {
-    thread: ({ title }: { title: string }) => `Export “${title}”`,
+    channel: ({ title }: { title: string }) => `Export “${title}”`,
     hob: ({ name }: { name: string }) => `Export ${name}`,
   },
   dialogIntro: {
-    thread: "This chat and the quests started in it, as Markdown and JSON you can read without Hobbots.",
+    channel: "This chat and the quests started in it, as Markdown and JSON you can read without Hobbots.",
     hob: ({ name }: { name: string }) =>
-      `${name}'s threads, the quests it led and the tasks it worked on, as Markdown and JSON you can read without Hobbots. Other hobs' tasks show only their titles and states.`,
+      `${name}'s channels, the quests it led and the tasks it worked on, as Markdown and JSON you can read without Hobbots. Other hobs' tasks show only their titles and states.`,
   },
   redacted: "Every piece of text is redacted, your own messages included. Redaction is best effort.",
   close: "Close",
-  menuThread: "Export chat…",
+  menuChannel: "Export chat…",
   menuHob: "Export hob…",
   saved: ({ folder }: { folder: string }) => `Saved to ${folder}`,
-  held: { threads: "Threads", quests: "Quests", files: "Files copied" },
+  held: { channels: "Channels", quests: "Quests", files: "Files copied" },
   notCopied: {
     one: "1 file is listed with why it was not copied.",
     other: ({ count }: { count: string }) => `${count} files are listed with why they were not copied.`,

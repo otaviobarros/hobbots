@@ -41,7 +41,7 @@ export const skillChangesQuery = queryOptions({
   queryFn: () => call((c) => c.skills.changes()),
 });
 
-/** How often hobs used a skill, per hob and per thread, as its Activity tab counts them. */
+/** How often hobs used a skill, per hob and per channel, as its Activity tab counts them. */
 export const skillUsesQuery = (skillId: SkillId) =>
   queryOptions({
     queryKey: skillsKeys.uses(skillId),

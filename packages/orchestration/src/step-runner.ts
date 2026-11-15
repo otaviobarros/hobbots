@@ -226,7 +226,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
             prompt: stepPrompt(step, tree),
             taskId: step.id,
             attemptId,
-            threadId: step.threadId,
+            channelId: step.channelId,
             // A fresh session: nothing of the hob's chat or of other steps.
             sessionId: null,
             access: run.access,
@@ -239,7 +239,7 @@ export const StepRunnerLive = (limits: StepLimits = DEFAULT_STEP_LIMITS, separat
                 { agentId: agent.id, taskId: step.id, carried },
                 {
                   attemptId,
-                  threadId: step.threadId,
+                  channelId: step.channelId,
                   currentAccess: currentAccessOf(run),
                   redactor,
                   approvals: marked,

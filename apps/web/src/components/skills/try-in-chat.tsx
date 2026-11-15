@@ -60,8 +60,8 @@ export function TryInChat({
     start.mutate(
       { agentId: hob.id, draft: draft() },
       {
-        onSuccess: (thread) =>
-          void navigate({ to: "/hobs/$hobId/threads/$threadId", params: { hobId: hob.id, threadId: thread.id } }),
+        onSuccess: (channel) =>
+          void navigate({ to: "/hobs/$hobId/channels/$channelId", params: { hobId: hob.id, channelId: channel.id } }),
       },
     );
   return (

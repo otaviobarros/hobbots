@@ -1,5 +1,5 @@
 import { BriefLog, HobbotsRepository, TaskRepository } from "@hobbots/agents";
-import { Agent, AgentId, type BriefDraft, roleFields, TaskId, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, type BriefDraft, roleFields, TaskId, Channel, ChannelId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import type { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
@@ -14,7 +14,7 @@ import { TestDatabase } from "../src/testing.ts";
 const NOW = "2026-11-12T00:00:00.000Z";
 const LATER = "2026-11-12T01:00:00.000Z";
 const ADA = AgentId.make("ada");
-const CAMP = ThreadId.make("camp-1");
+const CAMP = ChannelId.make("camp-1");
 
 const layer = Layer.mergeAll(
   HobbotsRepositoryLive,
@@ -44,11 +44,11 @@ const seed = Effect.gen(function* () {
       createdAt: NOW,
     }),
   );
-  yield* repo.upsertThread(new Thread({ id: CAMP, agentId: ADA, title: "Launch", createdAt: NOW, updatedAt: NOW }));
+  yield* repo.upsertChannel(new Channel({ id: CAMP, agentId: ADA, title: "Launch", createdAt: NOW, updatedAt: NOW }));
 });
 
 const draft = (fields: Partial<BriefDraft> = {}): BriefDraft => ({
-  threadId: CAMP,
+  channelId: CAMP,
   text: "Emails go out on Wednesdays.",
   basis: 5,
   source: "brain",
@@ -82,13 +82,13 @@ describe("the brief store", () => {
         };
       }),
     );
-    expect(result.first.map((entry) => [entry.type, entry.correlation.threadId])).toEqual([["BriefWritten", CAMP]]);
+    expect(result.first.map((entry) => [entry.type, entry.correlation.channelId])).toEqual([["BriefWritten", CAMP]]);
     expect(result.again).toEqual([]);
     expect(result.older).toEqual([]);
     // The cursor never moves back.
     expect(result.cursor).toBe(result.start + 5);
     expect(Option.getOrThrow(result.brief)).toMatchObject({
-      threadId: CAMP,
+      channelId: CAMP,
       text: "Emails go out on Wednesdays.",
       writtenBy: { kind: "hub", id: "hub" },
       source: "brain",
@@ -125,18 +125,18 @@ describe("the brief store", () => {
   });
 
   // covers ADR 037 (Records)
-  it("names the thread of a Task, and writes no brief for a thread that is not there (#1384)", async () => {
+  it("names the channel of a Task, and writes no brief for a channel that is not there (#1384)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
         const tasks = yield* TaskRepository;
-        const task = (id: string, threadId: ThreadId | null) =>
+        const task = (id: string, channelId: ChannelId | null) =>
           tasks.createTask({
             task: {
               id: TaskId.make(id),
               ownerId: ADA,
               parentId: null,
-              threadId,
+              channelId,
               brief: id,
               dependsOn: [],
               createdAt: NOW,
@@ -147,22 +147,22 @@ describe("the brief store", () => {
         yield* task("in-camp", CAMP);
         yield* task("nowhere", null);
         const log = yield* BriefLog;
-        const threads = yield* log.threadsOfTasks([
+        const channels = yield* log.channelsOfTasks([
           TaskId.make("in-camp"),
           TaskId.make("nowhere"),
           TaskId.make("gone"),
         ]);
-        const none = yield* log.threadsOfTasks([]);
+        const none = yield* log.channelsOfTasks([]);
         const start = yield* log.cursor;
         const missing = yield* log.record(
           start + 1,
-          [draft({ threadId: ThreadId.make("gone"), basis: start + 1 })],
+          [draft({ channelId: ChannelId.make("gone"), basis: start + 1 })],
           NOW,
         );
-        return { threads, none, missing, cursor: yield* log.cursor, start };
+        return { channels, none, missing, cursor: yield* log.cursor, start };
       }),
     );
-    expect(result.threads).toEqual([CAMP]);
+    expect(result.channels).toEqual([CAMP]);
     expect(result.none).toEqual([]);
     expect(result.missing).toEqual([]);
     expect(result.cursor).toBe(result.start + 1);

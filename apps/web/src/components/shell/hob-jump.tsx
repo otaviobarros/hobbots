@@ -15,7 +15,7 @@ const JUMP_EVENT = "hobbots:jump";
 /** Opens the finder, as Find or jump to in the sidebar does. */
 export const openJump = () => window.dispatchEvent(new Event(JUMP_EVENT));
 
-/** ⌘K (Ctrl+K elsewhere) from any page opens a finder that jumps to a hob, or to a thread by its title or messages. */
+/** ⌘K (Ctrl+K elsewhere) from any page opens a finder that jumps to a hob, or to a channel by its title or messages. */
 export function HobJump() {
   const [open, setOpen] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -88,7 +88,7 @@ function JumpList({ onDone }: { onDone: () => void }) {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  // An empty finder lists every hob; typing also finds threads by their title or messages.
+  // An empty finder lists every hob; typing also finds channels by their title or messages.
   const agents = useQuery(agentsQuery);
   const found = useSearchResults(query);
   const options: ReadonlyArray<JumpOption> = [
@@ -185,7 +185,7 @@ function PageOption({ page }: { page: JumpPage }) {
   );
 }
 
-/** A hob, or a thread the hub found. */
+/** A hob, or a channel the hub found. */
 function ResultOption({ option }: { option: SearchResult }) {
   return (
     <>
@@ -198,7 +198,7 @@ function ResultOption({ option }: { option: SearchResult }) {
       ) : (
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="flex min-w-0 items-center gap-1.5 text-ui font-bold">
-            <span className="truncate">{option.hit.thread.title}</span>
+            <span className="truncate">{option.hit.channel.title}</span>
             <ArchivedTag result={option} />
           </span>
           <span className="truncate text-detail text-text-secondary">

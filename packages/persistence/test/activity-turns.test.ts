@@ -7,8 +7,8 @@ import {
   FileChangeId,
   type FileVersion,
   TaskId,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { describe, expect, it } from "vitest";
@@ -33,7 +33,7 @@ const later = "2026-11-02T00:00:05.000Z";
 const nextTurn = "2026-11-02T00:01:00.000Z";
 const afterNext = "2026-11-02T00:01:05.000Z";
 const ALDRIC = AgentId.make("aldric");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 const taskId = TaskId.make("tidy");
 const attemptId = AttemptId.make("a1");
 const project = "/work/project";
@@ -57,8 +57,8 @@ const seed = Effect.gen(function* () {
       createdAt: now,
     }),
   );
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: ALDRIC, title: "Docs", createdAt: now, updatedAt: now }),
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, agentId: ALDRIC, title: "Docs", createdAt: now, updatedAt: now }),
   );
   const tasks = yield* TaskRepository;
   const created = yield* tasks.createTask({
@@ -66,7 +66,7 @@ const seed = Effect.gen(function* () {
       id: taskId,
       ownerId: ALDRIC,
       parentId: null,
-      threadId,
+      channelId,
       brief: "Tidy the docs",
       dependsOn: [],
       createdAt: now,

@@ -1,4 +1,4 @@
-import { type Agent, type AgentId, TaskId, type Thread, type ThreadId } from "@hobbots/domain";
+import { type Agent, type AgentId, TaskId, type Channel, type ChannelId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { SheetContent, Sheet as SheetRoot } from "@hobbots/ui/components/sheet";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -15,18 +15,18 @@ import { useOpenQuest } from "../quest-sheet/quest-search.ts";
 export type Sheet = "make-camp" | "start-fresh" | "camp" | "members" | null;
 
 /**
- * The quest the address opens in the thread's sheet (ADR 037), and how to leave it: none while its
+ * The quest the address opens in the channel's sheet (ADR 037), and how to leave it: none while its
  * Workbench is open beside the chat instead.
  */
-export const useQuestInSheet = (hobId: AgentId, threadId: ThreadId | undefined) => {
+export const useQuestInSheet = (hobId: AgentId, channelId: ChannelId | undefined) => {
   const search = useSearch({ strict: false });
   const navigate = useNavigate();
   const quest = search.tab === undefined && search.quest !== undefined ? TaskId.make(search.quest) : undefined;
   return {
-    quest: threadId === undefined ? undefined : quest,
+    quest: channelId === undefined ? undefined : quest,
     clear: () =>
-      threadId !== undefined &&
-      void navigate({ to: "/hobs/$hobId/threads/$threadId", params: { hobId, threadId }, search: {} }),
+      channelId !== undefined &&
+      void navigate({ to: "/hobs/$hobId/channels/$channelId", params: { hobId, channelId }, search: {} }),
   };
 };
 
@@ -38,7 +38,7 @@ type QuestInSheet = ReturnType<typeof useQuestInSheet>;
  */
 export function QuestSheets({
   hob,
-  threadId,
+  channelId,
   camp,
   campOpen,
   onCamp,
@@ -46,15 +46,15 @@ export function QuestSheets({
   pins,
 }: {
   hob: Agent;
-  threadId: ThreadId;
+  channelId: ChannelId;
   pins: Pins;
-  camp: Thread | undefined;
+  camp: Channel | undefined;
   /** Whether the camp's own sheet is open on its tabs. */
   campOpen: boolean;
   onCamp: (open: boolean) => void;
   inSheet: QuestInSheet;
 }) {
-  const openQuest = useOpenQuest(hob.id, threadId);
+  const openQuest = useOpenQuest(hob.id, channelId);
   if (camp !== undefined) {
     if (!campOpen && inSheet.quest === undefined) return null;
     return (
@@ -84,14 +84,14 @@ export function QuestSheets({
   return (
     <SheetRoot open onOpenChange={(open) => !open && inSheet.clear()}>
       <SheetContent aria-describedby={undefined}>
-        <QuestPane hobId={hob.id} threadId={threadId} taskId={inSheet.quest} back={null} pins={pins} />
+        <QuestPane hobId={hob.id} channelId={channelId} taskId={inSheet.quest} back={null} pins={pins} />
       </SheetContent>
     </SheetRoot>
   );
 }
 
 /** A camp's brief, records and what is yours (ADR 037), from the header. */
-export function CampSheetButton({ camp, open, onOpen }: { camp: Thread; open: boolean; onOpen: () => void }) {
+export function CampSheetButton({ camp, open, onOpen }: { camp: Channel; open: boolean; onOpen: () => void }) {
   return (
     <Button
       variant="outline"
@@ -109,17 +109,17 @@ export function CampSheetButton({ camp, open, onOpen }: { camp: Thread; open: bo
 export function HeaderSheet({
   sheet,
   hob,
-  thread,
+  channel,
   onClose,
 }: {
   sheet: Sheet;
   hob: Agent;
-  thread: Thread | undefined;
+  channel: Channel | undefined;
   onClose: () => void;
 }) {
   if (sheet === "make-camp") return <MakeCampSheet hob={hob} onClose={onClose} />;
-  if (thread === undefined) return null;
-  if (sheet === "start-fresh") return <StartFreshSheet hob={hob} chat={thread} onClose={onClose} />;
-  if (sheet === "members" && thread.kind === "camp") return <MembersSheet camp={thread} onClose={onClose} />;
+  if (channel === undefined) return null;
+  if (sheet === "start-fresh") return <StartFreshSheet hob={hob} chat={channel} onClose={onClose} />;
+  if (sheet === "members" && channel.kind === "camp") return <MembersSheet camp={channel} onClose={onClose} />;
   return null;
 }

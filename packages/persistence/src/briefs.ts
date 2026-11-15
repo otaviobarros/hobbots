@@ -9,7 +9,7 @@ import {
   HUB_ACTOR,
   type JournaledEvent,
   type TaskId,
-  ThreadId,
+  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -25,7 +25,7 @@ import { sqlOrDie } from "./sql-errors.ts";
 const PROJECTOR = "camp-briefs";
 
 interface BriefRow {
-  readonly threadId: string;
+  readonly channelId: string;
   readonly text: string;
   readonly actorKind: string;
   readonly actorId: string;
@@ -37,7 +37,7 @@ interface BriefRow {
 
 const briefOfRow = (row: BriefRow) =>
   new Brief({
-    threadId: ThreadId.make(row.threadId),
+    channelId: ChannelId.make(row.channelId),
     text: row.text,
     writtenBy: { kind: row.actorKind as ActorKind, id: row.actorId },
     source: row.source as BriefSource,
@@ -53,28 +53,28 @@ export const BriefLogLive = Layer.effect(
     const journal = yield* EventJournal;
     const journaledChange = makeJournaledChange(sql);
 
-    const stored = (threadId: ThreadId) =>
-      sql<BriefRow>`SELECT * FROM briefs WHERE thread_id = ${threadId}`.pipe(
+    const stored = (channelId: ChannelId) =>
+      sql<BriefRow>`SELECT * FROM briefs WHERE channel_id = ${channelId}`.pipe(
         Effect.map(([row]) => (row === undefined ? null : briefOfRow(row))),
       );
 
-    const threadsOfTasks = (taskIds: ReadonlyArray<TaskId>) =>
+    const channelsOfTasks = (taskIds: ReadonlyArray<TaskId>) =>
       taskIds.length === 0
         ? Effect.succeed([])
-        : sql<{ readonly threadId: string }>`SELECT DISTINCT thread_id FROM tasks
-            WHERE ${sql.in("id", taskIds)} AND thread_id IS NOT NULL`.pipe(
-            Effect.map((rows) => rows.map((row) => ThreadId.make(row.threadId))),
+        : sql<{ readonly channelId: string }>`SELECT DISTINCT channel_id FROM tasks
+            WHERE ${sql.in("id", taskIds)} AND channel_id IS NOT NULL`.pipe(
+            Effect.map((rows) => rows.map((row) => ChannelId.make(row.channelId))),
           );
 
     // The brief the draft writes, or null when its rule lets nothing through.
     const written = (draft: BriefDraft, at: string, revision: number) =>
       Effect.gen(function* () {
-        // A thread that is not there takes no brief.
-        const [thread] = yield* sql`SELECT 1 FROM threads WHERE id = ${draft.threadId}`;
-        if (thread === undefined) return null;
-        if (briefChange(yield* stored(draft.threadId), draft) !== "write") return null;
+        // A channel that is not there takes no brief.
+        const [channel] = yield* sql`SELECT 1 FROM channels WHERE id = ${draft.channelId}`;
+        if (channel === undefined) return null;
+        if (briefChange(yield* stored(draft.channelId), draft) !== "write") return null;
         const brief = new Brief({
-          threadId: draft.threadId,
+          channelId: draft.channelId,
           text: draft.text,
           writtenBy: HUB_ACTOR,
           source: briefSourceOf(draft),
@@ -83,7 +83,7 @@ export const BriefLogLive = Layer.effect(
           revision,
         });
         const row = {
-          thread_id: brief.threadId,
+          channel_id: brief.channelId,
           text: brief.text,
           actor_kind: brief.writtenBy.kind,
           actor_id: brief.writtenBy.id,
@@ -93,7 +93,7 @@ export const BriefLogLive = Layer.effect(
           revision: brief.revision,
         };
         yield* sql`INSERT INTO briefs ${sql.insert(row)}
-          ON CONFLICT (thread_id) DO UPDATE SET text = ${row.text}, actor_kind = ${row.actor_kind},
+          ON CONFLICT (channel_id) DO UPDATE SET text = ${row.text}, actor_kind = ${row.actor_kind},
             actor_id = ${row.actor_id}, source = ${row.source}, basis = ${row.basis},
             written_at = ${row.written_at}, revision = ${row.revision}`;
         return brief;
@@ -115,8 +115,8 @@ export const BriefLogLive = Layer.effect(
     return BriefLog.of({
       cursor: sqlOrDie(projectorCursor(sql, PROJECTOR)),
       readAfter: (sequence, limit) => journal.readAfter(sequence, limit),
-      threadsOfTasks: (taskIds) => sqlOrDie(threadsOfTasks(taskIds)),
-      briefOf: (threadId) => sqlOrDie(stored(threadId)).pipe(Effect.map(Option.fromNullishOr)),
+      channelsOfTasks: (taskIds) => sqlOrDie(channelsOfTasks(taskIds)),
+      briefOf: (channelId) => sqlOrDie(stored(channelId)).pipe(Effect.map(Option.fromNullishOr)),
       record,
     });
   }),

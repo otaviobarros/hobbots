@@ -7,7 +7,7 @@ import {
   scopeWork,
   stableJson,
   type TaskId,
-  type ThreadId,
+  type ChannelId,
 } from "@hobbots/domain";
 import { Context, DateTime, type Duration, Effect, Layer, Option, type Scope } from "effect";
 import type { HubCallStep } from "./runtime.ts";
@@ -59,12 +59,12 @@ export class CharmCalls extends Context.Service<
     readonly current: (call: CharmCall) => Effect.Effect<Option.Option<CharmCall>>;
     /** The call shown as this reply step. */
     readonly findByStep: (
-      threadId: ThreadId,
+      channelId: ChannelId,
       messageId: MessageId,
       stepId: string,
     ) => Effect.Effect<Option.Option<CharmCall>>;
-    /** The thread's calls, oldest first, so its steps can show how each settled. */
-    readonly listForThread: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<CharmCall>>;
+    /** The channel's calls, oldest first, so its steps can show how each settled. */
+    readonly listForChannel: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<CharmCall>>;
     /**
      * The sending `attempt` of a call made in `scope`, as it is stored now. A call a Task's session
      * made, which has no reply step, is found this way (ADR 038).
@@ -88,7 +88,7 @@ export type CharmCallSettlement = "applied" | "not-sent";
 export type CharmCallSite =
   | {
       readonly _tag: "Step";
-      readonly threadId: ThreadId;
+      readonly channelId: ChannelId;
       readonly messageId: MessageId;
       readonly stepId: string;
     }
@@ -101,7 +101,7 @@ const settledText = (charm: string, outcome: CharmCallSettlement) =>
     : `The user looked on ${charm} and settled this call as not sent, so it may be made again.`;
 
 /**
- * The user's side of the call records (ADR 020, ADR 038): the thread's calls, the uncertain ones
+ * The user's side of the call records (ADR 020, ADR 038): the channel's calls, the uncertain ones
  * Tasks' sessions made, and settling an uncertain one once they have looked on the Charm's side,
  * such as GitHub, from its reply step or from its Task. Only the user settles a call: it needs a
  * `UserSession`, which no hob, Charm or runtime tool has (PE-006).
@@ -109,7 +109,7 @@ const settledText = (charm: string, outcome: CharmCallSettlement) =>
 export class CharmCallService extends Context.Service<
   CharmCallService,
   {
-    readonly listForThread: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<CharmCall>>;
+    readonly listForChannel: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<CharmCall>>;
     /** The uncertain calls Tasks' sessions made, oldest first, each with its Task as it is now (ADR 038). */
     readonly waitingOnTasks: Effect.Effect<ReadonlyArray<WaitingCharmCall>>;
     readonly settle: (
@@ -128,12 +128,12 @@ export class CharmCallService extends Context.Service<
       /** The call `site` names: the latest on a reply step, or one sending on a Task. */
       const find = (site: CharmCallSite) =>
         site._tag === "Step"
-          ? calls.findByStep(site.threadId, site.messageId, site.stepId)
+          ? calls.findByStep(site.channelId, site.messageId, site.stepId)
           : calls.findSending(callScope.task(site.taskId), site.attempt);
       const refOf = (site: CharmCallSite) => (site._tag === "Step" ? site.stepId : site.attempt);
 
       return CharmCallService.of({
-        listForThread: calls.listForThread,
+        listForChannel: calls.listForChannel,
         waitingOnTasks: Effect.gen(function* () {
           const waiting: Array<WaitingCharmCall> = [];
           if (Option.isNone(tasks)) return waiting;
@@ -234,7 +234,7 @@ export interface CharmWrite {
   /** What the hob is told when reading the Charm back finds the call took effect. */
   readonly appliedText: string;
   readonly step: HubCallStep | undefined;
-  readonly threadId: ThreadId | null;
+  readonly channelId: ChannelId | null;
   readonly messageId: MessageId | null;
 }
 
@@ -356,7 +356,7 @@ export const makeCharmCallRunner = (readBacks: Readonly<Record<string, ReadBack>
           appliedText: write.appliedText,
           state: "sending",
           result: null,
-          threadId: write.threadId,
+          channelId: write.channelId,
           messageId: write.messageId,
           stepId: write.step?.id ?? null,
           createdAt: at,

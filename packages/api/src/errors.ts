@@ -13,8 +13,8 @@ import {
   QuestionId,
   SafetyPreset,
   TaskId,
-  ThreadArchiveRefusal,
-  ThreadId,
+  ChannelArchiveRefusal,
+  ChannelId,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 
@@ -35,47 +35,47 @@ export class HobUnavailable extends Schema.TaggedError<HobUnavailable>()(
   { httpApiStatus: 409 },
 ) {}
 
-export class ThreadNotFound extends Schema.TaggedError<ThreadNotFound>()(
-  "ThreadNotFound",
-  { threadId: ThreadId },
+export class ChannelNotFound extends Schema.TaggedError<ChannelNotFound>()(
+  "ChannelNotFound",
+  { channelId: ChannelId },
   { httpApiStatus: 404 },
 ) {}
 
-/** A tool step with no full log: the step, its reply or its thread is not there, or its output was shown whole. */
+/** A tool step with no full log: the step, its reply or its channel is not there, or its output was shown whole. */
 export class ToolLogNotFound extends Schema.TaggedError<ToolLogNotFound>()(
   "ToolLogNotFound",
   { messageId: MessageId, stepId: Schema.String },
   { httpApiStatus: 404 },
 ) {}
 
-/** The thread was not archived or restored, for `reason`; nothing changed. */
-export class ThreadArchiveRefused extends Schema.TaggedError<ThreadArchiveRefused>()(
-  "ThreadArchiveRefused",
-  { threadId: ThreadId, reason: ThreadArchiveRefusal },
+/** The channel was not archived or restored, for `reason`; nothing changed. */
+export class ChannelArchiveRefused extends Schema.TaggedError<ChannelArchiveRefused>()(
+  "ChannelArchiveRefused",
+  { channelId: ChannelId, reason: ChannelArchiveRefusal },
   { httpApiStatus: 409 },
 ) {}
 
 /**
- * Why Start fresh did nothing: the thread is not its hob's open chat (`not-open-chat`), or what
+ * Why Start fresh did nothing: the channel is not its hob's open chat (`not-open-chat`), or what
  * stops an archive stops it too.
  */
-export const StartFreshRefusal = Schema.Literals([...ThreadArchiveRefusal.literals, "not-open-chat"]);
+export const StartFreshRefusal = Schema.Literals([...ChannelArchiveRefusal.literals, "not-open-chat"]);
 export type StartFreshRefusal = typeof StartFreshRefusal.Type;
 
 /** Start fresh was refused for `reason`; nothing changed. */
 export class StartFreshRefused extends Schema.TaggedError<StartFreshRefused>()(
   "StartFreshRefused",
-  { threadId: ThreadId, reason: StartFreshRefusal },
+  { channelId: ChannelId, reason: StartFreshRefusal },
   { httpApiStatus: 409 },
 ) {}
 
 /**
- * The key of Make a camp or Start fresh, which becomes the new thread's id, already names another
- * thread or another request; nothing changed. The same request sent again is answered, not refused.
+ * The key of Make a camp or Start fresh, which becomes the new channel's id, already names another
+ * channel or another request; nothing changed. The same request sent again is answered, not refused.
  */
-export class ThreadKeyReused extends Schema.TaggedError<ThreadKeyReused>()(
-  "ThreadKeyReused",
-  { threadId: ThreadId },
+export class ChannelKeyReused extends Schema.TaggedError<ChannelKeyReused>()(
+  "ChannelKeyReused",
+  { channelId: ChannelId },
   { httpApiStatus: 409 },
 ) {}
 
@@ -89,17 +89,17 @@ export class MessageKeyReused extends Schema.TaggedError<MessageKeyReused>()(
   { httpApiStatus: 409 },
 ) {}
 
-/** The message is not in the thread: it was never there, was taken back, or moved with its chapter. */
+/** The message is not in the channel: it was never there, was taken back, or moved with its chapter. */
 export class MessageNotFound extends Schema.TaggedError<MessageNotFound>()(
   "MessageNotFound",
-  { threadId: ThreadId, messageId: MessageId },
+  { channelId: ChannelId, messageId: MessageId },
   { httpApiStatus: 404 },
 ) {}
 
 /** Only a camp has the setting asked for, such as Private; a chat keeps no such setting. */
-export class ThreadNotCamp extends Schema.TaggedError<ThreadNotCamp>()(
-  "ThreadNotCamp",
-  { threadId: ThreadId },
+export class ChannelNotCamp extends Schema.TaggedError<ChannelNotCamp>()(
+  "ChannelNotCamp",
+  { channelId: ChannelId },
   { httpApiStatus: 409 },
 ) {}
 
@@ -110,18 +110,18 @@ export class ThreadNotCamp extends Schema.TaggedError<ThreadNotCamp>()(
  */
 export class MentionRefused extends Schema.TaggedError<MentionRefused>()(
   "MentionRefused",
-  { threadId: ThreadId, hobs: Schema.Array(AgentId) },
+  { channelId: ChannelId, hobs: Schema.Array(AgentId) },
   { httpApiStatus: 409 },
 ) {}
 
-/** An archived thread is read-only: it takes no new messages, replies or brain switch until it is restored. */
-export class ThreadArchived extends Schema.TaggedError<ThreadArchived>()(
-  "ThreadArchived",
-  { threadId: ThreadId, archivedAt: Schema.String },
+/** An archived channel is read-only: it takes no new messages, replies or brain switch until it is restored. */
+export class ChannelArchived extends Schema.TaggedError<ChannelArchived>()(
+  "ChannelArchived",
+  { channelId: ChannelId, archivedAt: Schema.String },
   { httpApiStatus: 409 },
 ) {}
 
-/** A message that is not waiting in the thread's queue: it already started, was removed, or is elsewhere. */
+/** A message that is not waiting in the channel's queue: it already started, was removed, or is elsewhere. */
 export class MessageNotQueued extends Schema.TaggedError<MessageNotQueued>()(
   "MessageNotQueued",
   { messageId: MessageId },
@@ -129,8 +129,8 @@ export class MessageNotQueued extends Schema.TaggedError<MessageNotQueued>()(
 ) {}
 
 /**
- * A reply Continue cannot resume: it did not end early, it is not the thread's latest message, or
- * another turn is running in its thread.
+ * A reply Continue cannot resume: it did not end early, it is not the channel's latest message, or
+ * another turn is running in its channel.
  */
 export class ReplyNotResumable extends Schema.TaggedError<ReplyNotResumable>()(
   "ReplyNotResumable",
@@ -144,7 +144,7 @@ export class ReplyNotResumable extends Schema.TaggedError<ReplyNotResumable>()(
  */
 export class TurnsAtLimit extends Schema.TaggedError<TurnsAtLimit>()(
   "TurnsAtLimit",
-  { threadId: ThreadId },
+  { channelId: ChannelId },
   { httpApiStatus: 409 },
 ) {}
 

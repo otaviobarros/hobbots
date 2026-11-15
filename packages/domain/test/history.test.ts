@@ -23,12 +23,12 @@ import {
   Task,
   TaskId,
   type TaskState,
-  ThreadId,
+  ChannelId,
 } from "../src/index.ts";
 
 const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 const q1 = QuestId.make("q1");
 
 const task = (
@@ -44,7 +44,7 @@ const task = (
     ownerId,
     parentId: parent === null ? null : TaskId.make(parent),
     rootId: TaskId.make("launch"),
-    threadId,
+    channelId,
     brief: `Brief for ${id}`,
     state,
     dependsOn: [],
@@ -59,7 +59,7 @@ const approval = (id: string, agentId: AgentId, taskId: string | null, state: Ap
   new ApprovalRequest({
     id: ApprovalId.make(id),
     agentId,
-    threadId,
+    channelId,
     messageId: null,
     taskId: taskId === null ? null : TaskId.make(taskId),
     rootTaskId: taskId === null ? null : TaskId.make("launch"),
@@ -122,7 +122,7 @@ const records: HistoryRecords = {
       taskId: TaskId.make("launch"),
       leadId: ALDRIC,
       parentQuestId: null,
-      threadId,
+      channelId,
       goal: "Spring launch",
       acceptance: [],
       limits: DEFAULT_QUEST_LIMITS,
@@ -157,7 +157,7 @@ const records: HistoryRecords = {
     question("kept-by-lead", true, ALDRIC, "2026-09-02T10:00:00.000Z"),
     question("yours", true, null, "2026-09-02T11:00:00.000Z"),
   ],
-  threadOwners: new Map([[threadId, ALDRIC]]),
+  channelOwners: new Map([[channelId, ALDRIC]]),
 };
 
 const line = (event: HistoryEvent) => [event._tag, event.id, historyKind(event), event.quest?.goal ?? null];
@@ -186,9 +186,9 @@ describe("a hob's History", () => {
       summary: "The preview link was not ready.",
       attempts: 3,
       attemptId: "copy-3",
-      threadId,
+      channelId,
       // Quill's work opens in Aldric's chat, where you asked for it.
-      threadAgentId: ALDRIC,
+      channelAgentId: ALDRIC,
     });
     expect(byId.get("ended:launch")).toMatchObject({ state: "completed", summary: "launch is done" });
     expect(byId.get("quest-started:q1")).toMatchObject({ party: [QUILL] });

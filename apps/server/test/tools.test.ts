@@ -57,7 +57,7 @@ describe("a hob's tools", () => {
   });
 
   it("gives no tools when a folder holds every hob's runtime state", async () => {
-    // Chat-only, with the runtime folder kept so the thread's session still moves back.
+    // Chat-only, with the runtime folder kept so the channel's session still moves back.
     for (const folders of [[join(temp, "hub")], [temp, project]]) {
       const access = await accessWith(folders);
       expect(access?.folders).toEqual([]);

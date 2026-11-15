@@ -245,7 +245,7 @@ describe.runIf(engineEnabled)("ai-memory projects Hobbots did not make", () => {
     const { store, endpoint, keys } = await Effect.runPromise(open());
     const pip: MemoryScope = { _tag: "Hob", agentId: AgentId.make("0d6e2f0a-0000-4000-8000-000000000031") };
     const you = { _tag: "You" } as const;
-    const path = MemoryPath.make("sessions/thread-1.md");
+    const path = MemoryPath.make("sessions/channel-1.md");
     const draft = (markdown: string) => ({ path, markdown, tags: [], pinned: false });
     const first = await Effect.runPromise(store.write(you, pip, draft("# Session\n\nMonday."), { _tag: "New" }));
     const second = await Effect.runPromise(store.write(you, pip, draft("# Session\n\nTuesday."), { _tag: "Any" }));

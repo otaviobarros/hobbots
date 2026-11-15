@@ -53,7 +53,7 @@ describe("the request log", () => {
 
   it("logs successful reads at Debug when the log level asks for them", async () => {
     minimum = "Debug";
-    await send("GET", "/api/approvals?thread=1");
+    await send("GET", "/api/approvals?channel=1");
     await send("POST", "/api/agents");
     expect(logged).toEqual([
       { level: "Debug", url: "/api/approvals", status: 200 },

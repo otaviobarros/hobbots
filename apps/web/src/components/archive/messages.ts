@@ -1,4 +1,4 @@
-/** User-facing copy for archiving a chat (STD-I18N-001); the design calls a thread a chat. */
+/** User-facing copy for archiving a chat (STD-I18N-001); the design calls a channel a chat. */
 
 interface Named {
   readonly name: string;

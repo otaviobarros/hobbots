@@ -107,7 +107,7 @@ export const noticeText = (
  */
 export interface TaskLink {
   readonly hobId: string;
-  readonly threadId: string;
+  readonly channelId: string;
   readonly taskId: string;
 }
 
@@ -118,11 +118,11 @@ const text = (value: unknown): string | null => (typeof value === "string" ? val
 
 const firstLine = (value: string) => value.split("\n", 1)[0]?.trim() ?? "";
 
-/** The link to a Task in a lead's chat, or null when the work has no thread. */
+/** The link to a Task in a lead's chat, or null when the work has no channel. */
 const taskLink = (hobId: string | null, task: Record<string, unknown> | null): TaskLink | null => {
-  const threadId = text(task?.threadId);
+  const channelId = text(task?.channelId);
   const taskId = text(task?.id);
-  return hobId === null || threadId === null || taskId === null ? null : { hobId, threadId, taskId };
+  return hobId === null || channelId === null || taskId === null ? null : { hobId, channelId, taskId };
 };
 
 /** A question that climbed every lead and waits for you, as its notification needs it. */
@@ -233,7 +233,7 @@ export const finishedQuest = (payload: unknown): FinishedQuest | null => {
   const leadId = text(quest?.leadId);
   if (id === null || goal === null || leadId === null) return null;
   if (quest?.state !== "completed" || quest.parentQuestId !== null) return null;
-  return { id, goal: firstLine(goal), leadId, link: taskLink(leadId, { id: quest.taskId, threadId: quest.threadId }) };
+  return { id, goal: firstLine(goal), leadId, link: taskLink(leadId, { id: quest.taskId, channelId: quest.channelId }) };
 };
 
 /** The notification for a finished Quest: its goal is done, cut to fit, and whose chat has the finish. */

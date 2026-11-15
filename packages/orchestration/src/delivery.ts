@@ -151,14 +151,14 @@ export const makeDestinationCheck = (separator: PathSeparator) =>
 
 /**
  * What the user approved deleting in a request's work (#1215): the targets of each delete-files
- * request in its thread, from that request, that they approved. A hub that keeps no approvals has none.
+ * request in its channel, from that request, that they approved. A hub that keeps no approvals has none.
  */
 export const makeApprovedRemovals = Effect.gen(function* () {
   const approvals = yield* Effect.serviceOption(ApprovalRepository);
   return (top: Task): Effect.Effect<ReadonlyArray<string>> =>
-    Option.isNone(approvals) || top.threadId === null
+    Option.isNone(approvals) || top.channelId === null
       ? Effect.succeed([])
-      : Effect.map(approvals.value.listForThread(top.threadId), (all) =>
+      : Effect.map(approvals.value.listForChannel(top.channelId), (all) =>
           all.flatMap((each) =>
             each.rootTaskId === top.id && each.state === "approved" && each.operation === "delete-files"
               ? each.targets

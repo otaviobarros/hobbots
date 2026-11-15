@@ -1,4 +1,4 @@
-import type { AskWithoutAnswer, RegisteredArtifactKind, ThreadKind } from "@hobbots/domain";
+import type { AskWithoutAnswer, RegisteredArtifactKind, ChannelKind } from "@hobbots/domain";
 import { formatCount, plural } from "../../lib/format.ts";
 import type { FindGroupKind } from "./find-model.ts";
 
@@ -15,7 +15,7 @@ export const messages = {
   clear: "Clear the search",
   results: "What Find found",
   scope: "Where to look",
-  here: ({ kind }: { readonly kind: ThreadKind }) => (kind === "camp" ? "This camp" : "This chat"),
+  here: ({ kind }: { readonly kind: ChannelKind }) => (kind === "camp" ? "This camp" : "This chat"),
   everywhere: "Everywhere",
   group: ({ kind, count }: { readonly kind: FindGroupKind; readonly count: number }) =>
     `${{ decision: "Decisions", artifact: "Artifacts", chapter: "Chapters", message: "Messages" }[kind]} · ${formatCount(count)}`,

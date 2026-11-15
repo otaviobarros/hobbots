@@ -53,12 +53,12 @@ export const useChatFold = (width: RoomWidth) => {
 };
 
 /**
- * The replies of a thread the chat showed while it was last in view, by id. A count would not do: a
+ * The replies of a channel the chat showed while it was last in view, by id. A count would not do: a
  * reply that streams and then completes as routine progress leaves the chat, and the next reply
  * would only bring the count back to where it was (#1006).
  */
 export interface SeenReplies {
-  readonly thread: string | undefined;
+  readonly channel: string | undefined;
   readonly ids: ReadonlySet<string>;
 }
 
@@ -66,25 +66,25 @@ const keepsUp = (seen: SeenReplies, replies: ReadonlyArray<string>) =>
   seen.ids.size === replies.length && replies.every((id) => seen.ids.has(id));
 
 /**
- * The replies the chat has seen, after a read of `replies` in `thread`: a new thread starts from its
+ * The replies the chat has seen, after a read of `replies` in `channel`: a new channel starts from its
  * own replies, and while the chat is in view it keeps up; folded, it stays where it was, so a reply
  * after the fold counts as new. Returns `seen` itself when nothing changed.
  */
 export const nextSeen = (
   seen: SeenReplies | undefined,
-  thread: string | undefined,
+  channel: string | undefined,
   replies: ReadonlyArray<string> | undefined,
   hidden: boolean,
 ): SeenReplies | undefined => {
   if (replies === undefined) return seen;
-  if (seen === undefined || seen.thread !== thread || (!hidden && !keepsUp(seen, replies)))
-    return { thread, ids: new Set(replies) };
+  if (seen === undefined || seen.channel !== channel || (!hidden && !keepsUp(seen, replies)))
+    return { channel, ids: new Set(replies) };
   return seen;
 };
 
-/** Whether `thread` has a reply the chat has not shown since it was folded. */
+/** Whether `channel` has a reply the chat has not shown since it was folded. */
 export const hasUnread = (
   seen: SeenReplies | undefined,
-  thread: string | undefined,
+  channel: string | undefined,
   replies: ReadonlyArray<string> | undefined,
-) => replies !== undefined && seen !== undefined && seen.thread === thread && replies.some((id) => !seen.ids.has(id));
+) => replies !== undefined && seen !== undefined && seen.channel === channel && replies.some((id) => !seen.ids.has(id));

@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node";
 import { MemoryStore, MemoryVersionAuthors } from "@hobbots/agents";
-import { AgentId, DEFAULT_MEMORY_SETTINGS, type MemoryActor, type MemoryScope, ThreadId } from "@hobbots/domain";
+import { AgentId, DEFAULT_MEMORY_SETTINGS, type MemoryActor, type MemoryScope, ChannelId } from "@hobbots/domain";
 import { Context, Effect, Exit, Layer, Redacted, Schedule, Scope } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
@@ -61,13 +61,13 @@ describe.runIf(engineEnabled)("a finished chat's summary", () => {
     expect(Redacted.value(keys.model)).toMatch(/^[0-9a-f]{64}$/);
 
     const store = Context.get(context, MemoryStore);
-    const thread = ThreadId.make("0d6e2f0a-0000-4000-8000-0000000000a1");
+    const channel = ChannelId.make("0d6e2f0a-0000-4000-8000-0000000000a1");
     await Effect.runPromise(
       Effect.gen(function* () {
-        yield* store.capture(asPip, pipsOwn, thread, [
+        yield* store.capture(asPip, pipsOwn, channel, [
           { key: "message:m1", kind: "message", text: "Release notes go in CHANGELOG.md, newest first." },
         ]);
-        yield* store.endSession(asPip, pipsOwn, thread, "end:m1");
+        yield* store.endSession(asPip, pipsOwn, channel, "end:m1");
       }),
     );
     // The engine queues the summary when the session ends, then asks its model.

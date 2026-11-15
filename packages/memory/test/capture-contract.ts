@@ -43,8 +43,8 @@ import {
   Task,
   TaskId,
   type TaskState,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { Context, DateTime, Duration, Effect, Layer, Logger, type Scope } from "effect";
 import { TestClock } from "effect/testing";
@@ -63,7 +63,7 @@ import { makeMemorySavesFake } from "../src/testing.ts";
 export interface CaptureUnderTest {
   /** The memory under test. Its calls fail while it is down. */
   readonly store: MemoryStoreShape;
-  /** How many observations memory keeps of a session, a thread's or an Attempt's, in a hob's memory. */
+  /** How many observations memory keeps of a session, a channel's or an Attempt's, in a hob's memory. */
   readonly observations: (agentId: AgentId, sessionId: string) => Effect.Effect<number>;
   /** The title, text and time (ISO 8601) of each observation memory keeps of a session, its ends left out. */
   readonly observed: (
@@ -93,9 +93,9 @@ const recordedSave = (
   at: string,
   origin: {
     readonly work: string;
-    readonly threadId: ThreadId | null;
+    readonly channelId: ChannelId | null;
     readonly attemptId?: AttemptId;
-  } = { work: "thread:tests", threadId: null },
+  } = { work: "thread:tests", channelId: null },
 ) =>
   new MemorySave({
     id: crypto.randomUUID(),
@@ -109,7 +109,7 @@ const recordedSave = (
     tags: ["release"],
     state,
     version: null,
-    threadId: origin.threadId,
+    channelId: origin.channelId,
     messageId: null,
     ...(origin.attemptId === undefined ? {} : { attemptId: origin.attemptId }),
     createdAt: at,
@@ -138,13 +138,13 @@ const makeJournal = (start: string) => {
   const entries: Array<EventEnvelope> = [];
   let cursor = 0;
   let sessions: Array<MemoryCaptureSession> = [];
-  let privateAtCursor: ReadonlyArray<ThreadId> = [];
+  let privateAtCursor: ReadonlyArray<ChannelId> = [];
   let excluded: ReadonlyArray<string> = [];
   let crashNextSave = false;
   // When capture last started from the journal's head; a test moves it to start capture later.
   let since = start;
   let at = Date.parse(start);
-  const append = (payload: JournaledEvent, threadId: ThreadId | null, agentId: AgentId | null = pip) => {
+  const append = (payload: JournaledEvent, channelId: ChannelId | null, agentId: AgentId | null = pip) => {
     at += 1_000;
     const entry = new EventEnvelope({
       id: crypto.randomUUID(),
@@ -152,7 +152,7 @@ const makeJournal = (start: string) => {
       schemaVersion: EVENT_SCHEMA_VERSIONS[payload._tag],
       type: payload._tag,
       occurredAt: new Date(at).toISOString(),
-      correlation: { agentId, threadId, messageId: null },
+      correlation: { agentId, channelId, messageId: null },
       causationId: null,
       payload,
     });
@@ -160,32 +160,32 @@ const makeJournal = (start: string) => {
     record(payload);
     return entry;
   };
-  /** Each thread's privacy and each Task's thread as they stand now, as the hub's tables hold them. */
-  const privateThreads = new Set<ThreadId>();
-  const taskThreads = new Map<TaskId, ThreadId | null>();
+  /** Each channel's privacy and each Task's channel as they stand now, as the hub's tables hold them. */
+  const privateChannels = new Set<ChannelId>();
+  const taskChannels = new Map<TaskId, ChannelId | null>();
   const record = (payload: JournaledEvent) => {
-    if (payload._tag === "ThreadUpserted") {
-      if (payload.thread.private) privateThreads.add(payload.thread.id);
-      else privateThreads.delete(payload.thread.id);
+    if (payload._tag === "ChannelUpserted") {
+      if (payload.channel.private) privateChannels.add(payload.channel.id);
+      else privateChannels.delete(payload.channel.id);
     }
-    if (payload._tag === "TaskStateChanged") taskThreads.set(payload.task.id, payload.task.threadId);
+    if (payload._tag === "TaskStateChanged") taskChannels.set(payload.task.id, payload.task.channelId);
   };
   const log = MemoryCaptureLog.of({
     privacy: (work) =>
       Effect.sync(() => {
-        const tasks = new Map<TaskId, ThreadId>();
+        const tasks = new Map<TaskId, ChannelId>();
         for (const taskId of work.taskIds) {
-          const threadId = taskThreads.get(taskId) ?? null;
-          if (threadId !== null) tasks.set(taskId, threadId);
+          const channelId = taskChannels.get(taskId) ?? null;
+          if (channelId !== null) tasks.set(taskId, channelId);
         }
-        const asked = [...work.threadIds, ...tasks.values()];
-        return { privateNow: new Set(asked.filter((threadId) => privateThreads.has(threadId))), taskThreads: tasks };
+        const asked = [...work.channelIds, ...tasks.values()];
+        return { privateNow: new Set(asked.filter((channelId) => privateChannels.has(channelId))), taskChannels: tasks };
       }),
     hold: Effect.sync(() => ({
       sequence: cursor,
       since,
       sessions,
-      exclusions: { privateThreads: privateAtCursor, excluded },
+      exclusions: { privateChannels: privateAtCursor, excluded },
     })),
     release: Effect.void,
     // The messages as the hub stores them now: each one's latest entry.
@@ -212,7 +212,7 @@ const makeJournal = (start: string) => {
         const replaced = new Set([...active, ...ended].map(sessionKeyOf));
         sessions = [...sessions.filter((session) => !replaced.has(sessionKeyOf(session))), ...active];
         cursor = sequence;
-        privateAtCursor = exclusions.privateThreads;
+        privateAtCursor = exclusions.privateChannels;
         excluded = [...new Set([...excluded, ...exclusions.excluded])];
         return Effect.void;
       }),
@@ -238,10 +238,10 @@ const makeJournal = (start: string) => {
 
 type Journal = ReturnType<typeof makeJournal>;
 
-const message = (threadId: ThreadId, content: string, fields: Partial<Message> = {}) =>
+const message = (channelId: ChannelId, content: string, fields: Partial<Message> = {}) =>
   new Message({
     id: MessageId.make(crypto.randomUUID()),
-    threadId,
+    channelId,
     role: "user",
     content,
     status: "complete",
@@ -261,24 +261,24 @@ const step = (id: string, label: string, output: string): ReplyStep => ({
 });
 
 /**
- * You write in the thread, and a hob, Pip unless `more.hob` says, answers it on `runtime`, with
- * `steps`. The journal names the thread's hob, `more.threadHob` or Pip, as the hub does.
+ * You write in the channel, and a hob, Pip unless `more.hob` says, answers it on `runtime`, with
+ * `steps`. The journal names the channel's hob, `more.channelHob` or Pip, as the hub does.
  */
 const exchange = (
   journal: Journal,
-  threadId: ThreadId,
+  channelId: ChannelId,
   prompt: string,
   answer: string,
   more: {
     readonly runtime?: "claude-code" | "codex";
     readonly steps?: ReadonlyArray<ReplyStep>;
     readonly hob?: AgentId;
-    readonly threadHob?: AgentId;
+    readonly channelHob?: AgentId;
   } = {},
 ) => {
-  const asked = message(threadId, prompt, { actor: OWNER_ACTOR });
-  journal.append({ _tag: "MessageUpserted", message: asked }, threadId, more.threadHob ?? pip);
-  const reply = message(threadId, "", {
+  const asked = message(channelId, prompt, { actor: OWNER_ACTOR });
+  journal.append({ _tag: "MessageUpserted", message: asked }, channelId, more.channelHob ?? pip);
+  const reply = message(channelId, "", {
     role: "assistant",
     status: "streaming",
     actor: hobActorOf(more.hob ?? pip),
@@ -287,22 +287,22 @@ const exchange = (
     steps: more.steps ?? [],
   });
   // A reply is saved while it streams and again when its turn ends; only the end is captured.
-  journal.append({ _tag: "MessageUpserted", message: reply }, threadId, more.threadHob ?? pip);
+  journal.append({ _tag: "MessageUpserted", message: reply }, channelId, more.channelHob ?? pip);
   journal.append(
     { _tag: "MessageUpserted", message: new Message({ ...reply, content: answer, status: "complete" }) },
-    threadId,
-    more.threadHob ?? pip,
+    channelId,
+    more.channelHob ?? pip,
   );
   return asked;
 };
 
 /** You make the camp private, or public again (ADR 037). */
-const setPrivate = (journal: Journal, threadId: ThreadId, value: boolean) =>
+const setPrivate = (journal: Journal, channelId: ChannelId, value: boolean) =>
   journal.append(
     {
-      _tag: "ThreadUpserted",
-      thread: new Thread({
-        id: threadId,
+      _tag: "ChannelUpserted",
+      channel: new Channel({
+        id: channelId,
         agentId: pip,
         title: "Tests",
         private: value,
@@ -310,15 +310,15 @@ const setPrivate = (journal: Journal, threadId: ThreadId, value: boolean) =>
         updatedAt: "2026-11-05T13:00:00.000Z",
       }),
     },
-    threadId,
+    channelId,
   );
 
-const archive = (journal: Journal, threadId: ThreadId) =>
+const archive = (journal: Journal, channelId: ChannelId) =>
   journal.append(
     {
-      _tag: "ThreadUpserted",
-      thread: new Thread({
-        id: threadId,
+      _tag: "ChannelUpserted",
+      channel: new Channel({
+        id: channelId,
         agentId: pip,
         title: "Tests",
         archivedAt: "2026-11-05T13:00:00.000Z",
@@ -326,7 +326,7 @@ const archive = (journal: Journal, threadId: ThreadId) =>
         updatedAt: "2026-11-05T13:00:00.000Z",
       }),
     },
-    threadId,
+    channelId,
   );
 
 /**
@@ -336,7 +336,7 @@ const archive = (journal: Journal, threadId: ThreadId) =>
  */
 const arrived = (
   journal: Journal,
-  threadId: ThreadId,
+  channelId: ChannelId,
   recipient: AgentId,
   payload: BackpackPayload,
   delivery: { readonly target: string; readonly turnId: string },
@@ -358,7 +358,7 @@ const arrived = (
           taskId: null,
           questId: null,
           attemptId: null,
-          threadId,
+          channelId,
           dedupeKey: id,
           payload,
           notBefore: null,
@@ -372,7 +372,7 @@ const arrived = (
           revision: 1,
         }),
       },
-      threadId,
+      channelId,
       recipient,
     );
   return {
@@ -415,16 +415,16 @@ const answered = (taskId: TaskId, text: string, answer: string): BackpackPayload
 
 /**
  * A Task's work outside any chat, as the hub journals it (#1012): its Attempts start, record their
- * steps, end with a turn's reply, and the Task ends. The Task sits under Pip's top Task in `threadId`.
+ * steps, end with a turn's reply, and the Task ends. The Task sits under Pip's top Task in `channelId`.
  */
-const taskWork = (journal: Journal, threadId: ThreadId, owner: AgentId, brief: string) => {
+const taskWork = (journal: Journal, channelId: ChannelId, owner: AgentId, brief: string) => {
   const root = TaskId.make(crypto.randomUUID());
   let task = new Task({
     id: TaskId.make(crypto.randomUUID()),
     ownerId: owner,
     parentId: root,
     rootId: root,
-    threadId,
+    channelId,
     brief,
     state: "queued",
     dependsOn: [],
@@ -445,7 +445,7 @@ const taskWork = (journal: Journal, threadId: ThreadId, owner: AgentId, brief: s
         wait: null,
         ...(reply === undefined ? {} : { reply }),
       },
-      threadId,
+      channelId,
       owner,
     );
   };
@@ -478,7 +478,7 @@ const taskWork = (journal: Journal, threadId: ThreadId, owner: AgentId, brief: s
     /** The Attempt's steps so far, all of them, as each change records them. */
     steps: (steps: ReadonlyArray<ReplyStep>) => {
       const current = attempt as Attempt;
-      journal.append({ _tag: "AttemptStepsRecorded", attemptId: current.id, taskId: task.id, steps }, threadId, owner);
+      journal.append({ _tag: "AttemptStepsRecorded", attemptId: current.id, taskId: task.id, steps }, channelId, owner);
     },
     /** The turn ends with its reply, and the Task waits for more, or completes. */
     replied: (reply: string, state: TaskState = "waiting") => changed(state, withState("completed"), reply),
@@ -533,28 +533,28 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
 
   describe(`memory capture: ${name}`, () => {
     // covers ADR 028 (Capture and summaries)
-    it("leaves one session page for a thread whichever brains wrote it, and a replay does not duplicate it", () =>
+    it("leaves one session page for a channel whichever brains wrote it, and a replay does not duplicate it", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const threadId = ThreadId.make(crypto.randomUUID());
-          exchange(journal, threadId, "How do the tests run in this repository?", "With pnpm test, on Vitest.", {
+          const channelId = ChannelId.make(crypto.randomUUID());
+          exchange(journal, channelId, "How do the tests run in this repository?", "With pnpm test, on Vitest.", {
             steps: [step("s1", "Running pnpm test", "42 tests passed")],
           });
-          // The thread switches brain (ADR 017): its session goes on.
-          exchange(journal, threadId, "And the linter?", "Biome, through pnpm check.", { runtime: "codex" });
+          // The channel switches brain (ADR 017): its session goes on.
+          exchange(journal, channelId, "And the linter?", "Biome, through pnpm check.", { runtime: "codex" });
           expect(yield* capture.runOnce).toBe(true);
           expect(journal.cursor()).toBe(6);
           // start, two prompts, a tool step and two replies
-          expect(yield* memory.observations(pip, threadId)).toBe(6);
-          expect(yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, threadId))).toBeNull();
+          expect(yield* memory.observations(pip, channelId)).toBe(6);
+          expect(yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, channelId))).toBeNull();
 
           yield* quietPassed;
           yield* capture.runOnce;
-          const page = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, threadId));
+          const page = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, channelId));
           expect(page?.markdown).toContain("How do the tests run in this repository?");
           expect(page?.markdown).toContain("And the linter?");
           expect(journal.sessions()).toEqual([]);
-          const ended = yield* memory.observations(pip, threadId);
+          const ended = yield* memory.observations(pip, channelId);
 
           // Every entry sent again, as after a lost cursor, adds nothing.
           const replay = makeJournal("2026-11-05T12:00:00.000Z");
@@ -573,8 +573,8 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
             ),
           );
           yield* Context.get(replayed, MemoryCapture).runOnce;
-          expect(yield* memory.observations(pip, threadId)).toBe(ended);
-          const history = yield* memory.store.history(you, pipsOwn, memory.store.sessionPage(pipsOwn, threadId));
+          expect(yield* memory.observations(pip, channelId)).toBe(ended);
+          const history = yield* memory.store.history(you, pipsOwn, memory.store.sessionPage(pipsOwn, channelId));
           expect(history).toHaveLength(1);
         }),
       ));
@@ -583,13 +583,13 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
     it("sends nothing that redaction removes", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const threadId = ThreadId.make(crypto.randomUUID());
-          exchange(journal, threadId, `Use the token ${SECRET} to deploy.`, `I deployed with ${SECRET}.`, {
+          const channelId = ChannelId.make(crypto.randomUUID());
+          exchange(journal, channelId, `Use the token ${SECRET} to deploy.`, `I deployed with ${SECRET}.`, {
             steps: [step("s1", `curl -H "Authorization: Bearer ${SECRET}"`, `token=${SECRET}`)],
           });
-          archive(journal, threadId);
+          archive(journal, channelId);
           yield* capture.runOnce;
-          const page = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, threadId));
+          const page = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, channelId));
           expect(page).not.toBeNull();
           expect(page?.markdown).not.toContain(SECRET);
           expect(page?.markdown).toContain("[redacted");
@@ -597,28 +597,28 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (Capture and summaries)
-    it("ends a session when its thread is archived, and the thread goes on in the same session", () =>
+    it("ends a session when its channel is archived, and the channel goes on in the same session", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const threadId = ThreadId.make(crypto.randomUUID());
-          exchange(journal, threadId, "Where are the docs?", "In docs/.");
-          archive(journal, threadId);
+          const channelId = ChannelId.make(crypto.randomUUID());
+          exchange(journal, channelId, "Where are the docs?", "In docs/.");
+          archive(journal, channelId);
           yield* capture.runOnce;
-          const first = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, threadId));
+          const first = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, channelId));
           expect(first?.markdown).toContain("Where are the docs?");
           expect(journal.sessions()).toEqual([]);
 
-          exchange(journal, threadId, "And the decisions?", "In docs/decisions.");
+          exchange(journal, channelId, "And the decisions?", "In docs/decisions.");
           yield* capture.runOnce;
           yield* quietPassed;
           yield* capture.runOnce;
-          const page = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, threadId));
+          const page = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, channelId));
           expect(page?.markdown).toContain("And the decisions?");
           expect(page?.markdown).toContain("Where are the docs?");
           // start, two prompts, two replies: the start is not sent again
-          expect(yield* memory.observations(pip, threadId)).toBe(5);
+          expect(yield* memory.observations(pip, channelId)).toBe(5);
           // Each end wrote the page again, and History names the hob on every version (#1317).
-          const history = yield* memory.store.history(you, pipsOwn, memory.store.sessionPage(pipsOwn, threadId));
+          const history = yield* memory.store.history(you, pipsOwn, memory.store.sessionPage(pipsOwn, channelId));
           expect(history.length).toBeGreaterThan(1);
           for (const entry of history) expect(entry.author).toEqual({ _tag: "Hob", agentId: pip });
         }),
@@ -628,10 +628,10 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
     it("keeps a session's end while you have its chat note pinned, and sends it once you unpin the note", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const threadId = ThreadId.make(crypto.randomUUID());
-          const path = memory.store.sessionPage(pipsOwn, threadId);
-          exchange(journal, threadId, "Where are the docs?", "In docs/.");
-          archive(journal, threadId);
+          const channelId = ChannelId.make(crypto.randomUUID());
+          const path = memory.store.sessionPage(pipsOwn, channelId);
+          exchange(journal, channelId, "Where are the docs?", "In docs/.");
+          archive(journal, channelId);
           yield* capture.runOnce;
           const note = yield* memory.store.page(you, pipsOwn, path);
           if (note === null) return expect.fail("the session wrote no page");
@@ -642,14 +642,14 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
             { _tag: "Version", version: note.version },
           );
 
-          // The thread goes on and is archived again, then goes quiet: its end waits, kept in the journal.
-          exchange(journal, threadId, "And the decisions?", "In docs/decisions.");
-          archive(journal, threadId);
+          // The channel goes on and is archived again, then goes quiet: its end waits, kept in the journal.
+          exchange(journal, channelId, "And the decisions?", "In docs/decisions.");
+          archive(journal, channelId);
           yield* capture.runOnce;
           yield* quietPassed;
           yield* capture.runOnce;
           expect(yield* memory.store.page(you, pipsOwn, path)).toMatchObject({ version: pinnedAt, pinned: true });
-          expect(journal.sessions().map((session) => session.sessionId)).toEqual([threadId]);
+          expect(journal.sessions().map((session) => session.sessionId)).toEqual([channelId]);
 
           // Unpinned, the next round ends the session, and the note takes what was said meanwhile.
           yield* memory.store.write(
@@ -669,16 +669,16 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
     it("sends a page again once after a crash between memory's acknowledgement and the cursor's save, with no duplicate", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const threadId = ThreadId.make(crypto.randomUUID());
-          exchange(journal, threadId, "Which branch do we work on?", "Always a feature branch.");
+          const channelId = ChannelId.make(crypto.randomUUID());
+          exchange(journal, channelId, "Which branch do we work on?", "Always a feature branch.");
           journal.crashNextSave();
           expect(yield* capture.runOnce).toBe(false);
           expect(journal.cursor()).toBe(0);
-          const sent = yield* memory.observations(pip, threadId);
+          const sent = yield* memory.observations(pip, channelId);
           expect(sent).toBe(3);
           expect(yield* capture.runOnce).toBe(true);
           expect(journal.cursor()).toBe(3);
-          expect(yield* memory.observations(pip, threadId)).toBe(sent);
+          expect(yield* memory.observations(pip, channelId)).toBe(sent);
         }),
       ));
 
@@ -686,44 +686,44 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
     it("keeps everything while memory is down, past the journal's 7 days, and sends it all once memory is back", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const threadId = ThreadId.make(crypto.randomUUID());
-          exchange(journal, threadId, "Do we squash merges?", "Yes, always.");
+          const channelId = ChannelId.make(crypto.randomUUID());
+          exchange(journal, channelId, "Do we squash merges?", "Yes, always.");
           yield* capture.runOnce;
           yield* memory.down;
           // The hob keeps working while memory is down, for longer than the journal keeps entries.
-          exchange(journal, threadId, "And the changelog?", "release-please writes it.");
+          exchange(journal, channelId, "And the changelog?", "release-please writes it.");
           expect(yield* capture.runOnce).toBe(false);
           journal.skip(Duration.days(8));
           yield* TestClock.adjust(Duration.days(8));
-          exchange(journal, threadId, "Who reviews?", "You do.");
-          archive(journal, threadId);
+          exchange(journal, channelId, "Who reviews?", "You do.");
+          archive(journal, channelId);
           expect(yield* capture.runOnce).toBe(false);
           expect(journal.cursor()).toBe(3);
 
           yield* memory.up;
           expect(yield* capture.runOnce).toBe(true);
           expect(journal.cursor()).toBe(10);
-          const page = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, threadId));
+          const page = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, channelId));
           for (const prompt of ["Do we squash merges?", "And the changelog?", "Who reviews?"]) {
             expect(page?.markdown).toContain(prompt);
           }
           // start, three prompts, three replies
-          expect(yield* memory.observations(pip, threadId)).toBe(7);
+          expect(yield* memory.observations(pip, channelId)).toBe(7);
         }),
       ));
 
     // covers ADR 028 (Capture and summaries)
-    it("tags a thread's session with the Quests its hob led there", () =>
+    it("tags a channel's session with the Quests its hob led there", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const threadId = ThreadId.make(crypto.randomUUID());
-          exchange(journal, threadId, "Ship the release.", "I started a Quest for it.");
+          const channelId = ChannelId.make(crypto.randomUUID());
+          exchange(journal, channelId, "Ship the release.", "I started a Quest for it.");
           const quest = new Quest({
             id: QuestId.make("quest-1"),
             taskId: TaskId.make("task-1"),
             leadId: pip,
             parentQuestId: null,
-            threadId,
+            channelId,
             goal: "Ship the release",
             acceptance: [],
             limits: { maxDepth: 2, deadline: null },
@@ -732,29 +732,29 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
             createdAt: "2026-11-05T12:00:00.000Z",
             endedAt: null,
           });
-          journal.append({ _tag: "QuestStarted", quest }, threadId);
-          archive(journal, threadId);
+          journal.append({ _tag: "QuestStarted", quest }, channelId);
+          archive(journal, channelId);
           yield* capture.runOnce;
-          const page = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, threadId));
+          const page = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, channelId));
           expect(page?.markdown).toContain("quest:quest-1");
-          expect(page?.markdown).toContain(`thread:${threadId}`);
+          expect(page?.markdown).toContain(`thread:${channelId}`);
         }),
       ));
 
     // covers ADR 028 (Capture and summaries)
-    it("waits for memory's 30 minutes of quiet by the time of a thread's last entry", () =>
+    it("waits for memory's 30 minutes of quiet by the time of a channel's last entry", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const threadId = ThreadId.make(crypto.randomUUID());
-          exchange(journal, threadId, "What is the port?", "4180.");
+          const channelId = ChannelId.make(crypto.randomUUID());
+          exchange(journal, channelId, "What is the port?", "4180.");
           yield* capture.runOnce;
           yield* TestClock.adjust(Duration.minutes(29));
           yield* capture.runOnce;
-          expect(yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, threadId))).toBeNull();
-          expect(journal.sessions().map((session) => session.sessionId)).toEqual([threadId]);
+          expect(yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, channelId))).toBeNull();
+          expect(journal.sessions().map((session) => session.sessionId)).toEqual([channelId]);
           yield* TestClock.adjust(Duration.minutes(2));
           yield* capture.runOnce;
-          expect(yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, threadId))).not.toBeNull();
+          expect(yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, channelId))).not.toBeNull();
         }),
       ));
 
@@ -762,9 +762,9 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
     it("keeps a party member's Attempt in a session of the member's own memory, ended with its Task", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const threadId = ThreadId.make(crypto.randomUUID());
-          exchange(journal, threadId, "Ship the release.", "I brought Quill in for the changelog.");
-          const work = taskWork(journal, threadId, quill, "Write the changelog for 2.0");
+          const channelId = ChannelId.make(crypto.randomUUID());
+          exchange(journal, channelId, "Ship the release.", "I brought Quill in for the changelog.");
+          const work = taskWork(journal, channelId, quill, "Write the changelog for 2.0");
           const attemptId = work.start();
           const first = step("s1", "Reading CHANGELOG.md", "## 1.9.0");
           // Every change carries all the steps so far: the first is kept once.
@@ -780,8 +780,8 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
           const page = yield* memory.store.page(you, quillsOwn, memory.store.sessionPage(quillsOwn, attemptId));
           expect(page?.markdown).toContain("Write the changelog for 2.0");
           expect(page?.markdown).toContain("The changelog for 2.0 is in CHANGELOG.md.");
-          expect(journal.sessions().map((session) => session.sessionId)).toEqual([threadId]);
-          // The lead's memory keeps its own thread, and nothing of the member's work.
+          expect(journal.sessions().map((session) => session.sessionId)).toEqual([channelId]);
+          // The lead's memory keeps its own channel, and nothing of the member's work.
           expect(yield* memory.observations(pip, attemptId)).toBe(0);
           expect(yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, attemptId))).toBeNull();
         }),
@@ -791,8 +791,8 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
     it("writes nothing twice for a redelivered or retried Attempt, or a replayed journal", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const threadId = ThreadId.make(crypto.randomUUID());
-          const work = taskWork(journal, threadId, quill, "Fix the flaky upload test");
+          const channelId = ChannelId.make(crypto.randomUUID());
+          const work = taskWork(journal, channelId, quill, "Fix the flaky upload test");
           const failed = work.start();
           work.steps([step("s1", "Running pnpm test", "1 failed")]);
           work.failed();
@@ -844,8 +844,8 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
     it("sends nothing of a member's work that redaction removes, and ends a quiet Attempt's session", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const threadId = ThreadId.make(crypto.randomUUID());
-          const work = taskWork(journal, threadId, quill, `Deploy with the token ${SECRET}`);
+          const channelId = ChannelId.make(crypto.randomUUID());
+          const work = taskWork(journal, channelId, quill, `Deploy with the token ${SECRET}`);
           const attemptId = work.start();
           work.steps([step("s1", `curl -H "Authorization: Bearer ${SECRET}"`, `token=${SECRET}`)]);
           work.replied(`Deployed with ${SECRET}.`);
@@ -866,8 +866,8 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
     it("keeps the steps an Attempt finishes after its session ended for quiet, in the same session", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const threadId = ThreadId.make(crypto.randomUUID());
-          const work = taskWork(journal, threadId, quill, "Migrate the database");
+          const channelId = ChannelId.make(crypto.randomUUID());
+          const work = taskWork(journal, channelId, quill, "Migrate the database");
           const attemptId = work.start();
           const first = step("s1", "Running pnpm db:backup", "backed up");
           work.steps([first, { ...step("s2", "Running pnpm db:migrate", ""), state: "running" }]);
@@ -897,16 +897,16 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (Capture and summaries), #1028
-    it("keeps the work that wakes a member or a thread in the session of the turn that took it in, once", () =>
+    it("keeps the work that wakes a member or a channel in the session of the turn that took it in, once", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const threadId = ThreadId.make(crypto.randomUUID());
-          const work = taskWork(journal, threadId, quill, "Wire make check");
+          const channelId = ChannelId.make(crypto.randomUUID());
+          const work = taskWork(journal, channelId, quill, "Wire make check");
           const attemptId = work.start();
           work.replied("I asked Pip whether lint belongs in make check.");
           const answer = arrived(
             journal,
-            threadId,
+            channelId,
             quill,
             answered(work.taskId, "Does lint belong in make check?", `Yes, with the key ${SECRET}.`),
             { target: `task:${work.taskId}`, turnId: attemptId },
@@ -929,7 +929,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
           });
           arrived(
             journal,
-            threadId,
+            channelId,
             quill,
             { _tag: "progress", checkpoint },
             {
@@ -950,16 +950,16 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
           expect(page?.markdown).not.toContain("reviewing the release notes");
           expect(page?.markdown).not.toContain("Answer it with");
 
-          // A member's result wakes Pip in the thread, and goes to the thread's session.
-          exchange(journal, threadId, "Ship the release.", "I brought Quill in.");
+          // A member's result wakes Pip in the channel, and goes to the channel's session.
+          exchange(journal, channelId, "Ship the release.", "I brought Quill in.");
           yield* capture.runOnce;
-          const before = yield* memory.observations(pip, threadId);
+          const before = yield* memory.observations(pip, channelId);
           const done = new Task({
             id: work.taskId,
             ownerId: quill,
             parentId: work.taskId,
             rootId: work.taskId,
-            threadId,
+            channelId,
             brief: "Wire make check",
             state: "completed",
             dependsOn: [],
@@ -970,17 +970,17 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
           });
           arrived(
             journal,
-            threadId,
+            channelId,
             pip,
             { _tag: "result", task: done, artifacts: [] },
             {
-              target: `thread:${threadId}`,
+              target: `thread:${channelId}`,
               turnId: crypto.randomUUID(),
             },
           ).taken();
           yield* capture.runOnce;
-          expect(yield* memory.observations(pip, threadId)).toBe(before + 1);
-          expect(yield* memory.observations(quill, threadId)).toBe(0);
+          expect(yield* memory.observations(pip, channelId)).toBe(before + 1);
+          expect(yield* memory.observations(quill, channelId)).toBe(0);
         }),
       ));
 
@@ -1040,8 +1040,8 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
     it("warns when it sends entries older than memory's 30-day replay window", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const threadId = ThreadId.make(crypto.randomUUID());
-          exchange(journal, threadId, "Which branch do releases tag from?", "From main.");
+          const channelId = ChannelId.make(crypto.randomUUID());
+          exchange(journal, channelId, "Which branch do releases tag from?", "From main.");
           yield* TestClock.adjust(Duration.days(31));
           const warnings: Array<string> = [];
           const recorder = Logger.make(({ logLevel, message }) => {
@@ -1049,7 +1049,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
           });
           yield* capture.runOnce.pipe(Effect.provide(Logger.layer([recorder])));
           expect(warnings.some((warning) => warning.includes("older than memory's 30-day replay window"))).toBe(true);
-          expect(yield* memory.observations(pip, threadId)).toBeGreaterThan(0);
+          expect(yield* memory.observations(pip, channelId)).toBeGreaterThan(0);
         }),
       ));
 
@@ -1082,40 +1082,40 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
         "now",
       ));
     // covers ADR 028 (When memory is down), #1049
-    it("tells a thread's session that a save kept through an outage landed, on Claude Code and Codex", () =>
+    it("tells a channel's session that a save kept through an outage landed, on Claude Code and Codex", () =>
       run(
         ({ memory, journal, saves, capture }) =>
           Effect.gen(function* () {
             for (const runtime of ["claude-code", "codex"] as const) {
-              const threadId = ThreadId.make(crypto.randomUUID());
+              const channelId = ChannelId.make(crypto.randomUUID());
               const path = MemoryPath.make(`notes/${runtime}-release.md`);
               const at = DateTime.formatIso(yield* DateTime.now);
               // Memory is down: the save is kept, and the reply tells the hob so.
               const save = recordedSave(path, "# Release\n\nTag from main.", "queued", at, {
                 work: `reply:${crypto.randomUUID()}`,
-                threadId,
+                channelId,
               });
               yield* saves.service.begin(save);
-              exchange(journal, threadId, "Save how releases tag.", "Kept it for when memory is back.", {
+              exchange(journal, channelId, "Save how releases tag.", "Kept it for when memory is back.", {
                 runtime,
                 steps: [keptSaveStep("s1", path, at)],
               });
               // Memory is back: the worker writes the save, and the hub journals that it settled.
               yield* capture.runOnce;
               const settled = saves.journaled().filter((entry) => entry.type === "MemorySaveChanged");
-              for (const entry of settled) journal.append(entry.payload, threadId);
+              for (const entry of settled) journal.append(entry.payload, channelId);
               expect(saves.saves().find((stored) => stored.id === save.id)?.state).toBe("saved");
               yield* capture.runOnce;
-              const titles = (yield* memory.observed(pip, threadId)).map((observation) => observation.title);
+              const titles = (yield* memory.observed(pip, channelId)).map((observation) => observation.title);
               expect(titles.some((title) => title.includes(`${path} is saved in memory`))).toBe(true);
-              archive(journal, threadId);
+              archive(journal, channelId);
               yield* capture.runOnce;
-              const page = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, threadId));
+              const page = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, channelId));
               expect(page?.markdown).toContain(`${path} is saved in memory`);
               // A replay of the same entries writes it once.
-              for (const entry of settled) journal.append(entry.payload, threadId);
+              for (const entry of settled) journal.append(entry.payload, channelId);
               yield* capture.runOnce;
-              const again = (yield* memory.observed(pip, threadId)).map((observation) => observation.title);
+              const again = (yield* memory.observed(pip, channelId)).map((observation) => observation.title);
               expect(again.filter((title) => title.includes(`${path} is saved in memory`))).toHaveLength(1);
             }
           }),
@@ -1127,8 +1127,8 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       run(
         ({ memory, journal, saves, capture }) =>
           Effect.gen(function* () {
-            const threadId = ThreadId.make(crypto.randomUUID());
-            const work = taskWork(journal, threadId, pip, "Write down the release steps.");
+            const channelId = ChannelId.make(crypto.randomUUID());
+            const work = taskWork(journal, channelId, pip, "Write down the release steps.");
             const first = work.start();
             const path = MemoryPath.make("notes/steps.md");
             const at = DateTime.formatIso(yield* DateTime.now);
@@ -1136,7 +1136,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
             yield* memory.down;
             const save = recordedSave(path, "# Steps\n\nTag, then publish.", "queued", at, {
               work: `task:${work.taskId}`,
-              threadId: null,
+              channelId: null,
               attemptId: first,
             });
             yield* saves.service.begin(save);
@@ -1154,8 +1154,8 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
               titles.filter((observation) => observation.title.includes(`${path} is saved in memory`)).length;
             expect(landed(yield* memory.observed(pip, first))).toBe(1);
             expect(landed(yield* memory.observed(pip, retry))).toBe(0);
-            // The thread the Task's Quest started in hears nothing of it: the save was the Attempt's.
-            expect(yield* memory.observations(pip, threadId)).toBe(0);
+            // The channel the Task's Quest started in hears nothing of it: the save was the Attempt's.
+            expect(yield* memory.observations(pip, channelId)).toBe(0);
             // A replay of the same entries writes it once.
             for (const entry of settled) journal.append(entry.payload, null);
             yield* capture.runOnce;
@@ -1168,10 +1168,10 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
     it("keeps the time each thing happened when it reaches memory after an outage", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const threadId = ThreadId.make(crypto.randomUUID());
+          const channelId = ChannelId.make(crypto.randomUUID());
           yield* memory.down;
           const ranAt = "2026-11-05T12:00:00.500Z";
-          exchange(journal, threadId, "How do the tests run?", "With pnpm test.", {
+          exchange(journal, channelId, "How do the tests run?", "With pnpm test.", {
             steps: [{ ...step("s1", "Running pnpm test", "42 tests passed"), startedAt: ranAt }],
           });
           expect(yield* capture.runOnce).toBe(false);
@@ -1179,10 +1179,10 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
           // Memory is back three minutes later, and gets what happened before it.
           yield* TestClock.adjust(Duration.minutes(3));
           expect(yield* capture.runOnce).toBe(true);
-          const observed = yield* memory.observed(pip, threadId);
+          const observed = yield* memory.observed(pip, channelId);
           const first = Date.parse("2026-11-05T12:00:00.000Z");
           expect(observed.length).toBeGreaterThan(0);
-          // Every item is stamped within the seconds the thread ran, none at the time it arrived.
+          // Every item is stamped within the seconds the channel ran, none at the time it arrived.
           for (const observation of observed) {
             expect(Date.parse(observation.at) - first).toBeLessThan(10_000);
           }
@@ -1191,13 +1191,13 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
         }),
       ));
 
-    // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
+    // covers ADR 037 (A camp is a channel with a kind), ADR 028 (Capture and summaries)
     it("sends nothing of a private camp or its Quest's work, after a replayed journal too, and moves the cursor past it (#1377)", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const threadId = ThreadId.make(crypto.randomUUID());
-          setPrivate(journal, threadId, true);
-          exchange(journal, threadId, "Plan the surprise party.", "Saturday at eight.", {
+          const channelId = ChannelId.make(crypto.randomUUID());
+          setPrivate(journal, channelId, true);
+          exchange(journal, channelId, "Plan the surprise party.", "Saturday at eight.", {
             steps: [step("s1", "Reading calendar.md", "Saturday is free")],
           });
           const quest = new Quest({
@@ -1205,7 +1205,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
             taskId: TaskId.make(crypto.randomUUID()),
             leadId: pip,
             parentQuestId: null,
-            threadId,
+            channelId,
             goal: "Book the venue",
             acceptance: [],
             limits: { maxDepth: 2, deadline: null },
@@ -1214,28 +1214,28 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
             createdAt: "2026-11-05T12:00:00.000Z",
             endedAt: null,
           });
-          journal.append({ _tag: "QuestStarted", quest }, threadId);
+          journal.append({ _tag: "QuestStarted", quest }, channelId);
           // A member works on the camp's Quest outside any chat, and is answered there.
-          const work = taskWork(journal, threadId, quill, "Book the venue for Saturday");
+          const work = taskWork(journal, channelId, quill, "Book the venue for Saturday");
           const attemptId = work.start();
           work.steps([step("s1", "Calling the venue", "Booked")]);
-          arrived(journal, threadId, quill, answered(work.taskId, "Which room?", "The garden."), {
+          arrived(journal, channelId, quill, answered(work.taskId, "Which room?", "The garden."), {
             target: `task:${work.taskId}`,
             turnId: attemptId,
           }).taken();
           work.replied("The venue is booked.", "completed");
           const last = journal.append(
-            { _tag: "MessageUpserted", message: message(threadId, "Keep it quiet.") },
-            threadId,
+            { _tag: "MessageUpserted", message: message(channelId, "Keep it quiet.") },
+            channelId,
           );
 
           expect(yield* capture.runOnce).toBe(true);
           expect(journal.cursor()).toBe(last.sequence);
           expect(journal.sessions()).toEqual([]);
           const nothing = Effect.gen(function* () {
-            expect(yield* memory.observations(pip, threadId)).toBe(0);
+            expect(yield* memory.observations(pip, channelId)).toBe(0);
             expect(yield* memory.observations(quill, attemptId)).toBe(0);
-            expect(yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, threadId))).toBeNull();
+            expect(yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, channelId))).toBeNull();
             expect(yield* memory.store.page(you, quillsOwn, memory.store.sessionPage(quillsOwn, attemptId))).toBeNull();
           });
           yield* nothing;
@@ -1264,72 +1264,72 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
         }),
       ));
 
-    // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
+    // covers ADR 037 (A camp is a channel with a kind), ADR 028 (Capture and summaries)
     it("stops capture from when a camp is made private, keeps what memory had, and goes on once it is public again (#1377)", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const threadId = ThreadId.make(crypto.randomUUID());
-          exchange(journal, threadId, "Where are the docs?", "In docs/.");
+          const channelId = ChannelId.make(crypto.randomUUID());
+          exchange(journal, channelId, "Where are the docs?", "In docs/.");
           yield* capture.runOnce;
           // start, the prompt and the reply
-          expect(yield* memory.observations(pip, threadId)).toBe(3);
-          expect(journal.sessions().map((session) => session.sessionId)).toEqual([threadId]);
+          expect(yield* memory.observations(pip, channelId)).toBe(3);
+          expect(journal.sessions().map((session) => session.sessionId)).toEqual([channelId]);
 
           // Made private: its open session ends, so memory keeps what it had, and nothing more goes in.
-          setPrivate(journal, threadId, true);
+          setPrivate(journal, channelId, true);
           yield* capture.runOnce;
           expect(journal.sessions()).toEqual([]);
-          exchange(journal, threadId, "Draft the offer letter.", "Drafted it in offer.md.");
+          exchange(journal, channelId, "Draft the offer letter.", "Drafted it in offer.md.");
           yield* capture.runOnce;
-          expect(yield* memory.observations(pip, threadId)).toBe(3);
+          expect(yield* memory.observations(pip, channelId)).toBe(3);
           expect(journal.sessions()).toEqual([]);
-          const page = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, threadId));
+          const page = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, channelId));
           expect(page?.markdown).toContain("Where are the docs?");
           expect(page?.markdown).not.toContain("offer letter");
 
           // Public again: what happens from then on is captured, in the same session.
-          setPrivate(journal, threadId, false);
-          exchange(journal, threadId, "And the decisions?", "In docs/decisions.");
+          setPrivate(journal, channelId, false);
+          exchange(journal, channelId, "And the decisions?", "In docs/decisions.");
           yield* capture.runOnce;
           // two prompts and two replies after the start, sent once
-          expect(yield* memory.observations(pip, threadId)).toBe(5);
-          archive(journal, threadId);
+          expect(yield* memory.observations(pip, channelId)).toBe(5);
+          archive(journal, channelId);
           yield* capture.runOnce;
-          const after = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, threadId));
+          const after = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, channelId));
           expect(after?.markdown).toContain("And the decisions?");
           expect(after?.markdown).not.toContain("offer letter");
         }),
       ));
 
-    // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
+    // covers ADR 037 (A camp is a channel with a kind), ADR 028 (Capture and summaries)
     it("never sends what was written while a camp was private, once it is public again, from a backlog or a replay (#1377)", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           // Memory is down while the camp is private, and public again by the time it is back.
-          const threadId = ThreadId.make(crypto.randomUUID());
+          const channelId = ChannelId.make(crypto.randomUUID());
           yield* memory.down;
-          setPrivate(journal, threadId, true);
-          exchange(journal, threadId, "Draft the offer letter.", "Drafted it in offer.md.");
-          const work = taskWork(journal, threadId, quill, "Check the offer's salary band");
+          setPrivate(journal, channelId, true);
+          exchange(journal, channelId, "Draft the offer letter.", "Drafted it in offer.md.");
+          const work = taskWork(journal, channelId, quill, "Check the offer's salary band");
           const attemptId = work.start();
           work.steps([step("s1", "Reading bands.md", "Band C")]);
           work.replied("It is in band C.", "completed");
-          setPrivate(journal, threadId, false);
-          exchange(journal, threadId, "Where are the docs?", "In docs/.");
+          setPrivate(journal, channelId, false);
+          exchange(journal, channelId, "Where are the docs?", "In docs/.");
           expect(yield* capture.runOnce).toBe(false);
           yield* memory.up;
           expect(yield* capture.runOnce).toBe(true);
-          archive(journal, threadId);
+          archive(journal, channelId);
           yield* capture.runOnce;
           // start, the public prompt and its reply
-          expect(yield* memory.observations(pip, threadId)).toBe(3);
+          expect(yield* memory.observations(pip, channelId)).toBe(3);
           expect(yield* memory.observations(quill, attemptId)).toBe(0);
-          const page = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, threadId));
+          const page = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, channelId));
           expect(page?.markdown).toContain("Where are the docs?");
           expect(page?.markdown).not.toContain("offer");
 
           // The cursor saved the camp as private: what is written after it, before it is public, stays out.
-          const later = ThreadId.make(crypto.randomUUID());
+          const later = ChannelId.make(crypto.randomUUID());
           setPrivate(journal, later, true);
           yield* capture.runOnce;
           exchange(journal, later, "Plan the surprise party.", "Saturday at eight.");
@@ -1357,31 +1357,31 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
           yield* Context.get(replayed, MemoryCapture).runOnce;
           yield* quietPassed;
           yield* Context.get(replayed, MemoryCapture).runOnce;
-          expect(yield* memory.observations(pip, threadId)).toBe(3);
+          expect(yield* memory.observations(pip, channelId)).toBe(3);
           expect(yield* memory.observations(quill, attemptId)).toBe(0);
           expect(yield* memory.observations(pip, later)).toBe(0);
         }),
       ));
 
-    // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
+    // covers ADR 037 (A camp is a channel with a kind), ADR 028 (Capture and summaries)
     it("keeps out for good an Attempt's step and a reply written while the camp was private, after it is public again (#1377)", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const threadId = ThreadId.make(crypto.randomUUID());
-          setPrivate(journal, threadId, true);
+          const channelId = ChannelId.make(crypto.randomUUID());
+          setPrivate(journal, channelId, true);
           // A member finishes step A while the camp is private, and the hob's reply starts streaming.
-          const work = taskWork(journal, threadId, quill, "Check the offer's salary band");
+          const work = taskWork(journal, channelId, quill, "Check the offer's salary band");
           const attemptId = work.start();
           const privateStep = step("s1", "Reading salaries.md", "Ada earns 9000");
           work.steps([privateStep]);
-          const asked = message(threadId, "Draft the offer letter.", { actor: OWNER_ACTOR });
-          journal.append({ _tag: "MessageUpserted", message: asked }, threadId);
-          const reply = message(threadId, "", { role: "assistant", status: "streaming", promptId: asked.id });
-          journal.append({ _tag: "MessageUpserted", message: reply }, threadId);
+          const asked = message(channelId, "Draft the offer letter.", { actor: OWNER_ACTOR });
+          journal.append({ _tag: "MessageUpserted", message: asked }, channelId);
+          const reply = message(channelId, "", { role: "assistant", status: "streaming", promptId: asked.id });
+          journal.append({ _tag: "MessageUpserted", message: reply }, channelId);
           yield* capture.runOnce;
 
           // The camp is public again: the Attempt goes on, and every change carries step A again.
-          setPrivate(journal, threadId, false);
+          setPrivate(journal, channelId, false);
           work.steps([privateStep, step("s2", "Running git log", "42 commits")]);
           work.replied("The band is C.", "completed");
           journal.append(
@@ -1389,11 +1389,11 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
               _tag: "MessageUpserted",
               message: new Message({ ...reply, content: "Ada earns 9000, in band C.", status: "complete" }),
             },
-            threadId,
+            channelId,
           );
-          exchange(journal, threadId, "Where are the docs?", "In docs/.");
+          exchange(journal, channelId, "Where are the docs?", "In docs/.");
           yield* capture.runOnce;
-          archive(journal, threadId);
+          archive(journal, channelId);
           yield* capture.runOnce;
           yield* quietPassed;
           yield* capture.runOnce;
@@ -1401,8 +1401,8 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
           expect(yield* memory.observations(quill, attemptId)).toBe(0);
           expect(yield* memory.store.page(you, quillsOwn, memory.store.sessionPage(quillsOwn, attemptId))).toBeNull();
           // start, the public prompt and its reply
-          expect(yield* memory.observations(pip, threadId)).toBe(3);
-          const page = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, threadId));
+          expect(yield* memory.observations(pip, channelId)).toBe(3);
+          const page = yield* memory.store.page(you, pipsOwn, memory.store.sessionPage(pipsOwn, channelId));
           expect(page?.markdown).toContain("Where are the docs?");
           expect(page?.markdown).not.toContain("9000");
           expect(page?.markdown).not.toContain("offer letter");
@@ -1428,17 +1428,17 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
           yield* quietPassed;
           yield* Context.get(replayed, MemoryCapture).runOnce;
           expect(yield* memory.observations(quill, attemptId)).toBe(0);
-          expect(yield* memory.observations(pip, threadId)).toBe(3);
+          expect(yield* memory.observations(pip, channelId)).toBe(3);
         }),
       ));
 
-    // covers ADR 039 (Memory in a shared thread)
+    // covers ADR 039 (Memory in a shared channel)
     it("keeps each hob's own replies, and the messages it took a turn on, in its own memory only, on Claude Code and Codex (#1466)", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const camp = ThreadId.make(crypto.randomUUID());
+          const camp = ChannelId.make(crypto.randomUUID());
           exchange(journal, camp, "@Pip what is our stall number?", "Stall 12, by the fountain.");
-          // Quill answers in Pip's camp, on another runtime: its reply is its own, whoever the thread's hob is.
+          // Quill answers in Pip's camp, on another runtime: its reply is its own, whoever the channel's hob is.
           exchange(journal, camp, "@Quill write the sign for it.", "MARKET STALL 12: fresh bread.", {
             hob: quill,
             runtime: "codex",
@@ -1482,11 +1482,11 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
         }),
       ));
 
-    // covers ADR 039 (Memory in a shared thread), ADR 037 (A camp is a thread with a kind)
+    // covers ADR 039 (Memory in a shared channel), ADR 037 (A camp is a channel with a kind)
     it("captures nothing of a private camp in any member hob's memory, and making it private ends every hob's session (#1466)", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
-          const quiet = ThreadId.make(crypto.randomUUID());
+          const quiet = ChannelId.make(crypto.randomUUID());
           setPrivate(journal, quiet, true);
           exchange(journal, quiet, "@Pip the salary band is C.", "Noted, band C.");
           exchange(journal, quiet, "@Quill draft the offer.", "Offer drafted at band C.", { hob: quill });
@@ -1495,7 +1495,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
           expect(yield* memory.observations(quill, quiet)).toBe(0);
           expect(journal.sessions()).toEqual([]);
 
-          const camp = ThreadId.make(crypto.randomUUID());
+          const camp = ChannelId.make(crypto.randomUUID());
           exchange(journal, camp, "@Pip where are the docs?", "In docs/.");
           exchange(journal, camp, "@Quill and the tests?", "In test/.", { hob: quill, runtime: "codex" });
           yield* capture.runOnce;
@@ -1516,7 +1516,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
         }),
       ));
 
-    // covers ADR 039 (Memory in a shared thread), ADR 028 (Scopes)
+    // covers ADR 039 (Memory in a shared channel), ADR 028 (Scopes)
     it("writes a hob's capture only to its own memory, as itself, never to another hob's (#1466)", () =>
       run(({ memory, journal }) =>
         Effect.gen(function* () {
@@ -1544,10 +1544,10 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
             ),
           );
           const capture = Context.get(worker, MemoryCapture);
-          const camp = ThreadId.make(crypto.randomUUID());
+          const camp = ChannelId.make(crypto.randomUUID());
           exchange(journal, camp, "@Pip plan the release.", "Planned.");
-          exchange(journal, camp, "@Quill write the notes.", "Written.", { hob: quill, threadHob: pip });
-          exchange(journal, camp, "@Pip ship it.", "Shipped.", { threadHob: quill });
+          exchange(journal, camp, "@Quill write the notes.", "Written.", { hob: quill, channelHob: pip });
+          exchange(journal, camp, "@Pip ship it.", "Shipped.", { channelHob: quill });
           yield* capture.runOnce;
           archive(journal, camp);
           yield* capture.runOnce;
@@ -1560,13 +1560,13 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
         }),
       ));
 
-    // covers ADR 039 (Memory in a shared thread), ADR 037 (A camp is a thread with a kind)
+    // covers ADR 039 (Memory in a shared channel), ADR 037 (A camp is a channel with a kind)
     it("never keeps a message written before capture started, whose camp may have been private then (#1466)", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           // Memory was off when the message was written, so capture never saw whether its camp was private.
           journal.startedAt("2026-11-05T12:30:00.000Z");
-          const camp = ThreadId.make(crypto.randomUUID());
+          const camp = ChannelId.make(crypto.randomUUID());
           exchange(journal, camp, "Ada earns 9000.", "Noted.");
           exchange(journal, camp, "Where are the docs?", "In docs/.");
           yield* capture.runOnce;

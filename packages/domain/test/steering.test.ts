@@ -25,7 +25,7 @@ const task = (id: string, owner: AgentId, parent: string | null, state: TaskStat
     ownerId: owner,
     parentId: parent === null ? null : TaskId.make(parent),
     rootId: TaskId.make("top"),
-    threadId: null,
+    channelId: null,
     brief: id,
     state,
     dependsOn: [],

@@ -7,14 +7,14 @@ import {
   Message,
   MessageId,
   type TaskId,
-  ThreadId,
+  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { BEFORE_FIRST, headsUpOf, placeHeadsUps } from "./heads-up-model.ts";
 
 // #1390: the Heads-up a camp shows for a clash between two quests' claims.
 
-const CAMP = ThreadId.make("camp");
+const CAMP = ChannelId.make("camp");
 const QUILL = AgentId.make("quill");
 const ADA = AgentId.make("ada");
 const at = (second: number) => `2026-11-12T10:00:${String(second).padStart(2, "0")}.000Z`;
@@ -24,7 +24,7 @@ const side = (
   owner: AgentId,
   key: string,
   second: number,
-  threadId: ThreadId,
+  channelId: ChannelId,
   scope: Claim["scope"] = "path",
 ) =>
   new ClashSide({
@@ -44,13 +44,13 @@ const side = (
     }),
     ownerId: owner,
     brief: `Task ${id}\nWith a longer brief`,
-    threadId,
+    channelId,
   });
 
 const message = (id: string, second: number) =>
   new Message({
     id: MessageId.make(id),
-    threadId: CAMP,
+    channelId: CAMP,
     role: "user",
     content: id,
     status: "complete",
@@ -62,7 +62,7 @@ const message = (id: string, second: number) =>
 describe("a Heads-up for a clash", () => {
   it("names each side by its hob, task and claim, says which is elsewhere and who claimed last (#1390)", () => {
     const clash = new ClaimClash({
-      sides: [side("badge", QUILL, "web/badge.png", 5, CAMP), side("review", ADA, "web", 9, ThreadId.make("other"))],
+      sides: [side("badge", QUILL, "web/badge.png", 5, CAMP), side("review", ADA, "web", 9, ChannelId.make("other"))],
       since: at(9),
     });
     const headsUp = headsUpOf(clash, CAMP);

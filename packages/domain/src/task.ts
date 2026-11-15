@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { Actor } from "./actor.ts";
 import { ConfigVersion, RuntimeKind } from "./agent.ts";
-import { AgentId, TaskId, ThreadId } from "./ids.ts";
+import { AgentId, TaskId, ChannelId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import type { TaskReadiness } from "./readiness.ts";
 import { Revision } from "./revision.ts";
@@ -86,8 +86,8 @@ export class Task extends Schema.Class<Task>("Task")({
   parentId: Schema.NullOr(TaskId),
   /** The top Task of its tree: itself for the Task you asked for. Grants for This Task bind to it. */
   rootId: TaskId,
-  /** The thread whose request started the tree, shared by every Task in it. */
-  threadId: Schema.NullOr(ThreadId),
+  /** The channel whose request started the tree, shared by every Task in it. */
+  channelId: Schema.NullOr(ChannelId),
   brief: Schema.String,
   state: TaskState,
   /** Tasks in the same tree that must complete before this one can. */
@@ -113,7 +113,7 @@ export class Task extends Schema.Class<Task>("Task")({
 /**
  * A party member's failed Task that waits on you (ADR 027): its top Task is still under way, so you
  * can retry or reassign it. `leadId` is the hob whose chat the work was asked in, which you talk to
- * about it, or null for work with no thread.
+ * about it, or null for work with no channel.
  */
 export const FailedTask = Schema.Struct({ task: Task, leadId: Schema.NullOr(AgentId) });
 export type FailedTask = typeof FailedTask.Type;

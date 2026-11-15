@@ -151,7 +151,7 @@ describe("a hob's History and the Changes log", () => {
             appliedText: "Changed.",
             state: "applied",
             result: "Changed.",
-            threadId: null,
+            channelId: null,
             messageId: null,
             stepId: null,
             createdAt: now,
@@ -176,7 +176,7 @@ describe("a hob's History and the Changes log", () => {
     ]);
     const renamed = changes.find((change) => change._tag === "Version" && change.config.version === 2);
     expect(renamed).toMatchObject({
-      origin: { charm: "Summoning", taskId: "hire", threadId: null, messageId: null },
+      origin: { charm: "Summoning", taskId: "hire", channelId: null, messageId: null },
       config: { name: "Ash" },
       previous: { name: "Wren" },
     });

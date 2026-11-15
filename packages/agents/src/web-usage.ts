@@ -10,7 +10,7 @@ import {
   NO_HOB_WEB_LIMITS,
   type RuntimeKind,
   type TaskId,
-  type ThreadId,
+  type ChannelId,
   type WebFetchRecord,
   type WebLimits,
   WebRecordId,
@@ -99,7 +99,7 @@ export class WebRecords extends Context.Service<
     let settings: WebSettings = DEFAULT_WEB_SETTINGS;
     const matches = (filter: WebUsageFilter) => (record: WebSearchRecord | WebFetchRecord) =>
       (filter.agentId === undefined || record.agentId === filter.agentId) &&
-      (filter.threadId === undefined || record.threadId === filter.threadId) &&
+      (filter.channelId === undefined || record.channelId === filter.channelId) &&
       (filter.messageId === undefined || record.messageId === filter.messageId) &&
       (filter.taskId === undefined || record.taskId === filter.taskId) &&
       (filter.attemptId === undefined || record.attemptId === filter.attemptId) &&
@@ -163,7 +163,7 @@ export const countsByHobAndTurn = (
     const turn = turns.get(key) ?? {
       turn: record.turn,
       agentId: record.agentId,
-      threadId: record.threadId,
+      channelId: record.channelId,
       messageId: record.messageId,
       taskId: record.taskId,
       at: record.at,
@@ -296,7 +296,7 @@ export const pageSearchReason = {
 /** Where a turn runs: its hob, chat and reply, the Task and Attempt it works on once known, and its runtime. */
 export interface WebTurnPlace {
   readonly agentId: AgentId;
-  readonly threadId: ThreadId | null;
+  readonly channelId: ChannelId | null;
   readonly messageId: MessageId | null;
   readonly runtime: RuntimeKind;
   /** The session's work, as `webWorkOf` names it, which a hold on its search belongs to. */
@@ -419,7 +419,7 @@ export const webSearchTurn = (place: WebTurnPlace): Effect.Effect<WebSearchTurn>
             new WebSearchRecord({
               id: WebRecordId.make(crypto.randomUUID()),
               agentId: place.agentId,
-              threadId: place.threadId,
+              channelId: place.channelId,
               messageId,
               taskId: yield* place.taskId,
               attemptId,

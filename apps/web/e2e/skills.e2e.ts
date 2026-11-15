@@ -516,7 +516,7 @@ test("the Overview shows every finding and what each hob carries, and Try in a c
   await main.getByRole("button", { name: "Try in a chat" }).click();
   await page.getByRole("menuitem", { name: /Wren/ }).click();
 
-  await expect(page).toHaveURL(/\/threads\//);
+  await expect(page).toHaveURL(/\/channels\//);
   const notice = page.getByRole("region", { name: "Trying the draft of Tidy up." });
   await expect(notice).toContainText("nothing here reaches the library");
   await expect(notice.getByRole("link", { name: "Back to the draft" })).toBeVisible();

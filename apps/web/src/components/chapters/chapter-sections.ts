@@ -5,13 +5,13 @@ import { type Chapter, type ChapterId, ChapterStates, type Message } from "@hobb
 
 /** One chapter of the transcript with its messages, or the whole transcript before its chapters are read. */
 export interface ChapterSection {
-  /** The chapter, or null while the thread's chapters are not read yet. */
+  /** The chapter, or null while the channel's chapters are not read yet. */
   readonly chapter: Chapter | null;
   readonly messages: ReadonlyArray<Message>;
 }
 
 /**
- * The transcript under its chapters, in the thread's order. A moved chapter left the thread, so it
+ * The transcript under its chapters, in the channel's order. A moved chapter left the channel, so it
  * has no section, nor does a resting chapter without messages. The live chapter always has one, even
  * empty, since the hob just started it. A message whose chapter the list does not hold yet, as one
  * that arrived before a chapter event, joins the live chapter, where every new message goes.
@@ -20,13 +20,13 @@ export const chapterSections = (
   transcript: ReadonlyArray<Message>,
   chapters: ReadonlyArray<Chapter> | undefined,
 ): ReadonlyArray<ChapterSection> => {
-  const inThread = chapters?.filter(ChapterStates.isInThread) ?? [];
-  const live = inThread.find(ChapterStates.isLive) ?? inThread.at(-1);
+  const inChannel = chapters?.filter(ChapterStates.isInChannel) ?? [];
+  const live = inChannel.find(ChapterStates.isLive) ?? inChannel.at(-1);
   if (live === undefined) return [{ chapter: null, messages: transcript }];
-  const known = new Set(inThread.map((chapter) => chapter.id));
+  const known = new Set(inChannel.map((chapter) => chapter.id));
   const of = (message: Message): ChapterId =>
     message.chapterId !== null && known.has(message.chapterId) ? message.chapterId : live.id;
-  return inThread
+  return inChannel
     .map((chapter) => ({ chapter, messages: transcript.filter((message) => of(message) === chapter.id) }))
     .filter((section) => section.messages.length > 0 || section.chapter === live);
 };
@@ -102,9 +102,9 @@ export const chapterOf = (sections: ReadonlyArray<ChapterSection>, messageId: st
 export const chapterFocus = (
   chapters: ReadonlyArray<Chapter> | undefined,
 ): { readonly title: string | null; readonly resting: number } => {
-  const inThread = chapters?.filter(ChapterStates.isInThread) ?? [];
+  const inChannel = chapters?.filter(ChapterStates.isInChannel) ?? [];
   return {
-    title: inThread.find(ChapterStates.isLive)?.title ?? null,
-    resting: inThread.filter((chapter) => !ChapterStates.isLive(chapter)).length,
+    title: inChannel.find(ChapterStates.isLive)?.title ?? null,
+    resting: inChannel.filter((chapter) => !ChapterStates.isLive(chapter)).length,
   };
 };

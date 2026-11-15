@@ -1,4 +1,4 @@
-import type { AgentId, Task, TaskId, TaskTree, ThreadId } from "@hobbots/domain";
+import type { AgentId, Task, TaskId, TaskTree, ChannelId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
@@ -17,13 +17,13 @@ import { type Summary, subtreeScope } from "./summary-model.ts";
 
 const copy = messages.summary;
 
-/** What Still open reads besides the Task's tree: the thread's approvals and every hob's backpack. */
-export const useOpenReads = (threadId: ThreadId | null) => {
-  const approvals = useQuery({ ...approvalsQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== null });
+/** What Still open reads besides the Task's tree: the channel's approvals and every hob's backpack. */
+export const useOpenReads = (channelId: ChannelId | null) => {
+  const approvals = useQuery({ ...approvalsQuery(channelId ?? ("" as ChannelId)), enabled: channelId !== null });
   const backpack = useBackpack();
   const blockers = useBlockersQuery();
-  // A Task outside any thread has no approvals to read.
-  const approvalStatus = threadId === null ? "success" : approvals.status;
+  // A Task outside any channel has no approvals to read.
+  const approvalStatus = channelId === null ? "success" : approvals.status;
   return {
     approvals: approvals.data ?? [],
     items: backpack.items,
@@ -39,28 +39,28 @@ export const useOpenReads = (threadId: ThreadId | null) => {
 };
 
 /**
- * Where you act on a question or an approval: the chat of the thread the Task's request came from,
- * which may not be the one beside the room when its Quest is pinned from another thread. The chat
+ * Where you act on a question or an approval: the chat of the channel the Task's request came from,
+ * which may not be the one beside the room when its Quest is pinned from another channel. The chat
  * beside the room keeps its place and unsent message, and an approval scrolls to its reply there.
  */
-export const useTaskChat = (tree: TaskTree, hobId: AgentId, threadId: ThreadId) => {
+export const useTaskChat = (tree: TaskTree, hobId: AgentId, channelId: ChannelId) => {
   const navigate = useNavigate();
   const top = tree.tasks[0];
   return (messageId?: string | null) => {
-    if (top === undefined || top.threadId === null || (top.threadId === threadId && top.ownerId === hobId)) {
+    if (top === undefined || top.channelId === null || (top.channelId === channelId && top.ownerId === hobId)) {
       if (messageId == null) return;
       void navigate({
-        from: "/hobs/$hobId/threads/$threadId",
-        to: "/hobs/$hobId/threads/$threadId",
-        params: { hobId, threadId },
+        from: "/hobs/$hobId/channels/$channelId",
+        to: "/hobs/$hobId/channels/$channelId",
+        params: { hobId, channelId },
         search: (prev) => ({ ...prev, message: messageId }),
         replace: true,
       });
       return;
     }
     void navigate({
-      to: "/hobs/$hobId/threads/$threadId",
-      params: { hobId: top.ownerId, threadId: top.threadId },
+      to: "/hobs/$hobId/channels/$channelId",
+      params: { hobId: top.ownerId, channelId: top.channelId },
       search: messageId == null ? {} : { message: messageId },
     });
   };

@@ -10,11 +10,11 @@ import {
   DecisionId,
   DecisionRefusal,
   RegisteredArtifactId,
-  ThreadId,
+  ChannelId,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
-import { ThreadNotFound } from "./errors.ts";
+import { ChannelNotFound } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /** A decision you record in a chat or camp (ADR 037); `key` makes the same request record it once. */
@@ -33,7 +33,7 @@ export type RecordedDecision = typeof RecordedDecision.Type;
 /** A decision that was not recorded or crossed out, with why; nothing changed. */
 export class DecisionChangeRefused extends Schema.TaggedError<DecisionChangeRefused>()(
   "DecisionChangeRefused",
-  { threadId: ThreadId, reason: DecisionRefusal, message: Schema.String },
+  { channelId: ChannelId, reason: DecisionRefusal, message: Schema.String },
   { httpApiStatus: 409 },
 ) {}
 
@@ -47,14 +47,14 @@ export type ReviewArtifactPayload = typeof ReviewArtifactPayload.Type;
  */
 export class ArtifactReviewChangeRefused extends Schema.TaggedError<ArtifactReviewChangeRefused>()(
   "ArtifactReviewChangeRefused",
-  { threadId: ThreadId, artifactId: RegisteredArtifactId, reason: ArtifactReviewRefusal },
+  { channelId: ChannelId, artifactId: RegisteredArtifactId, reason: ArtifactReviewRefusal },
   { httpApiStatus: 409 },
 ) {}
 
 /** The chat or camp has no such artifact, or no such version of it. */
 export class ArtifactNotFound extends Schema.TaggedError<ArtifactNotFound>()(
   "ArtifactNotFound",
-  { threadId: ThreadId, artifactId: RegisteredArtifactId },
+  { channelId: ChannelId, artifactId: RegisteredArtifactId },
   { httpApiStatus: 404 },
 ) {}
 
@@ -73,49 +73,49 @@ export class ArtifactContentUnavailable extends Schema.TaggedError<ArtifactConte
 export class RecordsGroup extends HttpApiGroup.make("records")
   .add(
     // Newest first, crossed-out ones included.
-    HttpApiEndpoint.get("decisions", "/threads/:threadId/decisions", {
-      params: { threadId: ThreadId },
+    HttpApiEndpoint.get("decisions", "/channels/:channelId/decisions", {
+      params: { channelId: ChannelId },
       success: Schema.Array(Decision),
-      error: ThreadNotFound,
+      error: ChannelNotFound,
     }),
-    HttpApiEndpoint.post("recordDecision", "/threads/:threadId/decisions", {
-      params: { threadId: ThreadId },
+    HttpApiEndpoint.post("recordDecision", "/channels/:channelId/decisions", {
+      params: { channelId: ChannelId },
       payload: RecordDecisionPayload,
       success: RecordedDecision,
-      error: [ThreadNotFound, DecisionChangeRefused],
+      error: [ChannelNotFound, DecisionChangeRefused],
     }),
     // Crossing out a decision crossed out already returns it unchanged.
-    HttpApiEndpoint.post("crossOutDecision", "/threads/:threadId/decisions/:decisionId/cross-out", {
-      params: { threadId: ThreadId, decisionId: DecisionId },
+    HttpApiEndpoint.post("crossOutDecision", "/channels/:channelId/decisions/:decisionId/cross-out", {
+      params: { channelId: ChannelId, decisionId: DecisionId },
       success: Decision,
-      error: [ThreadNotFound, DecisionChangeRefused],
+      error: [ChannelNotFound, DecisionChangeRefused],
     }),
     // The most recently changed first.
-    HttpApiEndpoint.get("artifacts", "/threads/:threadId/artifacts", {
-      params: { threadId: ThreadId },
+    HttpApiEndpoint.get("artifacts", "/channels/:channelId/artifacts", {
+      params: { channelId: ChannelId },
       success: Schema.Array(Artifact),
-      error: ThreadNotFound,
+      error: ChannelNotFound,
     }),
     // Marks an artifact reviewed or dismisses it (#1422), which lowers what its Quest has ready for
     // review. The same review again returns it unchanged.
-    HttpApiEndpoint.post("reviewArtifact", "/threads/:threadId/artifacts/:artifactId/review", {
-      params: { threadId: ThreadId, artifactId: RegisteredArtifactId },
+    HttpApiEndpoint.post("reviewArtifact", "/channels/:channelId/artifacts/:artifactId/review", {
+      params: { channelId: ChannelId, artifactId: RegisteredArtifactId },
       payload: ReviewArtifactPayload,
       success: Artifact,
-      error: [ThreadNotFound, ArtifactReviewChangeRefused],
+      error: [ChannelNotFound, ArtifactReviewChangeRefused],
     }),
     // An artifact's versions, newest first, and how it is shown (#1434).
-    HttpApiEndpoint.get("artifactVersions", "/threads/:threadId/artifacts/:artifactId/versions", {
-      params: { threadId: ThreadId, artifactId: RegisteredArtifactId },
+    HttpApiEndpoint.get("artifactVersions", "/channels/:channelId/artifacts/:artifactId/versions", {
+      params: { channelId: ChannelId, artifactId: RegisteredArtifactId },
       success: ArtifactVersions,
       error: ArtifactNotFound,
     }),
     // One version's contents, read only: what the hub kept of it, or the latest one as it is now in
     // the hob's folders, only inside them. Text is redacted and cut to what a preview shows; an
     // image is served as it is, up to what the hub serves.
-    HttpApiEndpoint.get("artifactContent", "/threads/:threadId/artifacts/:artifactId/versions/:version", {
+    HttpApiEndpoint.get("artifactContent", "/channels/:channelId/artifacts/:artifactId/versions/:version", {
       params: {
-        threadId: ThreadId,
+        channelId: ChannelId,
         artifactId: RegisteredArtifactId,
         version: Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),
       },
@@ -124,10 +124,10 @@ export class RecordsGroup extends HttpApiGroup.make("records")
     }),
     // Null until the brief projector first writes one, at a chapter end or a Quest step; its text
     // is empty once nothing it said holds any more.
-    HttpApiEndpoint.get("brief", "/threads/:threadId/brief", {
-      params: { threadId: ThreadId },
+    HttpApiEndpoint.get("brief", "/channels/:channelId/brief", {
+      params: { channelId: ChannelId },
       success: Schema.NullOr(Brief),
-      error: ThreadNotFound,
+      error: ChannelNotFound,
     }),
   )
   .middleware(DeviceSession)

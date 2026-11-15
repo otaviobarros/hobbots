@@ -167,11 +167,11 @@ describe("hob profile", () => {
   });
 
   it("says what retiring did with the hob's work", () => {
-    expect(retiredSummary("Pip", "stop", false)).toBe("Pip is asleep. Its threads are kept and stay readable.");
+    expect(retiredSummary("Pip", "stop", false)).toBe("Pip is asleep. Its channels are kept and stay readable.");
     expect(retiredSummary("Pip", "finish", true)).toMatch(/^Pip finishes the replies/);
     expect(retiredSummary("Pip", "stop", true)).toMatch(/^Pip's running replies were stopped/);
     expect(retiredSummary("Pip", "hand-over", true, "Rook")).toBe(
-      "Pip's open Tasks went to Rook. Its threads are kept.",
+      "Pip's open Tasks went to Rook. Its channels are kept.",
     );
     expect(retiredSummary("Pip", "finish-first", false)).toMatch(/^Pip finishes its open Tasks, then retires/);
   });

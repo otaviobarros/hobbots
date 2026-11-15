@@ -98,10 +98,10 @@ export const WebHandlers = HttpApiBuilder.group(HobbotsApi, "web", (handlers) =>
           const busiest = [...read.turns].sort(busiestFirst).slice(0, BUSIEST_WEB_TURNS);
           const busiestTurns = yield* Effect.forEach(busiest, (turn) =>
             Effect.gen(function* () {
-              const thread = turn.threadId === null ? Option.none() : yield* repo.findThread(turn.threadId);
+              const channel = turn.channelId === null ? Option.none() : yield* repo.findChannel(turn.channelId);
               return {
                 ...turn,
-                threadTitle: Option.isSome(thread) ? thread.value.title : null,
+                channelTitle: Option.isSome(channel) ? channel.value.title : null,
                 reachedLimit: reachedTurnLimit(turn, limitOf(turn.agentId)),
               };
             }),

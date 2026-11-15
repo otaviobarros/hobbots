@@ -18,7 +18,7 @@ const VERDICT: Record<ApprovalRequest["state"], "done" | "failed" | "muted"> = {
   pending: "muted",
 };
 
-/** Every decided and expired request, newest first, with who asked, when and in which thread. */
+/** Every decided and expired request, newest first, with who asked, when and in which channel. */
 export function InboxHistory({
   requests,
   directory,
@@ -101,7 +101,7 @@ function HistoryRow({ request, directory }: { request: ApprovalRequest; director
         <span className="truncate text-meta text-label">
           {copy.history.meta({
             when: formatWhen(request.decidedAt ?? request.createdAt),
-            thread: directory.threadTitle(request.threadId),
+            channel: directory.channelTitle(request.channelId),
           })}
         </span>
         {decider !== null && (

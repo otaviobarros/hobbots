@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Runs the speaker check (STD-ARCH-021) on the hub's agents and the server: a thread's `agentId`
+// Runs the speaker check (STD-ARCH-021) on the hub's agents and the server: a channel's `agentId`
 // names who the camp belongs to, never who speaks. See scripts/speaker.mjs for what it reads.
 // Usage: node scripts/check-speaker.mjs
 

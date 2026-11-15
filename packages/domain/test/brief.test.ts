@@ -1,17 +1,17 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { Brief, type BriefDraft, briefChange, briefSourceOf, HUB_ACTOR, ThreadId } from "../src/index.ts";
+import { Brief, type BriefDraft, briefChange, briefSourceOf, HUB_ACTOR, ChannelId } from "../src/index.ts";
 
 // Issue #1384 (ADR 037, Records): a brief is rewritten by the hub's projector. A draft from no
 // further along the journal than the stored brief never writes, a failed brain never replaces a
 // brief already there, and a draft saying the same writes nothing.
 
-const THREAD = ThreadId.make("camp-1");
+const CHANNEL = ChannelId.make("camp-1");
 const NOW = "2026-11-12T00:00:00.000Z";
 
 const brief = (fields: Partial<Brief> = {}) =>
   new Brief({
-    threadId: THREAD,
+    channelId: CHANNEL,
     text: "Launch emails go out on Tuesdays.",
     writtenBy: HUB_ACTOR,
     source: "brain",
@@ -21,7 +21,7 @@ const brief = (fields: Partial<Brief> = {}) =>
   });
 
 const draft = (fields: Partial<BriefDraft> = {}): BriefDraft => ({
-  threadId: THREAD,
+  channelId: CHANNEL,
   text: "Launch emails go out on Wednesdays.",
   basis: 20,
   source: "brain",

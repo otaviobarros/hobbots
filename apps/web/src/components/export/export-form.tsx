@@ -14,7 +14,7 @@ const refusalOf = (error: unknown): string =>
 
 function Saved({ result }: { result: ExportResult }) {
   const rows = [
-    [copy.held.threads, result.threads],
+    [copy.held.channels, result.channels],
     [copy.held.quests, result.quests],
     [copy.held.files, result.files],
   ] as const;

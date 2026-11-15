@@ -21,8 +21,8 @@ import {
   OWNER_USER_ID,
   type Task,
   type TaskTree,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import {
@@ -62,7 +62,7 @@ const now = "2026-11-02T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
 const ADA = AgentId.make("ada");
-const threadId = ThreadId.make("launch");
+const channelId = ChannelId.make("launch");
 /** How every continuation's prompt starts (ADR 019). */
 const CONTINUATION = "Hobbots wrote this, not the user.";
 
@@ -86,7 +86,7 @@ interface Faults {
   readonly held: Map<string, Deferred.Deferred<void>>;
   /** Opens to let a stalled continuation go on. */
   readonly stall: Deferred.Deferred<void>;
-  /** The hub stops as it is about to tell a lead of its work: nothing more reaches a thread. */
+  /** The hub stops as it is about to tell a lead of its work: nothing more reaches a channel. */
   crashBeforeNotify: boolean;
   /** Claims are no longer renewed, as by a worker that is paused or cut off from the database. */
   freezeRenewals: boolean;
@@ -138,7 +138,7 @@ const runtimeOf = (requests: Array<PromptRequest>, faults: Faults) =>
     }),
   ).pipe(Layer.provide(FakeRuntimeLayer()));
 
-/** Thread continuations, which never start once the hub has stopped. */
+/** Channel continuations, which never start once the hub has stopped. */
 const crashable = (faults: Faults) =>
   Layer.effect(
     Continuations,
@@ -146,8 +146,8 @@ const crashable = (faults: Faults) =>
       const live = yield* Continuations;
       return Continuations.of({
         ...live,
-        deliver: (thread, agentId, turn) =>
-          Effect.suspend(() => (faults.crashBeforeNotify ? Effect.never : live.deliver(thread, agentId, turn))),
+        deliver: (channel, agentId, turn) =>
+          Effect.suspend(() => (faults.crashBeforeNotify ? Effect.never : live.deliver(channel, agentId, turn))),
       });
     }),
   ).pipe(Layer.provide(ContinuationsLive));
@@ -277,8 +277,8 @@ const party = Effect.gen(function* () {
   for (const each of [hob(ALDRIC, "Aldric", "Lead"), hob(QUILL, "Quill", "Copywriter"), hob(ADA, "Ada", "Reviewer")]) {
     yield* repo.insertAgent(each);
   }
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: ALDRIC, title: "The launch", createdAt: now, updatedAt: now }),
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, agentId: ALDRIC, title: "The launch", createdAt: now, updatedAt: now }),
   );
 });
 
@@ -301,9 +301,9 @@ const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 const until = <A, E, R>(read: Effect.Effect<A, E, R>, ready: (value: A) => boolean) =>
   retry(Effect.flatMap(read, (value) => (ready(value) ? Effect.succeed(value) : Effect.fail("not yet" as const))));
 
-const messages = HobbotsRepository.use((repo) => repo.listMessages(threadId));
+const messages = HobbotsRepository.use((repo) => repo.listMessages(channelId));
 
-/** The thread's messages once `ready` holds for them and every reply has ended. */
+/** The channel's messages once `ready` holds for them and every reply has ended. */
 const messagesWhen = (ready: (all: ReadonlyArray<Message>) => boolean) =>
   until(messages, (all) => all.every((m) => m.status !== "streaming" && m.status !== "stopping") && ready(all));
 
@@ -311,7 +311,7 @@ const messagesWhen = (ready: (all: ReadonlyArray<Message>) => boolean) =>
 const treeWhen = (ready: (tree: TaskTree) => boolean) =>
   retry(
     Effect.gen(function* () {
-      const [tree] = yield* TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
+      const [tree] = yield* TaskRepository.use((tasks) => tasks.readChannelTrees(channelId));
       return tree !== undefined && ready(tree) ? tree : yield* Effect.fail("not yet" as const);
     }),
   );
@@ -356,7 +356,7 @@ describe("the backpack end to end", () => {
     await run(party);
     // Quill finishes only once Aldric's turn has ended.
     holdCall(faults, "copy-done");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, plan([quillDone]))));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, plan([quillDone]))));
     const ended = await run(messagesWhen((all) => all.length === 2));
     expect(ended.map((m) => [m.role, m.status])).toEqual([
       ["user", "complete"],
@@ -402,15 +402,15 @@ describe("the backpack end to end", () => {
     // Quill reports only once Aldric's turn has ended, and finishes once the test has looked.
     holdCall(faults, "p1");
     holdCall(faults, "copy-done");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, plan([...progress, quillDone]))));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, plan([...progress, quillDone]))));
     await run(messagesWhen((all) => all.length === 2));
     await releaseCall("p1");
 
     // Her thirty updates wait for Aldric, routine, with the one the hub recorded when she started,
-    // and start nothing, even with his thread woken.
+    // and start nothing, even with his channel woken.
     const updates = await run(itemsWhen("progress", (item) => item.state === "pending" && !item.actionable, 31));
     expect(updates.filter((item) => item.dedupeKey.startsWith(`tool:${QUILL}:`))).toHaveLength(30);
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     await run(Effect.sleep("200 millis"));
     expect(continuationsIn(requests)).toEqual([]);
     expect(await run(messages)).toHaveLength(2);
@@ -436,7 +436,7 @@ describe("the backpack end to end", () => {
     const first = await start(database);
     await first.run(party);
     holdCall(first.faults, "copy-done");
-    await first.run(ChatService.use((chat) => chat.sendPrompt(threadId, plan([quillDone]))));
+    await first.run(ChatService.use((chat) => chat.sendPrompt(channelId, plan([quillDone]))));
     await first.run(messagesWhen((all) => all.length === 2));
 
     // Quill finishes, and the hub stops right after her result commits, before Aldric hears of it.
@@ -495,7 +495,7 @@ describe("the backpack end to end", () => {
       ]),
     );
     await run(party);
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, plan([quillDone]))));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, plan([quillDone]))));
 
     const done = await run(launched);
     // One Task, one delegation and one session for Ada, though she was brought in on two deliveries.
@@ -512,7 +512,7 @@ describe("the backpack end to end", () => {
     // The cut-off turn's session was told the result, so its redelivery points back to it (#1040).
     expect(cut?.briefing).toContain("The launch copy is ready");
     expect(redelivered?.prompt).toContain(`finished. ${RESULT_IN_BRIEFING}`);
-    const results = (await run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId))))[0];
+    const results = (await run(TaskRepository.use((tasks) => tasks.readChannelTrees(channelId))))[0];
     const quillTask = results === undefined ? undefined : ownedBy(results, QUILL)[0];
     const quillResult = (await run(Backpack.use((backpack) => backpack.listOpen({ _tag: "Workspace" })))).find(
       (item) => item.taskId === quillTask?.id && item.kind === "result",
@@ -536,7 +536,7 @@ describe("the backpack end to end", () => {
     const { run, requests, releaseCall, unstall } = await start(database, faults, { ...LIMITS, lease: SHORT_LEASE });
     await run(party);
     holdCall(faults, "copy-done");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, plan([quillDone]))));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, plan([quillDone]))));
     await run(messagesWhen((all) => all.length === 2));
     faults.freezeRenewals = true;
     await releaseCall("copy-done");
@@ -593,7 +593,7 @@ describe("the backpack end to end", () => {
     const { run, requests, releaseCall } = await start(database, faults, { ...LIMITS, lease: SHORT_LEASE });
     await run(party);
     holdCall(faults, "copy-done");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, plan([quillDone]))));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, plan([quillDone]))));
     await run(messagesWhen((all) => all.length === 2));
     holdCall(faults, "late-review");
     faults.freezeRenewals = true;
@@ -633,7 +633,7 @@ describe("the backpack end to end", () => {
     const faults = makeFaults([{ cut: true }, { cut: true }, { cut: true }]);
     const { run, requests } = await start(database, faults);
     await run(party);
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, plan([quillDone]))));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, plan([quillDone]))));
 
     // Three deliveries, each cut off: the result fails as a blocker instead of disappearing.
     const quill = await run(treeWhen((tree) => ownedBy(tree, QUILL)[0]?.state === "completed"));

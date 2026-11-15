@@ -4,14 +4,14 @@ import {
   PASS_TAKEN,
   PASS_UNREADABLE,
   type PromptRequest,
-  ThreadMemberRepository,
+  ChannelMemberRepository,
 } from "@hobbots/agents";
-import { hobActor, liveSession, type Message, OWNER_ACTOR, PASS_TOOL, type RuntimeKind, Thread } from "@hobbots/domain";
+import { hobActor, liveSession, type Message, OWNER_ACTOR, PASS_TOOL, type RuntimeKind, Channel } from "@hobbots/domain";
 import { waitUntil } from "@hobbots/domain/testing";
 import { Effect, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { afterEach, describe, expect, it } from "vitest";
-import { FRODO, hub, messagesWhen, PIP, partyHub, send, threadId } from "./party-hub.ts";
+import { FRODO, hub, messagesWhen, PIP, partyHub, send, channelId } from "./party-hub.ts";
 
 // Issue #1462 (ADR 039, One hob speaks at a time): a hob asked to answer that has nothing to add
 // calls `pass` with a reason. Its turn ends with no message, its request ends `passed`, and the floor
@@ -26,7 +26,7 @@ afterEach(async () => {
 
 const offered = (request: PromptRequest | undefined) => request?.hubTools?.tools.map((tool) => tool.name) ?? [];
 
-/** A party hub whose hobs all think with `runtime`, Frodo's thread made a camp that Pip joined. */
+/** A party hub whose hobs all think with `runtime`, Frodo's channel made a camp that Pip joined. */
 const campOn = async (runtime: RuntimeKind, options: Parameters<typeof partyHub>[0] = {}) => {
   const party = partyHub({ lead: runtime, members: runtime, ...options });
   dispose = party.dispose;
@@ -34,9 +34,9 @@ const campOn = async (runtime: RuntimeKind, options: Parameters<typeof partyHub>
   await run(
     Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
-      const thread = Option.getOrThrow(yield* repo.findThread(threadId));
-      yield* repo.upsertThread(new Thread({ ...thread, kind: "camp" }));
-      yield* ThreadMemberRepository.use((members) => members.add(threadId, hobActor(PIP), OWNER_ACTOR));
+      const channel = Option.getOrThrow(yield* repo.findChannel(channelId));
+      yield* repo.upsertChannel(new Channel({ ...channel, kind: "camp" }));
+      yield* ChannelMemberRepository.use((members) => members.add(channelId, hobActor(PIP), OWNER_ACTOR));
     }),
   );
   /** Every request in the camp as stored, oldest first. */
@@ -47,7 +47,7 @@ const campOn = async (runtime: RuntimeKind, options: Parameters<typeof partyHub>
           readonly hobId: string;
           readonly state: string;
           readonly passReason: string | null;
-        }>`SELECT hob_id, state, pass_reason FROM turn_requests WHERE thread_id = ${threadId}
+        }>`SELECT hob_id, state, pass_reason FROM turn_requests WHERE channel_id = ${channelId}
           ORDER BY queued_at, position`.pipe(Effect.orDie),
       ),
     );
@@ -126,14 +126,14 @@ describe("pass", () => {
     await run(messagesWhen((messages) => messages.length >= 2));
     await run(send(["What is my cat called?"]));
     await run(messagesWhen((messages) => messages.length >= 4));
-    const thread = await run(
-      HobbotsRepository.use((repo) => repo.findThread(threadId)).pipe(Effect.map(Option.getOrThrow)),
+    const channel = await run(
+      HobbotsRepository.use((repo) => repo.findChannel(channelId)).pipe(Effect.map(Option.getOrThrow)),
     );
 
     expect(offered(requests[0])).not.toContain(PASS_TOOL);
     // Codex keeps a thread's first tools, so the second turn starts a new thread that holds pass.
     expect(requests[1]?.sessionId).toBeNull();
     expect(offered(requests[1])).toContain(PASS_TOOL);
-    expect(liveSession(thread, "codex", FRODO)?.taskTools).toContain(PASS_TOOL);
+    expect(liveSession(channel, "codex", FRODO)?.taskTools).toContain(PASS_TOOL);
   }, 30_000);
 });

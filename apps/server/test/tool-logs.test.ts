@@ -2,7 +2,7 @@ import { linkSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ToolLogs } from "@hobbots/agents";
-import type { MessageId, ThreadId } from "@hobbots/domain";
+import type { MessageId, ChannelId } from "@hobbots/domain";
 import { Effect, Exit, Option } from "effect";
 import { afterAll, describe, expect, it } from "vitest";
 import { ToolLogsLive } from "../src/tool-logs.ts";
@@ -10,7 +10,7 @@ import { ToolLogsLive } from "../src/tool-logs.ts";
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-tool-logs-")));
 afterAll(() => rmSync(temp, { recursive: true, force: true }));
 const folder = join(temp, "tool-logs");
-const key = { threadId: "t1" as ThreadId, messageId: "m1" as MessageId, stepId: "toolu_1" };
+const key = { channelId: "t1" as ChannelId, messageId: "m1" as MessageId, stepId: "toolu_1" };
 
 const run = <A, E>(effect: Effect.Effect<A, E, ToolLogs>) =>
   Effect.runPromiseExit(effect.pipe(Effect.provide(ToolLogsLive(folder))));

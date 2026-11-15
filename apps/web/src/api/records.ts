@@ -8,7 +8,7 @@ import {
   type DecisionId,
   type HobbotsEvent,
   type RegisteredArtifactId,
-  type ThreadId,
+  type ChannelId,
 } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Schema } from "effect";
@@ -19,41 +19,41 @@ import { followsEvents } from "./queries.ts";
 // their latest version and its brief, each as the hub keeps it. Their events read the list again.
 
 export const recordKeys = {
-  decisions: (threadId: ThreadId) => ["threads", threadId, "decisions"] as const,
-  artifacts: (threadId: ThreadId) => ["threads", threadId, "artifacts"] as const,
-  brief: (threadId: ThreadId) => ["threads", threadId, "brief"] as const,
-  /** Every artifact's versions and contents read in the thread, so a moved chapter drops them all. */
-  artifactReads: (threadId: ThreadId) => ["threads", threadId, "artifact"] as const,
+  decisions: (channelId: ChannelId) => ["channels", channelId, "decisions"] as const,
+  artifacts: (channelId: ChannelId) => ["channels", channelId, "artifacts"] as const,
+  brief: (channelId: ChannelId) => ["channels", channelId, "brief"] as const,
+  /** Every artifact's versions and contents read in the channel, so a moved chapter drops them all. */
+  artifactReads: (channelId: ChannelId) => ["channels", channelId, "artifact"] as const,
   /** One artifact's versions and their contents, under one key so a new version reads them again. */
-  artifact: (threadId: ThreadId, artifactId: RegisteredArtifactId) =>
-    [...recordKeys.artifactReads(threadId), artifactId] as const,
-  versions: (threadId: ThreadId, artifactId: RegisteredArtifactId) =>
-    [...recordKeys.artifact(threadId, artifactId), "versions"] as const,
-  content: (threadId: ThreadId, artifactId: RegisteredArtifactId, version: number) =>
-    [...recordKeys.artifact(threadId, artifactId), "content", version] as const,
+  artifact: (channelId: ChannelId, artifactId: RegisteredArtifactId) =>
+    [...recordKeys.artifactReads(channelId), artifactId] as const,
+  versions: (channelId: ChannelId, artifactId: RegisteredArtifactId) =>
+    [...recordKeys.artifact(channelId, artifactId), "versions"] as const,
+  content: (channelId: ChannelId, artifactId: RegisteredArtifactId, version: number) =>
+    [...recordKeys.artifact(channelId, artifactId), "content", version] as const,
 };
 
-/** The thread's decisions, newest first, crossed-out ones kept. */
-export const decisionsQuery = (threadId: ThreadId) =>
+/** The channel's decisions, newest first, crossed-out ones kept. */
+export const decisionsQuery = (channelId: ChannelId) =>
   queryOptions({
-    queryKey: recordKeys.decisions(threadId),
-    queryFn: () => call((c) => c.records.decisions({ params: { threadId } })),
+    queryKey: recordKeys.decisions(channelId),
+    queryFn: () => call((c) => c.records.decisions({ params: { channelId } })),
     ...followsEvents,
   });
 
 /** One row per artifact at its latest version, the most recently changed first. */
-export const artifactsQuery = (threadId: ThreadId) =>
+export const artifactsQuery = (channelId: ChannelId) =>
   queryOptions({
-    queryKey: recordKeys.artifacts(threadId),
-    queryFn: () => call((c) => c.records.artifacts({ params: { threadId } })),
+    queryKey: recordKeys.artifacts(channelId),
+    queryFn: () => call((c) => c.records.artifacts({ params: { channelId } })),
     ...followsEvents,
   });
 
 /** An artifact's versions, newest first, and how it is shown (#1434). */
-export const artifactVersionsQuery = (threadId: ThreadId, artifactId: RegisteredArtifactId) =>
+export const artifactVersionsQuery = (channelId: ChannelId, artifactId: RegisteredArtifactId) =>
   queryOptions({
-    queryKey: recordKeys.versions(threadId, artifactId),
-    queryFn: () => call((c) => c.records.artifactVersions({ params: { threadId, artifactId } })),
+    queryKey: recordKeys.versions(channelId, artifactId),
+    queryFn: () => call((c) => c.records.artifactVersions({ params: { channelId, artifactId } })),
     ...followsEvents,
   });
 
@@ -64,14 +64,14 @@ export const artifactVersionsQuery = (threadId: ThreadId, artifactId: Registered
  * file now is read again with the artifact. A refusal is an answer, not a failure to retry.
  */
 export const artifactContentQuery = (
-  threadId: ThreadId,
+  channelId: ChannelId,
   artifactId: RegisteredArtifactId,
   version: number,
   content: ArtifactVersionContent | "unknown",
 ) =>
   queryOptions({
-    queryKey: recordKeys.content(threadId, artifactId, version),
-    queryFn: () => call((c) => c.records.artifactContent({ params: { threadId, artifactId, version } })),
+    queryKey: recordKeys.content(channelId, artifactId, version),
+    queryFn: () => call((c) => c.records.artifactContent({ params: { channelId, artifactId, version } })),
     staleTime: content === "kept" ? Number.POSITIVE_INFINITY : 0,
     retry: (failures: number, error: unknown) => contentRefusal(error) === null && failures < 2,
   });
@@ -88,19 +88,19 @@ export const contentRefusal = (error: unknown): ArtifactContentRefusal | "not-fo
 };
 
 /** Where the hub serves a version's contents, for an image to load them itself. */
-export const artifactContentUrl = (threadId: ThreadId, artifactId: RegisteredArtifactId, version: number): string =>
-  `${API_URL}/api/threads/${encodeURIComponent(threadId)}/artifacts/${encodeURIComponent(artifactId)}/versions/${version}`;
+export const artifactContentUrl = (channelId: ChannelId, artifactId: RegisteredArtifactId, version: number): string =>
+  `${API_URL}/api/channels/${encodeURIComponent(channelId)}/artifacts/${encodeURIComponent(artifactId)}/versions/${version}`;
 
 /** The "Where we are" the hub writes, or null before it first writes one. */
-export const briefQuery = (threadId: ThreadId) =>
+export const briefQuery = (channelId: ChannelId) =>
   queryOptions({
-    queryKey: recordKeys.brief(threadId),
-    queryFn: () => call((c) => c.records.brief({ params: { threadId } })),
+    queryKey: recordKeys.brief(channelId),
+    queryFn: () => call((c) => c.records.brief({ params: { channelId } })),
     ...followsEvents,
   });
 
 /**
- * Reads a thread's list again after its event. A read already on its way may predate the change, so
+ * Reads a channel's list again after its event. A read already on its way may predate the change, so
  * it is cancelled first (STD-REACT-012).
  */
 export const readListAgain = async (queryClient: QueryClient, queryKey: ReadonlyArray<unknown>): Promise<void> => {
@@ -114,22 +114,22 @@ export const readListAgain = async (queryClient: QueryClient, queryKey: Readonly
  */
 const readArtifactAgain = async (
   queryClient: QueryClient,
-  threadId: ThreadId,
+  channelId: ChannelId,
   artifactId: RegisteredArtifactId,
 ): Promise<void> => {
-  const queryKey = recordKeys.artifact(threadId, artifactId);
+  const queryKey = recordKeys.artifact(channelId, artifactId);
   await queryClient.cancelQueries({ queryKey });
   await queryClient.invalidateQueries({ queryKey });
 };
 
 /**
- * A chapter moved into or out of the thread: an artifact that took another's records numbers its
+ * A chapter moved into or out of the channel: an artifact that took another's records numbers its
  * versions again, so a version number may now name other contents. Every artifact's versions and
- * contents read in the thread are cancelled and dropped, kept ones too, and what is on screen reads
+ * contents read in the channel are cancelled and dropped, kept ones too, and what is on screen reads
  * them again.
  */
-export const forgetArtifactReads = async (queryClient: QueryClient, threadId: ThreadId): Promise<void> => {
-  const queryKey = recordKeys.artifactReads(threadId);
+export const forgetArtifactReads = async (queryClient: QueryClient, channelId: ChannelId): Promise<void> => {
+  const queryKey = recordKeys.artifactReads(channelId);
   await queryClient.cancelQueries({ queryKey });
   await queryClient.resetQueries({ queryKey });
 };
@@ -159,24 +159,24 @@ export const applyRecordEvent = (queryClient: QueryClient, event: RecordEvent): 
   switch (event._tag) {
     case "DecisionRecorded":
     case "DecisionSuperseded":
-      return readListAgain(queryClient, recordKeys.decisions(event.decision.threadId));
+      return readListAgain(queryClient, recordKeys.decisions(event.decision.channelId));
     case "ArtifactRegistered": {
-      const { threadId, id } = event.artifact;
+      const { channelId, id } = event.artifact;
       return Promise.all([
-        readArtifactAgain(queryClient, threadId, id),
-        readListAgain(queryClient, recordKeys.artifacts(threadId)),
+        readArtifactAgain(queryClient, channelId, id),
+        readListAgain(queryClient, recordKeys.artifacts(channelId)),
       ]).then(() => undefined);
     }
     case "ArtifactReviewSettled":
-      return readListAgain(queryClient, recordKeys.artifacts(event.artifact.threadId));
+      return readListAgain(queryClient, recordKeys.artifacts(event.artifact.channelId));
     case "BriefWritten":
-      return readListAgain(queryClient, recordKeys.brief(event.brief.threadId));
+      return readListAgain(queryClient, recordKeys.brief(event.brief.channelId));
   }
 };
 
 /** Puts the decisions the hub answered in the list, each in place of the copy it held. */
-const takeDecisions = (queryClient: QueryClient, threadId: ThreadId, changed: ReadonlyArray<Decision>) =>
-  queryClient.setQueryData<ReadonlyArray<Decision>>(recordKeys.decisions(threadId), (old) => {
+const takeDecisions = (queryClient: QueryClient, channelId: ChannelId, changed: ReadonlyArray<Decision>) =>
+  queryClient.setQueryData<ReadonlyArray<Decision>>(recordKeys.decisions(channelId), (old) => {
     if (old === undefined) return old;
     const fresh = changed.filter((decision) => !old.some((each) => each.id === decision.id));
     const replaced = old.map((each) => changed.find((decision) => decision.id === each.id) ?? each);
@@ -184,23 +184,23 @@ const takeDecisions = (queryClient: QueryClient, threadId: ThreadId, changed: Re
   });
 
 /** Records a decision of yours, replacing `replaces` when it changes one; `key` records it once. */
-export const useRecordDecision = (threadId: ThreadId) => {
+export const useRecordDecision = (channelId: ChannelId) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: RecordDecisionPayload) =>
-      call((c) => c.records.recordDecision({ params: { threadId }, payload })),
+      call((c) => c.records.recordDecision({ params: { channelId }, payload })),
     onSuccess: ({ recorded, superseded }) =>
-      takeDecisions(queryClient, threadId, superseded === null ? [recorded] : [recorded, superseded]),
+      takeDecisions(queryClient, channelId, superseded === null ? [recorded] : [recorded, superseded]),
   });
 };
 
 /** Crosses a decision out: it stays, no longer holding. */
-export const useCrossOutDecision = (threadId: ThreadId) => {
+export const useCrossOutDecision = (channelId: ChannelId) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (decisionId: DecisionId) =>
-      call((c) => c.records.crossOutDecision({ params: { threadId, decisionId } })),
-    onSuccess: (decision) => takeDecisions(queryClient, threadId, [decision]),
+      call((c) => c.records.crossOutDecision({ params: { channelId, decisionId } })),
+    onSuccess: (decision) => takeDecisions(queryClient, channelId, [decision]),
   });
 };
 
@@ -214,7 +214,7 @@ export const reviewArtifactError = (error: unknown): ReviewArtifactError =>
  * Marks an artifact reviewed or dismisses it (#1422), once: the hub answers the artifact as it now
  * stands, which takes its place in the list.
  */
-export const useReviewArtifact = (threadId: ThreadId) => {
+export const useReviewArtifact = (channelId: ChannelId) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -223,9 +223,9 @@ export const useReviewArtifact = (threadId: ThreadId) => {
     }: {
       readonly artifactId: RegisteredArtifactId;
       readonly outcome: ArtifactReviewOutcome;
-    }) => call((c) => c.records.reviewArtifact({ params: { threadId, artifactId }, payload: { outcome } })),
+    }) => call((c) => c.records.reviewArtifact({ params: { channelId, artifactId }, payload: { outcome } })),
     onSuccess: (artifact) =>
-      queryClient.setQueryData<ReadonlyArray<Artifact>>(recordKeys.artifacts(threadId), (old) =>
+      queryClient.setQueryData<ReadonlyArray<Artifact>>(recordKeys.artifacts(channelId), (old) =>
         old?.map((each) => (each.id === artifact.id ? artifact : each)),
       ),
   });

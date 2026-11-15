@@ -1,4 +1,4 @@
-import type { AgentId, ClaimClash, Message, MessageId, ThreadId } from "@hobbots/domain";
+import type { AgentId, ClaimClash, Message, MessageId, ChannelId } from "@hobbots/domain";
 import { taskTitle } from "../quest/work-model.ts";
 
 /** One side of a clash, as its Heads-up names it. */
@@ -22,15 +22,15 @@ export interface HeadsUp {
   readonly spotted: HeadsUpSide;
 }
 
-/** The Heads-up for an open clash, from the claims register, as `threadId` shows it. */
-export const headsUpOf = (clash: ClaimClash, threadId: ThreadId): HeadsUp | null => {
+/** The Heads-up for an open clash, from the claims register, as `channelId` shows it. */
+export const headsUpOf = (clash: ClaimClash, channelId: ChannelId): HeadsUp | null => {
   const sides = clash.sides.map(
     (side): HeadsUpSide => ({
       key: side.claim.id,
       ownerId: side.ownerId,
       task: taskTitle({ brief: side.brief }),
       on: side.claim.key,
-      elsewhere: side.threadId !== threadId,
+      elsewhere: side.channelId !== channelId,
     }),
   );
   const newest = clash.sides.reduce<(typeof clash.sides)[number] | undefined>(

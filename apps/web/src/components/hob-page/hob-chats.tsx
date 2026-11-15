@@ -1,4 +1,4 @@
-import type { Agent, Thread } from "@hobbots/domain";
+import type { Agent, Channel } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@hobbots/ui/components/empty";
 import { SearchField } from "@hobbots/ui/components/search-field";
@@ -8,14 +8,14 @@ import { Link } from "@tanstack/react-router";
 import { type ReactNode, useState } from "react";
 import { inboxQuery } from "../../api/approvals.ts";
 import type { ActivityMap } from "../../api/hub-status.ts";
-import { agentsQuery, archivedThreadsQuery } from "../../api/queries.ts";
+import { agentsQuery, archivedChannelsQuery } from "../../api/queries.ts";
 import { useSummariesByQuest } from "../../api/quest-summaries.ts";
 import { useQuestWork } from "../../api/quest-work.ts";
 import { useSearch } from "../../api/search.ts";
 import { questsInProgress } from "../../lib/quest-work.ts";
 import { HubWait, ROW_WIDTHS, SKELETON_ROWS } from "../loading/hub-wait.tsx";
 import { ChatRow } from "./chat-row.tsx";
-import { chatGroups, chatMatches, OLDER_SHOWN, questsByThread, waitingByThread } from "./chats-model.ts";
+import { chatGroups, chatMatches, OLDER_SHOWN, questsByChannel, waitingByChannel } from "./chats-model.ts";
 import { messages } from "./messages.ts";
 
 const copy = messages.chats;
@@ -27,31 +27,31 @@ const copy = messages.chats;
  */
 export function HobChats({
   hob,
-  threads,
+  channels,
   activity,
   initialQuery = "",
 }: {
   hob: Agent;
-  threads: ReadonlyArray<Thread>;
+  channels: ReadonlyArray<Channel>;
   activity: ActivityMap;
   initialQuery?: string;
 }) {
   const [query, setQuery] = useState(initialQuery);
   const [allOlder, setAllOlder] = useState(false);
   const search = useSearch(query);
-  const waiting = useQuery({ ...inboxQuery, select: waitingByThread }).data;
+  const waiting = useQuery({ ...inboxQuery, select: waitingByChannel }).data;
   const searching = query.trim() !== "";
   const hobs = useQuery(agentsQuery).data ?? [];
-  const quests = questsByThread(questsInProgress(useQuestWork(hobs.map((each) => each.id))), useSummariesByQuest());
+  const quests = questsByChannel(questsInProgress(useQuestWork(hobs.map((each) => each.id))), useSummariesByQuest());
 
-  const row = (thread: Thread, match?: Pick<Parameters<typeof ChatRow>[0], "title" | "snippet">) => (
+  const row = (channel: Channel, match?: Pick<Parameters<typeof ChatRow>[0], "title" | "snippet">) => (
     <ChatRow
-      key={thread.id}
+      key={channel.id}
       hob={hob}
-      thread={thread}
-      live={activity[thread.id] !== undefined}
-      needs={waiting?.get(thread.id) ?? 0}
-      quests={quests.get(thread.id) ?? []}
+      channel={channel}
+      live={activity[channel.id] !== undefined}
+      needs={waiting?.get(channel.id) ?? 0}
+      quests={quests.get(channel.id) ?? []}
       {...match}
     />
   );
@@ -69,13 +69,13 @@ export function HobChats({
         />
       </div>
       {searching ? (
-        <Matches hob={hob} query={query} onClear={() => setQuery("")} search={search} threads={threads} row={row} />
+        <Matches hob={hob} query={query} onClear={() => setQuery("")} search={search} channels={channels} row={row} />
       ) : (
-        chatGroups(threads, new Date()).map(({ group, threads: list }) => {
+        chatGroups(channels, new Date()).map(({ group, channels: list }) => {
           const hidden = group === "older" && !allOlder ? Math.max(0, list.length - OLDER_SHOWN) : 0;
           return (
             <Group key={group} label={copy.groups[group]}>
-              {list.slice(0, list.length - hidden).map((thread) => row(thread))}
+              {list.slice(0, list.length - hidden).map((channel) => row(channel))}
               {hidden > 0 && <ShowMore onClick={() => setAllOlder(true)}>{copy.showOlder({ count: hidden })}</ShowMore>}
             </Group>
           );
@@ -91,19 +91,19 @@ function Matches({
   query,
   onClear,
   search,
-  threads,
+  channels,
   row,
 }: {
   hob: Agent;
   query: string;
   onClear: () => void;
   search: ReturnType<typeof useSearch>;
-  threads: ReadonlyArray<Thread>;
-  row: (thread: Thread, match: { title: ChatMatchParts; snippet: ChatMatchParts | null }) => ReactNode;
+  channels: ReadonlyArray<Channel>;
+  row: (channel: Channel, match: { title: ChatMatchParts; snippet: ChatMatchParts | null }) => ReactNode;
 }) {
-  const matches = chatMatches(threads, search.hits, query);
+  const matches = chatMatches(channels, search.hits, query);
   if (matches.length > 0)
-    return <Group label={copy.groups.matches}>{matches.map((match) => row(match.thread, match))}</Group>;
+    return <Group label={copy.groups.matches}>{matches.map((match) => row(match.channel, match))}</Group>;
   if (search.error)
     return (
       <p role="alert" className="m-0 text-ui text-rose">
@@ -161,7 +161,7 @@ function ShowMore({ onClick, children }: { onClick: () => void; children: ReactN
 
 /** Archived chats · N, which opens the Archive narrowed to this hob; hidden while there are none. */
 function ArchivedLink({ hob }: { hob: Agent }) {
-  const count = useQuery({ ...archivedThreadsQuery(hob.id), select: (list) => list.length }).data ?? 0;
+  const count = useQuery({ ...archivedChannelsQuery(hob.id), select: (list) => list.length }).data ?? 0;
   if (count === 0) return null;
   return (
     <Link

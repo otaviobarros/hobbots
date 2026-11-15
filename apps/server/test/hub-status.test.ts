@@ -150,11 +150,11 @@ const waitUntil = (check: () => Promise<boolean>) =>
 
 const status = async (): Promise<StatusSnapshot> => (await request("GET", "/api/status")).body;
 
-/** What a client shows: each busy thread's run and reply, and each hob's presence. */
+/** What a client shows: each busy channel's run and reply, and each hob's presence. */
 const shown = (view: StatusView) => {
   const { runs, hobs } = shownStatus(view);
   return {
-    threads: Object.fromEntries(runs.map((run) => [run.threadId, `${run.run}/${run.reply ?? "-"}`])),
+    channels: Object.fromEntries(runs.map((run) => [run.channelId, `${run.run}/${run.reply ?? "-"}`])),
     hobs: Object.fromEntries(hobs.map((presence) => [presence.agentId, presence.state])),
   };
 };
@@ -187,7 +187,7 @@ const followStatus = async () => {
           continue;
         }
         const event: StatusEvent = JSON.parse(frame.data);
-        if (event._tag === "ThreadRunChanged") published.push(event.run.revision);
+        if (event._tag === "ChannelRunChanged") published.push(event.run.revision);
         view = withStatusEvent(view, event);
       }
     }
@@ -212,31 +212,31 @@ const offer = (...events: ReadonlyArray<RuntimeEvent>) => Effect.runSync(Queue.o
 
 // Each wait has its own 10-second limit, so a test may take longer than the default 5 seconds.
 describe("hub status", { timeout: 30_000 }, () => {
-  it("a client that connects mid-turn shows the same thread run and hob presence as one connected throughout", async () => {
+  it("a client that connects mid-turn shows the same channel run and hob presence as one connected throughout", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
-    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+    const channel = (await request("POST", `/api/agents/${agent.id}/channels`)).body;
     const throughout = await followStatus();
-    await allShow([throughout], { threads: {}, hobs: { [agent.id]: "idle" } });
+    await allShow([throughout], { channels: {}, hobs: { [agent.id]: "idle" } });
 
-    await request("POST", `/api/threads/${thread.id}/messages`, { content: "hello" });
-    await allShow([throughout], { threads: { [thread.id]: "running/thinking" }, hobs: { [agent.id]: "thinking" } });
+    await request("POST", `/api/channels/${channel.id}/messages`, { content: "hello" });
+    await allShow([throughout], { channels: { [channel.id]: "running/thinking" }, hobs: { [agent.id]: "thinking" } });
 
     offer({ _tag: "SessionStarted", sessionId: "s1", billing: "fake" }, { _tag: "TextDelta", text: "Hel" });
-    await allShow([throughout], { threads: { [thread.id]: "running/working" }, hobs: { [agent.id]: "working" } });
+    await allShow([throughout], { channels: { [channel.id]: "running/working" }, hobs: { [agent.id]: "working" } });
 
     const midTurn = await followStatus();
     const followers = [throughout, midTurn];
-    await allShow(followers, { threads: { [thread.id]: "running/working" }, hobs: { [agent.id]: "working" } });
+    await allShow(followers, { channels: { [channel.id]: "running/working" }, hobs: { [agent.id]: "working" } });
 
     // The reply is complete, but the runtime has not exited: the run goes on with no reply.
     offer({ _tag: "Completed", sessionId: "s1", text: "Hello" });
-    await allShow(followers, { threads: { [thread.id]: "running/-" }, hobs: { [agent.id]: "idle" } });
+    await allShow(followers, { channels: { [channel.id]: "running/-" }, hobs: { [agent.id]: "idle" } });
 
     Effect.runSync(Queue.end(turn));
-    await allShow(followers, { threads: {}, hobs: { [agent.id]: "idle" } });
+    await allShow(followers, { channels: {}, hobs: { [agent.id]: "idle" } });
 
     await request("POST", `/api/agents/${agent.id}/pause`);
-    await allShow(followers, { threads: {}, hobs: { [agent.id]: "paused" } });
+    await allShow(followers, { channels: {}, hobs: { [agent.id]: "paused" } });
 
     await Promise.all(followers.map((follower) => follower.stop()));
     // Each transition of the run is published once: its revisions run from 1 with no gap or repeat.
@@ -247,22 +247,22 @@ describe("hub status", { timeout: 30_000 }, () => {
   it("a retired hob's presence leaves every client, connected or connecting, and comes back with the hob", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     const connected = await followStatus();
-    await allShow([connected], { threads: {}, hobs: { [agent.id]: "idle" } });
+    await allShow([connected], { channels: {}, hobs: { [agent.id]: "idle" } });
 
     expect((await request("POST", `/api/agents/${agent.id}/retire`, { openWork: "finish-first" })).status).toBe(200);
     const connecting = await followStatus();
-    await allShow([connected, connecting], { threads: {}, hobs: {} });
+    await allShow([connected, connecting], { channels: {}, hobs: {} });
 
     // Brought back, it has a presence again on both.
     expect((await request("POST", `/api/agents/${agent.id}/bring-back`)).status).toBe(200);
-    await allShow([connected, connecting], { threads: {}, hobs: { [agent.id]: "idle" } });
+    await allShow([connected, connecting], { channels: {}, hobs: { [agent.id]: "idle" } });
     await Promise.all([connected.stop(), connecting.stop()]);
   });
 
   it("a presence the hub could not read is read again until it can, with no later change", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     const follower = await followStatus();
-    await allShow([follower], { threads: {}, hobs: { [agent.id]: "idle" } });
+    await allShow([follower], { channels: {}, hobs: { [agent.id]: "idle" } });
 
     failing = true;
     await request("POST", `/api/agents/${agent.id}/pause`);
@@ -270,7 +270,7 @@ describe("hub status", { timeout: 30_000 }, () => {
     expect(follower.shown().hobs).toEqual({ [agent.id]: "idle" });
     // Nothing else changes from here on: only the hub trying again brings the pause.
     failing = false;
-    await allShow([follower], { threads: {}, hobs: { [agent.id]: "paused" } });
+    await allShow([follower], { channels: {}, hobs: { [agent.id]: "paused" } });
     await follower.stop();
   });
 });

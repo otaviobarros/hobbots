@@ -31,7 +31,7 @@ export interface LaneMenu {
    * never one: the lead's lane cancels it as the whole request.
    */
   readonly cancel: ReadonlyArray<Task>;
-  /** The lead's lane pins its Quest in every thread. */
+  /** The lead's lane pins its Quest in every channel. */
   readonly pin: boolean;
   /**
    * The lead's lane cancels the whole request while it runs: its Quest, or its Task while no party

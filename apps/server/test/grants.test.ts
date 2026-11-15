@@ -24,7 +24,7 @@ import {
   type Message,
   OWNER_ACTOR,
   OWNER_USER_ID,
-  type ThreadId,
+  type ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -129,14 +129,14 @@ const run = <A, E>(
   >,
 ) => effect.pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
-const reply = (threadId: ThreadId) =>
+const reply = (channelId: ChannelId) =>
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
-    return (yield* repo.listMessages(threadId)).at(-1) as Message;
+    return (yield* repo.listMessages(channelId)).at(-1) as Message;
   });
 
-const settled = (threadId: ThreadId) =>
-  reply(threadId).pipe(
+const settled = (channelId: ChannelId) =>
+  reply(channelId).pipe(
     Effect.flatMap((message) =>
       message.role === "assistant" && !isInProgress(message.status)
         ? Effect.succeed(message)
@@ -145,29 +145,29 @@ const settled = (threadId: ThreadId) =>
     Effect.retry(Schedule.spaced("5 millis")),
   );
 
-/** Runs the command in a new thread of the hob, and returns the request it waits on, or the finished reply. */
+/** Runs the command in a new channel of the hob, and returns the request it waits on, or the finished reply. */
 const runCommand = (line: string, agentId: AgentId = SCOUT) =>
   Effect.gen(function* () {
     const chat = yield* ChatService;
     const approvals = yield* ApprovalService;
-    const thread = yield* chat.createThread(agentId);
-    yield* chat.sendPrompt(thread.id, `Go\nfake:tool Bash ${line}`);
+    const channel = yield* chat.createChannel(agentId);
+    yield* chat.sendPrompt(channel.id, `Go\nfake:tool Bash ${line}`);
     return yield* Effect.gen(function* () {
-      const pending = (yield* approvals.listForThread(thread.id)).find((a) => a.state === "pending");
-      if (pending) return { thread, pending, done: undefined };
-      const message = yield* reply(thread.id);
+      const pending = (yield* approvals.listForChannel(channel.id)).find((a) => a.state === "pending");
+      if (pending) return { channel, pending, done: undefined };
+      const message = yield* reply(channel.id);
       if (message.role === "assistant" && !isInProgress(message.status))
-        return { thread, pending: undefined, done: message };
+        return { channel, pending: undefined, done: message };
       return yield* Effect.fail("busy" as const);
     }).pipe(Effect.retry(Schedule.spaced("5 millis")));
   });
 
 /** Denies a request so its turn ends. */
-const dismiss = (request: ApprovalRequest, threadId: ThreadId) =>
+const dismiss = (request: ApprovalRequest, channelId: ChannelId) =>
   Effect.gen(function* () {
     const approvals = yield* ApprovalService;
     yield* approvals.decide(request.id, { decision: "deny", actionDigest: request.actionDigest });
-    yield* settled(threadId);
+    yield* settled(channelId);
   });
 
 describe("Standing grants", () => {
@@ -187,23 +187,23 @@ describe("Standing grants", () => {
           actionDigest: asked.actionDigest,
           lifetime: "always",
         });
-        const firstDone = yield* settled(first.thread.id);
+        const firstDone = yield* settled(first.channel.id);
         const saved = yield* grants.live(SCOUT);
 
         const again = yield* runCommand("rm build");
         const watch = yield* runCommand("rm build dist");
-        if (watch.pending) yield* dismiss(watch.pending, watch.thread.id);
+        if (watch.pending) yield* dismiss(watch.pending, watch.channel.id);
         const install = yield* runCommand("rm dist");
-        if (install.pending) yield* dismiss(install.pending, install.thread.id);
+        if (install.pending) yield* dismiss(install.pending, install.channel.id);
         const otherHob = yield* runCommand("rm build", BRAM);
-        if (otherHob.pending) yield* dismiss(otherHob.pending, otherHob.thread.id);
+        if (otherHob.pending) yield* dismiss(otherHob.pending, otherHob.channel.id);
 
         let thens = 0;
         const counted = () => Effect.sync(() => void thens++);
         const removed = yield* grants.revoke(saved[0]?.id as never, counted);
         const removedAgain = yield* grants.revoke(saved[0]?.id as never, counted);
         const afterRemoval = yield* runCommand("rm build");
-        if (afterRemoval.pending) yield* dismiss(afterRemoval.pending, afterRemoval.thread.id);
+        if (afterRemoval.pending) yield* dismiss(afterRemoval.pending, afterRemoval.channel.id);
         const all = yield* grants.list({ agentId: SCOUT, all: true });
         const events = yield* PubSub.takeAll(subscription);
         return {
@@ -269,7 +269,7 @@ describe("Standing grants", () => {
         const globAlways = yield* Effect.exit(
           approvals.decide(glob.id, { decision: "approve", actionDigest: glob.actionDigest, lifetime: "always" }),
         );
-        yield* dismiss(glob, unreadable.thread.id);
+        yield* dismiss(glob, unreadable.channel.id);
 
         const push = yield* runCommand("git push origin main");
         const risky = push.pending as ApprovalRequest;
@@ -281,7 +281,7 @@ describe("Standing grants", () => {
             lifetime: "always",
           }),
         );
-        yield* dismiss(risky, push.thread.id);
+        yield* dismiss(risky, push.channel.id);
 
         const asked = yield* runCommand("git push origin feature");
         const request = asked.pending as ApprovalRequest;
@@ -304,7 +304,7 @@ describe("Standing grants", () => {
             concurrency: "unbounded",
           },
         );
-        yield* settled(asked.thread.id);
+        yield* settled(asked.channel.id);
         const once = yield* Effect.exit(
           approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest }),
         );
@@ -356,7 +356,7 @@ describe("Standing grants", () => {
               actionDigest: request.actionDigest,
               lifetime: "always",
             });
-            yield* settled(asked.thread.id);
+            yield* settled(asked.channel.id);
           });
         yield* approveAlways("rm build", SCOUT);
         yield* approveAlways("rm dist", BRAM);
@@ -402,7 +402,7 @@ describe("Standing grants", () => {
           approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest, lifetime: "always" }),
         );
         const closed = yield* approvals.get(request.id);
-        const done = yield* settled(asked.thread.id);
+        const done = yield* settled(asked.channel.id);
         const saved = yield* grants.list({ agentId: SCOUT, all: true });
         // Approving Once is refused the same way: the call it was asked for never runs as you.
         const second = yield* runCommand("git push origin feature");
@@ -411,7 +411,7 @@ describe("Standing grants", () => {
         const once = yield* Effect.flip(
           approvals.decide(secondRequest.id, { decision: "approve", actionDigest: secondRequest.actionDigest }),
         );
-        yield* settled(second.thread.id);
+        yield* settled(second.channel.id);
         // A request asked after the switch is decided as usual, and its grant is saved.
         const third = yield* runCommand("git push origin feature");
         const thirdRequest = third.pending as ApprovalRequest;
@@ -420,7 +420,7 @@ describe("Standing grants", () => {
           actionDigest: thirdRequest.actionDigest,
           lifetime: "always",
         });
-        yield* settled(third.thread.id);
+        yield* settled(third.channel.id);
         return { request, always, closed, done, saved, second, once, approved, live: yield* grants.live(SCOUT) };
       }),
     );
@@ -451,7 +451,7 @@ describe("Standing grants", () => {
           actionDigest: request.actionDigest,
           lifetime: "always",
         });
-        yield* settled(asked.thread.id);
+        yield* settled(asked.channel.id);
         const before = yield* grants.live(SCOUT);
         yield* lifecycle.retire(SCOUT, "finish");
         return { before, after: yield* grants.list({ agentId: SCOUT, all: true }) };
@@ -476,7 +476,7 @@ describe("Standing grants", () => {
           actionDigest: asked.actionDigest,
           lifetime: "always",
         });
-        yield* settled(first.thread.id);
+        yield* settled(first.channel.id);
         const [grant] = yield* grants.live(SCOUT);
 
         // A turn still running, waiting on another request.
@@ -503,7 +503,7 @@ describe("Standing grants", () => {
         return {
           pending: running.pending,
           stops,
-          stopped: yield* settled(running.thread.id),
+          stopped: yield* settled(running.channel.id),
           live: yield* grants.live(SCOUT),
           all: yield* grants.list({ agentId: SCOUT, all: true }),
         };
@@ -529,18 +529,18 @@ describe("Standing grants", () => {
           actionDigest: asked.actionDigest,
           lifetime: "always",
         });
-        yield* settled(first.thread.id);
+        yield* settled(first.channel.id);
         const again = yield* runCommand("git push origin feature");
         const both = yield* runCommand("git push origin feature main");
-        if (both.pending) yield* dismiss(both.pending, both.thread.id);
+        if (both.pending) yield* dismiss(both.pending, both.channel.id);
         const sibling = yield* runCommand("git -C ../sibling push origin feature");
-        if (sibling.pending) yield* dismiss(sibling.pending, sibling.thread.id);
+        if (sibling.pending) yield* dismiss(sibling.pending, sibling.channel.id);
         const moved = yield* runCommand("cd sub && rm build");
-        if (moved.pending) yield* dismiss(moved.pending, moved.thread.id);
+        if (moved.pending) yield* dismiss(moved.pending, moved.channel.id);
         const wrapped = yield* runCommand("command cd sub && rm build");
-        if (wrapped.pending) yield* dismiss(wrapped.pending, wrapped.thread.id);
+        if (wrapped.pending) yield* dismiss(wrapped.pending, wrapped.channel.id);
         const pattern = yield* runCommand("git push origin 'refs/heads/*:refs/heads/*'");
-        if (pattern.pending) yield* dismiss(pattern.pending, pattern.thread.id);
+        if (pattern.pending) yield* dismiss(pattern.pending, pattern.channel.id);
         return { again, both, sibling, moved, wrapped, pattern };
       }),
     );
@@ -569,9 +569,9 @@ describe("Standing grants", () => {
           approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest, lifetime: "always" }),
         );
         const saved = yield* grants.list({ agentId: SCOUT, all: true });
-        const stillPending = (yield* approvals.listForThread(asked.thread.id))[0];
+        const stillPending = (yield* approvals.listForChannel(asked.channel.id))[0];
         restrictions = [];
-        yield* dismiss(request, asked.thread.id);
+        yield* dismiss(request, asked.channel.id);
 
         // A revocation for a change waits while a decision saves grants, so it sees what was saved.
         const release = yield* Deferred.make<void>();

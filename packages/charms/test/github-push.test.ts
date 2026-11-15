@@ -25,7 +25,7 @@ import {
   MessageId,
   type PolicyDecision,
   type SafetyPreset,
-  ThreadId,
+  ChannelId,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Layer, Redacted } from "effect";
@@ -213,7 +213,7 @@ const pushIn = (folder: string, repository: GitHubRepository, turn: Turn, input:
     const events = turn.events ?? [];
     const tools = yield* charmToolsFor({
       agentId: AgentId.make("hob"),
-      threadId: ThreadId.make("t1"),
+      channelId: ChannelId.make("t1"),
       messageId: MessageId.make("m1"),
       scope: () => "reply:m1",
       currentAccess: Effect.succeed(turn.access),
@@ -521,7 +521,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
       Effect.gen(function* () {
         const tools = yield* charmToolsFor({
           agentId: AgentId.make("hob"),
-          threadId: ThreadId.make("t1"),
+          channelId: ChannelId.make("t1"),
           messageId: MessageId.make("m1"),
           scope: () => "reply:m1",
           currentAccess: Effect.succeed(access),
@@ -649,7 +649,7 @@ describe("the GitHub Charm's Push", { timeout: REAL_GIT_TIMEOUT }, () => {
         appliedText: "Pushed.",
         state: "sending",
         result: null,
-        threadId: null,
+        channelId: null,
         messageId: null,
         stepId: null,
         createdAt: "2026-11-02T00:00:00.000Z",

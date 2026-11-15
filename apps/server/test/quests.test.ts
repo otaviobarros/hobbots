@@ -34,8 +34,8 @@ import {
   type Task,
   TaskId,
   type TaskTree,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Backpack, Dispatcher, RESULT_IN_BRIEFING } from "@hobbots/inbox";
@@ -80,7 +80,7 @@ const QUILL = AgentId.make("quill");
 const ADA = AgentId.make("ada");
 const ROOK = AgentId.make("rook");
 const PIP = AgentId.make("pip");
-const threadId = ThreadId.make("campaign");
+const channelId = ChannelId.make("campaign");
 /** A prompt with this line of its own waits, before it does anything, until the test lets it go on. */
 const HOLD = "fake:hold";
 
@@ -160,8 +160,8 @@ const Party = Layer.effectDiscard(
     const repo = yield* HobbotsRepository;
     const party = [hob(ALDRIC, "Aldric"), hob(QUILL, "Quill"), hob(ADA, "Ada"), hob(ROOK, "Rook"), hob(PIP, "Pip")];
     for (const each of party) yield* repo.insertAgent(each);
-    yield* repo.upsertThread(
-      new Thread({ id: threadId, agentId: ALDRIC, title: "Black Friday", createdAt: now, updatedAt: now }),
+    yield* repo.upsertChannel(
+      new Channel({ id: channelId, agentId: ALDRIC, title: "Black Friday", createdAt: now, updatedAt: now }),
     );
   }),
 );
@@ -254,9 +254,9 @@ const attemptStates = (tree: TaskTree, agentId: AgentId) =>
 
 const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-const messages = () => HobbotsRepository.use((repo) => repo.listMessages(threadId));
+const messages = () => HobbotsRepository.use((repo) => repo.listMessages(channelId));
 
-/** The thread's messages once `ready` holds for them, every reply ended. */
+/** The channel's messages once `ready` holds for them, every reply ended. */
 const messagesWhen = (ready: (all: ReadonlyArray<Message>) => boolean) =>
   retry(
     Effect.gen(function* () {
@@ -270,7 +270,7 @@ const messagesWhen = (ready: (all: ReadonlyArray<Message>) => boolean) =>
 const treeWhen = (ready: (tree: TaskTree) => boolean) =>
   retry(
     Effect.gen(function* () {
-      const [tree] = yield* TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
+      const [tree] = yield* TaskRepository.use((tasks) => tasks.readChannelTrees(channelId));
       return tree !== undefined && ready(tree) ? tree : yield* Effect.fail("not yet" as const);
     }),
   );
@@ -366,7 +366,7 @@ describe("leading a party on a Quest", () => {
       `fake:then fake:then ${hub("complete_task", { delivered: true, key: "early", summary: "Too early" })}`,
       `fake:then fake:then fake:then ${hub("complete_task", { delivered: true, key: "wrap", summary: "The Black Friday campaign is ready" })}`,
     ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, prompt)));
 
     // Quill starts; Ada's Task depends on his, so it stays queued and starts no turn meanwhile.
     const waiting = await run(
@@ -385,7 +385,7 @@ describe("leading a party on a Quest", () => {
     const { adaTask } = members;
 
     // Aldric waits without blocking his chat: you still get an answer from him.
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, "How is it going?")));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, "How is it going?")));
     const chatted = await run(messagesWhen((all) => all.length === 4));
     expect(chatted.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant"]);
 
@@ -432,7 +432,7 @@ describe("leading a party on a Quest", () => {
       "Plan the campaign",
       hub("delegate_task", { key: "copy", hob: "Quill", brief: "Draft the copy", milestones: ["Headlines"] }),
     ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, prompt)));
 
     const tree = await run(treeWhen((each) => ownedBy(each, QUILL)?.state === "blocked"));
     const quill = ownedBy(tree, QUILL);
@@ -456,7 +456,7 @@ describe("a retired party member", () => {
       "Plan the campaign",
       hub("delegate_task", { key: "copy", hob: "Quill", brief: ["Draft the copy", HOLD].join("\n") }),
     ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, prompt)));
     await run(treeWhen((each) => each.attempts.some((attempt) => attempt.agentId === QUILL)));
 
     await run(HobLifecycle.use((lifecycle) => lifecycle.retire(QUILL, "stop")));
@@ -502,7 +502,7 @@ const heldMemberTask = Effect.gen(function* () {
         id: TaskId.make("held-lead"),
         ownerId: ALDRIC,
         parentId: null,
-        threadId,
+        channelId,
         brief: "Plan the campaign",
         dependsOn: [],
         createdAt: at(),
@@ -528,7 +528,7 @@ const heldMemberTask = Effect.gen(function* () {
         id: TaskId.make("held-copy"),
         ownerId: QUILL,
         parentId: lead.id,
-        threadId: null,
+        channelId: null,
         brief: "Draft the copy",
         dependsOn: [],
         createdAt: at(),
@@ -655,7 +655,7 @@ describe("a member Task already being worked", () => {
 });
 
 describe("a party member's authority", () => {
-  it("a member's call that the delegation narrows to Ask asks you in the lead's thread, and runs once you approve", async () => {
+  it("a member's call that the delegation narrows to Ask asks you in the lead's channel, and runs once you approve", async () => {
     const { run } = setUp();
     const file = join(project, "copy.md");
     const prompt = [
@@ -671,7 +671,7 @@ describe("a party member's authority", () => {
         authority: { decisions: { "edit-files": "ask" } },
       }),
     ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, prompt)));
 
     // Balanced lets Quill edit on his own; the delegation made it ask, and it asks you, not Aldric.
     const pending = await run(
@@ -684,7 +684,7 @@ describe("a party member's authority", () => {
       ),
     );
     expect(pending.agentId).toBe(QUILL);
-    expect(pending.threadId).toBe(threadId);
+    expect(pending.channelId).toBe(channelId);
     expect(pending.operation).toBe("edit-files");
     expect(pending.targets).toEqual([file]);
     // It is Quill's request on his own Task, not one of Aldric's messages.
@@ -727,7 +727,7 @@ describe("a party member's authority", () => {
         authority: { folders: [given] },
       }),
     ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, prompt)));
 
     const tree = await run(treeWhen((each) => ownedBy(each, QUILL)?.state === "completed"));
     const quill = ownedBy(tree, QUILL);
@@ -759,7 +759,7 @@ describe("a party member's authority", () => {
         authority: { folders: [given], decisions: { "edit-files": "deny" } },
       }),
     ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, prompt)));
 
     const tree = await run(
       treeWhen((each) => {
@@ -806,7 +806,7 @@ describe("questions in a party", () => {
       `fake:then ${hub("answer", { key: "reply", question_id: "$tone.question_id", answer: "Playful" })}`,
       `fake:then fake:then ${hub("complete_task", { delivered: true, key: "wrap", summary: "Campaign planned" })}`,
     ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, prompt)));
 
     const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
     const quill = ownedBy(done, QUILL);
@@ -848,7 +848,7 @@ describe("questions in a party", () => {
       `fake:then ${hub("escalate", { key: "up", question_id: "$date.question_id" })}`,
       `fake:then fake:then ${hub("complete_task", { delivered: true, key: "wrap", summary: "Campaign built" })}`,
     ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, prompt)));
 
     // Aldric passed it up: no lead is left, so it waits for you.
     const [waiting] = await run(questionsWhen((tree) => tree.questions[0]?.recipientId === null));
@@ -886,7 +886,7 @@ describe("what reaches a lead", () => {
       hub("delegate_task", { key: "copy", hob: "Quill", brief: ["Draft the copy", HOLD].join("\n") }),
       hub("wait_for", { key: "wait", tasks: ["$copy.task_id"] }),
     ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, prompt)));
     const started = await run(treeWhen((tree) => ownedBy(tree, QUILL) !== undefined));
     const quill = ownedBy(started, QUILL);
     if (quill === undefined) throw new Error("no Task for Quill");
@@ -938,7 +938,7 @@ describe("what reaches a lead", () => {
       `fake:then ${hub("complete_task", { delivered: true, key: "wrap", summary: "Campaign planned" })}`,
       `fake:then fake:then ${hub("complete_task", { delivered: true, key: "wrap-later", summary: "Campaign planned" })}`,
     ].join("\n");
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, prompt)));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, prompt)));
 
     await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
     const all = await run(messagesWhen((each) => continuations(each).length >= 1));
@@ -1015,7 +1015,7 @@ describe("a nested Quest", () => {
     const rookBrief = rookLeads(pipBrief, [
       `fake:then ${hub("complete_task", { delivered: true, key: "ads-done", summary: "Ads ready around 'doorbuster'" })}`,
     ]);
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, aldricLeads(rookBrief))));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, aldricLeads(rookBrief))));
 
     const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
     const { rook, pip } = expectNested(done);
@@ -1055,7 +1055,7 @@ describe("a nested Quest", () => {
       hub("delegate_task", { key: "rook-to-aldric", hob: "Aldric", brief: "Back to you" }),
       `fake:then ${hub("complete_task", { delivered: true, key: "ads-done", summary: "Ads ready" })}`,
     ]);
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, aldricLeads(rookBrief))));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, aldricLeads(rookBrief))));
 
     const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
     expectNested(done);
@@ -1091,7 +1091,7 @@ describe("a nested Quest", () => {
     const rookBrief = rookLeads(pipBrief, [
       `fake:then ${hub("complete_task", { delivered: true, key: "ads-done", summary: "Ads from the keywords" })}`,
     ]);
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, aldricLeads(rookBrief))));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, aldricLeads(rookBrief))));
 
     const done = await run(treeWhen((tree) => tree.tasks[0]?.state === "completed"));
     expect(done.quests.map((quest) => [quest.leadId, quest.depth])).toEqual([
@@ -1124,7 +1124,7 @@ describe("a nested Quest", () => {
       `fake:then fake:then ${hub("complete_task", { delivered: true, key: "ads-done", summary: "Playful ads" })}`,
     ]);
     const aldricUp = [`fake:then ${hub("escalate", { key: "aldric-up", question_id: "$tone.question_id" })}`];
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, aldricLeads(rookBrief, aldricUp))));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, aldricLeads(rookBrief, aldricUp))));
 
     // Rook passed it up and so did Aldric: no lead is left, so it waits for you.
     const [waiting] = await run(questionsWhen((tree) => tree.questions[0]?.recipientId === null));
@@ -1162,7 +1162,7 @@ describe("a nested Quest", () => {
     const rookBrief = rookLeads(pipBrief, [
       `fake:then ${hub("complete_task", { delivered: true, key: "ads-done", summary: "Ads ready around 'doorbuster'" })}`,
     ]);
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, aldricLeads(rookBrief))));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, aldricLeads(rookBrief))));
 
     // Pip's turn started and is held: the hub's "started" waits in Rook's backpack and wakes nobody.
     const started = await run(treeWhen((tree) => tree.attempts.some((each) => each.agentId === PIP)));

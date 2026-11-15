@@ -10,7 +10,7 @@ One computer, the hub, runs the Hobbots server as a background service with one 
 
 - **The user's files** outside the hob's folders, and the integrity of files inside them.
 - **Credentials:** runtime sign-ins, Charm tokens such as the user's GitHub account and a hob's GitHub App key, device tokens and the window key. They live in the OS keychain or the data folder and never enter the sandbox.
-- **The hub's records:** threads, messages, memory, Tasks, Quests, approvals and grants, in the database and data folder.
+- **The hub's records:** channels, messages, memory, Tasks, Quests, approvals and grants, in the database and data folder.
 - **Authority:** who may approve, grant, widen a hob's policy or administer the hub. Only a user session from an approved device holds it.
 - **The user's accounts on other services**, reached through Charms: what gets pushed, commented or opened in their name.
 - **The hub's availability** for every hob and person on it.

@@ -44,7 +44,7 @@ export interface HubRequest {
  * decide, ask or record on its own. An action reads its tool set's own services from where it was made.
  */
 export interface HubPlanContext {
-  readonly turn: Pick<CharmTurn, "agentId" | "threadId" | "messageId" | "attemptId" | "taskId" | "scope" | "also">;
+  readonly turn: Pick<CharmTurn, "agentId" | "channelId" | "messageId" | "attemptId" | "taskId" | "scope" | "also">;
   readonly access: ToolAccess;
   /**
    * The runtime's id for the call's step, when the runtime knows it, so a record the call makes can
@@ -295,7 +295,7 @@ const planContext = (
 ): HubPlanContext => ({
   turn: {
     agentId: turn.agentId,
-    threadId: turn.threadId,
+    channelId: turn.channelId,
     messageId: turn.messageId,
     scope: turn.scope,
     ...(turn.attemptId === undefined ? {} : { attemptId: turn.attemptId }),
@@ -477,7 +477,7 @@ export const makeHubActions =
               plan: write.recorded,
               appliedText: write.appliedText,
               step,
-              threadId: turn.threadId,
+              channelId: turn.channelId,
               messageId: turn.messageId,
             },
             write.send,

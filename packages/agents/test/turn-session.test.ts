@@ -1,4 +1,4 @@
-import { AgentId, ChapterId, MessageId, Thread, ThreadId } from "@hobbots/domain";
+import { AgentId, ChapterId, MessageId, Channel, ChannelId } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { describe, expect, it } from "vitest";
 import { makeTurnSession } from "../src/turn-session.ts";
@@ -7,10 +7,10 @@ const NOW = "2026-11-15T01:00:00.000Z";
 const FRODO = AgentId.make("frodo");
 const MARK = { since: NOW, source: 'the web search "lamp oil"' };
 
-/** A turn session over a thread kept in memory, with every change the thread takes. */
+/** A turn session over a channel kept in memory, with every change the channel takes. */
 const session = () => {
-  let thread = new Thread({
-    id: ThreadId.make("camp"),
+  let channel = new Channel({
+    id: ChannelId.make("camp"),
     agentId: FRODO,
     title: "Lamps",
     kind: "camp",
@@ -18,16 +18,16 @@ const session = () => {
     createdAt: NOW,
     updatedAt: NOW,
   });
-  const changes: Array<Thread> = [];
+  const changes: Array<Channel> = [];
   const turn = makeTurnSession({
-    thread,
+    channel,
     runtime: "claude-code",
     agentId: FRODO,
-    changeThread: (_, change) =>
+    changeChannel: (_, change) =>
       Effect.sync(() => {
-        const next = change(thread);
+        const next = change(channel);
         if (next === null) return Option.none();
-        thread = next;
+        channel = next;
         changes.push(next);
         return Option.some(next);
       }),
@@ -36,7 +36,7 @@ const session = () => {
   return { turn, changes };
 };
 
-describe("a turn's session as the thread records it", () => {
+describe("a turn's session as the channel records it", () => {
   // covers ADR 036 (The read-the-web mark), ADR 039 (Hobs talking to hobs)
   it("records a new session with the turn's read-the-web mark in the same change, and without one when it holds none (#1463)", async () => {
     const marked = session();

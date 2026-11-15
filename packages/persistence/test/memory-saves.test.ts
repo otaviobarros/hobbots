@@ -1,5 +1,5 @@
 import { HobbotsRepository, MemorySaves } from "@hobbots/agents";
-import { Agent, AgentId, MemoryPath, MemorySave, MemoryVersion, MessageId, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, MemoryPath, MemorySave, MemoryVersion, MessageId, ChannelId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
@@ -48,7 +48,7 @@ const save = (key: string, overrides: Partial<MemorySave> = {}) =>
     tags: ["tests"],
     state: "sending",
     version: null,
-    threadId: ThreadId.make("t1"),
+    channelId: ChannelId.make("t1"),
     messageId: MessageId.make("m1"),
     createdAt: now,
     updatedAt: now,
@@ -67,7 +67,7 @@ describe("memory save records", () => {
         expect(started._tag).toBe("Started");
         if (started._tag !== "Started") return;
         expect(started.entries.map((entry) => entry.type)).toEqual(["MemorySaveRecorded"]);
-        expect(started.entries[0]?.correlation).toMatchObject({ agentId: pip, threadId: "t1", messageId: "m1" });
+        expect(started.entries[0]?.correlation).toMatchObject({ agentId: pip, channelId: "t1", messageId: "m1" });
         // A retry, with a fresh id, finds the first save: nothing new is recorded or journaled.
         const again = yield* saves.begin(save("tests", { id: "another" }));
         expect(again).toMatchObject({ _tag: "Existing", save: { id: "tests-id", state: "sending" } });
@@ -117,15 +117,15 @@ describe("memory save records", () => {
     ));
 
   // covers ADR 028 (In the chat), #961
-  it("finds a save, lists a thread's saves, and marks a saved one undone once (#961)", () =>
+  it("finds a save, lists a channel's saves, and marks a saved one undone once (#961)", () =>
     run(
       Effect.gen(function* () {
         yield* seed;
         const saves = yield* MemorySaves;
         yield* saves.begin(save("first"));
         yield* saves.begin(save("second", { id: "second-id", createdAt: later, updatedAt: later }));
-        yield* saves.begin(save("elsewhere", { id: "elsewhere-id", threadId: ThreadId.make("t2") }));
-        expect((yield* saves.inThread(ThreadId.make("t1"))).map((s) => s.id)).toEqual(["first-id", "second-id"]);
+        yield* saves.begin(save("elsewhere", { id: "elsewhere-id", channelId: ChannelId.make("t2") }));
+        expect((yield* saves.inChannel(ChannelId.make("t1"))).map((s) => s.id)).toEqual(["first-id", "second-id"]);
         expect(yield* saves.find("nothing")).toBeNull();
 
         // Only a saved save can be undone, and only once.

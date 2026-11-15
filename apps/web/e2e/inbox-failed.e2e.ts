@@ -58,6 +58,6 @@ test("a member's failed Task waits in the Inbox and on the lead's tile, and Retr
   const email = page.getByRole("article", { name: "Failed task from Ada: Schedule the sale email" });
   await expect(email.getByRole("button", { name: "Retry" })).toBeEnabled();
   await email.getByRole("link", { name: "Open the task" }).click();
-  await expect(page).toHaveURL(new RegExp(`/hobs/${aldric}/threads/[^?]+\\?quest=`));
+  await expect(page).toHaveURL(new RegExp(`/hobs/${aldric}/channels/[^?]+\\?quest=`));
   await expect(laneTask(page, "Schedule the sale email", "Ada")).toContainText("Failed");
 });

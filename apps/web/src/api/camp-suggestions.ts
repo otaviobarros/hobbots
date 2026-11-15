@@ -1,5 +1,5 @@
 import type { MoveChapterPayload } from "@hobbots/api";
-import type { CampSuggestion, CampSuggestionId, ChapterId, HobbotsEvent, ThreadId } from "@hobbots/domain";
+import type { CampSuggestion, CampSuggestionId, ChapterId, HobbotsEvent, ChannelId } from "@hobbots/domain";
 import { type QueryClient, queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { chapterMoved } from "./camps.ts";
 import { call } from "./client.ts";
@@ -9,13 +9,13 @@ import { readListAgain } from "./records.ts";
 // Camp suggestions (ADR 037, #1385), as the suggestion card in the chat shows them: the open ones the
 // hub offered, once it checked their chapter holds one topic and named the camp (#1557). You keep the chapter in the chat, or move it into a camp, which accepts its suggestion.
 
-const suggestionsKey = (threadId: ThreadId) => ["threads", threadId, "campSuggestions"] as const;
+const suggestionsKey = (channelId: ChannelId) => ["channels", channelId, "campSuggestions"] as const;
 
 /** The chat's open camp suggestions. */
-export const campSuggestionsQuery = (threadId: ThreadId) =>
+export const campSuggestionsQuery = (channelId: ChannelId) =>
   queryOptions({
-    queryKey: suggestionsKey(threadId),
-    queryFn: () => call((c) => c.campSuggestions.campSuggestions({ params: { threadId } })),
+    queryKey: suggestionsKey(channelId),
+    queryFn: () => call((c) => c.campSuggestions.campSuggestions({ params: { channelId } })),
     ...followsEvents,
   });
 
@@ -41,32 +41,32 @@ export const isSuggestionEvent = (event: HobbotsEvent): event is SuggestionEvent
 
 /** A suggestion was raised or settled: the chat's open ones are read again. */
 export const applySuggestionEvent = (queryClient: QueryClient, event: SuggestionEvent): Promise<void> =>
-  readListAgain(queryClient, suggestionsKey(event.threadId));
+  readListAgain(queryClient, suggestionsKey(event.channelId));
 
 /** Leaves out a settled suggestion at once, before its event arrives. */
 const settle = (queryClient: QueryClient, suggestion: CampSuggestion) =>
-  queryClient.setQueryData<ReadonlyArray<CampSuggestion>>(suggestionsKey(suggestion.threadId), (old) =>
+  queryClient.setQueryData<ReadonlyArray<CampSuggestion>>(suggestionsKey(suggestion.channelId), (old) =>
     old?.filter((each) => each.id !== suggestion.id),
   );
 
 /** Keep in chat: the chapter stays, and it is never suggested again. */
-export const useKeepInChat = (threadId: ThreadId) => {
+export const useKeepInChat = (channelId: ChannelId) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (suggestionId: CampSuggestionId) =>
-      call((c) => c.campSuggestions.keepInChat({ params: { threadId, suggestionId } })),
+      call((c) => c.campSuggestions.keepInChat({ params: { channelId, suggestionId } })),
     onSuccess: (kept) => settle(queryClient, kept),
   });
 };
 
-/** Moves a chapter of the thread into a camp, a new one or an open one of the hob's. */
-export const useMoveChapter = (threadId: ThreadId) => {
+/** Moves a chapter of the channel into a camp, a new one or an open one of the hob's. */
+export const useMoveChapter = (channelId: ChannelId) => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ chapterId, into }: { readonly chapterId: ChapterId; readonly into: MoveChapterPayload }) =>
-      call((c) => c.campSuggestions.moveChapter({ params: { threadId, chapterId }, payload: into })),
+      call((c) => c.campSuggestions.moveChapter({ params: { channelId, chapterId }, payload: into })),
     onSuccess: async (moved) => {
-      queryClient.setQueryData(suggestionsKey(threadId), (old: ReadonlyArray<CampSuggestion> | undefined) =>
+      queryClient.setQueryData(suggestionsKey(channelId), (old: ReadonlyArray<CampSuggestion> | undefined) =>
         old?.filter((each) => each.chapterId !== moved.stub.id),
       );
       // The moved chapter, as it now stands in the camp, is the camp's last one.

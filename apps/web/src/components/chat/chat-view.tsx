@@ -7,8 +7,8 @@ import {
   type MessageId,
   RUNTIME_NAMES,
   type RuntimeKind,
-  type Thread,
-  type ThreadId,
+  type Channel,
+  type ChannelId,
 } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
@@ -16,17 +16,17 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { appendDraft, moveDraft, restoreDraft, writeDraft } from "../../api/drafts.ts";
 import { useHobSkills } from "../../api/hob-skills.ts";
-import { useHobPresence, useThreadReplies } from "../../api/hub-status.ts";
+import { useHobPresence, useChannelReplies } from "../../api/hub-status.ts";
 import { useConnection } from "../../api/live.ts";
-import { threadMemorySavesQuery } from "../../api/memory-saves.ts";
+import { channelMemorySavesQuery } from "../../api/memory-saves.ts";
 import { enqueue, followed, takeBack, tryAgain, useOutbox, type WaitingPlace } from "../../api/outbox.ts";
 import {
   agentsQuery,
   archivedAgentsQuery,
   messagesQuery,
   runtimesQuery,
-  threadBrain,
-  threadsQuery,
+  channelBrain,
+  channelsQuery,
   useContinueReply,
   useInterrupt,
   usePauseHob,
@@ -34,12 +34,12 @@ import {
   useSendNow,
   useSendPrompt,
   useSetBrain,
-  useStartThread,
+  useStartChannel,
   useStopWaiting,
 } from "../../api/queries.ts";
 import { runtimeProblem } from "../../api/runtime-health.ts";
-import { useReadThread } from "../../api/thread-reads.ts";
-import { threadWebQuery } from "../../api/web.ts";
+import { useReadChannel } from "../../api/channel-reads.ts";
+import { channelWebQuery } from "../../api/web.ts";
 import { brainSwitches, lastReplyBrain } from "../../lib/brains.ts";
 import { isQuietReply } from "../../lib/quiet-replies.ts";
 import { replyAuthor } from "../../lib/reply-author.ts";
@@ -54,16 +54,16 @@ import { type CatchUpView, useCatchUp } from "../catch-up/use-catch-up.ts";
 import { ChapterTranscript } from "../chapters/chapter-transcript.tsx";
 import { FindBox } from "../find/find-box.tsx";
 import { useHeadsUps } from "../heads-up/heads-up.tsx";
-import { stateLabel, threadState } from "../hob-sprite/hob-sprite.tsx";
+import { stateLabel, channelState } from "../hob-sprite/hob-sprite.tsx";
 import { useNow } from "../inbox/use-now.ts";
 import { replySaves } from "../memory-line/memory-line-model.ts";
 import { MemorySavedLines, MemorySavesUnread } from "../memory-line/memory-saved-line.tsx";
 import { messages } from "../messages.ts";
-import { ThreadTray } from "../needs-tray/thread-tray.tsx";
+import { ChannelTray } from "../needs-tray/channel-tray.tsx";
 import { useNoteToSelf } from "../notes/use-note-to-self.ts";
 import { BrainSwitchNote, useOtherReadyRuntimes } from "../providers/brain-picker.tsx";
 import { PinNotes } from "../quest/pin-notes.tsx";
-import { useWorkMoments } from "../quest/thread-work.tsx";
+import { useWorkMoments } from "../quest/channel-work.tsx";
 import type { Pins } from "../quest/use-work.ts";
 import { ReconnectingCard } from "../shell/reconnecting.tsx";
 import { skillPicking } from "../skill-line/skill-picker-model.ts";
@@ -73,7 +73,7 @@ import { useSteerReceipts } from "../steer-receipt/steer-receipt.tsx";
 import { repliesWeb, replyWebOf } from "../web/web-model.ts";
 import { ChatHeader } from "./chat-header.tsx";
 import { Composer } from "./composer.tsx";
-import { EmptyThread } from "./empty-thread.tsx";
+import { EmptyChannel } from "./empty-channel.tsx";
 import { HobsPaused } from "./hobs-paused.tsx";
 import { type ContinueReply, MessageRow, QueuedRow, useScrollToMessage, WaitingRow } from "./message-row.tsx";
 import { TranscriptSkeleton } from "./transcript-skeleton.tsx";
@@ -107,20 +107,20 @@ const waitingWords = (wait: ReplyWait, now: Date): string => {
 };
 const brainCopy = messages.brain;
 
-/** The middle of the chat workspace. Without a thread id it is the empty "fresh page". */
+/** The middle of the chat workspace. Without a channel id it is the empty "fresh page". */
 // complexity-ignore: predates the limit (STD-ARCH-012). Split it before adding branches.
 export function ChatView({
   hobId,
-  threadId,
+  channelId,
   focusMessageId,
   pins,
   headerEnd,
   inView = true,
 }: {
   hobId: AgentId;
-  threadId?: ThreadId | undefined;
+  channelId?: ChannelId | undefined;
   focusMessageId?: string | undefined;
-  /** The Quests pinned to every thread's header. */
+  /** The Quests pinned to every channel's header. */
   pins: Pins;
   /** What the header ends with, such as the fold button while a quest's Workbench is open. */
   headerEnd?: ReactNode;
@@ -128,39 +128,39 @@ export function ChatView({
   inView?: boolean;
 }) {
   const hob = useQuery({ ...agentsQuery, select: (agents) => agents.find((a) => a.id === hobId) });
-  const thread = useQuery({
-    ...threadsQuery(hobId),
-    select: (threads) => threads.find((t) => t.id === threadId),
+  const channel = useQuery({
+    ...channelsQuery(hobId),
+    select: (channels) => channels.find((t) => t.id === channelId),
   });
-  const threadCount = useQuery({ ...threadsQuery(hobId), select: (threads) => threads.length });
+  const channelCount = useQuery({ ...channelsQuery(hobId), select: (channels) => channels.length });
   // The hob's skills, which `/` in the composer picks one of (ADR 029).
   const skills = useHobSkills(hobId, hob.data?.configVersion);
-  const messages = useQuery({ ...messagesQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== undefined });
-  const replies = useThreadReplies();
+  const messages = useQuery({ ...messagesQuery(channelId ?? ("" as ChannelId)), enabled: channelId !== undefined });
+  const replies = useChannelReplies();
   const presence = useHobPresence();
   const navigate = useNavigate();
   // Messages sent while the hub is out of reach wait in the outbox, which sends them when it is back.
-  const place: WaitingPlace = threadId ?? `new-${hobId}`;
+  const place: WaitingPlace = channelId ?? `new-${hobId}`;
   const outbox = useOutbox(place);
   const waiting = outbox.messages;
   const connection = useConnection();
-  // The problem of the runtime this thread thinks with, not only Claude Code's.
-  const runtime = hob.data ? threadBrain(hob.data, thread.data).runtime : "claude-code";
+  // The problem of the runtime this channel thinks with, not only Claude Code's.
+  const runtime = hob.data ? channelBrain(hob.data, channel.data).runtime : "claude-code";
   const brain = useQuery({
     ...runtimesQuery,
     select: (runtimes) => runtimeProblem(runtimes.find((health) => health.runtime === runtime)),
   });
   const bottom = useRef<HTMLDivElement>(null);
 
-  const send = useSendPrompt(threadId ?? ("" as ThreadId));
-  const start = useStartThread(hobId);
-  const interrupt = useInterrupt(threadId ?? ("" as ThreadId));
-  const stopWaiting = useStopWaiting(threadId ?? ("" as ThreadId));
+  const send = useSendPrompt(channelId ?? ("" as ChannelId));
+  const start = useStartChannel(hobId);
+  const interrupt = useInterrupt(channelId ?? ("" as ChannelId));
+  const stopWaiting = useStopWaiting(channelId ?? ("" as ChannelId));
   const pause = usePauseHob(hobId);
-  const remove = useRemoveQueued(threadId ?? ("" as ThreadId));
-  const sendNow = useSendNow(threadId ?? ("" as ThreadId));
-  const resume = useContinueReply(threadId ?? ("" as ThreadId));
-  const continueOn = useContinueOn(hobId, threadId ?? ("" as ThreadId), runtime, resume);
+  const remove = useRemoveQueued(channelId ?? ("" as ChannelId));
+  const sendNow = useSendNow(channelId ?? ("" as ChannelId));
+  const resume = useContinueReply(channelId ?? ("" as ChannelId));
+  const continueOn = useContinueOn(hobId, channelId ?? ("" as ChannelId), runtime, resume);
 
   const reply = messages.data?.find((m) => isInProgress(m.status));
   // Stopping lasts from the hub recording the request until the runtime confirms the turn ended.
@@ -181,14 +181,14 @@ export function ChatView({
   const queued = messages.data?.filter((m) => m.status === "queued") ?? [];
   const lastContent = messages.data?.at(-1)?.content;
   // What changed while you were away is read before the chat marks itself read (ADR 037).
-  const catchUp = useCatchUp(thread.data, inView);
+  const catchUp = useCatchUp(channel.data, inView);
   // Reading the chat clears its unread dot on every device, while it is in view (ADR 027).
-  useReadThread(thread.data, transcript, inView && !catchUp.reading);
+  useReadChannel(channel.data, transcript, inView && !catchUp.reading);
   // Notes to self go from the composer too, and wake no hob (ADR 037).
-  const note = useNoteToSelf(threadId, place);
+  const note = useNoteToSelf(channelId, place);
   // Up brings back the last message that went out; a queued one is still there to remove or edit.
   const lastSent = transcript?.findLast((m) => m.role === "user")?.content;
-  // Only the thread's latest reply can be continued, and only while nothing else runs; a note after
+  // Only the channel's latest reply can be continued, and only while nothing else runs; a note after
   // it changes nothing.
   const latest = transcript?.findLast((m) => m.role !== "note");
   // The hob that wrote it continues it, so its own status decides (ADR 039).
@@ -206,10 +206,10 @@ export function ChatView({
   // Each pick of a search result counts, so picking the same one again opens and scrolls to it again.
   const [picks, setPicks] = useState(0);
   const focusKey = focusMessageId === undefined ? undefined : `${focusMessageId}#${picks}`;
-  // The search box under the header, opened from its magnifier, belongs to the thread it opened in.
+  // The search box under the header, opened from its magnifier, belongs to the channel it opened in.
   const [findingIn, setFindingIn] = useState<string>();
-  const finding = threadId !== undefined && findingIn === threadId;
-  const setFinding = (open: boolean) => setFindingIn(open ? threadId : undefined);
+  const finding = channelId !== undefined && findingIn === channelId;
+  const setFinding = (open: boolean) => setFindingIn(open ? channelId : undefined);
   const holding = focusKey !== undefined && released !== focusKey;
   const follow = () => setReleased(focusKey);
 
@@ -219,14 +219,14 @@ export function ChatView({
 
   useScrollToMessage(messages.data, focusMessageId, picks);
 
-  // When a waiting message starts this page's thread, the page follows it there with its draft.
+  // When a waiting message starts this page's channel, the page follows it there with its draft.
   useEffect(() => {
-    const started = outbox.startedThread;
+    const started = outbox.startedChannel;
     if (started === undefined) return;
     followed(place);
     moveDraft(place, started);
-    void navigate({ to: "/hobs/$hobId/threads/$threadId", params: { hobId, threadId: started } });
-  }, [outbox.startedThread, place, hobId, navigate]);
+    void navigate({ to: "/hobs/$hobId/channels/$channelId", params: { hobId, channelId: started } });
+  }, [outbox.startedChannel, place, hobId, navigate]);
   // A send answered after the user left this page must not pull them back to it.
   const shown = useRef(true);
   useEffect(() => {
@@ -239,22 +239,22 @@ export function ChatView({
   const current = hob.data;
   if (!current) return <main className="flex-1" />;
 
-  const state = threadState(presence[hobId], threadId ? replies[threadId] : undefined, current.status);
+  const state = channelState(presence[hobId], channelId ? replies[channelId] : undefined, current.status);
   const paused = current.status === "paused";
   // The composer names a camp; the hob's chat, and the empty chat before it, is just the hob's.
   const placeholder =
-    thread.data?.kind === "camp"
-      ? copy.placeholder({ name: current.name, title: thread.data.title })
+    channel.data?.kind === "camp"
+      ? copy.placeholder({ name: current.name, title: channel.data.title })
       : campCopy.header.placeholder({ name: current.name });
   // The draft clears as it is sent, so the next message can be typed at once. A refused send puts
-  // its text back, even when the user has moved to another thread meanwhile.
+  // its text back, even when the user has moved to another channel meanwhile.
   const deliver = (content: string) => {
-    const sent = threadId
+    const sent = channelId
       ? send.mutateAsync(content)
-      : start.mutateAsync(content).then(({ thread: created }) => {
+      : start.mutateAsync(content).then(({ channel: created }) => {
           if (!shown.current) return;
           moveDraft(place, created.id);
-          void navigate({ to: "/hobs/$hobId/threads/$threadId", params: { hobId, threadId: created.id } });
+          void navigate({ to: "/hobs/$hobId/channels/$channelId", params: { hobId, channelId: created.id } });
         });
     sent.catch(() => restoreDraft(place, content));
   };
@@ -279,9 +279,9 @@ export function ChatView({
         start.reset();
       },
     });
-  // A hob with no threads yet has just arrived, so its first page says hello.
-  const newHob = threadId === undefined && threadCount.data === 0;
-  const empty = threadId === undefined || messages.data?.length === 0;
+  // A hob with no channels yet has just arrived, so its first page says hello.
+  const newHob = channelId === undefined && channelCount.data === 0;
+  const empty = channelId === undefined || messages.data?.length === 0;
 
   return (
     <main
@@ -292,8 +292,8 @@ export function ChatView({
       <ChatHeader
         hob={current}
         hobId={hobId}
-        threadId={threadId}
-        thread={thread.data}
+        channelId={channelId}
+        channel={channel.data}
         state={state}
         doing={wait === null ? stateLabel[state] : waitingWords(wait, now)}
         pins={pins}
@@ -302,15 +302,15 @@ export function ChatView({
         headerEnd={headerEnd}
       />
       <ReconnectingCard className="mx-6 mt-2.5" />
-      {thread.data && finding && (
+      {channel.data && finding && (
         <FindBox
           hob={current}
-          thread={thread.data}
+          channel={channel.data}
           onClose={() => setFinding(false)}
           onPick={() => setPicks((count) => count + 1)}
         />
       )}
-      {threadId && <PinNotes threadId={threadId} pins={pins} />}
+      {channelId && <PinNotes channelId={channelId} pins={pins} />}
 
       <section
         onScroll={(event) => {
@@ -327,24 +327,24 @@ export function ChatView({
         {/* The transcript, the tray and the composer share one centered column (A2-01). Long words
             and paths wrap inside it, so nothing in it is wider than the column (#874). */}
         <div className="mx-auto flex w-full max-w-measure flex-1 flex-col gap-3.5 wrap-anywhere">
-          {threadId && messages.isPending && <TranscriptSkeleton onRetry={() => void messages.refetch()} />}
+          {channelId && messages.isPending && <TranscriptSkeleton onRetry={() => void messages.refetch()} />}
           {empty && !messages.isLoading && (
-            <EmptyThread hob={current} newHob={newHob} onIdea={(idea) => writeDraft(place, idea)} />
+            <EmptyChannel hob={current} newHob={newHob} onIdea={(idea) => writeDraft(place, idea)} />
           )}
           {transcript && (
             <Transcript
               transcript={transcript}
               hob={current}
-              threadId={threadId}
-              thread={thread.data}
+              channelId={channelId}
+              channel={channel.data}
               focusMessageId={focusMessageId}
               focusPick={picks}
               streaming={streaming}
               catchUp={catchUp}
               onJump={(messageId) =>
                 void navigate({
-                  to: "/hobs/$hobId/threads/$threadId",
-                  params: { hobId, threadId: threadId ?? "" },
+                  to: "/hobs/$hobId/channels/$channelId",
+                  params: { hobId, channelId: channelId ?? "" },
                   search: { message: messageId },
                 })
               }
@@ -431,9 +431,9 @@ export function ChatView({
             </section>
           )}
           <WorkHeldNotice />
-          <TrialNotice thread={thread.data} />
+          <TrialNotice channel={channel.data} />
           {/* What waits on you in this chat or camp, or everywhere, shows in the tray above the composer. */}
-          {thread.data && <ThreadTray key={thread.data.id} thread={thread.data} />}
+          {channel.data && <ChannelTray key={channel.data.id} channel={channel.data} />}
           {queued.length > 0 && (
             <div className="flex max-h-32 flex-col gap-1 overflow-y-auto">
               {queued.map((message) => (
@@ -460,11 +460,11 @@ export function ChatView({
             onSend={sendDraft}
             onStop={() => interrupt.mutate()}
             onStopWaiting={() => stopWaiting.mutate()}
-            skills={skillPicking(skills, current.name, thread.data?.skillTrial)}
+            skills={skillPicking(skills, current.name, channel.data?.skillTrial)}
             note={note}
             paused={
               paused
-                ? { name: current.name, waking: pause.isPending, onWake: wake, canQueue: threadId !== undefined }
+                ? { name: current.name, waking: pause.isPending, onWake: wake, canQueue: channelId !== undefined }
                 : undefined
             }
           />
@@ -475,14 +475,14 @@ export function ChatView({
 }
 
 /**
- * The thread's messages, with a note where a reply's brain differs from the one before it, and at the
+ * The channel's messages, with a note where a reply's brain differs from the one before it, and at the
  * end when the next reply will think with another brain than the last one (ADR 017).
  */
 function Transcript({
   transcript,
   hob,
-  threadId,
-  thread,
+  channelId,
+  channel,
   focusMessageId,
   focusPick,
   streaming,
@@ -492,8 +492,8 @@ function Transcript({
 }: {
   transcript: ReadonlyArray<Message>;
   hob: Agent;
-  threadId: ThreadId | undefined;
-  thread: Thread | undefined;
+  channelId: ChannelId | undefined;
+  channel: Channel | undefined;
   focusMessageId: string | undefined;
   /** How many times a search result was picked here, so each pick opens its chapter again. */
   focusPick: number;
@@ -505,18 +505,18 @@ function Transcript({
 }) {
   const switches = brainSwitches(transcript);
   const last = lastReplyBrain(transcript);
-  const next = threadBrain(hob, thread);
+  const next = channelBrain(hob, channel);
   const changes = !streaming && last !== null && (last.runtime !== next.runtime || last.model !== next.model);
   // Tasks and Quests show under the request that started them, with only the moments that matter.
-  const work = useWorkMoments(hob.id, threadId, transcript);
+  const work = useWorkMoments(hob.id, channelId, transcript);
   // Where two quests' Tasks claim the same files or branch, at the time the hub found it (ADR 037).
-  const headsUps = useHeadsUps(threadId, transcript);
+  const headsUps = useHeadsUps(channelId, transcript);
   // Under a message you sent while work ran, where it went next (ADR 027).
-  const receipts = useSteerReceipts(hob.id, threadId, transcript);
+  const receipts = useSteerReceipts(hob.id, channelId, transcript);
   // Under a reply, what it saved to the hob's memory (ADR 028).
-  const saves = useQuery({ ...threadMemorySavesQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== undefined });
+  const saves = useQuery({ ...channelMemorySavesQuery(channelId ?? ("" as ChannelId)), enabled: channelId !== undefined });
   // A reply's searches and pages, as step lines and sources (ADR 036).
-  const webUsage = useQuery({ ...threadWebQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== undefined });
+  const webUsage = useQuery({ ...channelWebQuery(channelId ?? ("" as ChannelId)), enabled: channelId !== undefined });
   const web = repliesWeb(webUsage.data, transcript);
   // The message before each, which tells a quiet reply; chapters lay the transcript out in pieces.
   const previous = new Map(transcript.map((message, index) => [message.id, transcript[index - 1]]));
@@ -550,7 +550,7 @@ function Transcript({
               </>
             }
           >
-            <ReplyApprovals threadId={message.threadId} messageId={message.id} hob={author} />
+            <ReplyApprovals channelId={message.channelId} messageId={message.id} hob={author} />
           </MessageRow>
         )}
         {receipts.of(message)}
@@ -563,13 +563,13 @@ function Transcript({
     <>
       {work.before}
       {headsUps.before}
-      {/* Divided by its chapters once the thread exists (ADR 037); the empty chat has none yet. */}
-      {thread === undefined ? (
+      {/* Divided by its chapters once the channel exists (ADR 037); the empty chat has none yet. */}
+      {channel === undefined ? (
         transcript.map((message) => <Fragment key={message.id}>{row(message, undefined)}</Fragment>)
       ) : (
         <ChapterTranscript
           hob={hob}
-          thread={thread}
+          channel={channel}
           transcript={transcript}
           focusMessageId={focusMessageId}
           focusPick={focusPick}
@@ -577,7 +577,7 @@ function Transcript({
         />
       )}
       {/* Hobs that kept answering each other wait for a person after the relay budget (ADR 039). */}
-      <HobsPaused thread={thread} hobs={hobs} />
+      <HobsPaused channel={channel} hobs={hobs} />
       {caughtAt === null && catchUpAt}
       {headsUps.failed}
       {saves.isError && saves.data === undefined && (
@@ -589,17 +589,17 @@ function Transcript({
 }
 
 /**
- * Continue on another brain: each other runtime that is ready offers it next to Continue. The thread
+ * Continue on another brain: each other runtime that is ready offers it next to Continue. The channel
  * switches to that runtime's default model first, then the reply continues in place.
  */
 function useContinueOn(
   hobId: AgentId,
-  threadId: ThreadId,
+  channelId: ChannelId,
   runtime: RuntimeKind,
   resume: ReturnType<typeof useContinueReply>,
 ) {
   const others = useOtherReadyRuntimes(runtime);
-  const setBrain = useSetBrain(hobId, threadId);
+  const setBrain = useSetBrain(hobId, channelId);
   return {
     isPending: setBrain.isPending,
     isError: setBrain.isError,

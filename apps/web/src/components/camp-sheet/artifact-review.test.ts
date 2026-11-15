@@ -1,4 +1,4 @@
-import { Artifact, ChapterId, RegisteredArtifactId, ThreadId } from "@hobbots/domain";
+import { Artifact, ChapterId, RegisteredArtifactId, ChannelId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { reviewLine } from "./artifact-review.tsx";
 
@@ -8,7 +8,7 @@ const at = new Date(Date.now() - 60_000).toISOString();
 const artifact = (review: Partial<Pick<Artifact, "review" | "reviewedAt" | "reviewedBy">>) =>
   new Artifact({
     id: RegisteredArtifactId.make("a1"),
-    threadId: ThreadId.make("camp-1"),
+    channelId: ChannelId.make("camp-1"),
     chapterId: ChapterId.make("c1"),
     kind: "pr",
     title: "Launch page",

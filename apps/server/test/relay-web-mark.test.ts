@@ -3,14 +3,14 @@ import {
   ChatService,
   HobbotsRepository,
   type PromptRequest,
-  ThreadMemberRepository,
+  ChannelMemberRepository,
   WEB_MARK_NOTE,
 } from "@hobbots/agents";
-import { ChapterId, hobActor, OWNER_ACTOR, Thread } from "@hobbots/domain";
+import { ChapterId, hobActor, OWNER_ACTOR, Channel } from "@hobbots/domain";
 import { waitUntil } from "@hobbots/domain/testing";
 import { Effect, Option } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
-import { FRODO, messagesWhen, PIP, partyHub, send, threadId } from "./party-hub.ts";
+import { FRODO, messagesWhen, PIP, partyHub, send, channelId } from "./party-hub.ts";
 
 // Issue #1463 (ADR 039, Hobs talking to hobs; ADR 036, The read-the-web mark): a hob whose session
 // read the web writes what a page said into its reply, and a reply that mentions another hob wakes
@@ -26,18 +26,18 @@ afterEach(async () => {
 
 const of = (hobId: string) => (request: PromptRequest) => request.tools?.runtimeFolder.endsWith(`/${hobId}`) === true;
 
-/** Frodo's thread made a camp Pip is a member of. */
+/** Frodo's channel made a camp Pip is a member of. */
 const camp = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
-  const thread = Option.getOrThrow(yield* repo.findThread(threadId));
-  yield* repo.upsertThread(new Thread({ ...thread, kind: "camp" }));
-  yield* ThreadMemberRepository.use((members) => members.add(threadId, hobActor(PIP), OWNER_ACTOR));
+  const channel = Option.getOrThrow(yield* repo.findChannel(channelId));
+  yield* repo.upsertChannel(new Channel({ ...channel, kind: "camp" }));
+  yield* ChannelMemberRepository.use((members) => members.add(channelId, hobActor(PIP), OWNER_ACTOR));
 });
 
 /** The camp once every reply has ended and no hob owes one, but those the relay budget paused. */
 const quiet = waitUntil(
   HobbotsRepository.use((repo) =>
-    Effect.all([repo.listMessages(threadId), repo.openTurnRequests({ threadId, rootMessageId: null })]),
+    Effect.all([repo.listMessages(channelId), repo.openTurnRequests({ channelId, rootMessageId: null })]),
   ),
   ([all, owed]) =>
     owed.every((request) => request.state === "paused") &&
@@ -73,7 +73,7 @@ describe("a relay from a hob that read the web", () => {
     const sessions = await run(
       waitUntil(
         HobbotsRepository.use((repo) =>
-          Effect.map(repo.findThread(threadId), (thread) => Option.getOrThrow(thread).sessions),
+          Effect.map(repo.findChannel(channelId), (channel) => Option.getOrThrow(channel).sessions),
         ),
         (all) => all.some((session) => session.agentId === FRODO),
         { what: "Frodo's session" },
@@ -113,16 +113,16 @@ describe("a relay from a hob that read the web", () => {
     // that goes on there still starts marked: the reply it answers carries the mark of Pip's session.
     await run(
       ChapterService.use((chapters) =>
-        chapters.startChapter(threadId, { id: ChapterId.make("chapter-2"), title: "Supper" }),
+        chapters.startChapter(channelId, { id: ChapterId.make("chapter-2"), title: "Supper" }),
       ),
     );
-    await run(ChatService.use((chat) => chat.letHobsGoOn(threadId)));
+    await run(ChatService.use((chat) => chat.letHobsGoOn(channelId)));
     const later = await run(frodosTurns(requests, asked + 1));
     expect(later[asked]?.briefing ?? "").toContain(WEB_MARK_NOTE);
     const sessions = await run(
       waitUntil(
         HobbotsRepository.use((repo) =>
-          Effect.map(repo.findThread(threadId), (thread) => Option.getOrThrow(thread).sessions),
+          Effect.map(repo.findChannel(channelId), (channel) => Option.getOrThrow(channel).sessions),
         ),
         (all) => all.some((session) => session.agentId === FRODO && session.chapterId === "chapter-2"),
         { what: "Frodo's session in the new chapter" },

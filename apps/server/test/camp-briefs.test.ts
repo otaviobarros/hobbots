@@ -33,7 +33,7 @@ import {
   type RuntimeKind,
   roleFields,
   TaskId,
-  type ThreadId,
+  type ChannelId,
 } from "@hobbots/domain";
 import { HubBrainDecider, MemoryModelEndpoint } from "@hobbots/memory";
 import {
@@ -150,13 +150,13 @@ const start = async <R extends HubDecider>(runtime: RuntimeKind, decider: Layer.
           createdAt: NOW,
         }),
       );
-      return (yield* (yield* ChatService).createThread(WREN)).id;
+      return (yield* (yield* ChatService).createChannel(WREN)).id;
     }),
   );
 };
 
 /** Sends `content` and waits for the turn to end. */
-const say = async (id: ThreadId, content: string): Promise<Message> => {
+const say = async (id: ChannelId, content: string): Promise<Message> => {
   await run(ChatService.use((chat) => chat.sendPrompt(id, content)));
   return vi.waitFor(async () => {
     const all = await run(HobbotsRepository.use((repo) => repo.listMessages(id)));
@@ -165,10 +165,10 @@ const say = async (id: ThreadId, content: string): Promise<Message> => {
   });
 };
 
-const startChapter = (id: ThreadId, chapter: string, title: string) =>
+const startChapter = (id: ChannelId, chapter: string, title: string) =>
   run(ChapterService.use((chapters) => chapters.startChapter(id, { id: ChapterId.make(chapter), title })));
 
-const decide = (id: ThreadId, key: string, text: string) =>
+const decide = (id: ChannelId, key: string, text: string) =>
   run(asOwner(Records.use((records) => records.recordYours(id, { key, text, replaces: null }))));
 
 /** A reply's step wrote `path`, which the artifacts registry keeps. */
@@ -194,7 +194,7 @@ const wrote = (reply: Message, path: string) =>
   );
 
 const projectOnce = () => run(CampBriefs.use((projector) => projector.runOnce));
-const briefOf = (id: ThreadId) => run(BriefLog.use((log) => log.briefOf(id))).then(Option.getOrNull);
+const briefOf = (id: ChannelId) => run(BriefLog.use((log) => log.briefOf(id))).then(Option.getOrNull);
 const briefEntries = () =>
   run(
     EventJournal.use((journal) => journal.readAfter(0, 10_000)).pipe(
@@ -315,7 +315,7 @@ describe("the camp brief projector", () => {
             id: TaskId.make("emails"),
             ownerId: WREN,
             parentId: null,
-            threadId: id,
+            channelId: id,
             brief: "Write the launch emails",
             dependsOn: [],
             createdAt: NOW,
@@ -357,7 +357,7 @@ describe("the camp brief projector", () => {
 
   // covers ADR 037 (Records, Quests in camps)
   it.each<"failed" | "cancelled">(["failed", "cancelled"])(
-    "a step with no Quest of its own that ended %s writes its thread's brief again (#1384)",
+    "a step with no Quest of its own that ended %s writes its channel's brief again (#1384)",
     async (end) => {
       let said = "Drafting the emails.";
       const id = await start(
@@ -371,7 +371,7 @@ describe("the camp brief projector", () => {
             id: TaskId.make(taskId),
             ownerId: WREN,
             parentId: parentId === null ? null : TaskId.make(parentId),
-            threadId: id,
+            channelId: id,
             brief: taskId,
             dependsOn: [],
             createdAt: NOW,
@@ -414,11 +414,11 @@ describe("the camp brief projector", () => {
   });
 
   // covers ADR 037 (Records), ADR 028
-  it("a private camp's brief stays in that camp: memory capture takes nothing of it, and another thread's pack never reads it (#1384)", async () => {
+  it("a private camp's brief stays in that camp: memory capture takes nothing of it, and another channel's pack never reads it (#1384)", async () => {
     const chat = await start("claude-code", NoAi);
     const camp = await run(
       ChatService.use((service) =>
-        service.makeCamp(WREN, { key: "secret" as ThreadId, title: "Surprise party", goal: null, private: true }),
+        service.makeCamp(WREN, { key: "secret" as ChannelId, title: "Surprise party", goal: null, private: true }),
       ),
     );
     await say(camp.id, "Plan a surprise party for Ana.");
@@ -427,7 +427,7 @@ describe("the camp brief projector", () => {
     await projectOnce();
 
     const [written] = await briefEntries();
-    expect(written?.payload).toMatchObject({ _tag: "BriefWritten", brief: { threadId: camp.id } });
+    expect(written?.payload).toMatchObject({ _tag: "BriefWritten", brief: { channelId: camp.id } });
     expect(capturedEntryOf(written as NonNullable<typeof written>, makeRedactor())).toBeNull();
 
     await say(camp.id, "Candles?");

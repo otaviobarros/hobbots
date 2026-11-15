@@ -78,10 +78,10 @@ export function BlockerChoices({
             {copy.retry}
           </Button>
         )}
-        {reassign && item.threadId !== null && (
+        {reassign && item.channelId !== null && (
           <BlockerReassign
             item={item}
-            threadId={item.threadId}
+            channelId={item.channelId}
             owner={hob.name}
             disabled={decide.isPending}
             onSent={(sent, to) => follow(sent, copy.decided.reassign({ name: to.name }))}

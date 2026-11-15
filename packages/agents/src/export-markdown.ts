@@ -5,7 +5,7 @@ import type {
   ExportedAttempt,
   ExportedMessage,
   ExportedTask,
-  ExportedThread,
+  ExportedChannel,
   ExportedTree,
   HobbotsExport,
 } from "@hobbots/domain";
@@ -52,16 +52,16 @@ const messageBlock = (message: ExportedMessage, names: ExportNames): string => {
   return lines.join("\n");
 };
 
-/** One thread: who wrote each message and when, the replies, and each tool step as one line with its outcome. */
-export const threadMarkdown = (thread: ExportedThread, names: ExportNames): string => {
+/** One channel: who wrote each message and when, the replies, and each tool step as one line with its outcome. */
+export const channelMarkdown = (channel: ExportedChannel, names: ExportNames): string => {
   const about = [
-    // standards-allow STD-ARCH-021: an export names whose thread it is
-    nameOf(names, thread.agentId),
-    `started ${when(thread.createdAt)}`,
-    ...(thread.archivedAt === null ? [] : [`archived ${when(thread.archivedAt)}`]),
+    // standards-allow STD-ARCH-021: an export names whose channel it is
+    nameOf(names, channel.agentId),
+    `started ${when(channel.createdAt)}`,
+    ...(channel.archivedAt === null ? [] : [`archived ${when(channel.archivedAt)}`]),
   ].join(" · ");
-  const body = thread.messages.length === 0 ? ["_No messages._"] : thread.messages.map((m) => messageBlock(m, names));
-  return [`# ${thread.title}`, "", about, "", "---", "", body.join("\n\n---\n\n"), ""].join("\n");
+  const body = channel.messages.length === 0 ? ["_No messages._"] : channel.messages.map((m) => messageBlock(m, names));
+  return [`# ${channel.title}`, "", about, "", "---", "", body.join("\n\n---\n\n"), ""].join("\n");
 };
 
 const NOT_COPIED: Record<ArtifactNotCopied, string> = {
@@ -179,12 +179,12 @@ export const treeMarkdown = (tree: ExportedTree, names: ExportNames): string => 
 /** What an export holds, in a sentence. */
 const whatOf = (data: HobbotsExport, names: ExportNames): string => {
   switch (data.scope._tag) {
-    case "Thread":
-      return `The thread “${data.threads[0]?.title ?? ""}”`;
+    case "Channel":
+      return `The channel “${data.channels[0]?.title ?? ""}”`;
     case "Hob":
-      return `${nameOf(names, data.scope.agentId)}'s threads, the Quests it led and the Tasks it worked on`;
+      return `${nameOf(names, data.scope.agentId)}'s channels, the Quests it led and the Tasks it worked on`;
     default:
-      return "Every hob's threads, Quests and Tasks";
+      return "Every hob's channels, Quests and Tasks";
   }
 };
 
@@ -209,7 +209,7 @@ export const readmeMarkdown = (data: HobbotsExport, names: ExportNames, files: n
     "",
     `${whatOf(data, names)}, exported ${when(data.exportedAt)} by Hobbots ${data.hobbotsVersion}.`,
     "",
-    `- \`threads/\`: ${data.threads.length} threads, one Markdown file each.`,
+    `- \`channels/\`: ${data.channels.length} channels, one Markdown file each.`,
     `- \`quests/\`: ${data.quests.length} Quests and Tasks, one Markdown file for each Task you asked for.`,
     `- \`files/\`: ${files} files the Tasks made, copied from the hobs' folders.`,
     ...memoryLines(data),

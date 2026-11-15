@@ -1,5 +1,5 @@
 import { HobbotsRepository, MemoryCapture, MemoryStore } from "@hobbots/agents";
-import { type AgentId, type MemoryCaptureItem, type TaskTree, Thread } from "@hobbots/domain";
+import { type AgentId, type MemoryCaptureItem, type TaskTree, Channel } from "@hobbots/domain";
 import { makeMemoryStoreFake } from "@hobbots/memory/testing";
 import { MemoryCaptureLive } from "@hobbots/persistence";
 import { Effect, Layer, Option } from "effect";
@@ -15,7 +15,7 @@ import {
   partyHub,
   QUILL,
   send,
-  threadId,
+  channelId,
   treeWhen,
 } from "./party-hub.ts";
 
@@ -51,7 +51,7 @@ const captureOver = (party: ReturnType<typeof partyHub>, memory: ReturnType<type
 
 describe("memory capture of a party's work", () => {
   // covers ADR 028 (Capture and summaries), #1028
-  it("the answer that wakes a member reaches its memory, and its result reaches its lead's thread (#1028)", async () => {
+  it("the answer that wakes a member reaches its memory, and its result reaches its lead's channel (#1028)", async () => {
     const memory = makeMemoryStoreFake();
     const party = partyHub({ memory: memory.store, activity: true });
     dispose = party.dispose;
@@ -89,8 +89,8 @@ describe("memory capture of a party's work", () => {
     );
     expect(quill.some((item) => item.text.includes("Answer it with answer"))).toBe(false);
 
-    // Frodo's thread has Quill's result, which woke him, and Quill's answer stays in Quill's memory.
-    const frodo = memory.controls.captured({ _tag: "Hob", agentId: FRODO }, threadId);
+    // Frodo's channel has Quill's result, which woke him, and Quill's answer stays in Quill's memory.
+    const frodo = memory.controls.captured({ _tag: "Hob", agentId: FRODO }, channelId);
     expect(frodo.some((item) => item.kind === "message" && item.text.includes("Playful copy drafted"))).toBe(true);
     expect(frodo.some((item) => item.text.startsWith("Answer:"))).toBe(false);
   }, 30_000);
@@ -146,14 +146,14 @@ describe("memory capture of a party's work", () => {
     expect(kinds(nettle)).toContain("tool");
     expect(memory.controls.captured({ _tag: "Hob", agentId: PIP }, nettles)).toEqual([]);
 
-    // Frodo's memory has his thread, and none of his members' work.
-    expect(memory.controls.captured({ _tag: "Hob", agentId: FRODO }, threadId).length).toBeGreaterThan(0);
+    // Frodo's memory has his channel, and none of his members' work.
+    expect(memory.controls.captured({ _tag: "Hob", agentId: FRODO }, channelId).length).toBeGreaterThan(0);
     for (const attempt of [pips, nettles]) {
       expect(memory.controls.captured({ _tag: "Hob", agentId: FRODO }, attempt)).toEqual([]);
     }
   }, 30_000);
 
-  // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
+  // covers ADR 037 (A camp is a channel with a kind), ADR 028 (Capture and summaries)
   it("nothing of a private camp reaches memory, its Quest's members' work included (#1377)", async () => {
     const memory = makeMemoryStoreFake();
     const party = partyHub({ memory: memory.store, activity: true });
@@ -162,8 +162,8 @@ describe("memory capture of a party's work", () => {
     expect(await captureRound()).toBe(true);
     await party.run(
       HobbotsRepository.use((repo) =>
-        Effect.flatMap(repo.findThread(threadId), (thread) =>
-          repo.upsertThread(new Thread({ ...Option.getOrThrow(thread), kind: "camp", private: true })),
+        Effect.flatMap(repo.findChannel(channelId), (channel) =>
+          repo.upsertChannel(new Channel({ ...Option.getOrThrow(channel), kind: "camp", private: true })),
         ),
       ),
     );
@@ -187,7 +187,7 @@ describe("memory capture of a party's work", () => {
     );
     expect(await captureRound()).toBe(true);
 
-    expect(memory.controls.captured({ _tag: "Hob", agentId: FRODO }, threadId)).toEqual([]);
+    expect(memory.controls.captured({ _tag: "Hob", agentId: FRODO }, channelId)).toEqual([]);
     expect(memory.controls.captured({ _tag: "Hob", agentId: QUILL }, attemptOf(tree, QUILL))).toEqual([]);
   }, 30_000);
 });

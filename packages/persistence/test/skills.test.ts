@@ -9,8 +9,8 @@ import {
   SkillRevisionHash,
   SkillUse,
   SkillUseId,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { describe, expect, it } from "vitest";
@@ -329,7 +329,7 @@ describe("skills library", () => {
             number: 1,
             explicit: true,
             agentId: pip,
-            threadId: null,
+            channelId: null,
             messageId: null,
             at: "2026-11-07T10:00:00.000Z",
             set: SkillName.make("agent-engineering"),
@@ -343,13 +343,13 @@ describe("skills library", () => {
     ));
 
   // covers ADR 029 (The use line), #1096
-  it("records each use with its hob, thread and reply, journals it, and reads a skill's or a hob's (#1096)", () =>
+  it("records each use with its hob, channel and reply, journals it, and reads a skill's or a hob's (#1096)", () =>
     run(
       Effect.gen(function* () {
         yield* seed;
         const library = yield* SkillLibrary;
         const skill = (yield* library.addRevision(null, input(H1))).value.skill;
-        const use = (at: string, threadId: string | null, source: "library" | "organization" = "library") =>
+        const use = (at: string, channelId: string | null, source: "library" | "organization" = "library") =>
           new SkillUse({
             id: SkillUseId.make(`use-${at}`),
             source,
@@ -357,15 +357,15 @@ describe("skills library", () => {
             name: source === "library" ? "release" : "security",
             pin: source === "library" ? H1 : null,
             number: source === "library" ? 1 : null,
-            explicit: threadId !== null,
+            explicit: channelId !== null,
             agentId: pip,
-            threadId: threadId === null ? null : ThreadId.make(threadId),
-            messageId: threadId === null ? null : MessageId.make(`reply-${at}`),
+            channelId: channelId === null ? null : ChannelId.make(channelId),
+            messageId: channelId === null ? null : MessageId.make(`reply-${at}`),
             at,
           });
         const first = yield* library.recordUse(use("2026-11-06T10:00:00.000Z", "t1"));
         expect(first.entries[0]).toMatchObject({
-          correlation: { agentId: pip, threadId: "t1", messageId: "reply-2026-11-06T10:00:00.000Z" },
+          correlation: { agentId: pip, channelId: "t1", messageId: "reply-2026-11-06T10:00:00.000Z" },
           payload: { _tag: "SkillUsed", use: { name: "release", pin: H1, number: 1, explicit: true } },
         });
         yield* library.recordUse(use("2026-11-06T11:00:00.000Z", null));
@@ -389,8 +389,8 @@ describe("skills library", () => {
         const library = yield* SkillLibrary;
         const skill = (yield* library.addRevision(null, input(H1))).value.skill;
         const at = "2026-11-06T10:00:00.000Z";
-        const threadId = ThreadId.make("t1");
-        yield* repo.upsertThread(new Thread({ id: threadId, agentId: pip, title: "t", createdAt: at, updatedAt: at }));
+        const channelId = ChannelId.make("t1");
+        yield* repo.upsertChannel(new Channel({ id: channelId, agentId: pip, title: "t", createdAt: at, updatedAt: at }));
         const used = {
           source: "library",
           skillId: skill.id,
@@ -401,7 +401,7 @@ describe("skills library", () => {
         } as const;
         const reply = new Message({
           id: MessageId.make("reply"),
-          threadId,
+          channelId,
           role: "assistant",
           content: "",
           status: "streaming",
@@ -414,7 +414,7 @@ describe("skills library", () => {
           id: SkillUseId.make("use-1"),
           ...used,
           agentId: pip,
-          threadId,
+          channelId,
           messageId: reply.id,
           at,
         });
@@ -425,7 +425,7 @@ describe("skills library", () => {
         // The same use again fails its insert, and the reply's new text is not saved either.
         const again = yield* Effect.exit(repo.upsertMessage(new Message({ ...saved.value, content: "Later" }), [use]));
         expect(again._tag).toBe("Failure");
-        expect((yield* repo.listMessages(threadId)).map((one) => one.content)).toEqual([""]);
+        expect((yield* repo.listMessages(channelId)).map((one) => one.content)).toEqual([""]);
         expect(yield* library.uses({ messageId: reply.id })).toHaveLength(1);
       }),
     ));
@@ -440,7 +440,7 @@ describe("skills library", () => {
         const use = (
           id: string,
           at: string,
-          threadId: string | null,
+          channelId: string | null,
           source: "library" | "organization" = "library",
           set: string | null = null,
         ) =>
@@ -453,8 +453,8 @@ describe("skills library", () => {
             number: source === "library" ? 1 : null,
             explicit: false,
             agentId: pip,
-            threadId: threadId === null ? null : ThreadId.make(threadId),
-            messageId: threadId === null ? null : MessageId.make(`reply-${id}`),
+            channelId: channelId === null ? null : ChannelId.make(channelId),
+            messageId: channelId === null ? null : MessageId.make(`reply-${id}`),
             at,
             set: set === null ? null : SkillName.make(set),
           });
@@ -472,9 +472,9 @@ describe("skills library", () => {
           total: 5,
           thisWeek: 4,
           hobs: [{ agentId: pip, count: 5, lastAt: "2026-11-06T11:00:00.000Z" }],
-          threads: [
-            { threadId: "t2", agentId: pip, count: 2, lastAt: "2026-11-06T10:00:00.000Z" },
-            { threadId: "t1", agentId: pip, count: 2, lastAt: "2026-11-05T10:00:00.000Z" },
+          channels: [
+            { channelId: "t2", agentId: pip, count: 2, lastAt: "2026-11-06T10:00:00.000Z" },
+            { channelId: "t1", agentId: pip, count: 2, lastAt: "2026-11-05T10:00:00.000Z" },
           ],
           members: [{ name: "release", total: 1, thisWeek: 1 }],
         });

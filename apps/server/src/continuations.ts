@@ -8,7 +8,7 @@ import {
   type StaleBackpackClaim,
   type Task,
   type TaskId,
-  type ThreadId,
+  type ChannelId,
 } from "@hobbots/domain";
 import {
   arrivalsText,
@@ -16,7 +16,7 @@ import {
   type BackpackScope,
   BackpackTurnFailed,
   carryingTask,
-  carryingThread,
+  carryingChannel,
   continuationTask,
   type Delivery,
   Dispatcher,
@@ -156,7 +156,7 @@ const makeCarrier = Effect.gen(function* () {
 });
 
 /**
- * The dispatcher's continuation branch (ADR 019): which threads have backpack work waiting for
+ * The dispatcher's continuation branch (ADR 019): which channels have backpack work waiting for
  * their hob, and putting that work into one turn there under the dispatcher's claims. Routine
  * progress rides along that turn as one digest, and never starts a turn on its own (IN-005).
  */
@@ -166,26 +166,26 @@ export const ContinuationsLive = Layer.effect(
     const { routed, carry } = yield* makeCarrier;
     const threaded = (scope: BackpackScope, routine = false) =>
       Effect.map(routed(scope, routine), (all) =>
-        all.map(({ item, tree }) => ({ item, threadId: carryingThread(item, tree) })),
+        all.map(({ item, tree }) => ({ item, channelId: carryingChannel(item, tree) })),
       );
 
     const waiting: Continuations["Service"]["waiting"] = (agentId) =>
       Effect.map(threaded(agentId === undefined ? { _tag: "Workspace" } : { _tag: "Hob", agentId }), (items) => [
-        ...new Set(items.flatMap(({ threadId }) => (threadId === null ? [] : [threadId]))),
+        ...new Set(items.flatMap(({ channelId }) => (channelId === null ? [] : [channelId]))),
       ]);
 
-    const progressWaits: Continuations["Service"]["progressWaits"] = (threadId, agentId) =>
+    const progressWaits: Continuations["Service"]["progressWaits"] = (channelId, agentId) =>
       Effect.map(threaded({ _tag: "Hob", agentId }, true), (items) =>
-        items.some(({ item, threadId: carried }) => !item.actionable && carried === threadId),
+        items.some(({ item, channelId: carried }) => !item.actionable && carried === channelId),
       );
 
-    const deliver: Continuations["Service"]["deliver"] = (threadId: ThreadId, agentId: AgentId, turn) =>
+    const deliver: Continuations["Service"]["deliver"] = (channelId: ChannelId, agentId: AgentId, turn) =>
       Effect.gen(function* () {
-        const items = (yield* threaded({ _tag: "Hob", agentId }, true)).filter((each) => each.threadId === threadId);
-        // A thread's turn is its hob's chat on the Task you asked for, whose briefing lists each result.
+        const items = (yield* threaded({ _tag: "Hob", agentId }, true)).filter((each) => each.channelId === channelId);
+        // A channel's turn is its hob's chat on the Task you asked for, whose briefing lists each result.
         return yield* carry(
           items.map(({ item }) => item),
-          `thread:${threadId}`,
+          `thread:${channelId}`,
           turn,
           "briefed",
         );
@@ -197,7 +197,7 @@ export const ContinuationsLive = Layer.effect(
 
 /**
  * The same branch for a party member's Task (ADR 019): the work its owner holds under it waits for
- * one turn of the session that works it, never for a thread. A member that leads a nested Quest gets
+ * one turn of the session that works it, never for a channel. A member that leads a nested Quest gets
  * its party's routine progress as one digest along that turn, as a lead's chat does; the progress
  * never starts a turn on its own (IN-005).
  */
@@ -260,7 +260,7 @@ export const MemberContinuationsLive = Layer.effect(
 );
 
 /**
- * Wakes a thread when work arrives for its hob (ADR 019): after a commit that records an
+ * Wakes a channel when work arrives for its hob (ADR 019): after a commit that records an
  * actionable item, or sends one back to pending, as an expired claim does. Once a Task ends, or
  * its cancel is asked for, it resolves the work still waiting about its tree as late. The announcement only
  * wakes the chat, and the runner of members' Tasks when the hub has one; the stored items decide
@@ -280,9 +280,9 @@ export const WakeOnArrival = Layer.effectDiscard(
       item.state !== "pending" || !item.actionable
         ? Effect.void
         : Effect.all([
-            item.threadId === null ? Effect.void : chat.wake(item.threadId),
+            item.channelId === null ? Effect.void : chat.wake(item.channelId),
             Option.isSome(signal) ? signal.value.notify : Effect.void,
-          ]).pipe(Effect.catchCause((cause) => Effect.logWarning("Could not wake a thread for its hob's work", cause)));
+          ]).pipe(Effect.catchCause((cause) => Effect.logWarning("Could not wake a channel for its hob's work", cause)));
     // An Attempt that ended frees its Task: a member's work that waited behind it can start now.
     const freed = (attempt: Attempt | null) =>
       attempt === null || isLiveAttempt(attempt.state) || Option.isNone(signal) ? Effect.void : signal.value.notify;
@@ -316,6 +316,6 @@ export const WakeOnArrival = Layer.effectDiscard(
       Effect.forkScoped,
     );
     // Subscribed now: work recorded since the chat first looked at start is woken here.
-    yield* Effect.forEach(yield* continuations.waiting(), (threadId) => chat.wake(threadId), { discard: true });
+    yield* Effect.forEach(yield* continuations.waiting(), (channelId) => chat.wake(channelId), { discard: true });
   }),
 );

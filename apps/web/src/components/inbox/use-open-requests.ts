@@ -18,10 +18,10 @@ export const useOpenRequests = () => {
   );
   useEffect(
     () =>
-      window.hobbots?.onOpenTask?.(({ hobId, threadId, taskId }) => {
+      window.hobbots?.onOpenTask?.(({ hobId, channelId, taskId }) => {
         void navigate({
-          to: "/hobs/$hobId/threads/$threadId",
-          params: { hobId, threadId },
+          to: "/hobs/$hobId/channels/$channelId",
+          params: { hobId, channelId },
           search: questSearch(taskId),
         });
       }),

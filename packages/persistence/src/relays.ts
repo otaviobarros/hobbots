@@ -4,15 +4,15 @@ import {
   type MessageId,
   type MessageStatus,
   relayDepthAfter,
-  type ThreadKind,
-  ThreadMembers,
+  type ChannelKind,
+  ChannelMembers,
   type TurnRequest,
   TurnRequests,
 } from "@hobbots/domain";
 import { Effect } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
 import { answerersIn } from "./answerer-reads.ts";
-import { selectMembers } from "./thread-member-rows.ts";
+import { selectMembers } from "./channel-member-rows.ts";
 import { requestsFor, selectRequestsOfReply } from "./turn-request-rows.ts";
 
 // Hobs talking to hobs (ADR 039; #1463): a hob's reply that @mentions another hob of the camp owes
@@ -23,7 +23,7 @@ import { requestsFor, selectRequestsOfReply } from "./turn-request-rows.ts";
  * The relay requests `reply` causes as it is saved complete, read with the requests its turn spoke
  * for and those it already caused, in any state. None for a reply that is not a hob's complete chat
  * reply, that a lead kept quiet, whose turn was stopped, or that already relayed. Only an active
- * member hob of the thread is relayed to: a mention of any other hob, or of a person, wakes nobody.
+ * member hob of the channel is relayed to: a mention of any other hob, or of a person, wakes nobody.
  */
 /** Whether `message` is a hob's chat reply saved complete and not kept quiet, before its mentions are read. */
 export const mayComplete = (message: Message): boolean =>
@@ -54,19 +54,19 @@ export const relaysFor = (
     // Stop dropped the turn's request, and the reply relays once.
     if (spoken.some(TurnRequests.isDropped)) return [];
     if (own.some((request) => request.messageId === reply.id)) return [];
-    const members = yield* selectMembers(sql, reply.threadId);
+    const members = yield* selectMembers(sql, reply.channelId);
     const camp = new Set(
-      members.filter((member) => member.actor.kind === "hob" && ThreadMembers.isActive(member)).map((m) => m.actor.id),
+      members.filter((member) => member.actor.kind === "hob" && ChannelMembers.isActive(member)).map((m) => m.actor.id),
     );
     const mentions = reply.mentions.filter(
       (actor) => actor.kind === "hob" && actor.id !== author.id && camp.has(actor.id),
     );
     if (mentions.length === 0) return [];
-    const [thread] = yield* sql<{ readonly kind: ThreadKind }>`SELECT kind FROM threads WHERE id = ${reply.threadId}`;
-    if (thread === undefined) return [];
+    const [channel] = yield* sql<{ readonly kind: ChannelKind }>`SELECT kind FROM channels WHERE id = ${reply.channelId}`;
+    if (channel === undefined) return [];
     const answerers = yield* answerersIn(
       sql,
-      { id: reply.threadId, kind: thread.kind },
+      { id: reply.channelId, kind: channel.kind },
       { role: reply.role, actor: author, mentions, repliesTo: null },
     ).pipe(Effect.catchTag("MentionRefused", () => Effect.succeed([])));
     return requestsFor(reply, author, answerers, relayDepthAfter(spoken));

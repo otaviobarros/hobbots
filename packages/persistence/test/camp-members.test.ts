@@ -1,5 +1,5 @@
-import { HobbotsRepository, type SentTo, ThreadMemberRepository } from "@hobbots/agents";
-import type { ThreadArchived } from "@hobbots/api";
+import { HobbotsRepository, type SentTo, ChannelMemberRepository } from "@hobbots/agents";
+import type { ChannelArchived } from "@hobbots/api";
 import {
   type Actor,
   Agent,
@@ -13,14 +13,14 @@ import {
   mainLine,
   OWNER_ACTOR,
   type ReplyUsage,
-  Thread,
-  ThreadId,
-  type ThreadMember,
+  Channel,
+  ChannelId,
+  type ChannelMember,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { EventJournal, HobbotsRepositoryLive, ThreadMemberRepositoryLive, UsageLedger } from "../src/index.ts";
+import { EventJournal, HobbotsRepositoryLive, ChannelMemberRepositoryLive, UsageLedger } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 
 // Issue #1467 (ADR 039, Members): a camp is made with the hobs you pick, and hobs are added and taken
@@ -32,16 +32,16 @@ const NOW = "2026-11-14T10:00:00.000Z";
 const QUILL = AgentId.make("quill");
 const PIP = AgentId.make("pip");
 const ROOK = AgentId.make("rook");
-const CAMP = ThreadId.make("camp");
-const CHAT = ThreadId.make("chat");
+const CAMP = ChannelId.make("camp");
+const CHAT = ChannelId.make("chat");
 const BRUNA: Actor = { kind: "user", id: "bruna" };
 
-type Services = HobbotsRepository | ThreadMemberRepository | EventJournal | UsageLedger | SqlClient.SqlClient;
+type Services = HobbotsRepository | ChannelMemberRepository | EventJournal | UsageLedger | SqlClient.SqlClient;
 
 const run = <A, E>(effect: Effect.Effect<A, E, Services>) =>
   effect.pipe(
     Effect.provide(
-      Layer.mergeAll(HobbotsRepositoryLive, ThreadMemberRepositoryLive, EventJournal.layer, UsageLedger.layer).pipe(
+      Layer.mergeAll(HobbotsRepositoryLive, ChannelMemberRepositoryLive, EventJournal.layer, UsageLedger.layer).pipe(
         Layer.provideMerge(TestDatabase),
       ),
     ),
@@ -65,13 +65,13 @@ const hob = (id: AgentId, status: AgentStatus = "active") =>
     createdAt: NOW,
   });
 
-const camp = (id: ThreadId = CAMP, kind: Thread["kind"] = "camp") =>
-  new Thread({ id, agentId: QUILL, title: id, kind, createdAt: NOW, updatedAt: NOW });
+const camp = (id: ChannelId = CAMP, kind: Channel["kind"] = "camp") =>
+  new Channel({ id, agentId: QUILL, title: id, kind, createdAt: NOW, updatedAt: NOW });
 
 const said = (id: string, status: MessageStatus, actor: Actor = OWNER_ACTOR) =>
   new Message({
     id: MessageId.make(id),
-    threadId: CAMP,
+    channelId: CAMP,
     actor,
     role: "user",
     content: id,
@@ -83,9 +83,9 @@ const said = (id: string, status: MessageStatus, actor: Actor = OWNER_ACTOR) =>
 
 const mentioning = (hobs: ReadonlyArray<AgentId>): SentTo => ({ mentions: hobs.map(hobActor), repliesTo: null });
 
-const shown = (member: ThreadMember) => `${member.actor.kind}:${member.actor.id}:${member.state}`;
-const members = (threadId: ThreadId) =>
-  Effect.flatMap(ThreadMemberRepository, (repository) => repository.list(threadId)).pipe(
+const shown = (member: ChannelMember) => `${member.actor.kind}:${member.actor.id}:${member.state}`;
+const members = (channelId: ChannelId) =>
+  Effect.flatMap(ChannelMemberRepository, (repository) => repository.list(channelId)).pipe(
     Effect.map((rows) => rows.map(shown)),
   );
 const types = (entries: ReadonlyArray<{ readonly type: string }>) => entries.map((entry) => entry.type);
@@ -109,7 +109,7 @@ const plantJournalRow = Effect.gen(function* () {
   yield* sql`INSERT INTO event_journal ${sql.insert({
     sequence: next,
     id: "planted",
-    type: "ThreadUpserted",
+    type: "ChannelUpserted",
     schema_version: 4,
     occurred_at: NOW,
     payload: "{}",
@@ -118,7 +118,7 @@ const plantJournalRow = Effect.gen(function* () {
 });
 
 /** Why a member change was refused: its reason, or the error's tag when it is not a membership refusal. */
-const refusal = (error: MemberRefused | ThreadArchived) => (error._tag === "MemberRefused" ? error.reason : error._tag);
+const refusal = (error: MemberRefused | ChannelArchived) => (error._tag === "MemberRefused" ? error.reason : error._tag);
 
 describe("a camp's hobs", () => {
   // covers ADR 039 (Members)
@@ -130,7 +130,7 @@ describe("a camp's hobs", () => {
         yield* repo.insertAgent(hob(ROOK, "retired"));
         // A hob that no longer takes new work as the camp is written makes no camp at all.
         const refused = yield* repo.makeCamp(camp(), [PIP, ROOK]).pipe(Effect.flip);
-        const none = yield* repo.findThread(CAMP);
+        const none = yield* repo.findChannel(CAMP);
         const made = yield* repo.makeCamp(camp(), [PIP, QUILL, PIP]);
         // The same camp asked again, its hobs in another order, changes nothing; with other hobs, its key is reused.
         const again = yield* repo.makeCamp(camp(), [QUILL, PIP]);
@@ -150,12 +150,12 @@ describe("a camp's hobs", () => {
     expect(result.made).toEqual([
       "CampMade",
       "ChapterStarted",
-      "ThreadMemberAdded",
-      "ThreadMemberAdded",
-      "ThreadMemberAdded",
+      "ChannelMemberAdded",
+      "ChannelMemberAdded",
+      "ChannelMemberAdded",
     ]);
     expect(result.again).toEqual([]);
-    expect(result.otherHobs).toBe("ThreadKeyReused");
+    expect(result.otherHobs).toBe("ChannelKeyReused");
     expect(result.members).toEqual(["user:owner:active", "hob:pip:active", "hob:quill:active"]);
   });
 
@@ -187,7 +187,7 @@ describe("a camp's hobs", () => {
     );
     expect(result.before).toEqual(["pip:m-1:waiting", "rook:m-1:waiting", "pip:m-2:waiting"]);
     expect(result.after).toEqual(["rook:m-1:waiting"]);
-    expect(result.events).toEqual(["ThreadMemberChanged", "MessageUpserted", "MessageDequeued"]);
+    expect(result.events).toEqual(["ChannelMemberChanged", "MessageUpserted", "MessageDequeued"]);
     expect(result.dropped).toEqual(["pip:dropped", "pip:dropped"]);
     expect(result.droppedBy).toEqual([OWNER_ACTOR, OWNER_ACTOR]);
     expect(result.member).toBe("hob:pip:removed");
@@ -220,11 +220,11 @@ describe("a camp's hobs", () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
-        const repository = yield* ThreadMemberRepository;
+        const repository = yield* ChannelMemberRepository;
         yield* campOfThree;
-        yield* repo.upsertThread(camp(CHAT, "chat"));
-        const reason = (threadId: ThreadId, actor: Actor) =>
-          Effect.flip(repo.removeMember(threadId, actor, OWNER_ACTOR)).pipe(Effect.map(refusal));
+        yield* repo.upsertChannel(camp(CHAT, "chat"));
+        const reason = (channelId: ChannelId, actor: Actor) =>
+          Effect.flip(repo.removeMember(channelId, actor, OWNER_ACTOR)).pipe(Effect.map(refusal));
         const refusals = [
           yield* reason(CHAT, hobActor(QUILL)),
           yield* reason(CAMP, OWNER_ACTOR),
@@ -233,7 +233,7 @@ describe("a camp's hobs", () => {
         ];
         // Pip leads a Quest still open here, whose results come back to the camp: Pip stays.
         const sql = yield* SqlClient.SqlClient;
-        const quest = { id: "task-pip", owner_id: PIP, root_id: "task-pip", thread_id: CAMP, brief: "Plan" };
+        const quest = { id: "task-pip", owner_id: PIP, root_id: "task-pip", channel_id: CAMP, brief: "Plan" };
         const at = { created_at: "2026-11-14T09:00:00.000Z", updated_at: "2026-11-14T09:00:00.000Z" };
         yield* sql`INSERT INTO tasks ${sql.insert({ ...quest, state: "active", ...at })}`;
         const leading = yield* reason(CAMP, hobActor(PIP));
@@ -248,7 +248,7 @@ describe("a camp's hobs", () => {
         const bruna = yield* repository.add(CAMP, BRUNA, OWNER_ACTOR);
         const before = yield* members(CAMP);
         // A camp archived after the change was asked, before it is written, changes no one.
-        yield* sql`UPDATE threads SET archived_at = '2026-11-14T10:00:00.000Z' WHERE id = ${CAMP}`;
+        yield* sql`UPDATE channels SET archived_at = '2026-11-14T10:00:00.000Z' WHERE id = ${CAMP}`;
         const archived = [
           refusal(yield* Effect.flip(repo.removeMember(CAMP, hobActor(ROOK), OWNER_ACTOR))),
           refusal(yield* Effect.flip(repository.add(CAMP, hobActor(PIP), OWNER_ACTOR, true))),
@@ -267,10 +267,10 @@ describe("a camp's hobs", () => {
     );
     expect(result.refusals).toEqual(["direct-message", "owner", "lead", "not-member"]);
     expect(result.outsider).toEqual(["not-member", "not-member"]);
-    expect(result.archived).toEqual(["ThreadArchived", "ThreadArchived"]);
+    expect(result.archived).toEqual(["ChannelArchived", "ChannelArchived"]);
     expect(result.after).toEqual(result.members);
     expect(result.leading).toBe("leads-quest");
-    expect(result.back).toEqual(["ThreadMemberChanged"]);
+    expect(result.back).toEqual(["ChannelMemberChanged"]);
     expect(result.bruna).toBe("user:bruna:active");
     expect(result.members).toEqual([
       "user:owner:active",
@@ -281,7 +281,7 @@ describe("a camp's hobs", () => {
     ]);
   });
 
-  // covers ADR 039 (Cards every thread shares: Status and cost)
+  // covers ADR 039 (Cards every channel shares: Status and cost)
   it("counts each hob's own settled replies, passed turns and tokens in the camp for the period, and when it last answered there (#1467)", async () => {
     const usage = (input: number, output: number): ReplyUsage => ({
       timeToRequestMs: 5,
@@ -295,7 +295,7 @@ describe("a camp's hobs", () => {
     const reply = (id: string, hobId: AgentId, createdAt: string, used: ReplyUsage | null, status: MessageStatus) =>
       new Message({
         id: MessageId.make(id),
-        threadId: CAMP,
+        channelId: CAMP,
         actor: hobActor(hobId),
         role: "assistant",
         content: "…",
@@ -325,7 +325,7 @@ describe("a camp's hobs", () => {
         const sql = yield* SqlClient.SqlClient;
         yield* sql`INSERT INTO passed_turns ${sql.insert({
           reply_id: "r-6",
-          thread_id: CAMP,
+          channel_id: CAMP,
           agent_id: QUILL,
           created_at: "2026-11-14T10:00:00.000Z",
           input_tokens: 4,
@@ -333,7 +333,7 @@ describe("a camp's hobs", () => {
           cache_read_tokens: 0,
           cache_write_tokens: 0,
         })}`;
-        return yield* ledger.threadUsage(CAMP, "2026-11-14T00:00:00.000Z", "2026-11-14T12:00:00.000Z");
+        return yield* ledger.channelUsage(CAMP, "2026-11-14T00:00:00.000Z", "2026-11-14T12:00:00.000Z");
       }),
     );
     expect(result).toEqual([

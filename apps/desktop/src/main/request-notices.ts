@@ -34,7 +34,7 @@ export interface RequestNoticesOptions {
   readonly open: (requestId: string) => void;
   /**
    * Opens or reveals the window at a Task in its lead's chat, so the room opens with that lane lit
-   * (ADR 027), or only brings the window forward for work with no thread.
+   * (ADR 027), or only brings the window forward for work with no channel.
    */
   readonly openTask?: (link: TaskLink | null) => void;
   /** How an Inbox read that did not answer is made again. */

@@ -31,7 +31,7 @@ const follow = (options: Partial<HubEventsOptions> = {}, opening?: string) => {
 
 const reply = (role: string, status = "streaming") => ({
   _tag: "MessageUpserted",
-  message: { id: "m", threadId: "t1", role, status },
+  message: { id: "m", channelId: "t1", role, status },
 });
 
 describe("following the hub's event stream", () => {

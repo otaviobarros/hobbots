@@ -1091,7 +1091,7 @@ export const FakeRuntimeLayer = (options?: FakeRuntimeOptions) =>
   );
 
 /**
- * A fake Codex beside the fake Claude Code, so a thread can switch runtimes without either (ADR 017).
+ * A fake Codex beside the fake Claude Code, so a channel can switch runtimes without either (ADR 017).
  * Its own options set what its health reports; it decides scripted tool calls like the other.
  */
 export const FakeAdditionalRuntimesLayer = (options?: FakeRuntimeOptions) =>

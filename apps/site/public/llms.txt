@@ -6,7 +6,7 @@
 - Runs on: macOS 13 or later (Apple silicon and Intel). An experimental, not fully tested build for Linux: Ubuntu 24.04 or later and Debian (.deb), Fedora (.rpm), x64 and arm64. Windows, iPhone and Android are planned.
 - Needs: a Claude or ChatGPT plan, signed in on the same computer. No API key and no Hobbots account.
 - Price and license: free forever, Apache 2.0.
-- Privacy: threads, memory, skills and backups stay on your computer. Hobs talk to Claude or ChatGPT the same way their own apps do.
+- Privacy: channels, memory, skills and backups stay on your computer. Hobs talk to Claude or ChatGPT the same way their own apps do.
 - Not built yet: browser use, and hobs that manage other hobs.
 
 ## What it does

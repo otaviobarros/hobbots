@@ -9,7 +9,7 @@ import {
   type RuntimeKind,
   type RuntimeModels,
   sameBrain,
-  type Thread,
+  type Channel,
 } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Popover, PopoverAnchor, PopoverContent } from "@hobbots/ui/components/popover";
@@ -20,7 +20,7 @@ import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, useId, useRef, useState } from "react";
 import { effortWords } from "../../api/first-hob.ts";
-import { modelsQuery, runtimesQuery, threadBrain, useSetBrain } from "../../api/queries.ts";
+import { modelsQuery, runtimesQuery, channelBrain, useSetBrain } from "../../api/queries.ts";
 import { modelName, pickedBrain } from "../../lib/brains.ts";
 import { PROVIDER_MARKS, RUNTIME_STATE_WORDS } from "../../lib/providers.ts";
 import { messages } from "../messages.ts";
@@ -59,9 +59,9 @@ const unavailableReason = (health: RuntimeHealth) => {
   );
 };
 
-/** What the thread thinks with, and whether it is ready, as the chat's ⋯ menu names it. */
-export const useThreadBrain = (hob: Agent, thread: Thread | undefined) => {
-  const brain = threadBrain(hob, thread);
+/** What the channel thinks with, and whether it is ready, as the chat's ⋯ menu names it. */
+export const useChannelBrain = (hob: Agent, channel: Channel | undefined) => {
+  const brain = channelBrain(hob, channel);
   const modelLabel = useBrainLabel(brain);
   const label = brain.effort === null ? modelLabel : `${modelLabel} · ${effortWords(brain.effort).label}`;
   const runtimes = useQuery(runtimesQuery);
@@ -71,28 +71,28 @@ export const useThreadBrain = (hob: Agent, thread: Thread | undefined) => {
 };
 
 /**
- * The brain picker, opened from the chat's ⋯ menu beside `children`: it switches the thread's brain
+ * The brain picker, opened from the chat's ⋯ menu beside `children`: it switches the channel's brain
  * from its next reply (ADR 017). Closing it hands focus back to the first button in `children`.
  */
 export function BrainPicker({
   hob,
-  thread,
+  channel,
   open,
   onOpenChange,
   children,
 }: {
   hob: Agent;
-  thread: Thread;
+  channel: Channel;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: ReactNode;
 }) {
-  const { brain } = useThreadBrain(hob, thread);
+  const { brain } = useChannelBrain(hob, channel);
   const [makeDefault, setMakeDefault] = useState(false);
   const switchId = useId();
   const anchor = useRef<HTMLSpanElement>(null);
   const runtimes = useQuery(runtimesQuery);
-  const setBrain = useSetBrain(hob.id, thread.id);
+  const setBrain = useSetBrain(hob.id, channel.id);
   const hobBrain = { runtime: hob.runtime, model: hob.model, effort: hob.effort };
   const hobLabel = useBrainLabel(hobBrain);
   const pick = (next: Brain | null) =>
@@ -139,7 +139,7 @@ export function BrainPicker({
           <Switch id={switchId} checked={makeDefault} onCheckedChange={setMakeDefault} />
           <label htmlFor={switchId}>{copy.makeDefault({ name: hob.name })}</label>
         </span>
-        {thread.brain !== null && (
+        {channel.brain !== null && (
           <Button variant="outline" size="xs" disabled={setBrain.isPending} onClick={() => pick(null)}>
             {copy.backToDefault({ name: hob.name, brain: hobLabel })}
           </Button>
@@ -250,7 +250,7 @@ function ChoicesWaiting() {
   );
 }
 
-/** The efforts the thread's model takes, to think harder or lighter from the next reply. */
+/** The efforts the channel's model takes, to think harder or lighter from the next reply. */
 function EffortChoices({
   current,
   pending,
@@ -291,7 +291,7 @@ function EffortChoices({
   );
 }
 
-/** The runtime's main models, the one the thread thinks with even if it is not main, or its default. */
+/** The runtime's main models, the one the channel thinks with even if it is not main, or its default. */
 const modelChoices = (models: RuntimeModels | undefined, current: Brain, runtime: RuntimeKind) => {
   const listed = offeredModels(models, current.runtime === runtime ? current.model : null);
   return [

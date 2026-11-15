@@ -8,7 +8,7 @@ import {
   type HobChangeOrigin,
   MessageId,
   scopeWork,
-  ThreadId,
+  ChannelId,
   YOU,
 } from "@hobbots/domain";
 import { Effect, Layer, Schema } from "effect";
@@ -26,7 +26,7 @@ interface StatusRow {
 
 interface CallRow {
   readonly charm: string;
-  readonly threadId: string | null;
+  readonly channelId: string | null;
   readonly messageId: string | null;
 }
 
@@ -54,9 +54,9 @@ export const HobChangesLive = Layer.effect(
     const configs = (rows: ReadonlyArray<Readonly<Record<string, unknown>>>) =>
       decodeConfigs(agentRows(rows)).pipe(Effect.orDie);
 
-    const threadOf = (messageId: string) =>
-      sql<{ readonly threadId: string }>`SELECT thread_id FROM messages WHERE id = ${messageId}`.pipe(
-        Effect.map((rows) => rows[0]?.threadId ?? null),
+    const channelOf = (messageId: string) =>
+      sql<{ readonly channelId: string }>`SELECT channel_id FROM messages WHERE id = ${messageId}`.pipe(
+        Effect.map((rows) => rows[0]?.channelId ?? null),
       );
 
     const originOf = (actor: ChangeActor) =>
@@ -64,15 +64,15 @@ export const HobChangesLive = Layer.effect(
         if (actor._tag === "You") return null;
         const { scope, key } = actor.call;
         const work = scopeWork(scope);
-        const [call] = yield* sql<CallRow>`SELECT charm, thread_id, message_id FROM charm_calls
+        const [call] = yield* sql<CallRow>`SELECT charm, channel_id, message_id FROM charm_calls
           WHERE agent_id = ${actor.hobId} AND scope = ${scope} AND call_key = ${key}
           ORDER BY created_at DESC LIMIT 1`;
         const messageId = call?.messageId ?? work.messageId;
-        const threadId = call?.threadId ?? (messageId === null ? null : yield* threadOf(messageId));
+        const channelId = call?.channelId ?? (messageId === null ? null : yield* channelOf(messageId));
         return {
           charm: call?.charm ?? null,
           taskId: work.taskId,
-          threadId: threadId === null ? null : ThreadId.make(threadId),
+          channelId: channelId === null ? null : ChannelId.make(channelId),
           messageId: messageId === null ? null : MessageId.make(messageId),
         } satisfies HobChangeOrigin;
       });

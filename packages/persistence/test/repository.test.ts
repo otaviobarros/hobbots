@@ -9,8 +9,8 @@ import {
   OWNER_ACTOR,
   roleFields,
   TaskId,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
   YOU,
 } from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
@@ -21,12 +21,12 @@ import { TestDatabase } from "../src/testing.ts";
 const TestLayer = HobbotsRepositoryLive.pipe(Layer.provide(TestDatabase));
 const now = "2026-10-28T00:00:00.000Z";
 const agentId = AgentId.make("aldric");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 
 const message = (id: string, status: Message["status"] = "complete") =>
   new Message({
     id: MessageId.make(id),
-    threadId,
+    channelId,
     role: "assistant",
     content: id,
     status,
@@ -36,7 +36,7 @@ const message = (id: string, status: Message["status"] = "complete") =>
   });
 
 describe("HobbotsRepository", () => {
-  it("round-trips agents, threads and ordered messages", async () => {
+  it("round-trips agents, channels and ordered messages", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(
@@ -54,18 +54,18 @@ describe("HobbotsRepository", () => {
           createdAt: now,
         }),
       );
-      yield* repo.upsertThread(
-        new Thread({
-          id: threadId,
+      yield* repo.upsertChannel(
+        new Channel({
+          id: channelId,
           agentId,
-          title: "New thread",
+          title: "New channel",
           createdAt: now,
           updatedAt: now,
         }),
       );
-      yield* repo.upsertThread(
-        new Thread({
-          id: threadId,
+      yield* repo.upsertChannel(
+        new Channel({
+          id: channelId,
           agentId,
           title: "Renamed",
           sessions: [
@@ -89,14 +89,14 @@ describe("HobbotsRepository", () => {
       const unfinished = yield* repo.listUnfinishedMessages;
       return {
         agents: yield* repo.listAgents,
-        thread: yield* repo.findThread(threadId),
-        messages: yield* repo.listMessages(threadId),
+        channel: yield* repo.findChannel(channelId),
+        messages: yield* repo.listMessages(channelId),
         unfinished,
       };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
     expect(result.agents.map((a) => [a.name, a.lookSeed, a.lookColor])).toEqual([["Aldric", 1234, "moss"]]);
-    expect(Option.getOrThrow(result.thread)).toMatchObject({
+    expect(Option.getOrThrow(result.channel)).toMatchObject({
       title: "Renamed",
       sessions: [
         { runtime: "claude-code", sessionId: "s1", chapterId: ChapterId.make("chapter-1"), seenThrough: null },
@@ -111,7 +111,7 @@ describe("HobbotsRepository", () => {
     expect(result.unfinished.map((m) => m.id)).toEqual(["a", "c"]);
   });
 
-  it("reads each thread's last shown message as one line, skipping queued and empty ones", async () => {
+  it("reads each channel's last shown message as one line, skipping queued and empty ones", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(
@@ -129,21 +129,21 @@ describe("HobbotsRepository", () => {
           createdAt: now,
         }),
       );
-      const upserted = yield* repo.upsertThread(
-        new Thread({ id: threadId, agentId, title: "Plan", createdAt: now, updatedAt: now }),
+      const upserted = yield* repo.upsertChannel(
+        new Channel({ id: channelId, agentId, title: "Plan", createdAt: now, updatedAt: now }),
       );
-      const empty = { list: (yield* repo.listThreads(agentId))[0]?.lastLine, upserted: upserted.value.lastLine };
+      const empty = { list: (yield* repo.listChannels(agentId))[0]?.lastLine, upserted: upserted.value.lastLine };
       yield* repo.upsertMessage(new Message({ ...message("m1"), content: "Done.\n\nThe copy is in\tdocs/launch.md" }));
       // A reply made only of tool calls has no text, and a queued message is not in the transcript yet.
       yield* repo.upsertMessage(new Message({ ...message("m2"), content: "  " }));
       yield* repo.upsertMessage(
         new Message({ ...message("m3", "queued"), role: "user", actor: OWNER_ACTOR, configVersion: null }),
       );
-      const shown = (yield* repo.listThreads(agentId))[0]?.lastLine;
+      const shown = (yield* repo.listChannels(agentId))[0]?.lastLine;
       yield* repo.upsertMessage(new Message({ ...message("m4"), content: "word ".repeat(60) }));
-      const long = Option.getOrThrow(yield* repo.findThread(threadId)).lastLine;
-      const touched = yield* repo.upsertThread(
-        new Thread({ id: threadId, agentId, title: "Plan", createdAt: now, updatedAt: now }),
+      const long = Option.getOrThrow(yield* repo.findChannel(channelId)).lastLine;
+      const touched = yield* repo.upsertChannel(
+        new Channel({ id: channelId, agentId, title: "Plan", createdAt: now, updatedAt: now }),
       );
       return { empty, shown, long, touched: touched.value.lastLine };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
@@ -152,12 +152,12 @@ describe("HobbotsRepository", () => {
     expect(result.shown).toBe("Done. The copy is in docs/launch.md");
     expect(result.long).toHaveLength(140);
     expect(result.long?.endsWith("word…")).toBe(true);
-    // A thread written again carries the line a read shows, so its event does not blank it.
+    // A channel written again carries the line a read shows, so its event does not blank it.
     expect(result.touched).toBe(result.long);
   });
 
   // covers ADR 039, The sidebar (#1563)
-  it("reads who wrote each thread's last line with it, in a list and alone (#1563)", async () => {
+  it("reads who wrote each channel's last line with it, in a list and alone (#1563)", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(
@@ -175,23 +175,23 @@ describe("HobbotsRepository", () => {
           createdAt: now,
         }),
       );
-      const other = ThreadId.make("t2");
-      yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "Plan", createdAt: now, updatedAt: now }));
-      yield* repo.upsertThread(new Thread({ id: other, agentId, title: "Shop", createdAt: now, updatedAt: now }));
+      const other = ChannelId.make("t2");
+      yield* repo.upsertChannel(new Channel({ id: channelId, agentId, title: "Plan", createdAt: now, updatedAt: now }));
+      yield* repo.upsertChannel(new Channel({ id: other, agentId, title: "Shop", createdAt: now, updatedAt: now }));
       yield* repo.upsertMessage(new Message({ ...message("m1"), content: "On it." }));
       yield* repo.upsertMessage(
         new Message({ ...message("m2"), role: "user", actor: OWNER_ACTOR, configVersion: null, content: "Thanks!" }),
       );
       // A reply with no text is not the last line, so neither is its author.
       yield* repo.upsertMessage(new Message({ ...message("m3"), content: " " }));
-      yield* repo.upsertMessage(new Message({ ...message("m4"), threadId: other, content: "Shop is up." }));
-      const listed = new Map((yield* repo.listThreads(agentId)).map((each) => [each.id, each.lastAuthor]));
-      const found = Option.getOrThrow(yield* repo.findThread(threadId)).lastAuthor;
-      const touched = yield* repo.upsertThread(
-        new Thread({ id: other, agentId, title: "Shop", createdAt: now, updatedAt: now }),
+      yield* repo.upsertMessage(new Message({ ...message("m4"), channelId: other, content: "Shop is up." }));
+      const listed = new Map((yield* repo.listChannels(agentId)).map((each) => [each.id, each.lastAuthor]));
+      const found = Option.getOrThrow(yield* repo.findChannel(channelId)).lastAuthor;
+      const touched = yield* repo.upsertChannel(
+        new Channel({ id: other, agentId, title: "Shop", createdAt: now, updatedAt: now }),
       );
-      const empty = yield* repo.upsertThread(
-        new Thread({ id: ThreadId.make("t3"), agentId, title: "New", createdAt: now, updatedAt: now }),
+      const empty = yield* repo.upsertChannel(
+        new Channel({ id: ChannelId.make("t3"), agentId, title: "New", createdAt: now, updatedAt: now }),
       );
       return {
         listed: Object.fromEntries(listed),
@@ -203,12 +203,12 @@ describe("HobbotsRepository", () => {
 
     expect(result.listed).toEqual({ t1: OWNER_ACTOR, t2: { kind: "hob", id: "aldric" } });
     expect(result.found).toEqual(OWNER_ACTOR);
-    // A thread written again carries the author a read shows, so its event does not blank it.
+    // A channel written again carries the author a read shows, so its event does not blank it.
     expect(result.touched).toEqual({ kind: "hob", id: "aldric" });
     expect(result.empty).toBeNull();
   });
 
-  it("keeps how far you read a thread, unread once the hob writes past it, and moves it only forward", async () => {
+  it("keeps how far you read a channel, unread once the hob writes past it, and moves it only forward", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(
@@ -226,25 +226,25 @@ describe("HobbotsRepository", () => {
           createdAt: now,
         }),
       );
-      yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "Plan", createdAt: now, updatedAt: now }));
-      const unread = () => repo.listUnreadThreads.pipe(Effect.map((listed) => listed.threadIds.includes(threadId)));
+      yield* repo.upsertChannel(new Channel({ id: channelId, agentId, title: "Plan", createdAt: now, updatedAt: now }));
+      const unread = () => repo.listUnreadChannels.pipe(Effect.map((listed) => listed.channelIds.includes(channelId)));
       const asked = new Message({ ...message("m1"), role: "user", actor: OWNER_ACTOR, configVersion: null });
       yield* repo.upsertMessage(asked);
       const yours = yield* unread();
-      // A reply under way leaves the thread read until it ends.
+      // A reply under way leaves the channel read until it ends.
       yield* repo.upsertMessage(message("m2", "streaming"));
       const streaming = yield* unread();
       const seen = (yield* repo.upsertMessage(message("m2"))).value.revision;
       const ended = yield* unread();
-      const listed = (yield* repo.listUnreadThreads).threadIds;
-      const marked = yield* repo.markThreadRead(threadId, MessageId.make("m2"), seen);
+      const listed = (yield* repo.listUnreadChannels).channelIds;
+      const marked = yield* repo.markChannelRead(channelId, MessageId.make("m2"), seen);
       const after = yield* unread();
-      // Reading an older message, again or a message of another thread changes nothing.
-      const back = yield* repo.markThreadRead(threadId, MessageId.make("m1"), seen);
-      const again = yield* repo.markThreadRead(threadId, MessageId.make("m2"), seen);
-      const elsewhere = yield* repo.markThreadRead(threadId, MessageId.make("nope"), seen);
-      // A write of the thread keeps the marker, and a failed reply with no text is unread too.
-      yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "Renamed", createdAt: now, updatedAt: now }));
+      // Reading an older message, again or a message of another channel changes nothing.
+      const back = yield* repo.markChannelRead(channelId, MessageId.make("m1"), seen);
+      const again = yield* repo.markChannelRead(channelId, MessageId.make("m2"), seen);
+      const elsewhere = yield* repo.markChannelRead(channelId, MessageId.make("nope"), seen);
+      // A write of the channel keeps the marker, and a failed reply with no text is unread too.
+      yield* repo.upsertChannel(new Channel({ id: channelId, agentId, title: "Renamed", createdAt: now, updatedAt: now }));
       const kept = yield* unread();
       yield* repo.upsertMessage(new Message({ ...message("m3", "failed"), content: "" }));
       return {
@@ -271,8 +271,8 @@ describe("HobbotsRepository", () => {
       yours: false,
       streaming: false,
       ended: true,
-      listed: [threadId],
-      marked: Option.some({ reader: OWNER_ACTOR, read: result.seen, events: ["ThreadMemberChanged"] }),
+      listed: [channelId],
+      marked: Option.some({ reader: OWNER_ACTOR, read: result.seen, events: ["ChannelMemberChanged"] }),
       seen: result.seen,
       after: false,
       back: true,
@@ -283,7 +283,7 @@ describe("HobbotsRepository", () => {
     });
   });
 
-  it("keeps a lead's quiet reply with its text, out of the thread's last line and its unread dot (#1006)", async () => {
+  it("keeps a lead's quiet reply with its text, out of the channel's last line and its unread dot (#1006)", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(
@@ -301,24 +301,24 @@ describe("HobbotsRepository", () => {
           createdAt: now,
         }),
       );
-      yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "Plan", createdAt: now, updatedAt: now }));
+      yield* repo.upsertChannel(new Channel({ id: channelId, agentId, title: "Plan", createdAt: now, updatedAt: now }));
       const plan = (yield* repo.upsertMessage(new Message({ ...message("m1"), content: "Quill drafts the copy." })))
         .value;
-      yield* repo.markThreadRead(threadId, plan.id, plan.revision);
+      yield* repo.markChannelRead(channelId, plan.id, plan.revision);
       yield* repo.upsertMessage(
         new Message({ ...message("m2"), content: "Quill finished; I wait on Ada.", quiet: true }),
       );
-      const quiet = Option.getOrThrow(yield* repo.findThread(threadId));
-      const quietUnread = (yield* repo.listUnreadThreads).threadIds.includes(threadId);
+      const quiet = Option.getOrThrow(yield* repo.findChannel(channelId));
+      const quietUnread = (yield* repo.listUnreadChannels).channelIds.includes(channelId);
       yield* repo.upsertMessage(new Message({ ...message("m3"), content: "The launch page is live." }));
-      const finish = Option.getOrThrow(yield* repo.findThread(threadId));
-      const finishUnread = (yield* repo.listUnreadThreads).threadIds.includes(threadId);
+      const finish = Option.getOrThrow(yield* repo.findChannel(channelId));
+      const finishUnread = (yield* repo.listUnreadChannels).channelIds.includes(channelId);
       return {
         quiet,
         quietUnread,
         finish,
         finishUnread,
-        stored: (yield* repo.listMessages(threadId)).map((each) => [each.id, each.quiet]),
+        stored: (yield* repo.listMessages(channelId)).map((each) => [each.id, each.quiet]),
       };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
@@ -351,14 +351,14 @@ describe("HobbotsRepository", () => {
           createdAt: now,
         }),
       );
-      yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "Plan", createdAt: now, updatedAt: now }));
-      const unread = () => repo.listUnreadThreads.pipe(Effect.map((listed) => listed.threadIds.includes(threadId)));
+      yield* repo.upsertChannel(new Channel({ id: channelId, agentId, title: "Plan", createdAt: now, updatedAt: now }));
+      const unread = () => repo.listUnreadChannels.pipe(Effect.map((listed) => listed.channelIds.includes(channelId)));
       yield* repo.upsertMessage(
         new Message({ ...message("m1"), role: "user", actor: OWNER_ACTOR, configVersion: null }),
       );
       // The reply was cut off, and you read it as it was.
       const half = yield* repo.upsertMessage(new Message({ ...message("m2", "failed"), content: "Half a plan" }));
-      yield* repo.markThreadRead(threadId, MessageId.make("m2"), half.value.revision);
+      yield* repo.markChannelRead(channelId, MessageId.make("m2"), half.value.revision);
       const read = yield* unread();
       // Continue resumes it in the same message, which stays read while it runs.
       yield* repo.upsertMessage(new Message({ ...message("m2", "streaming"), content: "Half a plan, and" }));
@@ -366,10 +366,10 @@ describe("HobbotsRepository", () => {
       const whole = yield* repo.upsertMessage(new Message({ ...message("m2"), content: "Half a plan, and the rest." }));
       const continued = yield* unread();
       // Another device's read of the cut-off reply, landing only now, leaves the rest unread.
-      const late = yield* repo.markThreadRead(threadId, MessageId.make("m2"), half.value.revision);
+      const late = yield* repo.markChannelRead(channelId, MessageId.make("m2"), half.value.revision);
       // A fresh read of the list says the same, and reading the rest clears it.
-      const listed = (yield* repo.listUnreadThreads).threadIds.includes(threadId);
-      const marked = yield* repo.markThreadRead(threadId, MessageId.make("m2"), whole.value.revision);
+      const listed = (yield* repo.listUnreadChannels).channelIds.includes(channelId);
+      const marked = yield* repo.markChannelRead(channelId, MessageId.make("m2"), whole.value.revision);
       return {
         read,
         continuing,
@@ -392,9 +392,9 @@ describe("HobbotsRepository", () => {
     });
   });
 
-  it("stores when a thread was archived and lists live and archived threads apart", async () => {
-    const thread = (id: string, archivedAt: string | null) =>
-      new Thread({ id: ThreadId.make(id), agentId, title: id, archivedAt, createdAt: now, updatedAt: now });
+  it("stores when a channel was archived and lists live and archived channels apart", async () => {
+    const channel = (id: string, archivedAt: string | null) =>
+      new Channel({ id: ChannelId.make(id), agentId, title: id, archivedAt, createdAt: now, updatedAt: now });
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(
@@ -412,15 +412,15 @@ describe("HobbotsRepository", () => {
           createdAt: now,
         }),
       );
-      yield* repo.upsertThread(thread("live", null));
-      yield* repo.upsertThread(thread("older", "2026-10-29T00:00:00.000Z"));
-      yield* repo.upsertThread(thread("newer", "2026-10-30T00:00:00.000Z"));
+      yield* repo.upsertChannel(channel("live", null));
+      yield* repo.upsertChannel(channel("older", "2026-10-29T00:00:00.000Z"));
+      yield* repo.upsertChannel(channel("newer", "2026-10-30T00:00:00.000Z"));
       // Restoring is the same write with no archived time.
-      yield* repo.upsertThread(thread("restored", "2026-10-31T00:00:00.000Z"));
-      yield* repo.upsertThread(thread("restored", null));
+      yield* repo.upsertChannel(channel("restored", "2026-10-31T00:00:00.000Z"));
+      yield* repo.upsertChannel(channel("restored", null));
       return {
-        live: (yield* repo.listThreads(agentId)).map((t) => t.id),
-        archived: (yield* repo.listArchivedThreads(agentId)).map((t) => [t.id, t.archivedAt]),
+        live: (yield* repo.listChannels(agentId)).map((t) => t.id),
+        archived: (yield* repo.listArchivedChannels(agentId)).map((t) => [t.id, t.archivedAt]),
       };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
@@ -446,8 +446,8 @@ describe("HobbotsRepository", () => {
         configVersion: 1,
         createdAt: now,
       });
-    const thread = (id: string) =>
-      new Thread({ id: ThreadId.make(id), agentId, title: id, createdAt: now, updatedAt: now });
+    const channel = (id: string) =>
+      new Channel({ id: ChannelId.make(id), agentId, title: id, createdAt: now, updatedAt: now });
 
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
@@ -463,11 +463,11 @@ describe("HobbotsRepository", () => {
       }
       // A second insert with a taken id changes nothing.
       const reinserted = yield* repo.insertAgent(agent("b", 5));
-      for (const id of ["t-b", "T-a", "t-a", "ta"]) yield* repo.upsertThread(thread(id));
+      for (const id of ["t-b", "T-a", "t-a", "ta"]) yield* repo.upsertChannel(channel(id));
       return {
         reinserted,
         agents: yield* repo.listAgents,
-        threads: yield* repo.listThreads(agentId),
+        channels: yield* repo.listChannels(agentId),
       };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
@@ -480,7 +480,7 @@ describe("HobbotsRepository", () => {
       ["aldric", 2 ** 31],
       ["b", 2 ** 32 - 1],
     ]);
-    expect(result.threads.map((t) => t.id)).toEqual(["T-a", "t-a", "t-b", "ta"]);
+    expect(result.channels.map((t) => t.id)).toEqual(["T-a", "t-a", "t-b", "ta"]);
   });
 
   it("keeps every configuration version and stores an edit only on top of the current one", async () => {
@@ -741,7 +741,7 @@ describe("HobbotsRepository", () => {
     expect(result.stored).toEqual(Option.some(null));
   });
 
-  it("keeps queued messages in order, starts one with its reply after the thread's messages and removes only queued ones", async () => {
+  it("keeps queued messages in order, starts one with its reply after the channel's messages and removes only queued ones", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(
@@ -759,33 +759,33 @@ describe("HobbotsRepository", () => {
           createdAt: now,
         }),
       );
-      yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "Queue", createdAt: now, updatedAt: now }));
+      yield* repo.upsertChannel(new Channel({ id: channelId, agentId, title: "Queue", createdAt: now, updatedAt: now }));
       const user = (id: string, status: Message["status"]) =>
         new Message({ ...message(id, status), role: "user", actor: OWNER_ACTOR, configVersion: null });
       yield* repo.upsertMessage(user("q1", "queued"));
       yield* repo.upsertMessage(message("reply", "streaming"));
       yield* repo.upsertMessage(user("q2", "queued"));
-      const next = yield* repo.nextQueuedMessage(threadId);
-      const threads = yield* repo.threadsWithQueuedMessages;
+      const next = yield* repo.nextQueuedMessage(channelId);
+      const channels = yield* repo.channelsWithQueuedMessages;
       const startQ1 = new Message({ ...user("q1", "queued"), status: "complete" });
       const started = yield* repo.startQueuedMessage(startQ1, message("q1-reply", "streaming"));
       const startedTwice = yield* repo.startQueuedMessage(startQ1, message("q1-again", "streaming"));
-      const removedStarted = yield* repo.removeQueuedMessage(threadId, MessageId.make("q1"));
-      const removedElsewhere = yield* repo.removeQueuedMessage(ThreadId.make("other"), MessageId.make("q2"));
-      const removed = yield* repo.removeQueuedMessage(threadId, MessageId.make("q2"));
+      const removedStarted = yield* repo.removeQueuedMessage(channelId, MessageId.make("q1"));
+      const removedElsewhere = yield* repo.removeQueuedMessage(ChannelId.make("other"), MessageId.make("q2"));
+      const removed = yield* repo.removeQueuedMessage(channelId, MessageId.make("q2"));
       return {
         next: Option.map(next, (m) => m.id),
-        threads,
+        channels,
         flags: [started, startedTwice]
           .map(Option.isSome)
           .concat([removedStarted, removedElsewhere, removed].map(Option.isSome)),
-        messages: (yield* repo.listMessages(threadId)).map((m) => [m.id, m.status]),
-        empty: yield* repo.threadsWithQueuedMessages,
+        messages: (yield* repo.listMessages(channelId)).map((m) => [m.id, m.status]),
+        empty: yield* repo.channelsWithQueuedMessages,
       };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
     expect(result.next).toEqual(Option.some("q1"));
-    expect(result.threads).toEqual([threadId]);
+    expect(result.channels).toEqual([channelId]);
     expect(result.flags).toEqual([true, false, false, false, true]);
     expect(result.messages).toEqual([
       ["reply", "streaming"],

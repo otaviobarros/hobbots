@@ -9,7 +9,7 @@ import {
   QuestId,
   TaskId,
   TaskTree,
-  ThreadId,
+  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
@@ -27,7 +27,7 @@ const request = (fields: Partial<ApprovalRequest> = {}) =>
   new ApprovalRequest({
     id: ApprovalId.make("a1"),
     agentId: AgentId.make("pip"),
-    threadId: ThreadId.make("t1"),
+    channelId: ChannelId.make("t1"),
     messageId: MessageId.make("m1"),
     stepId: "s1",
     tool: "MultiEdit",
@@ -181,7 +181,7 @@ describe("This task", () => {
       taskId,
       leadId: AgentId.make("aldric"),
       parentQuestId: null,
-      threadId: ThreadId.make("t1"),
+      channelId: ChannelId.make("t1"),
       goal: "Launch",
       acceptance: [],
       limits: { maxDepth: 2, deadline: null },

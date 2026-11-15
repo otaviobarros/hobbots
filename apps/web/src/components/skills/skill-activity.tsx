@@ -6,14 +6,14 @@ import {
   type SkillId,
   type SkillUseCounts,
   skillRevisionLabel,
-  type Thread,
-  type ThreadId,
+  type Channel,
+  type ChannelId,
 } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { threadsQuery } from "../../api/queries.ts";
+import { channelsQuery } from "../../api/queries.ts";
 import { skillFeedbackQuery, skillUsesQuery } from "../../api/skills.ts";
 import { formatWhen } from "../../lib/time.ts";
 import { RowList } from "../memory/memory-overview.tsx";
@@ -24,11 +24,11 @@ import { ScopeMark } from "./skills-parts.tsx";
 const copy = messages.activity;
 
 /** The titles of the chats the hobs in `agentIds` have, read once per hob. */
-const useThreadTitles = (agentIds: ReadonlyArray<AgentId>) => {
-  const reads = useQueries({ queries: agentIds.map((agentId) => threadsQuery(agentId)) });
-  const titles = new Map<ThreadId, string>();
+const useChannelTitles = (agentIds: ReadonlyArray<AgentId>) => {
+  const reads = useQueries({ queries: agentIds.map((agentId) => channelsQuery(agentId)) });
+  const titles = new Map<ChannelId, string>();
   for (const read of reads)
-    for (const thread of (read.data ?? []) as ReadonlyArray<Thread>) titles.set(thread.id, thread.title);
+    for (const channel of (read.data ?? []) as ReadonlyArray<Channel>) titles.set(channel.id, channel.title);
   return titles;
 };
 
@@ -54,7 +54,7 @@ function ChatUseRow({
   hobs,
   title,
 }: {
-  use: SkillUses["threads"][number];
+  use: SkillUses["channels"][number];
   hobs: HobDirectory;
   title: string | undefined;
 }) {
@@ -62,8 +62,8 @@ function ChatUseRow({
   return (
     <li className="[contain-intrinsic-size:auto_44px] [content-visibility:auto]">
       <Link
-        to="/hobs/$hobId/threads/$threadId"
-        params={{ hobId: use.agentId, threadId: use.threadId }}
+        to="/hobs/$hobId/channels/$channelId"
+        params={{ hobId: use.agentId, channelId: use.channelId }}
         className="flex items-center gap-3 bg-card px-3.5 py-2.5 text-inherit no-underline hover:bg-hover"
       >
         <span className="min-w-0 flex-1 truncate text-ui text-text-strong">
@@ -138,7 +138,7 @@ function SkillNotes({ skillId, hobs }: { skillId: SkillId; hobs: HobDirectory })
 export function SkillActivity({ detail, hobs }: { detail: SkillDetail; hobs: HobDirectory }) {
   const { skill } = detail;
   const uses = useQuery(skillUsesQuery(skill.id));
-  const titles = useThreadTitles(uses.data?.hobs.map((one) => one.agentId) ?? []);
+  const titles = useChannelTitles(uses.data?.hobs.map((one) => one.agentId) ?? []);
   const title = skillTitle(skill.name);
 
   return (
@@ -176,8 +176,8 @@ export function SkillActivity({ detail, hobs }: { detail: SkillDetail; hobs: Hob
           <section aria-label={copy.chats} className="flex flex-col gap-1">
             <h3 className="lbl m-0 pb-1 text-label">{copy.chats}</h3>
             <RowList label={copy.chats}>
-              {uses.data.threads.map((one) => (
-                <ChatUseRow key={one.threadId} use={one} hobs={hobs} title={titles.get(one.threadId)} />
+              {uses.data.channels.map((one) => (
+                <ChatUseRow key={one.channelId} use={one} hobs={hobs} title={titles.get(one.channelId)} />
               ))}
             </RowList>
           </section>

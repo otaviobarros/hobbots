@@ -36,8 +36,8 @@ import {
   OWNER_ACTOR,
   RECORD_DECISION_TOOL,
   roleFields,
-  type Thread,
-  type UnreadThreads,
+  type Channel,
+  type UnreadChannels,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -56,7 +56,7 @@ import {
   SearchIndex,
   SetupRepository,
   TaskRepositoryLive,
-  ThreadMemberRepositoryLive,
+  ChannelMemberRepositoryLive,
   UserRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -124,7 +124,7 @@ beforeEach(() => {
             PinRepositoryLive,
             CatchUpRepositoryLive,
             ForYouRepositoryLive,
-            ThreadMemberRepositoryLive,
+            ChannelMemberRepositoryLive,
             UserRepositoryLive,
             EventJournal.layer,
             BackpackLive,
@@ -171,18 +171,18 @@ const eventually = <A>(read: () => Promise<A | undefined>) =>
     ),
   );
 
-const messages = async (thread: Thread) =>
-  (await request<ReadonlyArray<Message>>("GET", `/api/threads/${thread.id}/messages`)).body;
+const messages = async (channel: Channel) =>
+  (await request<ReadonlyArray<Message>>("GET", `/api/channels/${channel.id}/messages`)).body;
 
-/** Waits until the thread's last message is a reply that has ended. */
-const replyEnded = (thread: Thread) =>
+/** Waits until the channel's last message is a reply that has ended. */
+const replyEnded = (channel: Channel) =>
   eventually(async () => {
-    const last = (await messages(thread)).at(-1);
+    const last = (await messages(channel)).at(-1);
     return last?.role === "assistant" && !isInProgress(last.status) ? last : undefined;
   });
 
-/** A finished setup on `preset` sharing a project folder, with Pip and one empty thread. */
-const pipWithThread = async (preset: "careful" | "balanced" = "balanced") => {
+/** A finished setup on `preset` sharing a project folder, with Pip and one empty channel. */
+const pipWithChannel = async (preset: "careful" | "balanced" = "balanced") => {
   await request("PATCH", "/api/setup", { completed: true, safetyPreset: preset, approvedFolders: [project] });
   const pip = (
     await request<Agent>("POST", "/api/agents", {
@@ -196,32 +196,32 @@ const pipWithThread = async (preset: "careful" | "balanced" = "balanced") => {
       instructions: "",
     })
   ).body;
-  const thread = (await request<Thread>("POST", `/api/agents/${pip.id}/threads`)).body;
-  return { pip, thread };
+  const channel = (await request<Channel>("POST", `/api/agents/${pip.id}/channels`)).body;
+  return { pip, channel };
 };
 
 /** Sends `content` and waits until its reply has ended. */
-const exchange = async (thread: Thread, content: string) => {
-  const sent = await request("POST", `/api/threads/${thread.id}/messages`, { content });
+const exchange = async (channel: Channel, content: string) => {
+  const sent = await request("POST", `/api/channels/${channel.id}/messages`, { content });
   expect(sent.status).toBe(200);
-  return replyEnded(thread);
+  return replyEnded(channel);
 };
 
 describe("decisions over the API", () => {
   // covers ADR 037 (Records)
   it("keeps a hob's decision from its turn, and yours that replaces it, crossed out and listed (#1383)", async () => {
-    const { thread } = await pipWithThread();
+    const { channel } = await pipWithChannel();
     const call = { key: "tuesdays", text: "Launch emails go out on Tuesdays." };
-    const reply = await exchange(thread, `${FAKE_HUB_DIRECTIVE} ${RECORD_DECISION_TOOL} ${JSON.stringify(call)}`);
+    const reply = await exchange(channel, `${FAKE_HUB_DIRECTIVE} ${RECORD_DECISION_TOOL} ${JSON.stringify(call)}`);
     const decisions = async () =>
-      (await request<ReadonlyArray<Decision>>("GET", `/api/threads/${thread.id}/decisions`)).body;
+      (await request<ReadonlyArray<Decision>>("GET", `/api/channels/${channel.id}/decisions`)).body;
     const [hobs] = await decisions();
     expect(hobs).toMatchObject({ text: call.text, actor: { kind: "hob" }, sourceMessageId: reply.id, state: "active" });
 
     const yours = { key: "wednesdays", text: "Launch emails go out on Wednesdays.", replaces: hobs?.id };
     const recorded = await request<{ recorded: Decision; superseded: Decision }>(
       "POST",
-      `/api/threads/${thread.id}/decisions`,
+      `/api/channels/${channel.id}/decisions`,
       yours,
     );
     expect(recorded.status).toBe(200);
@@ -232,15 +232,15 @@ describe("decisions over the API", () => {
       supersededBy: recorded.body.recorded.id,
     });
     // The same request again records nothing new.
-    const again = await request<{ recorded: Decision }>("POST", `/api/threads/${thread.id}/decisions`, yours);
+    const again = await request<{ recorded: Decision }>("POST", `/api/channels/${channel.id}/decisions`, yours);
     expect(again.body.recorded.id).toBe(recorded.body.recorded.id);
 
     const crossed = await request<Decision>(
       "POST",
-      `/api/threads/${thread.id}/decisions/${recorded.body.recorded.id}/cross-out`,
+      `/api/channels/${channel.id}/decisions/${recorded.body.recorded.id}/cross-out`,
     );
     expect(crossed.body).toMatchObject({ state: "superseded", supersededBy: null });
-    const long = await request<{ _tag: string; reason: string }>("POST", `/api/threads/${thread.id}/decisions`, {
+    const long = await request<{ _tag: string; reason: string }>("POST", `/api/channels/${channel.id}/decisions`, {
       key: "long",
       text: "x".repeat(501),
       replaces: null,
@@ -251,28 +251,28 @@ describe("decisions over the API", () => {
       ["Launch emails go out on Wednesdays.", "superseded"],
       ["Launch emails go out on Tuesdays.", "superseded"],
     ]);
-    expect((await request("GET", `/api/threads/${thread.id}/artifacts`)).body).toEqual([]);
+    expect((await request("GET", `/api/channels/${channel.id}/artifacts`)).body).toEqual([]);
     // No chapter ended, so the hub has written no brief yet (#1384).
-    expect(await request("GET", `/api/threads/${thread.id}/brief`)).toEqual({ status: 200, body: null });
-    expect((await request("GET", "/api/threads/nope/decisions")).status).toBe(404);
-    expect((await request("GET", "/api/threads/nope/brief")).status).toBe(404);
+    expect(await request("GET", `/api/channels/${channel.id}/brief`)).toEqual({ status: 200, body: null });
+    expect((await request("GET", "/api/channels/nope/decisions")).status).toBe(404);
+    expect((await request("GET", "/api/channels/nope/brief")).status).toBe(404);
   });
 });
 
 describe("camp suggestions over the API", () => {
   // covers ADR 037 (Records: CampSuggestion, Moving a chapter into a camp moves it)
   it("offers a grown chat chapter, keeps it in the chat, and moves it into a new camp once (#1385)", async () => {
-    const { thread } = await pipWithThread();
-    await exchange(thread, "Let us plan the launch.");
+    const { channel } = await pipWithChannel();
+    await exchange(channel, "Let us plan the launch.");
     for (let n = 1; n <= CAMP_SUGGESTION_DECISIONS; n++) {
-      await request("POST", `/api/threads/${thread.id}/decisions`, {
+      await request("POST", `/api/channels/${channel.id}/decisions`, {
         key: `d${n}`,
         text: `Decision ${n}`,
         replaces: null,
       });
     }
     const suggestions = async () =>
-      (await request<ReadonlyArray<CampSuggestion>>("GET", `/api/threads/${thread.id}/camp-suggestions`)).body;
+      (await request<ReadonlyArray<CampSuggestion>>("GET", `/api/channels/${channel.id}/camp-suggestions`)).body;
     // Offered once the projector checked its chapter holds one topic and named the camp (#1557).
     const [open] = await vi.waitFor(
       async () => {
@@ -288,34 +288,34 @@ describe("camp suggestions over the API", () => {
       title: null,
       goal: null,
     });
-    const keep = `/api/threads/${thread.id}/camp-suggestions/${open?.id}/keep`;
+    const keep = `/api/channels/${channel.id}/camp-suggestions/${open?.id}/keep`;
     expect((await request<CampSuggestion>("POST", keep)).body).toMatchObject({ state: "kept" });
     expect((await request<CampSuggestion>("POST", keep)).body).toMatchObject({ state: "kept" });
     expect(await suggestions()).toEqual([]);
-    const missing = await request("POST", `/api/threads/${thread.id}/camp-suggestions/nope/keep`);
+    const missing = await request("POST", `/api/channels/${channel.id}/camp-suggestions/nope/keep`);
     expect(missing).toMatchObject({ status: 409, body: { _tag: "CampSuggestionChangeRefused", reason: "not-found" } });
 
     // The chat's live chapter moves into a new camp, with its messages and decisions.
-    const listed = await request<ReadonlyArray<Thread>>("GET", `/api/agents/${thread.agentId}/threads`);
-    const chapterId = listed.body.find((each) => each.id === thread.id)?.liveChapterId;
+    const listed = await request<ReadonlyArray<Channel>>("GET", `/api/agents/${channel.agentId}/channels`);
+    const chapterId = listed.body.find((each) => each.id === channel.id)?.liveChapterId;
     const into = { _tag: "new", key: "camp-launch", title: "Launch", goal: null, private: false };
-    const moved = await request<ChapterMove>("POST", `/api/threads/${thread.id}/chapters/${chapterId}/move`, into);
+    const moved = await request<ChapterMove>("POST", `/api/channels/${channel.id}/chapters/${chapterId}/move`, into);
     expect(moved.status).toBe(200);
     expect(moved.body.stub).toMatchObject({ id: chapterId, state: "moved", movedTo: "camp-launch" });
-    const again = await request<ChapterMove>("POST", `/api/threads/${thread.id}/chapters/${chapterId}/move`, into);
+    const again = await request<ChapterMove>("POST", `/api/channels/${channel.id}/chapters/${chapterId}/move`, into);
     expect(again.body.stub).toEqual(moved.body.stub);
-    expect((await request<ReadonlyArray<Message>>("GET", "/api/threads/camp-launch/messages")).body).toHaveLength(2);
-    expect((await request<ReadonlyArray<Decision>>("GET", "/api/threads/camp-launch/decisions")).body).toHaveLength(
+    expect((await request<ReadonlyArray<Message>>("GET", "/api/channels/camp-launch/messages")).body).toHaveLength(2);
+    expect((await request<ReadonlyArray<Decision>>("GET", "/api/channels/camp-launch/decisions")).body).toHaveLength(
       CAMP_SUGGESTION_DECISIONS,
     );
-    expect(await messages(thread)).toEqual([]);
+    expect(await messages(channel)).toEqual([]);
 
-    const refused = await request("POST", `/api/threads/${thread.id}/chapters/${chapterId}/move`, {
+    const refused = await request("POST", `/api/channels/${channel.id}/chapters/${chapterId}/move`, {
       _tag: "camp",
       campId: "nowhere",
     });
     expect(refused).toMatchObject({ status: 409, body: { _tag: "ChapterMoveRefused", reason: "not-a-camp" } });
-    const unknown = await request("POST", `/api/threads/${thread.id}/chapters/nope/move`, into);
+    const unknown = await request("POST", `/api/channels/${channel.id}/chapters/nope/move`, into);
     expect(unknown).toMatchObject({ status: 404, body: { _tag: "ChapterMissing" } });
     // The projector's rounds run every few seconds, so this waits for one.
   }, 30_000);
@@ -324,90 +324,90 @@ describe("camp suggestions over the API", () => {
 describe("the camp sheet over the API", () => {
   // covers ADR 037 (Mine: notes to self never wake a hob)
   it("keeps a note to self that wakes no hob, once under its key (#1387)", async () => {
-    const { thread } = await pipWithThread();
-    await exchange(thread, "Hello.");
+    const { channel } = await pipWithChannel();
+    await exchange(channel, "Hello.");
     const note = { key: "note-1", content: "Ask Ana about the venue." };
-    const written = await request<Message>("POST", `/api/threads/${thread.id}/notes`, note);
+    const written = await request<Message>("POST", `/api/channels/${channel.id}/notes`, note);
     expect(written).toMatchObject({
       status: 200,
       body: { id: "note-1", role: "note", content: "Ask Ana about the venue.", actor: { kind: "user" } },
     });
-    expect((await request<Message>("POST", `/api/threads/${thread.id}/notes`, note)).body.id).toBe("note-1");
-    const reused = await request("POST", `/api/threads/${thread.id}/notes`, { key: "note-1", content: "Other" });
+    expect((await request<Message>("POST", `/api/channels/${channel.id}/notes`, note)).body.id).toBe("note-1");
+    const reused = await request("POST", `/api/channels/${channel.id}/notes`, { key: "note-1", content: "Other" });
     expect(reused).toMatchObject({ status: 409, body: { _tag: "MessageKeyReused" } });
-    expect((await request("POST", `/api/threads/${thread.id}/notes`, { key: "n2", content: "  " })).status).toBe(400);
+    expect((await request("POST", `/api/channels/${channel.id}/notes`, { key: "n2", content: "  " })).status).toBe(400);
     // No hob woke: the transcript ends at the note, with no reply after it.
-    expect((await messages(thread)).map((each) => each.role)).toEqual(["user", "assistant", "note"]);
-    const listed = await request<UnreadThreads>("GET", "/api/unread-threads");
-    expect(listed.body.threadIds).toContain(thread.id);
-    expect((await request("POST", "/api/threads/nope/notes", note)).status).toBe(404);
+    expect((await messages(channel)).map((each) => each.role)).toEqual(["user", "assistant", "note"]);
+    const listed = await request<UnreadChannels>("GET", "/api/unread-channels");
+    expect(listed.body.channelIds).toContain(channel.id);
+    expect((await request("POST", "/api/channels/nope/notes", note)).status).toBe(404);
   });
 
   // covers ADR 037 (Mine: pins)
   it("pins a message once, lists it, and unpins it (#1387)", async () => {
-    const { thread } = await pipWithThread();
-    const reply = await exchange(thread, "Hello.");
-    const path = `/api/threads/${thread.id}/messages/${reply.id}/pinned`;
+    const { channel } = await pipWithChannel();
+    const reply = await exchange(channel, "Hello.");
+    const path = `/api/channels/${channel.id}/messages/${reply.id}/pinned`;
     const pinned = await request<MessagePin>("PUT", path, { pinned: true });
-    expect(pinned.body).toMatchObject({ messageId: reply.id, threadId: thread.id });
+    expect(pinned.body).toMatchObject({ messageId: reply.id, channelId: channel.id });
     expect((await request<MessagePin>("PUT", path, { pinned: true })).body).toEqual(pinned.body);
-    expect((await request("GET", `/api/threads/${thread.id}/pins`)).body).toEqual([pinned.body]);
+    expect((await request("GET", `/api/channels/${channel.id}/pins`)).body).toEqual([pinned.body]);
     expect(await request("PUT", path, { pinned: false })).toEqual({ status: 200, body: null });
-    expect((await request("GET", `/api/threads/${thread.id}/pins`)).body).toEqual([]);
-    const elsewhere = await request("PUT", `/api/threads/${thread.id}/messages/nope/pinned`, { pinned: true });
+    expect((await request("GET", `/api/channels/${channel.id}/pins`)).body).toEqual([]);
+    const elsewhere = await request("PUT", `/api/channels/${channel.id}/messages/nope/pinned`, { pinned: true });
     expect(elsewhere).toMatchObject({ status: 404, body: { _tag: "MessageNotFound" } });
   });
 
   // covers ADR 037 (Catch-up)
   it("catches you up on the replies and records since you read, and on nothing after (#1387)", async () => {
-    const { thread } = await pipWithThread();
-    const first = await exchange(thread, "Hello.");
-    await request("PUT", `/api/threads/${thread.id}/read`, { messageId: first.id, revision: first.revision });
+    const { channel } = await pipWithChannel();
+    const first = await exchange(channel, "Hello.");
+    await request("PUT", `/api/channels/${channel.id}/read`, { messageId: first.id, revision: first.revision });
     const call = { key: "fridays", text: "Ship on Fridays." };
-    const reply = await exchange(thread, `${FAKE_HUB_DIRECTIVE} ${RECORD_DECISION_TOOL} ${JSON.stringify(call)}`);
-    const catchUp = async () => (await request<CatchUp>("GET", `/api/threads/${thread.id}/catch-up`)).body;
+    const reply = await exchange(channel, `${FAKE_HUB_DIRECTIVE} ${RECORD_DECISION_TOOL} ${JSON.stringify(call)}`);
+    const catchUp = async () => (await request<CatchUp>("GET", `/api/channels/${channel.id}/catch-up`)).body;
     const caught = await catchUp();
     expect(caught).toMatchObject({ firstUnread: reply.id, replies: 1, more: 0, readUpTo: first.createdAt });
     expect(caught.items).toMatchObject([{ _tag: "Decided", decision: { text: call.text }, messageId: reply.id }]);
-    const last = (await messages(thread)).at(-1);
-    await request("PUT", `/api/threads/${thread.id}/read`, { messageId: last?.id, revision: last?.revision });
+    const last = (await messages(channel)).at(-1);
+    await request("PUT", `/api/channels/${channel.id}/read`, { messageId: last?.id, revision: last?.revision });
     expect(await catchUp()).toMatchObject({ firstUnread: null, replies: 0, items: [] });
-    expect((await request("GET", "/api/threads/nope/catch-up")).status).toBe(404);
+    expect((await request("GET", "/api/channels/nope/catch-up")).status).toBe(404);
   });
 
-  // covers ADR 039 (Cards every thread shares › For you)
+  // covers ADR 039 (Cards every channel shares › For you)
   it("lists in For you, for the person asking, the changes catch-up lists, and nothing once read (#1456)", async () => {
-    const { thread } = await pipWithThread();
-    const first = await exchange(thread, "Hello.");
-    await request("PUT", `/api/threads/${thread.id}/read`, { messageId: first.id, revision: first.revision });
+    const { channel } = await pipWithChannel();
+    const first = await exchange(channel, "Hello.");
+    await request("PUT", `/api/channels/${channel.id}/read`, { messageId: first.id, revision: first.revision });
     const call = { key: "mondays", text: "Ship on Mondays." };
-    await exchange(thread, `${FAKE_HUB_DIRECTIVE} ${RECORD_DECISION_TOOL} ${JSON.stringify(call)}`);
+    await exchange(channel, `${FAKE_HUB_DIRECTIVE} ${RECORD_DECISION_TOOL} ${JSON.stringify(call)}`);
     const forYou = async () => (await request<ForYouRead>("GET", "/api/for-you")).body;
-    const caught = (await request<CatchUp>("GET", `/api/threads/${thread.id}/catch-up`)).body;
+    const caught = (await request<CatchUp>("GET", `/api/channels/${channel.id}/catch-up`)).body;
     const read = await forYou();
     expect(read.cursor).toMatch(/\S/);
     expect(read.forYou.for).toEqual(OWNER_ACTOR);
-    expect(read.forYou.away.find((part) => part.threadId === thread.id)).toMatchObject({
+    expect(read.forYou.away.find((part) => part.channelId === channel.id)).toMatchObject({
       readRevision: first.revision,
       items: caught.items,
       more: caught.more,
     });
-    const last = (await messages(thread)).at(-1);
-    await request("PUT", `/api/threads/${thread.id}/read`, { messageId: last?.id, revision: last?.revision });
-    expect((await forYou()).forYou.away.find((part) => part.threadId === thread.id)).toBeUndefined();
+    const last = (await messages(channel)).at(-1);
+    await request("PUT", `/api/channels/${channel.id}/read`, { messageId: last?.id, revision: last?.revision });
+    expect((await forYou()).forYou.away.find((part) => part.channelId === channel.id)).toBeUndefined();
   });
 
   // covers ADR 037 (Private camps), #1377
   it("makes a camp private later, and refuses it for a chat (#1387)", async () => {
-    const { thread } = await pipWithThread();
-    const chat = await request("PUT", `/api/threads/${thread.id}/private`, { private: true });
-    expect(chat).toMatchObject({ status: 409, body: { _tag: "ThreadNotCamp" } });
-    await exchange(thread, "Let us plan the launch.");
-    const listed = await request<ReadonlyArray<Thread>>("GET", `/api/agents/${thread.agentId}/threads`);
-    const chapterId = listed.body.find((each) => each.id === thread.id)?.liveChapterId;
+    const { channel } = await pipWithChannel();
+    const chat = await request("PUT", `/api/channels/${channel.id}/private`, { private: true });
+    expect(chat).toMatchObject({ status: 409, body: { _tag: "ChannelNotCamp" } });
+    await exchange(channel, "Let us plan the launch.");
+    const listed = await request<ReadonlyArray<Channel>>("GET", `/api/agents/${channel.agentId}/channels`);
+    const chapterId = listed.body.find((each) => each.id === channel.id)?.liveChapterId;
     const into = { _tag: "new", key: "camp-private", title: "Launch", goal: null, private: false };
-    await request("POST", `/api/threads/${thread.id}/chapters/${chapterId}/move`, into);
-    const made = await request<Thread>("PUT", "/api/threads/camp-private/private", { private: true });
+    await request("POST", `/api/channels/${channel.id}/chapters/${chapterId}/move`, into);
+    const made = await request<Channel>("PUT", "/api/channels/camp-private/private", { private: true });
     expect(made).toMatchObject({ status: 200, body: { id: "camp-private", private: true } });
   });
 });
@@ -415,9 +415,9 @@ describe("the camp sheet over the API", () => {
 describe("the sidebar over the API", () => {
   // covers ADR 039 (The sidebar), #1469
   it("lists a hob's chat in Direct messages and its camps in Camps, with your unread replies, sorted on every read (#1469)", async () => {
-    const { pip, thread } = await pipWithThread();
-    await exchange(thread, "Hello.");
-    const camp = await request<Thread>("POST", `/api/agents/${pip.id}/camps`, {
+    const { pip, channel } = await pipWithChannel();
+    await exchange(channel, "Hello.");
+    const camp = await request<Channel>("POST", `/api/agents/${pip.id}/camps`, {
       key: "launch",
       title: "Launch",
       goal: null,
@@ -429,7 +429,7 @@ describe("the sidebar over the API", () => {
     expect(read.people).toEqual([]);
     expect(read.sidebar.directMessages).toEqual([
       {
-        threadId: thread.id,
+        channelId: channel.id,
         agentId: pip.id,
         section: "direct-message",
         others: [hobActor(pip.id)],
@@ -440,7 +440,7 @@ describe("the sidebar over the API", () => {
     ]);
     expect(read.sidebar.camps).toEqual([
       {
-        threadId: "launch",
+        channelId: "launch",
         agentId: pip.id,
         section: "hob-camp",
         others: [hobActor(pip.id)],
@@ -450,8 +450,8 @@ describe("the sidebar over the API", () => {
       },
     ]);
     // Reading the chat clears its count on the next read: nothing about the sidebar was stored.
-    const last = (await messages(thread)).at(-1);
-    await request("PUT", `/api/threads/${thread.id}/read`, { messageId: last?.id, revision: last?.revision });
+    const last = (await messages(channel)).at(-1);
+    await request("PUT", `/api/channels/${channel.id}/read`, { messageId: last?.id, revision: last?.revision });
     const again = (await request<SidebarRead>("GET", "/api/sidebar")).body;
     expect(again.sidebar.directMessages[0]?.unread).toBe(0);
   });

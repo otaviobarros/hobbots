@@ -25,8 +25,8 @@ import {
   EMPTY_HOB_POLICY,
   type Message,
   type TaskTree,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -57,7 +57,7 @@ const dataFolder = join(temp, "data");
 
 const now = "2026-11-02T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
-const threadId = ThreadId.make("docs");
+const channelId = ChannelId.make("docs");
 /** A prompt with this line of its own waits, after its turn's baseline, until the test lets it go on. */
 const HOLD = "fake:hold";
 /** A token as a command could print it. */
@@ -125,8 +125,8 @@ const Seed = Layer.effectDiscard(
         createdAt: now,
       }),
     );
-    yield* repo.upsertThread(
-      new Thread({ id: threadId, agentId: ALDRIC, title: "Docs", createdAt: now, updatedAt: now }),
+    yield* repo.upsertChannel(
+      new Channel({ id: channelId, agentId: ALDRIC, title: "Docs", createdAt: now, updatedAt: now }),
     );
   }),
 );
@@ -213,14 +213,14 @@ const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 const run = (command: object) => `fake:run ${JSON.stringify(command)}`;
 
-/** Sends a message in the thread and waits until every reply in it has ended. */
+/** Sends a message in the channel and waits until every reply in it has ended. */
 const say = (prompt: string) =>
   Effect.gen(function* () {
-    const before = (yield* HobbotsRepository.use((repo) => repo.listMessages(threadId))).length;
-    yield* ChatService.use((chat) => chat.sendPrompt(threadId, prompt));
+    const before = (yield* HobbotsRepository.use((repo) => repo.listMessages(channelId))).length;
+    yield* ChatService.use((chat) => chat.sendPrompt(channelId, prompt));
     return yield* retry(
       Effect.gen(function* () {
-        const all: ReadonlyArray<Message> = yield* HobbotsRepository.use((repo) => repo.listMessages(threadId));
+        const all: ReadonlyArray<Message> = yield* HobbotsRepository.use((repo) => repo.listMessages(channelId));
         const ended = all.every((m) => m.status !== "streaming" && m.status !== "stopping");
         return ended && all.length >= before + 2 ? all : yield* Effect.fail("not yet" as const);
       }),
@@ -230,7 +230,7 @@ const say = (prompt: string) =>
 const treeWhen = (ready: (tree: TaskTree) => boolean) =>
   retry(
     Effect.gen(function* () {
-      const [tree] = yield* TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
+      const [tree] = yield* TaskRepository.use((tasks) => tasks.readChannelTrees(channelId));
       return tree !== undefined && ready(tree) ? tree : yield* Effect.fail("not yet" as const);
     }),
   );

@@ -8,7 +8,7 @@ const at = new Date("2026-11-13T23:15:42.123Z");
 test("a new migration is named by the UTC second it was made", () => {
   assert.equal(secondId(at), "20261113231542");
   assert.equal(
-    migrationFileName("thread_members", at, ["0114_thread_members.ts", "index.ts"]),
+    migrationFileName("channel_members", at, ["0114_thread_members.ts", "index.ts"]),
     "20261113231542_thread_members.ts",
   );
 });
@@ -26,7 +26,7 @@ test("a second already taken moves to the next free one", () => {
 });
 
 test("a name must be lowercase words joined by _", () => {
-  for (const name of ["Thread", "thread-members", "_x", "x__y", ""]) {
+  for (const name of ["Channel", "channel-members", "_x", "x__y", ""]) {
     assert.throws(() => migrationFileName(name, at, []), /is not a migration name/);
   }
 });

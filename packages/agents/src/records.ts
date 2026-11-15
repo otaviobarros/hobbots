@@ -1,4 +1,4 @@
-import { ThreadNotFound, UserSession } from "@hobbots/api";
+import { ChannelNotFound, UserSession } from "@hobbots/api";
 import {
   type Actor,
   type Artifact,
@@ -21,7 +21,7 @@ import {
   recordDecisionJsonSchema,
   type StoredVersion,
   stableJson,
-  type ThreadId,
+  type ChannelId,
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import type { CharmTurn } from "./charms.ts";
@@ -42,7 +42,7 @@ import { PackRecordSource } from "./turn-pack.ts";
 export interface DecisionRequest {
   /** The new decision's id, used once its request key is new. */
   readonly id: DecisionId;
-  readonly threadId: ThreadId;
+  readonly channelId: ChannelId;
   /** The reply whose turn recorded it, whose chapter it joins; null for one you recorded in the app, which joins the live chapter. */
   readonly sourceMessageId: MessageId | null;
   readonly text: string;
@@ -67,14 +67,14 @@ export interface StoredArtifact {
 
 /** A decision to cross out with nothing in its place. */
 export interface CrossOutRequest {
-  readonly threadId: ThreadId;
+  readonly channelId: ChannelId;
   readonly decisionId: DecisionId;
   readonly at: string;
 }
 
 /** Your review of an artifact in a chat or camp. */
 export interface ReviewRequest {
-  readonly threadId: ThreadId;
+  readonly channelId: ChannelId;
   readonly artifactId: RegisteredArtifactId;
   readonly outcome: ArtifactReviewOutcome;
   readonly by: Actor;
@@ -94,24 +94,24 @@ export class RecordRepository extends Context.Service<
      */
     readonly recordDecision: (
       request: DecisionRequest,
-    ) => Effect.Effect<Committed<DecisionPlan>, DecisionRefused | ThreadNotFound>;
+    ) => Effect.Effect<Committed<DecisionPlan>, DecisionRefused | ChannelNotFound>;
     /**
      * Crosses a decision out with nothing in its place, journaled as `DecisionSuperseded`. One
      * crossed out already is returned as it is, and nothing is journaled.
      */
     readonly crossOutDecision: (
       request: CrossOutRequest,
-    ) => Effect.Effect<Committed<Decision>, DecisionRefused | ThreadNotFound>;
-    /** The thread's decisions, crossed-out ones included, newest first. */
-    readonly listDecisions: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Decision>>;
-    /** The thread's artifacts, each once at its latest version, the most recently changed first. */
-    readonly listArtifacts: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Artifact>>;
+    ) => Effect.Effect<Committed<Decision>, DecisionRefused | ChannelNotFound>;
+    /** The channel's decisions, crossed-out ones included, newest first. */
+    readonly listDecisions: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<Decision>>;
+    /** The channel's artifacts, each once at its latest version, the most recently changed first. */
+    readonly listArtifacts: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<Artifact>>;
     /**
-     * One of the thread's artifacts with its versions, oldest first, each with where its contents
-     * are (#1434); none when the thread has no such artifact.
+     * One of the channel's artifacts with its versions, oldest first, each with where its contents
+     * are (#1434); none when the channel has no such artifact.
      */
     readonly artifactVersions: (
-      threadId: ThreadId,
+      channelId: ChannelId,
       artifactId: RegisteredArtifactId,
     ) => Effect.Effect<Option.Option<StoredArtifact>>;
     /**
@@ -121,7 +121,7 @@ export class RecordRepository extends Context.Service<
      */
     readonly reviewArtifact: (
       request: ReviewRequest,
-    ) => Effect.Effect<Committed<Artifact>, ArtifactReviewRefused | ThreadNotFound>;
+    ) => Effect.Effect<Committed<Artifact>, ArtifactReviewRefused | ChannelNotFound>;
     /**
      * Reviews a pull request artifact GitHub reported merged or closed, journaled as
      * `ArtifactReviewSettled`. Null, with nothing journaled, when it no longer waits for review.
@@ -143,8 +143,8 @@ const inputOf = (text: string, replaces: DecisionId | null) => stableJson({ text
 
 /**
  * The decision commands (ADR 037): record and cross out, each announced once committed, and the
- * reads the camp sheet and the context pack take: a thread's decisions, its active ones and its
- * artifacts. A thread that is not there is refused before anything is written.
+ * reads the camp sheet and the context pack take: a channel's decisions, its active ones and its
+ * artifacts. A channel that is not there is refused before anything is written.
  */
 export class Records extends Context.Service<
   Records,
@@ -154,32 +154,32 @@ export class Records extends Context.Service<
      * request record it once.
      */
     readonly recordYours: (
-      threadId: ThreadId,
+      channelId: ChannelId,
       input: { readonly key: string; readonly text: string; readonly replaces: DecisionId | null },
-    ) => Effect.Effect<DecisionPlan, DecisionRefused | ThreadNotFound, UserSession>;
+    ) => Effect.Effect<DecisionPlan, DecisionRefused | ChannelNotFound, UserSession>;
     /** Records a decision a hob's turn made, from `record_decision`. */
     readonly recordHobs: (
       request: Omit<DecisionRequest, "at">,
-    ) => Effect.Effect<DecisionPlan, DecisionRefused | ThreadNotFound>;
+    ) => Effect.Effect<DecisionPlan, DecisionRefused | ChannelNotFound>;
     /** Crosses a decision out with nothing in its place; again, it changes nothing. */
     readonly crossOut: (
-      threadId: ThreadId,
+      channelId: ChannelId,
       decisionId: DecisionId,
-    ) => Effect.Effect<Decision, DecisionRefused | ThreadNotFound>;
-    readonly decisionsOf: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Decision>, ThreadNotFound>;
+    ) => Effect.Effect<Decision, DecisionRefused | ChannelNotFound>;
+    readonly decisionsOf: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<Decision>, ChannelNotFound>;
     /** The decisions that hold, newest first: what the context pack carries. */
-    readonly activeDecisions: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Decision>>;
+    readonly activeDecisions: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<Decision>>;
     /** The artifacts index, the most recently changed first: what the context pack carries. */
-    readonly artifactsOf: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Artifact>>;
+    readonly artifactsOf: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<Artifact>>;
     /**
      * Marks an artifact you looked at reviewed, or dismisses it, as the session's user (ADR 039); the
      * same again changes nothing.
      */
     readonly review: (
-      threadId: ThreadId,
+      channelId: ChannelId,
       artifactId: RegisteredArtifactId,
       outcome: ArtifactReviewOutcome,
-    ) => Effect.Effect<Artifact, ArtifactReviewRefused | ThreadNotFound, UserSession>;
+    ) => Effect.Effect<Artifact, ArtifactReviewRefused | ChannelNotFound, UserSession>;
     /** Every pull request artifact still waiting for review, for the GitHub Charm to check. */
     readonly waitingPullRequests: Effect.Effect<ReadonlyArray<Artifact>>;
     /** Reviews a pull request artifact GitHub reported merged or closed; null when it no longer waits. */
@@ -194,21 +194,21 @@ export class Records extends Context.Service<
       const announce = announcer(yield* Effect.serviceOption(EventPublisher), "a record");
       const now = Effect.map(DateTime.now, DateTime.formatIso);
 
-      const known = (threadId: ThreadId) =>
-        Effect.flatMap(repo.findThread(threadId), (found) =>
-          Option.isNone(found) ? Effect.fail(new ThreadNotFound({ threadId })) : Effect.void,
+      const known = (channelId: ChannelId) =>
+        Effect.flatMap(repo.findChannel(channelId), (found) =>
+          Option.isNone(found) ? Effect.fail(new ChannelNotFound({ channelId })) : Effect.void,
         );
       const announced = announcing(announce);
 
       return Records.of({
-        recordYours: (threadId, input) =>
+        recordYours: (channelId, input) =>
           Effect.gen(function* () {
             const session = yield* UserSession;
-            yield* known(threadId);
+            yield* known(channelId);
             return yield* announced(
               records.recordDecision({
                 id: DecisionIds.make(crypto.randomUUID()),
-                threadId,
+                channelId,
                 sourceMessageId: null,
                 text: input.text,
                 replaces: input.replaces,
@@ -221,24 +221,24 @@ export class Records extends Context.Service<
           }),
         recordHobs: (request) =>
           Effect.gen(function* () {
-            yield* known(request.threadId);
+            yield* known(request.channelId);
             return yield* announced(records.recordDecision({ ...request, at: yield* now }));
           }),
-        crossOut: (threadId, decisionId) =>
+        crossOut: (channelId, decisionId) =>
           Effect.gen(function* () {
-            yield* known(threadId);
-            return yield* announced(records.crossOutDecision({ threadId, decisionId, at: yield* now }));
+            yield* known(channelId);
+            return yield* announced(records.crossOutDecision({ channelId, decisionId, at: yield* now }));
           }),
-        decisionsOf: (threadId) => Effect.andThen(known(threadId), records.listDecisions(threadId)),
-        activeDecisions: (threadId) =>
-          Effect.map(records.listDecisions(threadId), (all) => all.filter(DecisionStates.isActive)),
-        artifactsOf: (threadId) => records.listArtifacts(threadId),
-        review: (threadId, artifactId, outcome) =>
+        decisionsOf: (channelId) => Effect.andThen(known(channelId), records.listDecisions(channelId)),
+        activeDecisions: (channelId) =>
+          Effect.map(records.listDecisions(channelId), (all) => all.filter(DecisionStates.isActive)),
+        artifactsOf: (channelId) => records.listArtifacts(channelId),
+        review: (channelId, artifactId, outcome) =>
           Effect.gen(function* () {
             const session = yield* UserSession;
-            yield* known(threadId);
+            yield* known(channelId);
             return yield* announced(
-              records.reviewArtifact({ threadId, artifactId, outcome, by: session.actor, at: yield* now }),
+              records.reviewArtifact({ channelId, artifactId, outcome, by: session.actor, at: yield* now }),
             );
           }),
         waitingPullRequests: records.waitingPullRequests,
@@ -288,7 +288,7 @@ export const RecordToolsLive = Layer.effect(
     // A runtime runs each call on its own, so it carries the hub's services, its logger included.
     const context = yield* Effect.context<never>();
 
-    const call = (turn: CharmTurn, threadId: ThreadId, messageId: MessageId, raw: unknown) =>
+    const call = (turn: CharmTurn, channelId: ChannelId, messageId: MessageId, raw: unknown) =>
       Effect.gen(function* () {
         const decoded = yield* decodeInput(raw).pipe(Effect.option);
         if (Option.isNone(decoded)) {
@@ -300,7 +300,7 @@ export const RecordToolsLive = Layer.effect(
         const replaces = input.replaces === undefined ? null : DecisionIds.make(input.replaces.trim());
         const plan = yield* records.recordHobs({
           id: DecisionIds.make(crypto.randomUUID()),
-          threadId,
+          channelId,
           sourceMessageId: messageId,
           text,
           replaces,
@@ -313,7 +313,7 @@ export const RecordToolsLive = Layer.effect(
         Effect.catchTags({
           DecisionRefused: (refused) =>
             Effect.succeed({ text: `Refused (${refused.reason}): ${refused.message}`, refused: true }),
-          ThreadNotFound: () =>
+          ChannelNotFound: () =>
             Effect.succeed({ text: "This chat or camp is gone, so nothing was recorded.", refused: true }),
         }),
         Effect.catchCause((cause) =>
@@ -326,13 +326,13 @@ export const RecordToolsLive = Layer.effect(
       );
 
     const offer = (turn: CharmTurn): HubTools | null => {
-      const { threadId, messageId } = turn;
-      if (threadId === null || messageId === null) return null;
+      const { channelId, messageId } = turn;
+      if (channelId === null || messageId === null) return null;
       return {
         tools: [RECORD_DECISION],
         call: (name, input): Effect.Effect<HubToolAnswer> =>
           name === RECORD_DECISION_TOOL
-            ? call(turn, threadId, messageId, input)
+            ? call(turn, channelId, messageId, input)
             : Effect.succeed({ text: `${name} is not offered in this session.`, refused: true }),
       };
     };
@@ -350,12 +350,12 @@ export const RecordPackSource = Layer.effect(
   Effect.gen(function* () {
     const records = yield* Records;
     return PackRecordSource.of({
-      activeDecisions: (threadId) =>
-        Effect.map(records.activeDecisions(threadId), (decisions) =>
+      activeDecisions: (channelId) =>
+        Effect.map(records.activeDecisions(channelId), (decisions) =>
           decisions.map((decision) => ({ id: decision.id, text: decision.text, recordedAt: decision.recordedAt })),
         ),
-      artifactsIndex: (threadId) =>
-        Effect.map(records.artifactsOf(threadId), (artifacts) =>
+      artifactsIndex: (channelId) =>
+        Effect.map(records.artifactsOf(channelId), (artifacts) =>
           artifacts.map((artifact) => ({
             kind: artifact.kind,
             title: artifact.title,

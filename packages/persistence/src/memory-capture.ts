@@ -5,7 +5,7 @@ import {
   type MemoryCaptureWork,
   PrivateCamps,
 } from "@hobbots/agents";
-import { AgentId, Message, TaskId, ThreadId } from "@hobbots/domain";
+import { AgentId, Message, TaskId, ChannelId } from "@hobbots/domain";
 import { DateTime, Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { EventJournal } from "./journal.ts";
@@ -39,8 +39,8 @@ export const MemoryCaptureLive = Layer.effect(
 
     /** The camps private as of the cursor, which capture follows along the journal (ADR 037). */
     const privateAtCursor = Effect.map(
-      sql<{ readonly threadId: string }>`SELECT thread_id FROM memory_capture_private_threads ORDER BY thread_id`,
-      (rows) => rows.map((row) => ThreadId.make(row.threadId)),
+      sql<{ readonly channelId: string }>`SELECT channel_id FROM memory_capture_private_channels ORDER BY channel_id`,
+      (rows) => rows.map((row) => ChannelId.make(row.channelId)),
     );
 
     /** The units kept out of memory for good (ADR 037). */
@@ -48,16 +48,16 @@ export const MemoryCaptureLive = Layer.effect(
       sql<{ readonly unit: string }>`SELECT unit FROM memory_capture_excluded ORDER BY unit`,
       (rows) => rows.map((row) => row.unit),
     );
-    const exclusionsAtCursor = Effect.all({ privateThreads: privateAtCursor, excluded });
+    const exclusionsAtCursor = Effect.all({ privateChannels: privateAtCursor, excluded });
 
-    const saveExclusions = ({ privateThreads, excluded: added }: MemoryCaptureExclusions) =>
+    const saveExclusions = ({ privateChannels, excluded: added }: MemoryCaptureExclusions) =>
       Effect.gen(function* () {
         for (const unit of added) {
           yield* sql`INSERT INTO memory_capture_excluded ${sql.insert({ unit })} ON CONFLICT (unit) DO NOTHING`;
         }
-        yield* sql`DELETE FROM memory_capture_private_threads`;
-        for (const threadId of privateThreads)
-          yield* sql`INSERT INTO memory_capture_private_threads ${sql.insert({ thread_id: threadId })}`;
+        yield* sql`DELETE FROM memory_capture_private_channels`;
+        for (const channelId of privateChannels)
+          yield* sql`INSERT INTO memory_capture_private_channels ${sql.insert({ channel_id: channelId })}`;
       });
 
     const hold = Effect.gen(function* () {
@@ -74,8 +74,8 @@ export const MemoryCaptureLive = Layer.effect(
       }
       yield* sql`DELETE FROM memory_capture_sessions`;
       // Starting at the head, capture takes the camps private now, and keeps out what it kept out before.
-      yield* sql`DELETE FROM memory_capture_private_threads`;
-      yield* sql`INSERT INTO memory_capture_private_threads (thread_id) SELECT id FROM threads WHERE private = 1`;
+      yield* sql`DELETE FROM memory_capture_private_channels`;
+      yield* sql`INSERT INTO memory_capture_private_channels (channel_id) SELECT id FROM channels WHERE private = 1`;
       const since = DateTime.formatIso(yield* DateTime.now);
       const [moved] = yield* sql<{ readonly sequence: unknown }>`UPDATE memory_capture
         SET sequence = (SELECT sequence FROM event_journal_head WHERE id = 1), holding = 1, since_at = ${since}
@@ -83,23 +83,23 @@ export const MemoryCaptureLive = Layer.effect(
       return { sequence: Number(moved?.sequence), since, sessions: [], exclusions: yield* exclusionsAtCursor };
     }).pipe(sql.withTransaction, sqlOrDie);
 
-    /** Of `work`, the camps private now, and the thread of each Task in one (ADR 037). */
+    /** Of `work`, the camps private now, and the channel of each Task in one (ADR 037). */
     const privacy = (work: MemoryCaptureWork) =>
       Effect.gen(function* () {
         const tasks =
           work.taskIds.size === 0
             ? []
-            : yield* sql<{ readonly id: string; readonly threadId: string }>`SELECT id, thread_id FROM tasks
-                WHERE thread_id IS NOT NULL AND ${sql.in("id", [...work.taskIds])}`;
-        const threadIds = [...new Set([...work.threadIds, ...tasks.map((row) => row.threadId)])];
+            : yield* sql<{ readonly id: string; readonly channelId: string }>`SELECT id, channel_id FROM tasks
+                WHERE channel_id IS NOT NULL AND ${sql.in("id", [...work.taskIds])}`;
+        const channelIds = [...new Set([...work.channelIds, ...tasks.map((row) => row.channelId)])];
         const rows =
-          threadIds.length === 0
+          channelIds.length === 0
             ? []
-            : yield* sql<{ readonly id: string }>`SELECT id FROM threads
-                WHERE private = 1 AND ${sql.in("id", threadIds)}`;
+            : yield* sql<{ readonly id: string }>`SELECT id FROM channels
+                WHERE private = 1 AND ${sql.in("id", channelIds)}`;
         return {
-          privateNow: new Set(rows.map((row) => ThreadId.make(row.id))),
-          taskThreads: new Map(tasks.map((row) => [TaskId.make(row.id), ThreadId.make(row.threadId)] as const)),
+          privateNow: new Set(rows.map((row) => ChannelId.make(row.id))),
+          taskChannels: new Map(tasks.map((row) => [TaskId.make(row.id), ChannelId.make(row.channelId)] as const)),
         };
       }).pipe(sqlOrDie);
 
@@ -141,21 +141,21 @@ export const MemoryCaptureLive = Layer.effect(
   }),
 );
 
-/** Whether a turn's work is in a private camp (ADR 037), read from its thread, or its Task's. */
+/** Whether a turn's work is in a private camp (ADR 037), read from its channel, or its Task's. */
 export const PrivateCampsLive = Layer.effect(
   PrivateCamps,
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     return PrivateCamps.of({
-      holds: ({ threadId, taskId }) =>
+      holds: ({ channelId, taskId }) =>
         Effect.gen(function* () {
-          if (threadId !== null) {
-            const [row] = yield* sql`SELECT 1 AS found FROM threads WHERE id = ${threadId} AND private = 1`;
+          if (channelId !== null) {
+            const [row] = yield* sql`SELECT 1 AS found FROM channels WHERE id = ${channelId} AND private = 1`;
             if (row !== undefined) return true;
           }
           if (taskId === undefined) return false;
-          const [row] = yield* sql`SELECT 1 AS found FROM tasks JOIN threads ON threads.id = tasks.thread_id
-            WHERE tasks.id = ${taskId} AND threads.private = 1`;
+          const [row] = yield* sql`SELECT 1 AS found FROM tasks JOIN channels ON channels.id = tasks.channel_id
+            WHERE tasks.id = ${taskId} AND channels.private = 1`;
           return row !== undefined;
         }).pipe(sqlOrDie),
     });

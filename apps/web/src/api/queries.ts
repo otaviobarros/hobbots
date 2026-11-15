@@ -14,10 +14,10 @@ import type {
   MessageId,
   RuntimeKind,
   SummonCaps,
-  ThreadId,
+  ChannelId,
   UsagePeriod,
 } from "@hobbots/domain";
-import { authorOf, messagePreview, sameActor, Thread } from "@hobbots/domain";
+import { authorOf, messagePreview, sameActor, Channel } from "@hobbots/domain";
 import {
   keepPreviousData,
   type QueryClient,
@@ -29,15 +29,15 @@ import {
 import { periodStart } from "../lib/usage.ts";
 import { ApiError, call } from "./client.ts";
 import { runtimeRefetchOnFocus } from "./runtime-health.ts";
-import { newer, syncedAgents, syncedMessages, syncedThreads } from "./sync.ts";
+import { newer, syncedAgents, syncedMessages, syncedChannels } from "./sync.ts";
 
 export const queryKeys = {
   agents: ["agents"] as const,
   archivedAgents: ["archivedAgents"] as const,
-  threads: (agentId: AgentId) => ["agents", agentId, "threads"] as const,
-  archivedThreads: (agentId: AgentId) => ["agents", agentId, "archivedThreads"] as const,
-  messages: (threadId: ThreadId) => ["threads", threadId, "messages"] as const,
-  unreadThreads: ["unreadThreads"] as const,
+  channels: (agentId: AgentId) => ["agents", agentId, "channels"] as const,
+  archivedChannels: (agentId: AgentId) => ["agents", agentId, "archivedChannels"] as const,
+  messages: (channelId: ChannelId) => ["channels", channelId, "messages"] as const,
+  unreadChannels: ["unreadChannels"] as const,
   runtimes: ["runtimes"] as const,
   models: (runtime: RuntimeKind) => ["runtimes", runtime, "models"] as const,
   permissions: (agentId: AgentId) => ["agents", agentId, "permissions"] as const,
@@ -73,42 +73,42 @@ export const archivedAgentsQuery = queryOptions({
 export const sortArchived = (hobs: ReadonlyArray<Agent>): Array<Agent> =>
   [...hobs].sort((a, b) => (b.retiredAt ?? "").localeCompare(a.retiredAt ?? ""));
 
-export const threadsQuery = (agentId: AgentId) =>
+export const channelsQuery = (agentId: AgentId) =>
   queryOptions({
-    queryKey: queryKeys.threads(agentId),
+    queryKey: queryKeys.channels(agentId),
     ...followsEvents,
-    queryFn: syncedThreads(
+    queryFn: syncedChannels(
       agentId,
-      () => call((c) => c.agents.threads({ params: { agentId }, query: {} })),
-      sortThreads,
+      () => call((c) => c.agents.channels({ params: { agentId }, query: {} })),
+      sortChannels,
       false,
     ),
   });
 
-/** A hob's archived threads, most recently archived first. */
-export const archivedThreadsQuery = (agentId: AgentId) =>
+/** A hob's archived channels, most recently archived first. */
+export const archivedChannelsQuery = (agentId: AgentId) =>
   queryOptions({
-    queryKey: queryKeys.archivedThreads(agentId),
+    queryKey: queryKeys.archivedChannels(agentId),
     ...followsEvents,
-    queryFn: syncedThreads(
+    queryFn: syncedChannels(
       agentId,
-      () => call((c) => c.agents.threads({ params: { agentId }, query: { archived: "true" } })),
-      sortArchivedThreads,
+      () => call((c) => c.agents.channels({ params: { agentId }, query: { archived: "true" } })),
+      sortArchivedChannels,
       true,
     ),
   });
 
-export const messagesQuery = (threadId: ThreadId) =>
+export const messagesQuery = (channelId: ChannelId) =>
   queryOptions({
-    queryKey: queryKeys.messages(threadId),
+    queryKey: queryKeys.messages(channelId),
     ...followsEvents,
-    queryFn: syncedMessages(threadId, () => call((c) => c.threads.messages({ params: { threadId } })), upsertMessage),
+    queryFn: syncedMessages(channelId, () => call((c) => c.channels.messages({ params: { channelId } })), upsertMessage),
   });
 
 export const runtimesQuery = queryOptions({
   queryKey: queryKeys.runtimes,
   queryFn: () => call((c) => c.system.runtimes()),
-  // Each check runs the providers' CLIs, so opening a page or a thread doesn't check again.
+  // Each check runs the providers' CLIs, so opening a page or a channel doesn't check again.
   staleTime: 60_000,
   refetchOnWindowFocus: (query) => runtimeRefetchOnFocus(query.state.data),
 });
@@ -306,62 +306,62 @@ export const upsertMessage = (list: ReadonlyArray<Message>, message: Message): A
     : upsertById(list, message);
 };
 
-const sortThreads = (threads: Array<Thread>) => threads.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+const sortChannels = (channels: Array<Channel>) => channels.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
-const sortArchivedThreads = (threads: Array<Thread>) =>
-  threads.sort((a, b) => (b.archivedAt ?? "").localeCompare(a.archivedAt ?? ""));
+const sortArchivedChannels = (channels: Array<Channel>) =>
+  channels.sort((a, b) => (b.archivedAt ?? "").localeCompare(a.archivedAt ?? ""));
 
 /**
- * Puts a thread the hub returned or announced in its hob's list by its `archivedAt`: a live thread in
- * the thread list, an archived one in the archived list, and out of the other. An older version than
+ * Puts a channel the hub returned or announced in its hob's list by its `archivedAt`: a live channel in
+ * the channel list, an archived one in the archived list, and out of the other. An older version than
  * the one already shown changes nothing. Lists not loaded yet stay unloaded.
  */
-export const placeThread = (queryClient: QueryClient, thread: Thread) => {
-  const archived = thread.archivedAt !== null;
-  const known = [queryKeys.threads(thread.agentId), queryKeys.archivedThreads(thread.agentId)]
-    .flatMap((key) => queryClient.getQueryData<ReadonlyArray<Thread>>(key) ?? [])
-    .find((existing) => existing.id === thread.id);
-  if (newer(known, thread) !== thread) return;
-  const into = archived ? queryKeys.archivedThreads(thread.agentId) : queryKeys.threads(thread.agentId);
-  const outOf = archived ? queryKeys.threads(thread.agentId) : queryKeys.archivedThreads(thread.agentId);
-  const order = archived ? sortArchivedThreads : sortThreads;
-  queryClient.setQueryData<ReadonlyArray<Thread>>(into, (old) => (old ? order(upsertById(old, thread)) : old));
-  queryClient.setQueryData<ReadonlyArray<Thread>>(outOf, (old) => old?.filter((t) => t.id !== thread.id));
+export const placeChannel = (queryClient: QueryClient, channel: Channel) => {
+  const archived = channel.archivedAt !== null;
+  const known = [queryKeys.channels(channel.agentId), queryKeys.archivedChannels(channel.agentId)]
+    .flatMap((key) => queryClient.getQueryData<ReadonlyArray<Channel>>(key) ?? [])
+    .find((existing) => existing.id === channel.id);
+  if (newer(known, channel) !== channel) return;
+  const into = archived ? queryKeys.archivedChannels(channel.agentId) : queryKeys.channels(channel.agentId);
+  const outOf = archived ? queryKeys.channels(channel.agentId) : queryKeys.archivedChannels(channel.agentId);
+  const order = archived ? sortArchivedChannels : sortChannels;
+  queryClient.setQueryData<ReadonlyArray<Channel>>(into, (old) => (old ? order(upsertById(old, channel)) : old));
+  queryClient.setQueryData<ReadonlyArray<Channel>>(outOf, (old) => old?.filter((t) => t.id !== channel.id));
 };
 
-const isThreadList = (query: { readonly queryKey: ReadonlyArray<unknown> }) =>
-  query.queryKey[0] === "agents" && /^(threads|archivedThreads)$/.test(String(query.queryKey[2]));
+const isChannelList = (query: { readonly queryKey: ReadonlyArray<unknown> }) =>
+  query.queryKey[0] === "agents" && /^(channels|archivedChannels)$/.test(String(query.queryKey[2]));
 
 /**
- * A message the transcript shows becomes its thread's last line in the hob's thread lists, so a
+ * A message the transcript shows becomes its channel's last line in the hob's channel lists, so a
  * list of chats follows a reply as it lands. The hub works out the same line when it reads them.
  */
 export const showLastLine = (queryClient: QueryClient, message: Message) => {
-  const lists = queryClient.getQueriesData<ReadonlyArray<Thread>>({ predicate: isThreadList });
+  const lists = queryClient.getQueriesData<ReadonlyArray<Channel>>({ predicate: isChannelList });
   if (message.quiet) {
     // A reply kept quiet as it completes may already be the last line, from a read or a step while it
-    // streamed. The hub reads the line from the message before it, so the lists holding the thread
+    // streamed. The hub reads the line from the message before it, so the lists holding the channel
     // are read again (#1006).
-    for (const [key, threads] of lists)
-      if (threads?.some((thread) => thread.id === message.threadId))
+    for (const [key, channels] of lists)
+      if (channels?.some((channel) => channel.id === message.channelId))
         void queryClient.invalidateQueries({ queryKey: key, exact: true });
     return;
   }
   const lastLine = messagePreview(message);
   if (lastLine === null) return;
   // Who wrote it, as the hub reads it with the line: the message's own actor (STD-ARCH-021).
-  const shown = (thread: Thread) => {
-    const lastAuthor = authorOf(message, thread);
+  const shown = (channel: Channel) => {
+    const lastAuthor = authorOf(message, channel);
     const sameAuthor =
-      thread.lastAuthor === null || lastAuthor === null
-        ? thread.lastAuthor === lastAuthor
-        : sameActor(thread.lastAuthor, lastAuthor);
-    return thread.lastLine === lastLine && sameAuthor ? thread : new Thread({ ...thread, lastLine, lastAuthor });
+      channel.lastAuthor === null || lastAuthor === null
+        ? channel.lastAuthor === lastAuthor
+        : sameActor(channel.lastAuthor, lastAuthor);
+    return channel.lastLine === lastLine && sameAuthor ? channel : new Channel({ ...channel, lastLine, lastAuthor });
   };
-  for (const [key, threads] of lists) {
-    if (!threads?.some((thread) => thread.id === message.threadId && shown(thread) !== thread)) continue;
-    queryClient.setQueryData<ReadonlyArray<Thread>>(key, (old) =>
-      old?.map((thread) => (thread.id === message.threadId ? shown(thread) : thread)),
+  for (const [key, channels] of lists) {
+    if (!channels?.some((channel) => channel.id === message.channelId && shown(channel) !== channel)) continue;
+    queryClient.setQueryData<ReadonlyArray<Channel>>(key, (old) =>
+      old?.map((channel) => (channel.id === message.channelId ? shown(channel) : channel)),
     );
   }
 };
@@ -375,11 +375,11 @@ const refreshIfUnavailable = (queryClient: QueryClient) => (error: Error) => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.agents, exact: true });
 };
 
-/** Sends a prompt and puts it and its reply in the thread, without a component to report to. */
-export const sendPrompt = async (queryClient: QueryClient, threadId: ThreadId, content: string) => {
+/** Sends a prompt and puts it and its reply in the channel, without a component to report to. */
+export const sendPrompt = async (queryClient: QueryClient, channelId: ChannelId, content: string) => {
   try {
-    const sent = await call((c) => c.threads.sendPrompt({ params: { threadId }, payload: { content } }));
-    queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId), (old) =>
+    const sent = await call((c) => c.channels.sendPrompt({ params: { channelId }, payload: { content } }));
+    queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(channelId), (old) =>
       insertIfMissing(insertIfMissing(old, sent.userMessage), sent.assistantMessage),
     );
     return sent;
@@ -389,18 +389,18 @@ export const sendPrompt = async (queryClient: QueryClient, threadId: ThreadId, c
   }
 };
 
-export const useSendPrompt = (threadId: ThreadId) => {
+export const useSendPrompt = (channelId: ChannelId) => {
   const queryClient = useQueryClient();
-  return useMutation({ mutationFn: (content: string) => sendPrompt(queryClient, threadId, content) });
+  return useMutation({ mutationFn: (content: string) => sendPrompt(queryClient, channelId, content) });
 };
 
-/** Takes a queued message out of the thread before it starts. */
-export const useRemoveQueued = (threadId: ThreadId) => {
+/** Takes a queued message out of the channel before it starts. */
+export const useRemoveQueued = (channelId: ChannelId) => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (messageId: MessageId) => call((c) => c.threads.removeQueued({ params: { threadId, messageId } })),
+    mutationFn: (messageId: MessageId) => call((c) => c.channels.removeQueued({ params: { channelId, messageId } })),
     onSuccess: (_, messageId) => {
-      queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId), (old) =>
+      queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(channelId), (old) =>
         old?.filter((message) => message.id !== messageId),
       );
     },
@@ -408,73 +408,73 @@ export const useRemoveQueued = (threadId: ThreadId) => {
 };
 
 /** Stops the running reply and starts this queued message next. */
-export const useSendNow = (threadId: ThreadId) =>
+export const useSendNow = (channelId: ChannelId) =>
   useMutation({
-    mutationFn: (messageId: MessageId) => call((c) => c.threads.sendNow({ params: { threadId, messageId } })),
+    mutationFn: (messageId: MessageId) => call((c) => c.channels.sendNow({ params: { channelId, messageId } })),
   });
 
-export const useInterrupt = (threadId: ThreadId) =>
+export const useInterrupt = (channelId: ChannelId) =>
   useMutation({
-    mutationFn: () => call((c) => c.threads.interrupt({ params: { threadId } })),
+    mutationFn: () => call((c) => c.channels.interrupt({ params: { channelId } })),
   });
 
 /** Stop waiting: ends a reply that only waits on commands, keeping its text (#1056). */
-export const useStopWaiting = (threadId: ThreadId) =>
+export const useStopWaiting = (channelId: ChannelId) =>
   useMutation({
-    mutationFn: () => call((c) => c.threads.stopWaiting({ params: { threadId } })),
+    mutationFn: () => call((c) => c.channels.stopWaiting({ params: { channelId } })),
   });
 
 /**
- * Let them go on (ADR 039): the hobs the relay budget paused in the thread go on. The card goes
- * away when the hub publishes the thread's run without them.
+ * Let them go on (ADR 039): the hobs the relay budget paused in the channel go on. The card goes
+ * away when the hub publishes the channel's run without them.
  */
-export const useLetHobsGoOn = (threadId: ThreadId) =>
+export const useLetHobsGoOn = (channelId: ChannelId) =>
   useMutation({
-    mutationFn: () => call((c) => c.threads.letHobsGoOn({ params: { threadId } })),
+    mutationFn: () => call((c) => c.channels.letHobsGoOn({ params: { channelId } })),
   });
 
-/** Creates a thread and sends its first prompt, so a new thread only appears once it has a message. */
-export const startThread = async (queryClient: QueryClient, agentId: AgentId, content: string) => {
+/** Creates a channel and sends its first prompt, so a new channel only appears once it has a message. */
+export const startChannel = async (queryClient: QueryClient, agentId: AgentId, content: string) => {
   try {
-    const thread = await call((c) => c.agents.createThread({ params: { agentId } }));
+    const channel = await call((c) => c.agents.createChannel({ params: { agentId } }));
     // An empty list lets live events for the first reply land while the prompt is sent.
-    queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(thread.id), []);
-    const sent = await call((c) => c.threads.sendPrompt({ params: { threadId: thread.id }, payload: { content } }));
-    queryClient.setQueryData<ReadonlyArray<Thread>>(queryKeys.threads(agentId), (old) =>
-      sortThreads(insertIfMissing(old, thread)),
+    queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(channel.id), []);
+    const sent = await call((c) => c.channels.sendPrompt({ params: { channelId: channel.id }, payload: { content } }));
+    queryClient.setQueryData<ReadonlyArray<Channel>>(queryKeys.channels(agentId), (old) =>
+      sortChannels(insertIfMissing(old, channel)),
     );
-    queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(thread.id), (old) =>
+    queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(channel.id), (old) =>
       insertIfMissing(insertIfMissing(old, sent.userMessage), sent.assistantMessage),
     );
-    return { thread, ...sent };
+    return { channel, ...sent };
   } catch (error) {
     refreshIfUnavailable(queryClient)(error as Error);
     throw error;
   }
 };
 
-export const useStartThread = (agentId: AgentId) => {
+export const useStartChannel = (agentId: AgentId) => {
   const queryClient = useQueryClient();
-  return useMutation({ mutationFn: (content: string) => startThread(queryClient, agentId, content) });
+  return useMutation({ mutationFn: (content: string) => startChannel(queryClient, agentId, content) });
 };
 
 /**
- * Switches a thread's brain from its next turn (ADR 017). The thread shows its new brain now; with
+ * Switches a channel's brain from its next turn (ADR 017). The channel shows its new brain now; with
  * `makeDefault` the hob changes too, and the hob list hears of its new version from its event.
  */
-export const useSetBrain = (agentId: AgentId, threadId: ThreadId) => {
+export const useSetBrain = (agentId: AgentId, channelId: ChannelId) => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: SetBrainPayload) => call((c) => c.threads.setBrain({ params: { threadId }, payload })),
-    onSuccess: (thread, payload) => {
-      queryClient.setQueryData<ReadonlyArray<Thread>>(queryKeys.threads(agentId), (old) =>
+    mutationFn: (payload: SetBrainPayload) => call((c) => c.channels.setBrain({ params: { channelId }, payload })),
+    onSuccess: (channel, payload) => {
+      queryClient.setQueryData<ReadonlyArray<Channel>>(queryKeys.channels(agentId), (old) =>
         old
-          ? sortThreads(
+          ? sortChannels(
               upsertById(
                 old,
                 newer(
-                  old.find((t) => t.id === thread.id),
-                  thread,
+                  old.find((t) => t.id === channel.id),
+                  channel,
                 ),
               ),
             )
@@ -485,18 +485,18 @@ export const useSetBrain = (agentId: AgentId, threadId: ThreadId) => {
   });
 };
 
-/** The brain a thread thinks with: its own, else its hob's. */
-export const threadBrain = (hob: Agent, thread: Thread | undefined): Brain =>
-  thread?.brain ?? { runtime: hob.runtime, model: hob.model, effort: hob.effort };
+/** The brain a channel thinks with: its own, else its hob's. */
+export const channelBrain = (hob: Agent, channel: Channel | undefined): Brain =>
+  channel?.brain ?? { runtime: hob.runtime, model: hob.model, effort: hob.effort };
 
 /** Continues a reply that was cut off or hit a limit, in the same message. */
-export const useContinueReply = (threadId: ThreadId) => {
+export const useContinueReply = (channelId: ChannelId) => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (messageId: MessageId) => call((c) => c.threads.continueReply({ params: { threadId, messageId } })),
+    mutationFn: (messageId: MessageId) => call((c) => c.channels.continueReply({ params: { channelId, messageId } })),
     onError: refreshIfUnavailable(queryClient),
     onSuccess: (message) => {
-      queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId), (old) =>
+      queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(channelId), (old) =>
         // A live event may already have brought a newer version of the reply.
         old
           ? upsertMessage(

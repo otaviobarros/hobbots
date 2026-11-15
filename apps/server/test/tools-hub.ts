@@ -1,6 +1,6 @@
 import { sep } from "node:path";
 import { HobbotsRepository, HobTools, TaskRepository } from "@hobbots/agents";
-import { Agent, type AgentId, AttemptId, type TaskId, type TaskToolDone, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, type AgentId, AttemptId, type TaskId, type TaskToolDone, Channel, ChannelId } from "@hobbots/domain";
 import { TaskTools } from "@hobbots/orchestration";
 import {
   ApprovalRepositoryLive,
@@ -39,7 +39,7 @@ const toolsLayer = (runtimes: Layer.Layer<never> = Layer.empty) =>
 const Tools = toolsLayer();
 
 /**
- * Hobs named `names`, and a request to the first of them in its thread, `top`, whose turn has
+ * Hobs named `names`, and a request to the first of them in its channel, `top`, whose turn has
  * started. `call` makes a hob's call from a turn on a Task, `refused` one the hub refuses.
  */
 export const toolsHub = (
@@ -97,9 +97,9 @@ export const toolsHub = (
     }
     const [lead] = names;
     if (lead === undefined) return;
-    const threadId = ThreadId.make("tools-hub");
-    yield* repo.upsertThread(
-      new Thread({ id: threadId, agentId: lead[0], title: "Work", createdAt: now, updatedAt: now }),
+    const channelId = ChannelId.make("tools-hub");
+    yield* repo.upsertChannel(
+      new Channel({ id: channelId, agentId: lead[0], title: "Work", createdAt: now, updatedAt: now }),
     );
     const tasks = yield* TaskRepository;
     const created = yield* tasks.createTask({
@@ -107,7 +107,7 @@ export const toolsHub = (
         id: top,
         ownerId: lead[0],
         parentId: null,
-        threadId,
+        channelId,
         brief: "Build the project",
         dependsOn: [],
         createdAt: now,

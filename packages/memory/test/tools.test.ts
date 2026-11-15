@@ -36,7 +36,7 @@ import {
   type PolicyDecision,
   SafetyPreset,
   TaskId,
-  ThreadId,
+  ChannelId,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Layer } from "effect";
@@ -128,7 +128,7 @@ const withMark = (approvals: TurnApprovals | null, webMark: WebMark | undefined)
       };
 
 /** A private camp, and a Task worked on in it (ADR 037). */
-const camp = ThreadId.make("camp");
+const camp = ChannelId.make("camp");
 const campTask = TaskId.make("camp-task");
 
 /** One hub's memory: its tools, its store and save records, every call that reached the store, and its shares. */
@@ -173,7 +173,7 @@ const makeHub = (options: { readonly shares?: boolean; readonly store?: MemorySt
         ),
         PolicyEngine.node,
         Layer.succeed(PrivateCamps, {
-          holds: ({ threadId, taskId }) => Effect.succeed(threadId === camp || taskId === campTask),
+          holds: ({ channelId, taskId }) => Effect.succeed(channelId === camp || taskId === campTask),
         }),
         options.shares ? Layer.succeed(MemoryShares, shares) : Layer.empty,
       ),
@@ -192,8 +192,8 @@ interface CallOptions {
   readonly work?: string;
   /** The Attempt a turn outside any chat runs as. */
   readonly attemptId?: AttemptId;
-  /** The thread a chat turn writes, or the Task a turn outside any chat works on. */
-  readonly threadId?: ThreadId;
+  /** The channel a chat turn writes, or the Task a turn outside any chat works on. */
+  readonly channelId?: ChannelId;
   readonly taskId?: TaskId;
   /**
    * What recording the call's step answers, as the turn's `recordToolStart` would (ADR 031); each
@@ -211,7 +211,7 @@ const callOn = (hub: Hub, name: string, input: unknown, options: CallOptions = {
     let started = false;
     const turn: CharmTurn = {
       agentId: options.as ?? pip,
-      threadId: options.threadId ?? null,
+      channelId: options.channelId ?? null,
       messageId: null,
       ...(options.taskId === undefined ? {} : { taskId: options.taskId }),
       scope: () => options.work ?? "reply:m1",
@@ -266,13 +266,13 @@ describe("the memory tools", () => {
       const saved = await callOn(hub, MEMORY_SAVE_TOOL, page(`save-${preset}`), { access: accessFor([app], preset) });
       expect(saved.offered).toEqual([MEMORY_SEARCH_TOOL, MEMORY_SAVE_TOOL]);
       expect(saved.answer).toEqual({
-        text: "Saved notes/tests.md to your memory. A later thread can find it with memory_search.",
+        text: "Saved notes/tests.md to your memory. A later channel can find it with memory_search.",
         refused: false,
       });
       expect(saved.events).toContainEqual(
         expect.objectContaining({ _tag: "ToolStarted", tool: MEMORY_SAVE_TOOL, operation: "save-memory" }),
       );
-      // In another thread, a later search finds it.
+      // In another channel, a later search finds it.
       const found = await callOn(hub, MEMORY_SEARCH_TOOL, { query: "pnpm test" }, { work: "reply:m2" });
       expect(found.answer?.refused).toBe(false);
       expect(found.answer?.text).toContain("Tests (notes/tests.md, in your memory)");
@@ -381,14 +381,14 @@ describe("the memory tools", () => {
     ]);
   });
 
-  // covers ADR 037 (A camp is a thread with a kind), ADR 028 (The memory tools)
+  // covers ADR 037 (A camp is a channel with a kind), ADR 028 (The memory tools)
   it("refuses a save or a share from a private camp, or a Task in one, before anything is asked or written (#1377)", async () => {
     const hub = makeHub({ shares: true });
     const asked: Array<ApprovalAction> = [];
     const user = { asked, answer: "approve" } as const;
-    const fromCamp = await callOn(hub, MEMORY_SAVE_TOOL, page("camp"), { threadId: camp, records: true, user });
+    const fromCamp = await callOn(hub, MEMORY_SAVE_TOOL, page("camp"), { channelId: camp, records: true, user });
     const fromTask = await callOn(hub, MEMORY_SAVE_TOOL, page("task"), { taskId: campTask, work: "task:camp-task" });
-    const share = await callOn(hub, MEMORY_SAVE_TOOL, page("share", { scope: "everyone" }), { threadId: camp, user });
+    const share = await callOn(hub, MEMORY_SAVE_TOOL, page("share", { scope: "everyone" }), { channelId: camp, user });
     for (const { answer } of [fromCamp, fromTask, share]) {
       expect(answer).toEqual({ text: PRIVATE_CAMP_SAVE, refused: true });
     }
@@ -396,11 +396,11 @@ describe("the memory tools", () => {
     expect(asked).toEqual([]);
     expect(hub.saves.saves()).toEqual([]);
     expect(hub.shared).toEqual([]);
-    // It still reads memory, and a save from another thread goes through.
-    expect((await callOn(hub, MEMORY_SEARCH_TOOL, { query: "pnpm test" }, { threadId: camp })).answer?.refused).toBe(
+    // It still reads memory, and a save from another channel goes through.
+    expect((await callOn(hub, MEMORY_SEARCH_TOOL, { query: "pnpm test" }, { channelId: camp })).answer?.refused).toBe(
       false,
     );
-    await callOn(hub, MEMORY_SAVE_TOOL, page("elsewhere"), { threadId: ThreadId.make("public") });
+    await callOn(hub, MEMORY_SAVE_TOOL, page("elsewhere"), { channelId: ChannelId.make("public") });
     expect(hub.saves.saves().map((save) => save.key)).toHaveLength(1);
   });
 
@@ -610,13 +610,13 @@ describe("the memory tools", () => {
 // and answers as on the in-memory store.
 describe.runIf(engineEnabled)("the memory tools on the bundled ai-memory", () => {
   // covers ADR 028 (The memory tools)
-  it("save to the hob's own memory, find it in its next thread, write once for a retried key, and keep it from another hob", async () => {
+  it("save to the hob's own memory, find it in its next channel, write once for a retried key, and keep it from another hob", async () => {
     const { dataDir, keys } = engineDataDir();
     const { store } = await Effect.runPromise(startEngineStore(dataDir, keys));
     const hub = makeHub({ store });
     const saved = await callOn(hub, MEMORY_SAVE_TOOL, page("tests"));
     expect(saved.answer).toEqual({
-      text: "Saved notes/tests.md to your memory. A later thread can find it with memory_search.",
+      text: "Saved notes/tests.md to your memory. A later channel can find it with memory_search.",
       refused: false,
     });
     const again = await callOn(hub, MEMORY_SAVE_TOOL, page("tests"));

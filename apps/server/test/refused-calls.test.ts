@@ -20,8 +20,8 @@ import {
   TaskId as TaskIdSchema,
   type TaskToolDone,
   type TaskToolRefused,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
 import { TaskTools } from "@hobbots/orchestration";
@@ -48,7 +48,7 @@ const FRODO = AgentId.make("frodo");
 const ROOK = AgentId.make("rook");
 const PIP = AgentId.make("pip");
 const SAM = AgentId.make("sam");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 const TOP = TaskIdSchema.make("top");
 /** A credential the hub knows by value, as one from its environment. */
 const KNOWN_TOKEN = "hobbots-known-credential-0123456789";
@@ -133,12 +133,12 @@ const seed = Effect.gen(function* () {
       }),
     );
   }
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: FRODO, title: "Quest", createdAt: now, updatedAt: now }),
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, agentId: FRODO, title: "Quest", createdAt: now, updatedAt: now }),
   );
   const tasks = yield* TaskRepository;
   const created = yield* tasks.createTask({
-    task: { id: TOP, ownerId: FRODO, parentId: null, threadId, brief: "The Quest", dependsOn: [], createdAt: now },
+    task: { id: TOP, ownerId: FRODO, parentId: null, channelId, brief: "The Quest", dependsOn: [], createdAt: now },
     delegation: null,
     milestones: [],
   });
@@ -405,12 +405,12 @@ describe("refused Task tool calls", () => {
 
   it("a chat turn's refusal before its call is decided is recorded on the Task it was briefed on", async () => {
     await run(seed);
-    const chatTurn = (thread: ThreadId, message: string) =>
+    const chatTurn = (channel: ChannelId, message: string) =>
       run(
         Effect.flatMap(Effect.service(TaskTools), (tools) =>
           tools.forChat({
             agentId: FRODO,
-            threadId: thread,
+            channelId: channel,
             messageId: MessageId.make(message),
             prompt: "Carry on with the Quest",
             runtime: "claude-code",
@@ -418,7 +418,7 @@ describe("refused Task tool calls", () => {
           }),
         ),
       );
-    const briefed = await chatTurn(threadId, "reply-1");
+    const briefed = await chatTurn(channelId, "reply-1");
     for (const [name, input] of [
       ["summon_army", { key: "army" }],
       ["plan_steps", { steps: [] }],
@@ -435,12 +435,12 @@ describe("refused Task tool calls", () => {
     ]);
     expect((await tree()).refusals).toHaveLength(3);
 
-    // In a thread with no Task yet, a refused call that would start one leaves none, and no Task on its record.
-    const elsewhere = ThreadId.make("t2");
+    // In a channel with no Task yet, a refused call that would start one leaves none, and no Task on its record.
+    const elsewhere = ChannelId.make("t2");
     await run(
       Effect.flatMap(Effect.service(HobbotsRepository), (repo) =>
-        repo.upsertThread(
-          new Thread({ id: elsewhere, agentId: FRODO, title: "Other", createdAt: now, updatedAt: now }),
+        repo.upsertChannel(
+          new Channel({ id: elsewhere, agentId: FRODO, title: "Other", createdAt: now, updatedAt: now }),
         ),
       ),
     );
@@ -450,7 +450,7 @@ describe("refused Task tool calls", () => {
     const missing = (await stored()).find((row) => row.callKey === "d");
     expect(missing).toMatchObject({ reason: "hob-missing", taskId: null });
     expect(
-      await run(Effect.flatMap(Effect.service(TaskRepository), (tasks) => tasks.readThreadTrees(elsewhere))),
+      await run(Effect.flatMap(Effect.service(TaskRepository), (tasks) => tasks.readChannelTrees(elsewhere))),
     ).toEqual([]);
   });
 });

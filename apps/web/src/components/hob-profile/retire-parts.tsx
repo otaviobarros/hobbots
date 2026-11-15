@@ -29,7 +29,7 @@ export function OpenWorkList({
       {running.length > 0 && <span className="lbl text-label">{copy.runningHeading}</span>}
       <ul className="m-0 flex list-none flex-col gap-1 p-0">
         {running.map((title, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: two running threads may share a title.
+          // biome-ignore lint/suspicious/noArrayIndexKey: two running channels may share a title.
           <li key={i} className="truncate">
             {title}
           </li>

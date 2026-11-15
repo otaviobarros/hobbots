@@ -5,8 +5,8 @@ import { v5 as uuidV5 } from "uuid";
 import type { EngineProject } from "./scopes.ts";
 
 /**
- * Capture on ai-memory (ADR 028, Capture and summaries): what happened in a thread, or in an Attempt
- * outside any chat, sent to `/hook/batch` as lifecycle events of one ai-memory session, the thread's
+ * Capture on ai-memory (ADR 028, Capture and summaries): what happened in a channel, or in an Attempt
+ * outside any chat, sent to `/hook/batch` as lifecycle events of one ai-memory session, the channel's
  * or the Attempt's. Hobbots is the producer (`extension=hobbots`) and the agent, whichever brain
  * wrote a reply, so a brain switch never splits the session. A message of yours, or a Task's goal, is
  * a prompt, a reply ends a turn (`stop`), a tool step and a Quest are events of Hobbots' own
@@ -23,8 +23,8 @@ const SESSION_NAMESPACE = "6f1f3a5e-2b7d-4c0e-9a51-8d2c4e7b9f10";
 
 /**
  * The session ai-memory keeps a memory session in. ai-memory names a session once for all its
- * projects, while a hob's memory names its own sessions: a thread with several hobs has a session
- * named by the thread in each hob's memory (ADR 039, Memory in a shared thread). So each one is named
+ * projects, while a hob's memory names its own sessions: a channel with several hobs has a session
+ * named by the channel in each hob's memory (ADR 039, Memory in a shared channel). So each one is named
  * by its project too, as a UUID v5, which ai-memory keeps as it is, and the same session always gets
  * the same name. Its summary page is `sessions/<that name>.md`.
  */

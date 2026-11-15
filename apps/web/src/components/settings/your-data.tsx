@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { aboutQuery } from "../../api/about.ts";
-import { archivedAgentsQuery, threadsQuery, useBringBackHob } from "../../api/queries.ts";
+import { archivedAgentsQuery, channelsQuery, useBringBackHob } from "../../api/queries.ts";
 import { formatDay } from "../../lib/time.ts";
 import { useCopy } from "../../lib/use-copy.ts";
 import { messages as archiveMessages } from "../archive-page/messages.ts";
@@ -91,11 +91,11 @@ function RetiredRow({
   busy: boolean;
   onBringBack: (hob: Agent, chats: number) => void;
 }) {
-  const threads = useQuery(threadsQuery(hob.id));
+  const channels = useQuery(channelsQuery(hob.id));
   const meta = [
     hob.roleTitle,
     hob.retiredAt ? retiredCopy.retired({ day: formatDay(hob.retiredAt) }) : retiredCopy.retiredUnknown,
-    ...(threads.data ? [retiredCopy.kept({ count: threads.data.length })] : []),
+    ...(channels.data ? [retiredCopy.kept({ count: channels.data.length })] : []),
   ].join(" · ");
   return (
     <li className="flex min-w-0 items-center gap-3 rounded-control px-3 py-2.5 hover:bg-hover">
@@ -116,7 +116,7 @@ function RetiredRow({
         size="xs"
         disabled={busy}
         aria-label={retiredCopy.bringBackLabel({ name: hob.name })}
-        onClick={() => onBringBack(hob, threads.data?.length ?? 0)}
+        onClick={() => onBringBack(hob, channels.data?.length ?? 0)}
       >
         {busy ? retiredCopy.bringingBack : retiredCopy.bringBack}
       </Button>

@@ -1,8 +1,8 @@
-import { Agent, AgentId, SidebarPlace, Thread, ThreadId, User, UserId } from "@hobbots/domain";
+import { Agent, AgentId, SidebarPlace, Channel, ChannelId, User, UserId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { authorName, campRows, directRows, rowTime, unreadCount } from "./sidebar-rows.ts";
 
-// Issue #1469 (ADR 039, The sidebar): rows join the hub's sections with the live threads and hobs.
+// Issue #1469 (ADR 039, The sidebar): rows join the hub's sections with the live channels and hobs.
 
 const NOW = "2026-11-14T10:00:00.000Z";
 const hob = (id: string) =>
@@ -19,9 +19,9 @@ const hob = (id: string) =>
     configVersion: 1,
     createdAt: NOW,
   });
-const thread = (id: string, agentId: string, kind: "chat" | "camp") =>
-  new Thread({
-    id: ThreadId.make(id),
+const channel = (id: string, agentId: string, kind: "chat" | "camp") =>
+  new Channel({
+    id: ChannelId.make(id),
     agentId: AgentId.make(agentId),
     title: id,
     kind,
@@ -29,7 +29,7 @@ const thread = (id: string, agentId: string, kind: "chat" | "camp") =>
     updatedAt: NOW,
   });
 const place = (
-  threadId: string,
+  channelId: string,
   agentId: string,
   section: SidebarPlace["section"],
   others: SidebarPlace["others"],
@@ -37,7 +37,7 @@ const place = (
   needsYou = false,
 ) =>
   new SidebarPlace({
-    threadId: ThreadId.make(threadId),
+    channelId: ChannelId.make(channelId),
     agentId: AgentId.make(agentId),
     section,
     others,
@@ -48,11 +48,11 @@ const place = (
 const marina = new User({ id: UserId.make("marina"), name: "Marina", initials: "MR", color: "rose", state: "active" });
 
 describe("sidebar rows", () => {
-  it("joins each camp with its thread, hob, faces and needs-you mark, and waits for a thread not loaded yet (#1469)", () => {
+  it("joins each camp with its channel, hob, faces and needs-you mark, and waits for a channel not loaded yet (#1469)", () => {
     const aldric = hob("aldric");
     const quill = hob("quill");
-    const team = thread("team", "aldric", "camp");
-    const threads = new Map([[team.id, team]]);
+    const team = channel("team", "aldric", "camp");
+    const channels = new Map([[team.id, team]]);
     const rows = campRows({
       places: [
         place(
@@ -69,13 +69,13 @@ describe("sidebar rows", () => {
         ),
         place("later", "aldric", "hob-camp", [{ kind: "hob", id: "aldric" }]),
       ],
-      threads,
+      channels,
       hobs: [aldric, quill],
       you: undefined,
       people: [marina],
       unread: undefined,
     });
-    expect(rows.map((row) => row.thread.id)).toEqual(["team"]);
+    expect(rows.map((row) => row.channel.id)).toEqual(["team"]);
     expect(rows[0]?.faces).toEqual([
       { _tag: "hob", hob: aldric },
       { _tag: "person", person: marina },
@@ -95,14 +95,14 @@ describe("sidebar rows", () => {
   });
 
   it("gives a camp's row the name of who wrote its last line (#1563)", () => {
-    const team = new Thread({
-      ...thread("team", "aldric", "camp"),
+    const team = new Channel({
+      ...channel("team", "aldric", "camp"),
       lastLine: "one caption idea each?",
       lastAuthor: { kind: "user", id: "marina" },
     });
     const [row] = campRows({
       places: [place("team", "aldric", "shared-camp", [{ kind: "user", id: "marina" }])],
-      threads: new Map([[team.id, team]]),
+      channels: new Map([[team.id, team]]),
       hobs: [hob("aldric")],
       you: undefined,
       people: [marina],
@@ -112,11 +112,11 @@ describe("sidebar rows", () => {
   });
 
   it("lists every hob in its order, each with its direct message once the hub lists one (#1469)", () => {
-    const chat = thread("chat-quill", "quill", "chat");
+    const chat = channel("chat-quill", "quill", "chat");
     const rows = directRows({
       hobs: [hob("aldric"), hob("quill")],
       places: [place("chat-quill", "quill", "direct-message", [{ kind: "hob", id: "quill" }])],
-      threads: new Map([[chat.id, chat]]),
+      channels: new Map([[chat.id, chat]]),
     });
     expect(rows.map((row) => [row.hob.id, row.chat?.id])).toEqual([
       ["aldric", undefined],
@@ -124,11 +124,11 @@ describe("sidebar rows", () => {
     ]);
   });
 
-  it("counts the hub's unread replies, kept in step with the live unread threads (#1469)", () => {
+  it("counts the hub's unread replies, kept in step with the live unread channels (#1469)", () => {
     const counted = place("c", "aldric", "hob-camp", [], 3);
     expect(unreadCount(counted, undefined)).toBe(3);
     expect(unreadCount(counted, new Set())).toBe(0);
-    expect(unreadCount(place("c", "aldric", "hob-camp", [], 0), new Set([ThreadId.make("c")]))).toBe(1);
+    expect(unreadCount(place("c", "aldric", "hob-camp", [], 0), new Set([ChannelId.make("c")]))).toBe(1);
   });
 
   it("shows today's time of day, and the day for an older row (#1469)", () => {

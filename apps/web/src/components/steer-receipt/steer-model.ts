@@ -115,7 +115,7 @@ const runsNow = (tree: TaskTree): boolean => {
 
 /**
  * The receipt under `message`, or null when it gets none: it is not yours, it was not sent while
- * work in the thread ran, or the hub holds no record of the turn that read it, as for messages from
+ * work in the channel ran, or the hub holds no record of the turn that read it, as for messages from
  * before receipts were recorded. Built from records only (#900), never from what the lead says:
  * the reply whose `promptId` names the message is the turn that read it, and the notes that trace
  * back to it are where it went next.
@@ -177,7 +177,7 @@ const chipsFrom = (passed: PassedNote, from: AgentId, into: Map<AgentId, Array<N
 /**
  * The note chips of every lane of `tree`, by hob, oldest first: each message of yours sent while
  * the work ran in the lead's lane, with whom the lead passed it to, and each note in the lane of the
- * hob it reached. Your messages are the thread's; notes come from the tree's records only.
+ * hob it reached. Your messages are the channel's; notes come from the tree's records only.
  */
 export const laneNoteChips = (
   tree: TaskTree,

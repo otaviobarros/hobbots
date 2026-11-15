@@ -29,8 +29,8 @@ import {
   QuestId,
   QuestionId,
   TaskId,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -79,8 +79,8 @@ const run = <A, E>(effect: Effect.Effect<A, E, Services>) =>
 const NOW = "2026-11-12T00:00:00.000Z";
 const LATER = "2026-11-12T01:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
-const CHAT = ThreadId.make("chat-1");
-const CAMP = ThreadId.make("camp-1");
+const CHAT = ChannelId.make("chat-1");
+const CAMP = ChannelId.make("camp-1");
 
 let clock = 0;
 const tick = () => new Date(Date.parse(NOW) + 1000 * ++clock).toISOString();
@@ -100,16 +100,16 @@ const hob = (id: AgentId, name: string) =>
     createdAt: NOW,
   });
 
-const thread = (id: ThreadId, fields: Partial<Thread> = {}) =>
-  new Thread({ id, agentId: ALDRIC, title: id, kind: "camp", createdAt: NOW, updatedAt: NOW, ...fields });
+const channel = (id: ChannelId, fields: Partial<Channel> = {}) =>
+  new Channel({ id, agentId: ALDRIC, title: id, kind: "camp", createdAt: NOW, updatedAt: NOW, ...fields });
 
-const newCamp = (fields: Partial<Thread> = {}) =>
-  thread(CAMP, { title: "Launch", goal: "Ship the launch", origin: { threadId: CHAT, chapterId: null }, ...fields });
+const newCamp = (fields: Partial<Channel> = {}) =>
+  channel(CAMP, { title: "Launch", goal: "Ship the launch", origin: { channelId: CHAT, chapterId: null }, ...fields });
 
-const message = (threadId: ThreadId, id: string, role: Message["role"], fields: Partial<Message> = {}) =>
+const message = (channelId: ChannelId, id: string, role: Message["role"], fields: Partial<Message> = {}) =>
   new Message({
     id: MessageId.make(id),
-    threadId,
+    channelId,
     actor: role === "assistant" ? null : OWNER_ACTOR,
     role,
     content: id,
@@ -121,8 +121,8 @@ const message = (threadId: ThreadId, id: string, role: Message["role"], fields: 
   });
 
 /** A reply that wrote a file, which the artifacts registry keeps. */
-const writing = (threadId: ThreadId, id: string, path: string) =>
-  message(threadId, id, "assistant", {
+const writing = (channelId: ChannelId, id: string, path: string) =>
+  message(channelId, id, "assistant", {
     steps: [
       {
         id: `${id}-step`,
@@ -134,23 +134,23 @@ const writing = (threadId: ThreadId, id: string, path: string) =>
     ],
   });
 
-const newTask = (id: string, parentId: string | null, threadId: ThreadId = CHAT): NewTask => ({
+const newTask = (id: string, parentId: string | null, channelId: ChannelId = CHAT): NewTask => ({
   id: TaskId.make(id),
   ownerId: ALDRIC,
   parentId: parentId === null ? null : TaskId.make(parentId),
-  threadId,
+  channelId,
   brief: `Brief for ${id}`,
   dependsOn: [],
   createdAt: tick(),
 });
 
-/** A decision you recorded in the app, which joins the thread's live chapter. */
-const decide = (threadId: ThreadId, id: string) =>
+/** A decision you recorded in the app, which joins the channel's live chapter. */
+const decide = (channelId: ChannelId, id: string) =>
   Effect.gen(function* () {
     const records = yield* RecordRepository;
     return yield* records.recordDecision({
       id: DecisionId.make(id),
-      threadId,
+      channelId,
       sourceMessageId: null,
       text: `Decision ${id}`,
       replaces: null,
@@ -161,11 +161,11 @@ const decide = (threadId: ThreadId, id: string) =>
     });
   });
 
-/** A Quest started in the thread's live chapter, with a question waiting and a failed step. */
-const quest = (id: string, threadId: ThreadId = CHAT) =>
+/** A Quest started in the channel's live chapter, with a question waiting and a failed step. */
+const quest = (id: string, channelId: ChannelId = CHAT) =>
   Effect.gen(function* () {
     const tasks = yield* TaskRepository;
-    yield* tasks.createTask({ task: newTask(id, null, threadId), delegation: null, milestones: [] });
+    yield* tasks.createTask({ task: newTask(id, null, channelId), delegation: null, milestones: [] });
     const started = yield* tasks.startQuest({
       id: QuestId.make(`${id}-quest`),
       taskId: TaskId.make(id),
@@ -187,7 +187,7 @@ const chatWithTwoChapters = Effect.gen(function* () {
   const chapters = yield* ChapterRepository;
   const tasks = yield* TaskRepository;
   yield* repo.insertAgent(hob(ALDRIC, "Aldric"));
-  yield* repo.upsertThread(thread(CHAT, { title: "Chat", kind: "chat" }));
+  yield* repo.upsertChannel(channel(CHAT, { title: "Chat", kind: "chat" }));
   yield* repo.upsertMessage(message(CHAT, "ask-1", "user"));
   yield* repo.upsertMessage(writing(CHAT, "reply-1", "/work/app/launch.md"));
   yield* decide(CHAT, "d1");
@@ -227,11 +227,11 @@ const judgedNow = (chapterId: ChapterId) =>
     };
   });
 
-/** Where each record is now, by table: its id and thread, in id order. */
+/** Where each record is now, by table: its id and channel, in id order. */
 const placesOf = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const rows = (table: string, id = "id") =>
-    sql<{ id: string; threadId: string | null }>`SELECT ${sql(id)} AS id, thread_id FROM ${sql(table)} ORDER BY id`;
+    sql<{ id: string; channelId: string | null }>`SELECT ${sql(id)} AS id, channel_id FROM ${sql(table)} ORDER BY id`;
   return {
     messages: yield* rows("messages"),
     decisions: yield* rows("decisions"),
@@ -242,13 +242,13 @@ const placesOf = Effect.gen(function* () {
   };
 });
 
-const intoNew = (fields: Partial<Thread> = {}): ChapterMoveTarget => ({ _tag: "new", camp: newCamp(fields) });
-const intoCamp = (campId: ThreadId): ChapterMoveTarget => ({ _tag: "camp", campId });
+const intoNew = (fields: Partial<Channel> = {}): ChapterMoveTarget => ({ _tag: "new", camp: newCamp(fields) });
+const intoCamp = (campId: ChannelId): ChapterMoveTarget => ({ _tag: "camp", campId });
 
-const move = (chapterId: ChapterId, target: ChapterMoveTarget, threadId: ThreadId = CHAT) =>
+const move = (chapterId: ChapterId, target: ChapterMoveTarget, channelId: ChannelId = CHAT) =>
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
-    return yield* repo.moveChapter({ threadId, chapterId, target, at: LATER });
+    return yield* repo.moveChapter({ channelId, chapterId, target, at: LATER });
   });
 
 /** Takes the journal sequence the next change will use, as a crash midway through its writes would. */
@@ -259,7 +259,7 @@ const breakNextAppend = Effect.gen(function* () {
   yield* sql`INSERT INTO event_journal ${sql.insert({
     sequence: next,
     id: "planted",
-    type: "ThreadUpserted",
+    type: "ChannelUpserted",
     schema_version: 4,
     occurred_at: NOW,
     payload: "{}",
@@ -267,8 +267,8 @@ const breakNextAppend = Effect.gen(function* () {
   return sql`DELETE FROM event_journal WHERE id = 'planted'`;
 });
 
-const idsIn = (rows: ReadonlyArray<{ id: string; threadId: string | null }>, threadId: ThreadId) =>
-  rows.filter((row) => row.threadId === threadId).map((row) => row.id);
+const idsIn = (rows: ReadonlyArray<{ id: string; channelId: string | null }>, channelId: ChannelId) =>
+  rows.filter((row) => row.channelId === channelId).map((row) => row.id);
 
 describe("moving a chapter into a camp", () => {
   // covers ADR 037 (Moving a chapter into a camp moves it)
@@ -301,8 +301,8 @@ describe("moving a chapter into a camp", () => {
     expect(result.moved.entries.map((entry) => entry.type)).toEqual([
       "CampMade",
       "ChapterStarted",
-      "ThreadMemberAdded",
-      "ThreadMemberAdded",
+      "ChannelMemberAdded",
+      "ChannelMemberAdded",
       "ChapterMoved",
       ...result.moved.entries.slice(5, -1).map(() => "BackpackItemChanged"),
       "QuestSummaryChanged",
@@ -336,7 +336,7 @@ describe("moving a chapter into a camp", () => {
     // Asked again, it answers what it did and journals nothing.
     expect(result.again.entries).toEqual([]);
     expect(result.again.value.stub).toEqual(result.moved.value.stub);
-    expect(result.moved.value.camp).toMatchObject({ id: CAMP, kind: "camp", origin: { threadId: CHAT } });
+    expect(result.moved.value.camp).toMatchObject({ id: CAMP, kind: "camp", origin: { channelId: CHAT } });
   });
 
   // covers ADR 037 (Moving a chapter into a camp moves it)
@@ -357,8 +357,8 @@ describe("moving a chapter into a camp", () => {
           chat: yield* chapters.listChapters(CHAT),
           camp: yield* chapters.listChapters(CAMP),
           campMessages: yield* repo.listMessages(CAMP),
-          chatThread: Option.getOrThrow(yield* repo.findThread(CHAT)),
-          campThread: Option.getOrThrow(yield* repo.findThread(CAMP)),
+          chatChannel: Option.getOrThrow(yield* repo.findChannel(CHAT)),
+          campChannel: Option.getOrThrow(yield* repo.findChannel(CAMP)),
         };
       }),
     );
@@ -368,14 +368,14 @@ describe("moving a chapter into a camp", () => {
       [2, "moved"],
       [3, "live"],
     ]);
-    expect(result.chatThread.liveChapterId).toBe(result.chat[2]?.id);
+    expect(result.chatChannel.liveChapterId).toBe(result.chat[2]?.id);
     expect(result.next.chapterId).toBe(result.chat[2]?.id);
     // The camp's own topic rests, and the moved one goes on as its live chapter, after it.
     expect(result.camp.map((chapter) => [chapter.number, chapter.state, chapter.title])).toEqual([
       [1, "resting", null],
       [2, "live", "Billing"],
     ]);
-    expect(result.campThread.liveChapterId).toBe(result.camp[1]?.id);
+    expect(result.campChannel.liveChapterId).toBe(result.camp[1]?.id);
     expect(result.campMessages.map((m) => [m.id, m.chapterId === result.camp[1]?.id])).toEqual([
       ["camp-ask", false],
       ["ask-2", true],
@@ -397,7 +397,7 @@ describe("moving a chapter into a camp", () => {
         yield* clear;
         const after = yield* placesOf;
         const chaptersAfter = yield* chapters.listChapters(CHAT);
-        const camp = yield* repo.findThread(CAMP);
+        const camp = yield* repo.findChannel(CAMP);
         // Once the journal takes writes again, the same move goes through whole.
         const retried = yield* move(first, intoNew());
         return { failed, before, after, chaptersBefore, chaptersAfter, camp, retried };
@@ -411,15 +411,15 @@ describe("moving a chapter into a camp", () => {
   });
 
   // covers ADR 037 (Moving a chapter into a camp moves it)
-  it("refuses a move into the same thread, a chat, another hob's camp or a closed camp, and a chapter moved already (#1385)", async () => {
+  it("refuses a move into the same channel, a chat, another hob's camp or a closed camp, and a chapter moved already (#1385)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { first, billing } = yield* chatWithTwoChapters;
         const repo = yield* HobbotsRepository;
         const sql = yield* SqlClient.SqlClient;
         yield* repo.insertAgent(hob(AgentId.make("bo"), "Bo"));
-        yield* repo.upsertThread(thread(ThreadId.make("bo-camp"), { agentId: AgentId.make("bo") }));
-        yield* repo.upsertThread(thread(ThreadId.make("old-camp"), { state: "archived", archivedAt: NOW }));
+        yield* repo.upsertChannel(channel(ChannelId.make("bo-camp"), { agentId: AgentId.make("bo") }));
+        yield* repo.upsertChannel(channel(ChannelId.make("old-camp"), { state: "archived", archivedAt: NOW }));
         yield* repo.makeCamp(newCamp());
         const refused = (chapterId: ChapterId, target: ChapterMoveTarget) =>
           move(chapterId, target).pipe(
@@ -430,25 +430,25 @@ describe("moving a chapter into a camp", () => {
           );
         const reasons = {
           same: yield* refused(first, intoCamp(CHAT)),
-          otherHob: yield* refused(first, intoCamp(ThreadId.make("bo-camp"))),
-          closed: yield* refused(first, intoCamp(ThreadId.make("old-camp"))),
-          missing: yield* refused(first, intoCamp(ThreadId.make("nowhere"))),
+          otherHob: yield* refused(first, intoCamp(ChannelId.make("bo-camp"))),
+          closed: yield* refused(first, intoCamp(ChannelId.make("old-camp"))),
+          missing: yield* refused(first, intoCamp(ChannelId.make("nowhere"))),
         };
         // A reply under way holds the chat's chapters where they are.
         yield* sql`UPDATE messages SET status = 'streaming' WHERE id = 'reply-2'`;
         const running = yield* refused(first, intoCamp(CAMP));
         yield* sql`UPDATE messages SET status = 'complete' WHERE id = 'reply-2'`;
         yield* move(first, intoCamp(CAMP));
-        const elsewhere = yield* refused(first, intoNew({ id: ThreadId.make("camp-2") }));
+        const elsewhere = yield* refused(first, intoNew({ id: ChannelId.make("camp-2") }));
         // The chat's live chapter, once moved, leaves an empty one in its place, which does not move.
         yield* move(billing, intoCamp(CAMP));
-        const live = Option.getOrThrow(yield* repo.findThread(CHAT)).liveChapterId as ChapterId;
+        const live = Option.getOrThrow(yield* repo.findChannel(CHAT)).liveChapterId as ChapterId;
         const empty = yield* refused(live, intoCamp(CAMP));
         return { reasons, running, elsewhere, empty };
       }),
     );
     expect(result.reasons).toEqual({
-      same: "same-thread",
+      same: "same-channel",
       otherHob: "not-a-camp",
       closed: "not-a-camp",
       missing: "not-a-camp",
@@ -464,7 +464,7 @@ const membersApproval = (taskId: TaskId, id = "member-rm", fields: Partial<Appro
   new ApprovalRequest({
     id: ApprovalId.make(id),
     agentId: ALDRIC,
-    threadId: CHAT,
+    channelId: CHAT,
     messageId: null,
     taskId,
     rootTaskId: TaskId.make("launch"),
@@ -495,7 +495,7 @@ const runningQuest = Effect.gen(function* () {
   yield* sql`INSERT INTO web_searches ${sql.insert({
     id: "search-1",
     agent_id: ALDRIC,
-    thread_id: CHAT,
+    channel_id: CHAT,
     message_id: null,
     task_id: step.value.id,
     runtime: "claude-code",
@@ -510,11 +510,11 @@ const questPlaces = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const tasks = yield* TaskRepository;
   const rows = (table: string, id: string) =>
-    sql<{ id: string; threadId: string | null }>`SELECT ${sql(id)} AS id, thread_id FROM ${sql(table)} ORDER BY id`;
+    sql<{ id: string; channelId: string | null }>`SELECT ${sql(id)} AS id, channel_id FROM ${sql(table)} ORDER BY id`;
   return {
     approvals: yield* rows("approval_requests", "id"),
     searches: yield* rows("web_searches", "id"),
-    summaries: (yield* tasks.listQuestSummaries(null)).map((summary) => [summary.questId, summary.threadId]),
+    summaries: (yield* tasks.listQuestSummaries(null)).map((summary) => [summary.questId, summary.channelId]),
   };
 });
 
@@ -531,28 +531,28 @@ describe("a quest whose chapter moves into a camp", () => {
           before,
           moved,
           after: yield* questPlaces,
-          camp: yield* approvals.listForThread(CAMP),
-          chat: yield* approvals.listForThread(CHAT),
+          camp: yield* approvals.listForChannel(CAMP),
+          chat: yield* approvals.listForChannel(CHAT),
         };
       }),
     );
-    expect(result.before.approvals).toEqual([{ id: "member-rm", threadId: CHAT }]);
+    expect(result.before.approvals).toEqual([{ id: "member-rm", channelId: CHAT }]);
     expect(result.before.summaries).toEqual([["launch-quest", CHAT]]);
     // The member's request waits in its own session, not in the chat's reply, so it does not hold the move.
-    expect(result.after.approvals).toEqual([{ id: "member-rm", threadId: CAMP }]);
-    expect(result.after.searches).toEqual([{ id: "search-1", threadId: CAMP }]);
+    expect(result.after.approvals).toEqual([{ id: "member-rm", channelId: CAMP }]);
+    expect(result.after.searches).toEqual([{ id: "search-1", channelId: CAMP }]);
     expect(result.camp.map((approval) => [approval.id, approval.state])).toEqual([["member-rm", "pending"]]);
     expect(result.chat).toEqual([]);
-    // It is journaled after the move, at its new revision, naming the thread it left.
+    // It is journaled after the move, at its new revision, naming the channel it left.
     const movedApproval = result.moved.entries.find((entry) => entry.payload._tag === "ApprovalMoved");
-    expect(movedApproval?.payload).toMatchObject({ fromThreadId: CHAT, approval: { id: "member-rm", threadId: CAMP } });
+    expect(movedApproval?.payload).toMatchObject({ fromChannelId: CHAT, approval: { id: "member-rm", channelId: CAMP } });
     expect(result.camp[0]?.revision).toBe(movedApproval?.sequence);
     const types = result.moved.entries.map((entry) => entry.type);
     expect(types.indexOf("ApprovalMoved")).toBeGreaterThan(types.indexOf("ChapterMoved"));
     expect(types.indexOf("ApprovalMoved")).toBeLessThan(types.indexOf("BackpackItemChanged"));
     // Its summary is journaled once, after the move, naming the camp.
     const summaries = result.moved.entries.filter((entry) => entry.payload._tag === "QuestSummaryChanged");
-    expect(summaries.map((entry) => (entry.payload as { summary: { threadId: string } }).summary.threadId)).toEqual([
+    expect(summaries.map((entry) => (entry.payload as { summary: { channelId: string } }).summary.channelId)).toEqual([
       CAMP,
     ]);
     expect(result.moved.entries.at(-1)?.type).toBe("QuestSummaryChanged");
@@ -586,13 +586,13 @@ describe("a quest whose chapter moves into a camp", () => {
         yield* move(first, intoNew());
         // The session started before the move, so it still names the chat it was started from.
         const asked = yield* approvals.insert(membersApproval(step, "member-second"));
-        return { asked, camp: yield* approvals.listForThread(CAMP), chat: yield* approvals.listForThread(CHAT) };
+        return { asked, camp: yield* approvals.listForChannel(CAMP), chat: yield* approvals.listForChannel(CHAT) };
       }),
     );
-    expect(result.asked.value.threadId).toBe(CAMP);
+    expect(result.asked.value.channelId).toBe(CAMP);
     expect(result.asked.entries[0]?.payload).toMatchObject({
       _tag: "ApprovalRequested",
-      approval: { id: "member-second", threadId: CAMP },
+      approval: { id: "member-second", channelId: CAMP },
     });
     expect(result.camp.map((approval) => approval.id)).toEqual(["member-rm", "member-second"]);
     expect(result.chat).toEqual([]);
@@ -614,16 +614,16 @@ describe("a quest whose chapter moves into a camp", () => {
         return {
           decided: Option.getOrThrow(decided),
           stored: Option.getOrThrow(yield* approvals.find(ApprovalId.make("member-rm"))),
-          chat: yield* approvals.listForThread(CHAT),
+          chat: yield* approvals.listForChannel(CHAT),
         };
       }),
     );
-    expect(result.decided.value).toMatchObject({ state: "approved", threadId: CAMP });
+    expect(result.decided.value).toMatchObject({ state: "approved", channelId: CAMP });
     expect(result.decided.entries[0]?.payload).toMatchObject({
       _tag: "ApprovalResolved",
-      approval: { id: "member-rm", threadId: CAMP },
+      approval: { id: "member-rm", channelId: CAMP },
     });
-    expect(result.stored).toMatchObject({ state: "approved", threadId: CAMP });
+    expect(result.stored).toMatchObject({ state: "approved", channelId: CAMP });
     expect(result.chat).toEqual([]);
   });
 
@@ -661,7 +661,7 @@ describe("camp suggestions", () => {
         const repo = yield* HobbotsRepository;
         const suggestions = yield* CampSuggestionRepository;
         yield* repo.insertAgent(hob(ALDRIC, "Aldric"));
-        yield* repo.upsertThread(thread(CHAT, { title: "Chat", kind: "chat" }));
+        yield* repo.upsertChannel(channel(CHAT, { title: "Chat", kind: "chat" }));
         const raised: Array<ReadonlyArray<CampSuggestion>> = [];
         for (let n = 1; n <= CAMP_SUGGESTION_DECISIONS + 1; n++) {
           raised.push(suggested((yield* decide(CHAT, `d${n}`)).entries));
@@ -709,7 +709,7 @@ describe("camp suggestions", () => {
     // Only the decision that reached the threshold raised it, in its own transaction.
     expect(result.raised.map((each) => each.length)).toEqual([0, 0, 0, 0, 1, 0]);
     expect(result.raised[CAMP_SUGGESTION_DECISIONS - 1]?.[0]).toMatchObject({
-      threadId: CHAT,
+      channelId: CHAT,
       state: "pending",
       reasons: [{ code: "decisions", count: CAMP_SUGGESTION_DECISIONS }],
       title: null,
@@ -749,7 +749,7 @@ describe("camp suggestions", () => {
         const keepAccepted = yield* Effect.exit(suggestions.keep(CHAT, (open as CampSuggestion).id, LATER));
 
         // Merged away: the chat's next chapter gets a suggestion, then merges into the one before it.
-        const live = Option.getOrThrow(yield* repo.findThread(CHAT)).liveChapterId as ChapterId;
+        const live = Option.getOrThrow(yield* repo.findChannel(CHAT)).liveChapterId as ChapterId;
         yield* repo.upsertMessage(message(CHAT, "ask-4", "user"));
         yield* chapters.startChapter(CHAT, { id: ChapterId.make("late"), title: "Late", at: tick() });
         yield* repo.upsertMessage(message(CHAT, "ask-5", "user"));
@@ -761,8 +761,8 @@ describe("camp suggestions", () => {
         for (let n = 1; n <= CAMP_SUGGESTION_DECISIONS; n++) {
           beforeArchive.push(...suggested((yield* decide(CHAT, `more-${n}`)).entries));
         }
-        const chat = Option.getOrThrow(yield* repo.findThread(CHAT));
-        const archived = yield* repo.upsertThread(new Thread({ ...chat, state: "archived", archivedAt: LATER }));
+        const chat = Option.getOrThrow(yield* repo.findChannel(CHAT));
+        const archived = yield* repo.upsertChannel(new Channel({ ...chat, state: "archived", archivedAt: LATER }));
         return { raisedBy, open, moved, keepAccepted, live, merged, beforeArchive, archived };
       }),
     );
@@ -776,7 +776,7 @@ describe("camp suggestions", () => {
     expect(result.keepAccepted).toMatchObject(Exit.fail({ _tag: "CampSuggestionRefused", reason: "settled" }));
     expect(result.merged.entries.map((entry) => entry.type)).toEqual(["ChapterMerged", "CampSuggestionExpired"]);
     expect(result.beforeArchive).toHaveLength(1);
-    expect(result.archived.entries.map((entry) => entry.type)).toEqual(["ThreadUpserted", "CampSuggestionExpired"]);
+    expect(result.archived.entries.map((entry) => entry.type)).toEqual(["ChannelUpserted", "CampSuggestionExpired"]);
   });
 
   // covers ADR 037 (Records: CampSuggestion), #1557
@@ -804,7 +804,7 @@ describe("camp suggestions", () => {
         });
         const found = yield* suggestions.find(first.id);
         // The first chapter: raised with the reasons given, then withdrawn.
-        const live = Option.getOrThrow(yield* repo.findThread(CHAT)).liveChapterId as ChapterId;
+        const live = Option.getOrThrow(yield* repo.findChannel(CHAT)).liveChapterId as ChapterId;
         const resting = (yield* (yield* ChapterRepository).listChapters(CHAT)).find((c) => c.id !== live);
         const drift = yield* suggestions.recordRound(0, {
           withdrawn: [],
@@ -1035,7 +1035,7 @@ describe("camp suggestions", () => {
       const tasks = yield* TaskRepository;
       const chapters = yield* ChapterRepository;
       yield* repo.insertAgent(hob(ALDRIC, "Aldric"));
-      yield* repo.upsertThread(thread(CHAT, { title: "Chat", kind: "chat" }));
+      yield* repo.upsertChannel(channel(CHAT, { title: "Chat", kind: "chat" }));
       yield* repo.upsertMessage(message(CHAT, "ask-1", "user"));
       yield* quest("ship");
       const step = yield* tasks.createTask({ task: newTask("copy", "ship"), delegation: null, milestones: [] });
@@ -1068,12 +1068,12 @@ describe("camp suggestions", () => {
       return (first as { id: ChapterId }).id;
     });
 
-  const reviewIn = (threadId: ThreadId, locator: string, outcome: "reviewed" | "dismissed") =>
+  const reviewIn = (channelId: ChannelId, locator: string, outcome: "reviewed" | "dismissed") =>
     Effect.gen(function* () {
       const records = yield* RecordRepository;
-      const artifact = (yield* records.listArtifacts(threadId)).find((each) => each.locator === locator);
-      if (artifact === undefined) return yield* Effect.die(new Error(`No ${locator} in ${threadId}`));
-      return yield* records.reviewArtifact({ threadId, artifactId: artifact.id, outcome, by: OWNER_ACTOR, at: tick() });
+      const artifact = (yield* records.listArtifacts(channelId)).find((each) => each.locator === locator);
+      if (artifact === undefined) return yield* Effect.die(new Error(`No ${locator} in ${channelId}`));
+      return yield* records.reviewArtifact({ channelId, artifactId: artifact.id, outcome, by: OWNER_ACTOR, at: tick() });
     });
 
   const readyOf = Effect.gen(function* () {
@@ -1154,7 +1154,7 @@ describe("camp suggestions", () => {
             onSuccess: () => "moved",
           }),
         );
-        yield* sql`INSERT INTO turn_requests (id, thread_id, root_message_id, hob_id, message_id, caused_by_kind,
+        yield* sql`INSERT INTO turn_requests (id, channel_id, root_message_id, hob_id, message_id, caused_by_kind,
           caused_by_id, cause, relay_depth, state, reply_id, dropped_by_kind, dropped_by_id, queued_at, position,
           created_at) VALUES ('owed', ${CHAT}, NULL, 'quill', 'reply-2', 'user', 'owner', 'mention', 0, 'paused',
           NULL, NULL, NULL, 1, 0, ${NOW})`;

@@ -53,7 +53,7 @@ export const openWork = (agentId: AgentId, handOverTo: AgentId | undefined) =>
     return {
       agentId,
       tasks: checked,
-      approvals: pending.map((each) => ({ id: each.id, label: each.label, threadId: each.threadId })),
+      approvals: pending.map((each) => ({ id: each.id, label: each.label, channelId: each.channelId })),
       backpackItems: items.map((each) => ({ id: each.id, kind: each.kind, taskId: each.taskId })),
     } satisfies OpenWork;
   });

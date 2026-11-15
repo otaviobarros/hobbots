@@ -27,7 +27,7 @@ Domain code does no I/O and imports nothing except `effect` and other domain mod
 
 ### STD-ARCH-003 Use cases reach the outside world through ports
 
-A use case reaches storage, runtimes, the clock or the network only through a **port**. A port is an Effect service whose interface the application layer defines, for example `ThreadRepository` or `RuntimeAdapter`. A use case never imports a concrete adapter.
+A use case reaches storage, runtimes, the clock or the network only through a **port**. A port is an Effect service whose interface the application layer defines, for example `ChannelRepository` or `RuntimeAdapter`. A use case never imports a concrete adapter.
 
 - **Why:** a test swaps the port for a fake, and an adapter can change without touching the use case.
 - **Enforced by:** Biome `noNodejsModules` and `noRestrictedImports` on `packages/agents/src` and `packages/orchestration/src` block Node, platform and runtime SDK imports, and `scripts/check-layers.mjs` blocks adapter packages. Review covers ports in `apps/server`.
@@ -51,7 +51,7 @@ Only adapters run SQL, spawn processes, open sockets, call HTTP or touch the fil
 
 ### STD-ARCH-006 Use cases live in their feature package
 
-Each use case lives in the package that owns its feature, as named in that package's README. For example, hob configuration and threads belong in `packages/agents`, and delegation belongs in `packages/orchestration`. Write new use cases in their feature package. Move existing use cases out of `apps/server` when you next change them, not in one large refactor.
+Each use case lives in the package that owns its feature, as named in that package's README. For example, hob configuration and channels belong in `packages/agents`, and delegation belongs in `packages/orchestration`. Write new use cases in their feature package. Move existing use cases out of `apps/server` when you next change them, not in one large refactor.
 
 - **Why:** a feature package gives each concern one home and keeps `apps/server` small.
 - **Enforced by:** review.
@@ -67,7 +67,7 @@ No package needs a fixed folder layout. When a file grows too large to read in o
 
 ### STD-ARCH-008 Domain identity stays independent of runtimes and transports
 
-Hobs, threads, messages and tasks have Hobbots IDs. A runtime session ID or a protocol message ID is adapter data that maps to a domain record. It never replaces the domain ID.
+Hobs, channels, messages and tasks have Hobbots IDs. A runtime session ID or a protocol message ID is adapter data that maps to a domain record. It never replaces the domain ID.
 
 - **Why:** a hob keeps its history when its runtime, model or transport changes.
 - **Enforced by:** review.
@@ -115,8 +115,8 @@ These rules come from [ADR 037](../decisions/037-chat-and-camps.md). The [state 
 
 Declare each lifecycle with `defineMachine` in `@hobbots/domain`: its states, events, guards and next states in one table, and a pure `transition(state, event)` that returns the next state or the machine's own typed illegal-transition error, such as `IllegalTaskTransition`. Effects run around the transition, never inside it. A guard reads only the machine's state and the event. The state lives in one field and changes only through `transition`. Other code asks the machine's helpers, such as `canArchive`, and never compares its state field. Never spread a state over several booleans, nullable timestamps, or `Set`s and `Map`s keyed by an id.
 
-- ✅ `ThreadRun.transition(run, { _tag: "Stopped" })`, then `ThreadRun.isRunning(next)`
-- ❌ `busy.has(threadId) || holdBack.has(threadId)`
+- ✅ `ChannelRun.transition(run, { _tag: "Stopped" })`, then `ChannelRun.isRunning(next)`
+- ❌ `busy.has(channelId) || holdBack.has(channelId)`
 - **Why:** one table lists every legal combination, so a new path cannot forget one, a model-based test and a diagram can read it, and a pure transition is tested without I/O and replays the same way.
 - **Enforced by:** `scripts/check-implicit-state.mjs` in `pnpm check` (`pnpm lint:state`), which fails on a `Set` or `Map` keyed by an id held for a service's or module's life, and on a machine's state field compared outside its module, with today's cases in `scripts/implicit-state-baseline.json`, a list that only shrinks; `scripts/machines.mjs` in `pnpm check` (`pnpm lint:machines`), which fails when a machine is not its own `defineMachine` export or its diagram in `docs/architecture/machines/` is out of date (`pnpm docs:machines` writes them); a model-based test of each machine with `fast-check` and `agreesWithModel`; and review.
 - **Applies to:** `packages/*`, `apps/server`.
@@ -155,9 +155,9 @@ The in-process bus announces committed journal entries, and carries transient ev
 
 ### STD-ARCH-018 A turn reads records, not the transcript
 
-A runtime session starts from the context pack: briefs, active decisions, the artifacts index, the live chapter and one line per resting chapter, built by a pure function within a budget. Never replay a thread's transcript as context, except for a brain switch inside a live chapter (ADR 017). The pack never goes over its budget and never drops an active decision silently.
+A runtime session starts from the context pack: briefs, active decisions, the artifacts index, the live chapter and one line per resting chapter, built by a pure function within a budget. Never replay a channel's transcript as context, except for a brain switch inside a live chapter (ADR 017). The pack never goes over its budget and never drops an active decision silently.
 
-- **Why:** a turn's cost then follows the live topic, not the thread's length.
+- **Why:** a turn's cost then follows the live topic, not the channel's length.
 - **Enforced by:** snapshot tests of the pack and its `PackReport`, and review.
 - **Applies to:** `packages/agents`, `packages/runtimes`.
 
@@ -177,12 +177,12 @@ A field that says who did something, such as `requestedBy`, `addedBy` or `author
 - **Enforced by:** `checkRecords` in `scripts/owner-actor.mjs`, run by `scripts/check-standards.mjs` and `pnpm lint:actor`, which fails on a schema field whose name ends in `By` (or is `author`, `actor`, `creator`, `requester`) and whose schema is a bare `UserId`, `AgentId` or `HobId`. The two fields that predate the rule are listed in `KNOWN_BARE_AUTHORS`, and that list only shrinks. Review covers the rest.
 - **Applies to:** `packages/*`, `apps/*`.
 
-### STD-ARCH-021 A turn names its speaker, never the thread's hob
+### STD-ARCH-021 A turn names its speaker, never the channel's hob
 
-A camp has one floor and many speakers (ADR 039), so a thread's `agentId` means one thing: the hob the thread belongs to, for listing, ownership, its lock and its own default answerer. Code that asks which hob a turn, a reply or a message is for never answers with it. Inside a turn, the hob is the turn's `Speaker` (`packages/agents/src/speaker.ts`): its thread, line, hob, reason and role. Outside one, it is the run's `speaking`, or the message's author through `authorOf` and `replyHobOf` (`packages/domain/src/message.ts`), the one place a message not stored yet falls back to the thread's hob.
+A camp has one floor and many speakers (ADR 039), so a channel's `agentId` means one thing: the hob the channel belongs to, for listing, ownership, its lock and its own default answerer. Code that asks which hob a turn, a reply or a message is for never answers with it. Inside a turn, the hob is the turn's `Speaker` (`packages/agents/src/speaker.ts`): its channel, line, hob, reason and role. Outside one, it is the run's `speaking`, or the message's author through `authorOf` and `replyHobOf` (`packages/domain/src/message.ts`), the one place a message not stored yet falls back to the channel's hob.
 
-- **Why:** #1461 turned one hob per thread into one floor with many speakers, and about seventeen review findings on it were code that still read the turn's hob from `thread.agentId`.
-- **Enforced by:** `scripts/speaker.mjs`, run by `pnpm lint:speaker`, which fails on a read of `agentId` from a thread in `packages/agents/src` and `apps/server/src`: a value named like a thread, bound from one (`const found = yield* repo.findThread(id)`) or typed `Thread`. A read that means the owner says so with `// standards-allow STD-ARCH-021: <reason>` on its line or the line above. Review covers the web app, which reads authors through `replyHobOf`.
+- **Why:** #1461 turned one hob per channel into one floor with many speakers, and about seventeen review findings on it were code that still read the turn's hob from `channel.agentId`.
+- **Enforced by:** `scripts/speaker.mjs`, run by `pnpm lint:speaker`, which fails on a read of `agentId` from a channel in `packages/agents/src` and `apps/server/src`: a value named like a channel, bound from one (`const found = yield* repo.findChannel(id)`) or typed `Channel`. A read that means the owner says so with `// standards-allow STD-ARCH-021: <reason>` on its line or the line above. Review covers the web app, which reads authors through `replyHobOf`.
 - **Applies to:** `packages/agents`, `apps/server`, `apps/web`.
 
 ## Guidance

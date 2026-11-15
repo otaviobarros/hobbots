@@ -10,7 +10,7 @@ import {
   type RuntimeAdapterShape,
   TurnSlots,
 } from "@hobbots/agents";
-import { Agent, AgentId, type RuntimeKind, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, type RuntimeKind, Channel, ChannelId } from "@hobbots/domain";
 import { waitUntil } from "@hobbots/domain/testing";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -97,20 +97,20 @@ const hob = (id: string, runtime: RuntimeKind) =>
     createdAt: at,
   });
 
-/** A database with each hob and one thread per name, `<hob>-<n>`. */
+/** A database with each hob and one channel per name, `<hob>-<n>`. */
 const openDatabase = async (
   scope: Scope.Closeable,
-  threads: ReadonlyArray<{ readonly hob: string; readonly runtime: RuntimeKind; readonly ids: ReadonlyArray<string> }>,
+  channels: ReadonlyArray<{ readonly hob: string; readonly runtime: RuntimeKind; readonly ids: ReadonlyArray<string> }>,
 ): Promise<Database> => {
   const database = Layer.succeedContext(await Effect.runPromise(Layer.buildWithScope(TestDatabase, scope)));
   const seed = Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
-    for (const each of threads) {
+    for (const each of channels) {
       yield* repo.insertAgent(hob(each.hob, each.runtime));
       for (const id of each.ids) {
-        yield* repo.upsertThread(
-          new Thread({
-            id: ThreadId.make(id),
+        yield* repo.upsertChannel(
+          new Channel({
+            id: ChannelId.make(id),
             agentId: AgentId.make(each.hob),
             title: id,
             createdAt: at,
@@ -134,10 +134,10 @@ afterEach(async () => {
 });
 
 /** A hub over a new database, and what it is asked to run. */
-const start = async (threads: Parameters<typeof openDatabase>[1], cap: number) => {
+const start = async (channels: Parameters<typeof openDatabase>[1], cap: number) => {
   const scope = await Effect.runPromise(Scope.make());
   scopes.push(scope);
-  const database = await openDatabase(scope, threads);
+  const database = await openDatabase(scope, channels);
   const starts: Array<Start> = [];
   const open = () => {
     const hub = ManagedRuntime.make(hubLayer(database, starts, cap));
@@ -148,16 +148,16 @@ const start = async (threads: Parameters<typeof openDatabase>[1], cap: number) =
   return { hub, starts, open };
 };
 
-const send = (hub: Hub, threadId: string, text: string) =>
-  hub.runPromise(ChatService.use((chat) => chat.sendPrompt(ThreadId.make(threadId), text)));
+const send = (hub: Hub, channelId: string, text: string) =>
+  hub.runPromise(ChatService.use((chat) => chat.sendPrompt(ChannelId.make(channelId), text)));
 
 /** Waits until `check` holds, reading again every millisecond up to a time limit: never a fixed delay. */
 const until = <A>(hub: Hub, read: Effect.Effect<A, never, HubServices>, check: (value: A) => boolean) =>
   hub.runPromise(waitUntil(read, check, { every: "1 millis" }));
 
 const report = (hub: Hub) => hub.runPromise(TurnSlots.use((slots) => slots.report));
-const statusOf = async (hub: Hub, threadId: string) =>
-  (await hub.runPromise(HobbotsRepository.use((repo) => repo.listMessages(ThreadId.make(threadId))))).map(
+const statusOf = async (hub: Hub, channelId: string) =>
+  (await hub.runPromise(HobbotsRepository.use((repo) => repo.listMessages(ChannelId.make(channelId))))).map(
     (m) => `${m.role}:${m.status}`,
   );
 const startedCount = (starts: ReadonlyArray<Start>, count: number) => Effect.sync(() => starts.length >= count);

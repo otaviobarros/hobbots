@@ -30,7 +30,7 @@ const searchOf = (row: Row) =>
   decodeSearch({
     id: row.id,
     agentId: row.agentId,
-    threadId: row.threadId,
+    channelId: row.channelId,
     messageId: row.messageId,
     taskId: row.taskId,
     attemptId: row.attemptId,
@@ -47,7 +47,7 @@ const fetchOf = (row: Row) =>
   decodeFetch({
     id: row.id,
     agentId: row.agentId,
-    threadId: row.threadId,
+    channelId: row.channelId,
     messageId: row.messageId,
     taskId: row.taskId,
     attemptId: row.attemptId,
@@ -66,7 +66,7 @@ const fetchOf = (row: Row) =>
 const place = (record: WebSearchRecord | WebFetchRecord) => ({
   id: record.id,
   agent_id: record.agentId,
-  thread_id: record.threadId,
+  channel_id: record.channelId,
   message_id: record.messageId,
   task_id: record.taskId,
   attempt_id: record.attemptId,
@@ -88,7 +88,7 @@ export const WebRecordsLive = Layer.effect(
     const where = (filter: WebUsageFilter, at: string) =>
       sql.and([
         ...(filter.agentId === undefined ? [] : [sql`agent_id = ${filter.agentId}`]),
-        ...(filter.threadId === undefined ? [] : [sql`thread_id = ${filter.threadId}`]),
+        ...(filter.channelId === undefined ? [] : [sql`channel_id = ${filter.channelId}`]),
         ...(filter.messageId === undefined ? [] : [sql`message_id = ${filter.messageId}`]),
         ...(filter.taskId === undefined ? [] : [sql`task_id = ${filter.taskId}`]),
         ...(filter.attemptId === undefined ? [] : [sql`attempt_id = ${filter.attemptId}`]),
@@ -217,11 +217,11 @@ export const WebRecordsLive = Layer.effect(
                 UNION ALL SELECT agent_id, 0 AS searches, 1 AS pages FROM web_fetches WHERE fetched_at >= ${since}
               ) used GROUP BY agent_id`;
             const turns = yield* sql<Row>`
-              SELECT turn, agent_id, MAX(thread_id) AS thread_id, MAX(message_id) AS message_id,
+              SELECT turn, agent_id, MAX(channel_id) AS channel_id, MAX(message_id) AS message_id,
                 MAX(task_id) AS task_id, MAX(at) AS at, SUM(searches) AS searches, SUM(pages) AS pages FROM (
-                SELECT turn, agent_id, thread_id, message_id, task_id, searched_at AS at, 1 AS searches, 0 AS pages
+                SELECT turn, agent_id, channel_id, message_id, task_id, searched_at AS at, 1 AS searches, 0 AS pages
                   FROM web_searches WHERE turn IS NOT NULL AND searched_at >= ${since}
-                UNION ALL SELECT turn, agent_id, thread_id, message_id, task_id, fetched_at AS at, 0 AS searches,
+                UNION ALL SELECT turn, agent_id, channel_id, message_id, task_id, fetched_at AS at, 0 AS searches,
                   1 AS pages FROM web_fetches WHERE turn IS NOT NULL AND fetched_at >= ${since}
               ) used GROUP BY turn, agent_id`;
             return {
@@ -234,7 +234,7 @@ export const WebRecordsLive = Layer.effect(
               turns: turns.map((row) => ({
                 turn: String(row.turn),
                 agentId: row.agentId as AgentId,
-                threadId: (row.threadId ?? null) as WebTurnCount["threadId"],
+                channelId: (row.channelId ?? null) as WebTurnCount["channelId"],
                 messageId: (row.messageId ?? null) as WebTurnCount["messageId"],
                 taskId: (row.taskId ?? null) as WebTurnCount["taskId"],
                 at: String(row.at),

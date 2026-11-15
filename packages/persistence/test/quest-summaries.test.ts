@@ -26,8 +26,8 @@ import {
   TaskId,
   type TaskTarget,
   type TaskTree,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer, ManagedRuntime, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -87,7 +87,7 @@ const approval = (id: string, task: Task) =>
   new ApprovalRequest({
     id: ApprovalId.make(id),
     agentId: task.ownerId,
-    threadId: task.threadId ?? ThreadId.make("none"),
+    channelId: task.channelId ?? ChannelId.make("none"),
     messageId: null,
     taskId: task.id,
     rootTaskId: task.rootId,
@@ -206,7 +206,7 @@ const newTask = (id: string, ownerId: AgentId, parentId: TaskId) => ({
   id: TaskId.make(id),
   ownerId,
   parentId,
-  threadId: null,
+  channelId: null,
   brief: `Brief ${id}`,
   dependsOn: [],
   createdAt: tick(),
@@ -355,7 +355,7 @@ const STEPS: { readonly [K in Op["_tag"]]: Step<K> } = {
     if (artifact === undefined) return NOTHING;
     return RecordRepository.use((records) =>
       records.reviewArtifact({
-        threadId: artifact.threadId,
+        channelId: artifact.channelId,
         artifactId: artifact.id,
         outcome: op.outcome,
         by: OWNER_ACTOR,
@@ -406,13 +406,13 @@ describe("Quest summaries", () => {
     Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       const tasks = yield* TaskRepository;
-      const threadId = ThreadId.make(`chat-${run}`);
-      yield* repo.upsertThread(
-        new Thread({ id: threadId, agentId: ALDRIC, title: run, createdAt: NOW, updatedAt: NOW }),
+      const channelId = ChannelId.make(`chat-${run}`);
+      yield* repo.upsertChannel(
+        new Channel({ id: channelId, agentId: ALDRIC, title: run, createdAt: NOW, updatedAt: NOW }),
       );
       const top = TaskId.make(`top-${run}`);
       yield* tasks.createTask({
-        task: { id: top, ownerId: ALDRIC, parentId: null, threadId, brief: "Launch", dependsOn: [], createdAt: tick() },
+        task: { id: top, ownerId: ALDRIC, parentId: null, channelId, brief: "Launch", dependsOn: [], createdAt: tick() },
         delegation: null,
         milestones: [],
       });
@@ -424,7 +424,7 @@ describe("Quest summaries", () => {
         limits: DEFAULT_QUEST_LIMITS,
         createdAt: tick(),
       });
-      return { threadId, top, started };
+      return { channelId, top, started };
     });
 
   // covers ADR 037 (Quests in camps), STD-ARCH-015, STD-ARCH-016
@@ -439,7 +439,7 @@ describe("Quest summaries", () => {
             const tasks = yield* TaskRepository;
             const records = yield* RecordRepository;
             const journal = yield* EventJournal;
-            const { threadId, top, started } = yield* quest(run);
+            const { channelId, top, started } = yield* quest(run);
             // A new Quest's summary is journaled with it.
             const published = new Map(summariesIn(started.entries).map(([, summary]) => [summary.questId, summary]));
             expect([...published.keys()]).toEqual([started.value.id]);
@@ -448,7 +448,7 @@ describe("Quest summaries", () => {
             for (const [step, op] of script.entries()) {
               const where = `step ${step} (${JSON.stringify(op)}) of ${JSON.stringify(script)}`;
               const head = yield* journal.head;
-              const artifacts = yield* records.listArtifacts(threadId);
+              const artifacts = yield* records.listArtifacts(channelId);
               const outcome = yield* Effect.exit(perform(op, { tree, artifacts, id: `${run}-${step}` }));
               // A refusal is a typed failure, never a defect.
               if (Exit.isFailure(outcome)) {
@@ -496,7 +496,7 @@ describe("Quest summaries", () => {
               );
               folds = next;
               // The sync snapshot serves what was last journaled for each of the chat's Quests.
-              const snapshot = yield* tasks.listQuestSummaries(threadId);
+              const snapshot = yield* tasks.listQuestSummaries(channelId);
               expect(new Map(snapshot.map((summary) => [summary.questId, summary])), where).toEqual(published);
             }
           }),
@@ -514,8 +514,8 @@ describe("Quest summaries", () => {
         const sql = yield* SqlClient.SqlClient;
         const tasks = yield* TaskRepository;
         const journal = yield* EventJournal;
-        const { threadId, top } = yield* quest("rollback");
-        const before = yield* tasks.listQuestSummaries(threadId);
+        const { channelId, top } = yield* quest("rollback");
+        const before = yield* tasks.listQuestSummaries(channelId);
         const head = yield* journal.head;
         // A member joins and the transaction around it fails before it commits.
         const failed = yield* Effect.exit(
@@ -525,7 +525,7 @@ describe("Quest summaries", () => {
                 id: TaskId.make("rollback-member"),
                 ownerId: HOBS[1] ?? ALDRIC,
                 parentId: top,
-                threadId: null,
+                channelId: null,
                 brief: "Write copy",
                 dependsOn: [],
                 createdAt: tick(),
@@ -546,7 +546,7 @@ describe("Quest summaries", () => {
         return {
           failed,
           before,
-          after: yield* tasks.listQuestSummaries(threadId),
+          after: yield* tasks.listQuestSummaries(channelId),
           tasks: tree.tasks.map((task) => task.id),
           entries: yield* journal.readAfter(head.sequence),
           active: (yield* tasks.listQuestSummaries(null)).some((summary) => summary.questId === "q-rollback"),
@@ -569,13 +569,13 @@ describe("Quest summaries", () => {
         const sql = yield* SqlClient.SqlClient;
         const tasks = yield* TaskRepository;
         const journal = yield* EventJournal;
-        const { threadId, top } = yield* quest("before");
+        const { channelId, top } = yield* quest("before");
         yield* tasks.createTask({
           task: {
             id: TaskId.make("before-step"),
             ownerId: ALDRIC,
             parentId: top,
-            threadId: null,
+            channelId: null,
             brief: "Plan",
             dependsOn: [],
             createdAt: tick(),
@@ -583,7 +583,7 @@ describe("Quest summaries", () => {
           delegation: null,
           milestones: [],
         });
-        const published = yield* tasks.listQuestSummaries(threadId);
+        const published = yield* tasks.listQuestSummaries(channelId);
         // As a hub from before the migration: no summaries at all.
         yield* sql`DROP TABLE quest_summaries`;
         const head = yield* journal.head;
@@ -592,7 +592,7 @@ describe("Quest summaries", () => {
         return {
           published,
           head,
-          migrated: yield* tasks.listQuestSummaries(threadId),
+          migrated: yield* tasks.listQuestSummaries(channelId),
           fold: tree.quests.map((each) => questSummaryOf(each, { ...tree, delivered: [] })),
           entries: yield* journal.readAfter(head.sequence),
           known: Object.keys(migrations).includes("0103_quest_summaries"),
@@ -650,10 +650,10 @@ describe("Quest summaries", () => {
     const result = await hub.runPromise(
       Effect.gen(function* () {
         const records = yield* RecordRepository;
-        const { threadId, top } = yield* quest("review");
+        const { channelId, top } = yield* quest("review");
         // Two pull requests, a page, a doc, code and a text, which you review, and an image and an email.
         const delivered = yield* deliver("review", top, [0, 1, 2, 3, 4, 5, 6, 7]);
-        const artifacts = yield* records.listArtifacts(threadId);
+        const artifacts = yield* records.listArtifacts(channelId);
         const of = (kind: string) => artifacts.filter((artifact) => artifact.kind === kind);
         const [pr1, pr2] = of("pr");
         const [doc] = of("doc");
@@ -662,7 +662,7 @@ describe("Quest summaries", () => {
           return yield* Effect.die(new Error("Not every artifact was registered"));
         }
         const review = (artifactId: typeof doc.id, outcome: "reviewed" | "dismissed") =>
-          records.reviewArtifact({ threadId, artifactId, outcome, by: OWNER_ACTOR, at: tick() });
+          records.reviewArtifact({ channelId, artifactId, outcome, by: OWNER_ACTOR, at: tick() });
         const steps = [
           yield* review(doc.id, "reviewed"),
           yield* review(page.id, "dismissed"),
@@ -686,9 +686,9 @@ describe("Quest summaries", () => {
           refused,
           notPr: notPr.value,
           ended,
-          waiting: (yield* records.waitingPullRequests).filter((artifact) => artifact.threadId === threadId),
+          waiting: (yield* records.waitingPullRequests).filter((artifact) => artifact.channelId === channelId),
           pr2: pr2.id,
-          summary: (yield* (yield* TaskRepository).listQuestSummaries(threadId))[0]?.readyForReview,
+          summary: (yield* (yield* TaskRepository).listQuestSummaries(channelId))[0]?.readyForReview,
         };
       }),
     );
@@ -734,7 +734,7 @@ describe("Quest summaries", () => {
         const tasks = yield* TaskRepository;
         const records = yield* RecordRepository;
         const journal = yield* EventJournal;
-        const { threadId, top } = yield* quest("backfill");
+        const { channelId, top } = yield* quest("backfill");
         const step = TaskId.make("backfill-step");
         const created = yield* tasks.createTask({
           task: { ...newTask("backfill-step", ALDRIC, top), id: step },
@@ -761,17 +761,17 @@ describe("Quest summaries", () => {
           at: tick(),
           carried: Option.isSome(ledger) ? carriedFrom(ledger.value, () => true) : [],
         });
-        const [doc] = (yield* records.listArtifacts(threadId)).filter((artifact) => artifact.kind === "doc");
+        const [doc] = (yield* records.listArtifacts(channelId)).filter((artifact) => artifact.kind === "doc");
         if (doc !== undefined) {
           yield* records.reviewArtifact({
-            threadId,
+            channelId,
             artifactId: doc.id,
             outcome: "reviewed",
             by: OWNER_ACTOR,
             at: tick(),
           });
         }
-        const published = yield* tasks.listQuestSummaries(threadId);
+        const published = yield* tasks.listQuestSummaries(channelId);
         // As a hub from before the migration: no reviews, and a count of pull request links.
         yield* sql`DROP INDEX artifact_sightings_origin`;
         for (const column of ["review", "reviewed_at", "reviewed_by_kind", "reviewed_by_id"]) {
@@ -783,8 +783,8 @@ describe("Quest summaries", () => {
         return {
           published,
           head,
-          migrated: yield* tasks.listQuestSummaries(threadId),
-          artifacts: yield* records.listArtifacts(threadId),
+          migrated: yield* tasks.listQuestSummaries(channelId),
+          artifacts: yield* records.listArtifacts(channelId),
           entries: yield* journal.readAfter(head.sequence),
           known: Object.keys(migrations).includes("0105_artifact_reviews"),
         };

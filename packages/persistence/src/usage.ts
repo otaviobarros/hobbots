@@ -8,7 +8,7 @@ import {
   type QuestSpend,
   type QuestUsage,
   RuntimeKind,
-  type ThreadId,
+  type ChannelId,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -34,7 +34,7 @@ const TOKENS =
   "COALESCE(s.input_tokens, 0) + COALESCE(s.output_tokens, 0) + COALESCE(s.cache_read_tokens, 0) + COALESCE(s.cache_write_tokens, 0)";
 
 // The hob that wrote a reply: in a camp a member hob answers too (ADR 039), so a reply names its
-// own author. A reply stored before authors were recorded counts for its thread's hob.
+// own author. A reply stored before authors were recorded counts for its channel's hob.
 const REPLY_HOB = "CASE WHEN m.actor_kind = 'hob' THEN m.actor_id ELSE t.agent_id END";
 
 // PostgreSQL reads COUNT and SUM as bigint or numeric text, so every count is read back as a number.
@@ -71,7 +71,7 @@ const questRow = (row: Readonly<Record<string, unknown>>): QuestUsage => ({
 
 // The top Quest a settled reply was written under: one that ran in its chat when it started.
 const QUEST_OF_REPLY = `(SELECT q.id FROM quests q
-  WHERE q.thread_id = m.thread_id AND q.parent_quest_id IS NULL AND q.created_at <= m.created_at
+  WHERE q.channel_id = m.channel_id AND q.parent_quest_id IS NULL AND q.created_at <= m.created_at
     AND (q.ended_at IS NULL OR q.ended_at >= m.created_at)
   ORDER BY q.created_at DESC LIMIT 1)`;
 
@@ -100,10 +100,10 @@ export class UsageLedger extends Context.Service<
       readonly minutes: ReadonlyArray<MinuteUsage>;
     }>;
     /**
-     * What each hob's settled replies in one thread used from `since` until `until` (ADR 039, Status
+     * What each hob's settled replies in one channel used from `since` until `until` (ADR 039, Status
      * and cost), from the same columns as `usage`, and when each hob last answered there at all.
      */
-    readonly threadUsage: (threadId: ThreadId, since: string, until: string) => Effect.Effect<ReadonlyArray<HobToday>>;
+    readonly channelUsage: (channelId: ChannelId, since: string, until: string) => Effect.Effect<ReadonlyArray<HobToday>>;
     /**
      * What a top Quest's whole party spent, ever (#1449): its replies and turns outside a chat, as
      * `usage` attributes them, a sub-quest's included.
@@ -130,13 +130,13 @@ export class UsageLedger extends Context.Service<
             ? sql.literal("")
             : sql`AND u.started_at >= ${window.since} AND u.started_at < ${window.until}`;
         return sql`(
-            SELECT ${sql.literal(REPLY_HOB)} AS hob_id, m.runtime, m.model, m.created_at AS at, m.thread_id,
+            SELECT ${sql.literal(REPLY_HOB)} AS hob_id, m.runtime, m.model, m.created_at AS at, m.channel_id,
               ${sql.literal(QUEST_OF_REPLY)} AS quest_id,
               m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_write_tokens
-            FROM messages m JOIN threads t ON t.id = m.thread_id
+            FROM messages m JOIN channels t ON t.id = m.channel_id
             WHERE ${sql.literal(SETTLED)} ${replies}
             UNION ALL
-            SELECT m.agent_id, m.runtime, m.model, m.created_at, m.thread_id, ${sql.literal(QUEST_OF_REPLY)},
+            SELECT m.agent_id, m.runtime, m.model, m.created_at, m.channel_id, ${sql.literal(QUEST_OF_REPLY)},
               m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_write_tokens
             FROM passed_turns m
             WHERE 1 = 1 ${replies}
@@ -148,7 +148,7 @@ export class UsageLedger extends Context.Service<
           ) s`;
       };
       return UsageLedger.of({
-        threadUsage: (threadId, since, until) =>
+        channelUsage: (channelId, since, until) =>
           Effect.all(
             [
               sql<Record<string, unknown>>`
@@ -157,19 +157,19 @@ export class UsageLedger extends Context.Service<
                 FROM (
                   SELECT ${sql.literal(REPLY_HOB)} AS hob_id,
                     m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_write_tokens
-                  FROM messages m JOIN threads t ON t.id = m.thread_id
-                  WHERE m.thread_id = ${threadId} AND ${sql.literal(SETTLED)}
+                  FROM messages m JOIN channels t ON t.id = m.channel_id
+                  WHERE m.channel_id = ${channelId} AND ${sql.literal(SETTLED)}
                     AND m.created_at >= ${since} AND m.created_at < ${until}
                   UNION ALL
                   SELECT p.agent_id, p.input_tokens, p.output_tokens, p.cache_read_tokens, p.cache_write_tokens
                   FROM passed_turns p
-                  WHERE p.thread_id = ${threadId} AND p.created_at >= ${since} AND p.created_at < ${until}
+                  WHERE p.channel_id = ${channelId} AND p.created_at >= ${since} AND p.created_at < ${until}
                 ) s
                 GROUP BY s.hob_id`,
               sql<Record<string, unknown>>`
                 SELECT ${sql.literal(REPLY_HOB)} AS hob_id, MAX(m.created_at) AS last_at
-                FROM messages m JOIN threads t ON t.id = m.thread_id
-                WHERE m.thread_id = ${threadId} AND ${sql.literal(SETTLED)}
+                FROM messages m JOIN channels t ON t.id = m.channel_id
+                WHERE m.channel_id = ${channelId} AND ${sql.literal(SETTLED)}
                 GROUP BY ${sql.literal(REPLY_HOB)}`,
             ],
             { concurrency: 1 },
@@ -222,7 +222,7 @@ export class UsageLedger extends Context.Service<
                 SELECT s.quest_id, q.goal, a.name AS lead_name,
                   (SELECT COUNT(DISTINCT p.owner_id) FROM tasks p
                     WHERE p.root_id = (SELECT r.root_id FROM tasks r WHERE r.id = q.task_id)) AS party,
-                  COUNT(DISTINCT s.thread_id) AS chats, COUNT(*) AS replies,
+                  COUNT(DISTINCT s.channel_id) AS chats, COUNT(*) AS replies,
                   SUM(CASE WHEN ${sql.literal(UNREPORTED)} THEN 1 ELSE 0 END) AS unreported,
                   SUM(${sql.literal(TOKENS)}) AS tokens
                 FROM ${spent}

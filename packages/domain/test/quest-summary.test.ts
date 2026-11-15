@@ -11,7 +11,7 @@ import {
   sameSummary,
   TaskId,
   type TaskState,
-  ThreadId,
+  ChannelId,
 } from "../src/index.ts";
 
 const task = (id: string, parentId: string | null, state: TaskState) => ({
@@ -25,7 +25,7 @@ const quest = (id: string, taskId: string, state: QuestState = "active") => ({
   taskId: TaskId.make(taskId),
   leadId: AgentId.make("aldric"),
   parentQuestId: null,
-  threadId: ThreadId.make("t1"),
+  channelId: ChannelId.make("t1"),
   state,
 });
 
@@ -69,7 +69,7 @@ describe("questSummaryOf", () => {
       problem: 1,
       idle: 0,
     });
-    expect(summary).toMatchObject({ questId: "q1", taskId: "campaign", leadId: "aldric", threadId: "t1" });
+    expect(summary).toMatchObject({ questId: "q1", taskId: "campaign", leadId: "aldric", channelId: "t1" });
   });
 
   it("counts questions that reached you, pending approvals and failed Tasks as what needs you, in its own tree only", () => {
@@ -136,7 +136,7 @@ describe("sameSummary", () => {
     expect(sameSummary(summary, { ...summary, tones: { ...summary.tones } })).toBe(true);
     expect(sameSummary(summary, { ...summary, tones: { ...summary.tones, done: 3 } })).toBe(false);
     expect(sameSummary(summary, { ...summary, state: "completed" })).toBe(false);
-    expect(sameSummary(summary, { ...summary, threadId: ThreadId.make("t2") })).toBe(false);
+    expect(sameSummary(summary, { ...summary, channelId: ChannelId.make("t2") })).toBe(false);
     expect(sameSummary(summary, { ...summary, needsYou: summary.needsYou + 1 })).toBe(false);
     expect(sameSummary(summary, { ...summary, readyForReview: summary.readyForReview + 1 })).toBe(false);
   });

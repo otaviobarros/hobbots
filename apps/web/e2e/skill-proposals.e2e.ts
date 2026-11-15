@@ -51,9 +51,9 @@ const proposalHub = async () => {
     instructions: "",
   });
   const propose = async (name: string, body: string) => {
-    const thread = await api("POST", `/agents/${ada.id}/threads`);
+    const channel = await api("POST", `/agents/${ada.id}/channels`);
     const call = { key: name, name, instructions: skillMd(name, body), why: `I repeat the ${name} steps.` };
-    await api("POST", `/threads/${thread.id}/messages`, {
+    await api("POST", `/channels/${channel.id}/messages`, {
       content: `Keep how we release\nfake:hub skill_propose ${JSON.stringify(call)}`,
     });
   };

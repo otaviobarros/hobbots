@@ -1,12 +1,12 @@
-import type { AgentId, AttemptId, TaskId, ThreadId } from "@hobbots/domain";
+import type { AgentId, AttemptId, TaskId, ChannelId } from "@hobbots/domain";
 import { useNavigate } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { searchParam } from "../../lib/search-params.ts";
 import { WorkbenchTab } from "../workbench/workbench-model.ts";
 
 /**
- * Where a quest is in a thread's address (ADR 037, STD-REACT-002). `quest` names a Task of the
- * quest, which opens in the thread's sheet. `tab` opens the quest's Workbench beside the chat on that
+ * Where a quest is in a channel's address (ADR 037, STD-REACT-002). `quest` names a Task of the
+ * quest, which opens in the channel's sheet. `tab` opens the quest's Workbench beside the chat on that
  * tab instead, with `task` the Task whose hob's work it shows, `attempt` a try other than the one it
  * picks and `file` a file the tab shows first, with `from` the try that recorded it when more than one
  * did. `scope=task` narrows the Workbench to that Task alone, as Show in the Workbench on one of a
@@ -49,13 +49,13 @@ export const questSearch = (
   ...(options.file === undefined ? {} : { file: options.file }),
 });
 
-const THREAD = "/hobs/$hobId/threads/$threadId" as const;
+const CHANNEL = "/hobs/$hobId/channels/$channelId" as const;
 
-/** Opens a quest of the thread's work in its sheet, or its Workbench on a tab, as a link to it would. */
-export const useOpenQuest = (hobId: AgentId, threadId: ThreadId) => {
+/** Opens a quest of the channel's work in its sheet, or its Workbench on a tab, as a link to it would. */
+export const useOpenQuest = (hobId: AgentId, channelId: ChannelId) => {
   const navigate = useNavigate();
   return (taskId: TaskId, options?: Parameters<typeof questSearch>[1]) =>
-    void navigate({ to: THREAD, params: { hobId, threadId }, search: questSearch(taskId, options) });
+    void navigate({ to: CHANNEL, params: { hobId, channelId }, search: questSearch(taskId, options) });
 };
 
 /**
@@ -64,11 +64,11 @@ export const useOpenQuest = (hobId: AgentId, threadId: ThreadId) => {
  * them. Each keeps the quest's `top` Task in `quest`, so a link that named a member's Task shows that
  * hob's work only until another, or everyone, is picked.
  */
-export const useQuestMoves = (hobId: AgentId, threadId: ThreadId, top: TaskId | undefined) => {
+export const useQuestMoves = (hobId: AgentId, channelId: ChannelId, top: TaskId | undefined) => {
   const navigate = useNavigate();
-  const params = { hobId, threadId };
+  const params = { hobId, channelId };
   const go = (search: (prev: Record<string, unknown>) => Record<string, unknown>, replace = true) =>
-    void navigate({ from: THREAD, to: THREAD, params, search, replace });
+    void navigate({ from: CHANNEL, to: CHANNEL, params, search, replace });
   return {
     /** Shows a hob's work in the Workbench, by one of its Tasks, on the tab it was on, else Changes; with none, everyone's. */
     lane: (taskId: TaskId | undefined) =>

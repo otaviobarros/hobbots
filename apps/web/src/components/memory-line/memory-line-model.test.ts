@@ -1,4 +1,4 @@
-import { AgentId, MemoryPath, MemorySave, MemoryVersion, MessageId, ThreadId } from "@hobbots/domain";
+import { AgentId, MemoryPath, MemorySave, MemoryVersion, MessageId, ChannelId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client.ts";
 import { replySaves, savedLine, undoFailure } from "./memory-line-model.ts";
@@ -18,7 +18,7 @@ const save = (id: string, overrides: Partial<MemorySave> = {}) =>
     tags: [],
     state: "saved",
     version: MemoryVersion.make("v1"),
-    threadId: ThreadId.make("thread-1"),
+    channelId: ChannelId.make("channel-1"),
     messageId: reply,
     createdAt: "2026-11-05T09:55:00.000Z",
     updatedAt: "2026-11-05T09:55:00.000Z",

@@ -18,8 +18,8 @@ import {
   FileChangeId,
   TaskId,
   type TaskToolDone,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { TaskTools } from "@hobbots/orchestration";
 import {
@@ -43,7 +43,7 @@ import { NodeFolderChecks } from "../src/folders.ts";
 
 const now = "2026-11-03T01:21:55.000Z";
 const FRODO = AgentId.make("frodo");
-const threadId = ThreadId.make("spec");
+const channelId = ChannelId.make("spec");
 const TASK = TaskId.make("wrap-up");
 const ATTEMPT = AttemptId.make("wrap-up-1");
 
@@ -140,12 +140,12 @@ const seed = (paths: ReadonlyArray<string>) =>
         createdAt: now,
       }),
     );
-    yield* repo.upsertThread(
-      new Thread({ id: threadId, agentId: FRODO, title: "Spec", createdAt: now, updatedAt: now }),
+    yield* repo.upsertChannel(
+      new Channel({ id: channelId, agentId: FRODO, title: "Spec", createdAt: now, updatedAt: now }),
     );
     const tasks = yield* TaskRepository;
     const created = yield* tasks.createTask({
-      task: { id: TASK, ownerId: FRODO, parentId: null, threadId, brief: "Wrap up", dependsOn: [], createdAt: now },
+      task: { id: TASK, ownerId: FRODO, parentId: null, channelId, brief: "Wrap up", dependsOn: [], createdAt: now },
       delegation: null,
       milestones: [],
     });

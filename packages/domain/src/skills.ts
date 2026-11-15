@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { AgentId, MessageId, ThreadId } from "./ids.ts";
+import { AgentId, MessageId, ChannelId } from "./ids.ts";
 import { MemoryScope } from "./memory.ts";
 import { Revision } from "./revision.ts";
 
@@ -352,28 +352,28 @@ export type SkillUseId = typeof SkillUseId.Type;
 
 /**
  * One use of a skill by a hob (ADR 029, The use line), counted on the skill's Activity tab. A use
- * from a chat names the thread and the reply; a Task step's or a party member's names the thread
+ * from a chat names the channel and the reply; a Task step's or a party member's names the channel
  * its session runs in, and no reply.
  */
 export class SkillUse extends Schema.Class<SkillUse>("SkillUse")({
   id: SkillUseId,
   ...UsedSkill.fields,
   agentId: AgentId,
-  threadId: Schema.NullOr(ThreadId),
+  channelId: Schema.NullOr(ChannelId),
   messageId: Schema.NullOr(MessageId),
   at: Schema.String,
 }) {}
 
-/** How often hobs used a skill (ADR 029): in all, in the last seven days, per hob and per thread. */
+/** How often hobs used a skill (ADR 029): in all, in the last seven days, per hob and per channel. */
 export const SkillUseCounts = Schema.Struct({
   skillId: SkillId,
   total: Schema.Int,
   thisWeek: Schema.Int,
   /** Each hob that used it, the most recent first. */
   hobs: Schema.Array(Schema.Struct({ agentId: AgentId, count: Schema.Int, lastAt: Schema.String })),
-  /** Each thread it was used in, the most recent first. */
-  threads: Schema.Array(
-    Schema.Struct({ threadId: ThreadId, agentId: AgentId, count: Schema.Int, lastAt: Schema.String }),
+  /** Each channel it was used in, the most recent first. */
+  channels: Schema.Array(
+    Schema.Struct({ channelId: ChannelId, agentId: AgentId, count: Schema.Int, lastAt: Schema.String }),
   ),
   /** For a set (ADR 029, Skill sets), each of its skills that was used, by its name in the set. */
   members: Schema.Array(Schema.Struct({ name: Schema.String, total: Schema.Int, thisWeek: Schema.Int })).pipe(
@@ -392,7 +392,7 @@ export const skillUseWeekStart = (now: string): string => new Date(Date.parse(no
 export const countSkillUses = (skillId: SkillId, uses: ReadonlyArray<SkillUse>, since: string): SkillUseCounts => {
   const mine = uses.filter((use) => use.skillId === skillId).sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
   const hobs = new Map<AgentId, { agentId: AgentId; count: number; lastAt: string }>();
-  const threads = new Map<ThreadId, { threadId: ThreadId; agentId: AgentId; count: number; lastAt: string }>();
+  const channels = new Map<ChannelId, { channelId: ChannelId; agentId: AgentId; count: number; lastAt: string }>();
   const members = new Map<string, { name: string; total: number; thisWeek: number }>();
   for (const use of mine) {
     if (use.set !== null) {
@@ -405,21 +405,21 @@ export const countSkillUses = (skillId: SkillId, uses: ReadonlyArray<SkillUse>, 
     }
     const hob = hobs.get(use.agentId) ?? { agentId: use.agentId, count: 0, lastAt: use.at };
     hobs.set(use.agentId, { ...hob, count: hob.count + 1 });
-    if (use.threadId === null) continue;
-    const thread = threads.get(use.threadId) ?? {
-      threadId: use.threadId,
+    if (use.channelId === null) continue;
+    const channel = channels.get(use.channelId) ?? {
+      channelId: use.channelId,
       agentId: use.agentId,
       count: 0,
       lastAt: use.at,
     };
-    threads.set(use.threadId, { ...thread, count: thread.count + 1 });
+    channels.set(use.channelId, { ...channel, count: channel.count + 1 });
   }
   return {
     skillId,
     total: mine.length,
     thisWeek: mine.filter((use) => use.at > since).length,
     hobs: [...hobs.values()],
-    threads: [...threads.values()],
+    channels: [...channels.values()],
     members: [...members.values()].sort((a, b) => a.name.localeCompare(b.name)),
   };
 };

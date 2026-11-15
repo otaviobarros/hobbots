@@ -108,7 +108,7 @@ describe("corners", () => {
    */
   const ALLOWED: Allowed = {
     "apps/web/src/components/find/find-rows.tsx": ["rounded-[3px]"],
-    "apps/web/src/components/chat/empty-thread.tsx": ["rounded-[12px_12px_12px_2px]"],
+    "apps/web/src/components/chat/empty-channel.tsx": ["rounded-[12px_12px_12px_2px]"],
     "apps/web/src/components/hob-page/chat-row.tsx": ["rounded-[3px]"],
     "apps/web/src/components/hob-page/hob-aside.tsx": ["rounded-[2px]"],
     "apps/web/src/components/hob-page/hob-hero.tsx": ["rounded-[50%]", "rounded-xl", "rounded-ss-[2px]"],

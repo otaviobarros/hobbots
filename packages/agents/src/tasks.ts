@@ -51,18 +51,18 @@ import type {
   TaskToolRefused,
   TaskTree,
   TaskWait,
-  ThreadId,
+  ChannelId,
   WaitMode,
   WebReadMark,
 } from "@hobbots/domain";
 import { Context, type Effect, type Option } from "effect";
 
-/** A new Task. A child takes its parent's root and thread; `threadId` applies only to the Task you asked for. */
+/** A new Task. A child takes its parent's root and channel; `channelId` applies only to the Task you asked for. */
 export interface NewTask {
   readonly id: TaskId;
   readonly ownerId: AgentId;
   readonly parentId: TaskId | null;
-  readonly threadId: ThreadId | null;
+  readonly channelId: ChannelId | null;
   readonly brief: string;
   readonly dependsOn: ReadonlyArray<TaskId>;
   readonly createdAt: string;
@@ -437,9 +437,9 @@ export class TaskRepository extends Context.Service<
     readonly listFailedTasks: Effect.Effect<ReadonlyArray<FailedTask>>;
     /**
      * How Quests are going, as the hub last published each (ADR 037): every Quest followed in
-     * `threadId`, ended ones included, or with none every Quest still active. Oldest Quest first.
+     * `channelId`, ended ones included, or with none every Quest still active. Oldest Quest first.
      */
-    readonly listQuestSummaries: (threadId: ThreadId | null) => Effect.Effect<ReadonlyArray<QuestSummary>>;
+    readonly listQuestSummaries: (channelId: ChannelId | null) => Effect.Effect<ReadonlyArray<QuestSummary>>;
     /** Gives an artifact to another Task in its tree. Handing it to the same Task again changes nothing. */
     readonly handOff: (artifactId: ArtifactId, toTaskId: TaskId, at: string) => Changed<HandOff>;
     /**
@@ -477,8 +477,8 @@ export class TaskRepository extends Context.Service<
     readonly readLedger: (taskId: TaskId) => Effect.Effect<Option.Option<ResponsibilityLedger>>;
     /** The Task and everything under it. */
     readonly readTree: (taskId: TaskId) => Effect.Effect<Option.Option<TaskTree>>;
-    /** The tree of each Task a request in the thread started, oldest first. */
-    readonly readThreadTrees: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<TaskTree>>;
+    /** The tree of each Task a request in the channel started, oldest first. */
+    readonly readChannelTrees: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<TaskTree>>;
     readonly findQuest: (questId: QuestId) => Effect.Effect<Option.Option<Quest>>;
     /** How many Tasks the hob owns that have not ended, across every tree. */
     readonly openTaskCount: (ownerId: AgentId) => Effect.Effect<number>;

@@ -12,7 +12,7 @@ import {
   PermissionSummary,
   SecretRedaction,
 } from "@hobbots/agents";
-import { type Agent, isInProgress, type Message, roleFields, type StartedFresh, type Thread } from "@hobbots/domain";
+import { type Agent, isInProgress, type Message, roleFields, type StartedFresh, type Channel } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,
@@ -110,23 +110,23 @@ const eventually = <A>(read: () => Promise<A | undefined>) =>
     ),
   );
 
-const messages = async (thread: Thread) =>
-  (await request<ReadonlyArray<Message>>("GET", `/api/threads/${thread.id}/messages`)).body;
+const messages = async (channel: Channel) =>
+  (await request<ReadonlyArray<Message>>("GET", `/api/channels/${channel.id}/messages`)).body;
 
 const listed = async (hobId: string, archived = false) =>
   (
-    await request<ReadonlyArray<Thread>>("GET", `/api/agents/${hobId}/threads${archived ? "?archived=true" : ""}`)
-  ).body.map((thread) => thread.id);
+    await request<ReadonlyArray<Channel>>("GET", `/api/agents/${hobId}/channels${archived ? "?archived=true" : ""}`)
+  ).body.map((channel) => channel.id);
 
-/** Waits until the thread's last message is a reply that has ended. */
-const replyEnded = (thread: Thread) =>
+/** Waits until the channel's last message is a reply that has ended. */
+const replyEnded = (channel: Channel) =>
   eventually(async () => {
-    const last = (await messages(thread)).at(-1);
+    const last = (await messages(channel)).at(-1);
     return last?.role === "assistant" && !isInProgress(last.status) ? last : undefined;
   });
 
-/** A finished setup on `preset` sharing a project folder, with Pip and one empty thread. */
-const pipWithThread = async (preset: "careful" | "balanced" = "balanced") => {
+/** A finished setup on `preset` sharing a project folder, with Pip and one empty channel. */
+const pipWithChannel = async (preset: "careful" | "balanced" = "balanced") => {
   await request("PATCH", "/api/setup", { completed: true, safetyPreset: preset, approvedFolders: [project] });
   const pip = (
     await request<Agent>("POST", "/api/agents", {
@@ -140,41 +140,41 @@ const pipWithThread = async (preset: "careful" | "balanced" = "balanced") => {
       instructions: "",
     })
   ).body;
-  const thread = (await request<Thread>("POST", `/api/agents/${pip.id}/threads`)).body;
-  return { pip, thread };
+  const channel = (await request<Channel>("POST", `/api/agents/${pip.id}/channels`)).body;
+  return { pip, channel };
 };
 
 /** Sends `content` and waits until its reply has ended. */
-const exchange = async (thread: Thread, content: string) => {
-  const sent = await request("POST", `/api/threads/${thread.id}/messages`, { content });
+const exchange = async (channel: Channel, content: string) => {
+  const sent = await request("POST", `/api/channels/${channel.id}/messages`, { content });
   expect(sent.status).toBe(200);
-  return replyEnded(thread);
+  return replyEnded(channel);
 };
 
 describe("camps and Start fresh over the API", () => {
   it("makes a camp and starts a chat fresh once per key, and refuses what does not fit (#1376)", async () => {
-    const { pip, thread } = await pipWithThread();
-    await exchange(thread, "Plan the launch");
+    const { pip, channel } = await pipWithChannel();
+    await exchange(channel, "Plan the launch");
     const ask = { key: "camp-launch", title: "Launch post", goal: "Write the launch post", private: true };
-    const camp = await request<Thread>("POST", `/api/agents/${pip.id}/camps`, ask);
+    const camp = await request<Channel>("POST", `/api/agents/${pip.id}/camps`, ask);
     expect(camp.status).toBe(200);
     expect(camp.body).toMatchObject({ id: "camp-launch", kind: "camp", goal: "Write the launch post", private: true });
-    const again = await request<Thread>("POST", `/api/agents/${pip.id}/camps`, ask);
+    const again = await request<Channel>("POST", `/api/agents/${pip.id}/camps`, ask);
     expect(again.body).toEqual(camp.body);
     const reused = await request("POST", `/api/agents/${pip.id}/camps`, { ...ask, title: "Another" });
-    expect(reused).toMatchObject({ status: 409, body: { _tag: "ThreadKeyReused", threadId: "camp-launch" } });
+    expect(reused).toMatchObject({ status: 409, body: { _tag: "ChannelKeyReused", channelId: "camp-launch" } });
     const untitled = await request("POST", `/api/agents/${pip.id}/camps`, { ...ask, key: "camp-2", title: "" });
     expect(untitled.status).toBe(400);
 
-    const onCamp = await request("POST", "/api/threads/camp-launch/start-fresh", { key: "fresh-0" });
+    const onCamp = await request("POST", "/api/channels/camp-launch/start-fresh", { key: "fresh-0" });
     expect(onCamp).toMatchObject({ status: 409, body: { _tag: "StartFreshRefused", reason: "not-open-chat" } });
-    const fresh = await request<StartedFresh>("POST", `/api/threads/${thread.id}/start-fresh`, { key: "fresh-1" });
+    const fresh = await request<StartedFresh>("POST", `/api/channels/${channel.id}/start-fresh`, { key: "fresh-1" });
     expect(fresh.status).toBe(200);
-    expect(fresh.body.superseded).toMatchObject({ id: thread.id, state: "superseded" });
-    expect(fresh.body.chat).toMatchObject({ id: "fresh-1", kind: "chat", origin: { threadId: thread.id } });
-    const replayed = await request<StartedFresh>("POST", `/api/threads/${thread.id}/start-fresh`, { key: "fresh-1" });
+    expect(fresh.body.superseded).toMatchObject({ id: channel.id, state: "superseded" });
+    expect(fresh.body.chat).toMatchObject({ id: "fresh-1", kind: "chat", origin: { channelId: channel.id } });
+    const replayed = await request<StartedFresh>("POST", `/api/channels/${channel.id}/start-fresh`, { key: "fresh-1" });
     expect(replayed.body).toEqual(fresh.body);
     expect(await listed(pip.id)).toEqual(["fresh-1", "camp-launch"]);
-    expect(await listed(pip.id, true)).toEqual([thread.id]);
+    expect(await listed(pip.id, true)).toEqual([channel.id]);
   });
 });

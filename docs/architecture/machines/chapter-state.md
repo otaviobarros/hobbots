@@ -6,9 +6,9 @@ Its state is in the `state` field.
 
 | State | Meaning |
 | --- | --- |
-| live | The thread's current topic: new messages join it, and its runtime sessions are resumed |
+| live | The channel's current topic: new messages join it, and its runtime sessions are resumed |
 | resting | An earlier topic: it takes no new messages, and its sessions are never resumed |
-| moved | Moved into a camp; the thread keeps it as a stub that links there |
+| moved | Moved into a camp; the channel keeps it as a stub that links there |
 
 ```mermaid
 stateDiagram-v2

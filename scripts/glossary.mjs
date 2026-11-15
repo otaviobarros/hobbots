@@ -4,7 +4,7 @@
 // word the UI never shows, or when a doc uses a word the docs no longer use.
 //
 // Copy is every string and template literal of a message module (STD-I18N-001), except object keys,
-// codes such as "thread-closed", and paths such as "~/.agents/skills". The pure parts live here so
+// codes such as "channel-closed", and paths such as "~/.agents/skills". The pure parts live here so
 // scripts/glossary.test.mjs can feed them text; scripts/check-glossary.mjs reads the repository.
 
 import { parseSync, visitorKeys } from "oxc-parser";

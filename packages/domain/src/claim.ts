@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { Actor } from "./actor.ts";
-import { AgentId, ThreadId } from "./ids.ts";
+import { AgentId, ChannelId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { Revision } from "./revision.ts";
 import { TaskId } from "./task.ts";
@@ -306,13 +306,13 @@ export class ClashSide extends Schema.Class<ClashSide>("ClashSide")({
   ownerId: AgentId,
   /** The Task's brief, whose first line is its title. */
   brief: Schema.String,
-  /** The chat or camp the Task's work belongs to: the thread of its top Task. */
-  threadId: Schema.NullOr(ThreadId),
+  /** The chat or camp the Task's work belongs to: the channel of its top Task. */
+  channelId: Schema.NullOr(ChannelId),
 }) {}
 
 /**
  * An open clash on a path or a branch, as a chat or camp shows it in a Heads-up (ADR 037): the open
- * claims that clash, oldest first, at least one of them a Task's in that thread, and when it began,
+ * claims that clash, oldest first, at least one of them a Task's in that channel, and when it began,
  * which is when its newest claim was made.
  */
 export class ClaimClash extends Schema.Class<ClaimClash>("ClaimClash")({

@@ -9,9 +9,9 @@ export {
 export {
   arrivalsText,
   carryingTask,
-  carryingThread,
+  carryingChannel,
   continuationTask,
-  continuationThread,
+  continuationChannel,
   RESULT_IN_BRIEFING,
   type ResultsIn,
   runningTurnAsk,

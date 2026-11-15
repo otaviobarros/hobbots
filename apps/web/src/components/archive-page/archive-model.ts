@@ -1,4 +1,4 @@
-import { type Agent, type AgentId, foldWord, searchTerms, type Thread, type ThreadId } from "@hobbots/domain";
+import { type Agent, type AgentId, foldWord, searchTerms, type Channel, type ChannelId } from "@hobbots/domain";
 import { Schema } from "effect";
 
 /** The Archive's two tabs. */
@@ -12,22 +12,22 @@ export const isArchiveTab = Schema.is(ArchiveTab);
 export const SHOWN = 12;
 
 type HobLike = Pick<Agent, "id" | "name">;
-type ThreadLike = Pick<Thread, "id" | "title" | "archivedAt">;
+type ChannelLike = Pick<Channel, "id" | "title" | "archivedAt">;
 
 /** An archived chat with the hob it belongs to. */
-export interface ArchivedChat<H extends HobLike = Agent, T extends ThreadLike = Thread> {
+export interface ArchivedChat<H extends HobLike = Agent, T extends ChannelLike = Channel> {
   readonly hob: H;
-  readonly thread: T;
+  readonly channel: T;
 }
 
 /** Every hob's archived chats in one list, most recently archived first. */
-export const allArchivedChats = <H extends HobLike, T extends ThreadLike>(
+export const allArchivedChats = <H extends HobLike, T extends ChannelLike>(
   hobs: ReadonlyArray<H>,
   archived: ReadonlyMap<AgentId, ReadonlyArray<T>>,
 ): ReadonlyArray<ArchivedChat<H, T>> =>
   hobs
-    .flatMap((hob) => (archived.get(hob.id) ?? []).map((thread) => ({ hob, thread })))
-    .sort((a, b) => (b.thread.archivedAt ?? "").localeCompare(a.thread.archivedAt ?? ""));
+    .flatMap((hob) => (archived.get(hob.id) ?? []).map((channel) => ({ hob, channel })))
+    .sort((a, b) => (b.channel.archivedAt ?? "").localeCompare(a.channel.archivedAt ?? ""));
 
 /** How many hob chips the scope shows before the rest go under More hobs. */
 const SCOPE_CHIPS = 6;
@@ -43,7 +43,7 @@ export interface ScopeChip<H> {
  */
 export const scopeChips = <H extends HobLike>(
   hobs: ReadonlyArray<H>,
-  chats: ReadonlyArray<ArchivedChat<HobLike, ThreadLike>>,
+  chats: ReadonlyArray<ArchivedChat<HobLike, ChannelLike>>,
   chosen: AgentId | undefined,
 ): { readonly chips: ReadonlyArray<ScopeChip<H>>; readonly more: ReadonlyArray<ScopeChip<H>> } => {
   const counts = new Map<AgentId, number>();
@@ -62,18 +62,18 @@ export const scopeChips = <H extends HobLike>(
  * The chats one hob's scope or All hobs shows, narrowed by the search: a chat matches when its title
  * holds every word of the query, or the hub's search found the words in its messages.
  */
-export const visibleChats = <C extends ArchivedChat<HobLike, ThreadLike>>(
+export const visibleChats = <C extends ArchivedChat<HobLike, ChannelLike>>(
   chats: ReadonlyArray<C>,
   hobId: AgentId | undefined,
   query: string,
-  messageHits: ReadonlySet<ThreadId>,
+  messageHits: ReadonlySet<ChannelId>,
 ): ReadonlyArray<C> => {
   const terms = searchTerms(query);
   return chats.filter((chat) => {
     if (hobId !== undefined && chat.hob.id !== hobId) return false;
     if (terms.length === 0) return true;
-    if (messageHits.has(chat.thread.id)) return true;
-    const title = foldWord(chat.thread.title);
+    if (messageHits.has(chat.channel.id)) return true;
+    const title = foldWord(chat.channel.title);
     return terms.every((term) => title.includes(term));
   });
 };

@@ -11,8 +11,8 @@ import {
   OWNER_ACTOR,
   QuestId,
   type ReplyUsage,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
@@ -50,14 +50,14 @@ const tokens = (input: number, output: number, cacheRead = 0, cacheWrite = 0): R
 
 let seq = 0;
 const reply = (
-  threadId: string,
+  channelId: string,
   createdAt: string,
   usage: ReplyUsage | null,
   options: { status?: MessageStatus; model?: string | null; role?: "user" | "assistant" } = {},
 ) =>
   new Message({
     id: MessageId.make(`m${++seq}`),
-    threadId: ThreadId.make(threadId),
+    channelId: ChannelId.make(channelId),
     actor: options.role === "user" ? OWNER_ACTOR : null,
     role: options.role ?? "assistant",
     content: "…",
@@ -80,9 +80,9 @@ const seed = Effect.gen(function* () {
     ["t-bramble", "bramble"],
     ["t-moss", "moss"],
   ] as const) {
-    yield* repo.upsertThread(
-      new Thread({
-        id: ThreadId.make(id),
+    yield* repo.upsertChannel(
+      new Channel({
+        id: ChannelId.make(id),
         agentId: AgentId.make(agentId),
         title: id,
         createdAt: created,
@@ -128,7 +128,7 @@ const seedQuests = Effect.gen(function* () {
       owner_id: owner,
       parent_id: parent,
       root_id: "k-plan",
-      thread_id: "t-pip",
+      channel_id: "t-pip",
       brief: id,
       state: "active",
       created_at: at,
@@ -144,7 +144,7 @@ const seedQuests = Effect.gen(function* () {
       task_id: task,
       lead_id: "pip",
       parent_quest_id: parent,
-      thread_id: "t-pip",
+      channel_id: "t-pip",
       goal: id === "q-plan" ? "Plan the week" : "Pick the days",
       limits: "{}",
       depth: parent === null ? 0 : 1,
@@ -181,9 +181,9 @@ const turn = (
 const seedTurns = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const repo = yield* HobbotsRepository;
-  yield* repo.upsertThread(
-    new Thread({
-      id: ThreadId.make("t-moss-plan"),
+  yield* repo.upsertChannel(
+    new Channel({
+      id: ChannelId.make("t-moss-plan"),
       agentId: AgentId.make("moss"),
       title: "t-moss-plan",
       createdAt: created,
@@ -196,7 +196,7 @@ const seedTurns = Effect.gen(function* () {
     owner_id: "moss",
     parent_id: null,
     root_id: "k-tidy",
-    thread_id: "t-moss-plan",
+    channel_id: "t-moss-plan",
     brief: "k-tidy",
     state: "active",
     created_at: at,
@@ -310,7 +310,7 @@ describe("UsageLedger", () => {
         // Pip passed in Bramble's chat: the hob is the one that passed, not the chat's.
         yield* sql`INSERT INTO passed_turns ${sql.insert({
           reply_id: "m-passed",
-          thread_id: "t-bramble",
+          channel_id: "t-bramble",
           agent_id: "pip",
           runtime: "claude-code",
           model: "haiku",

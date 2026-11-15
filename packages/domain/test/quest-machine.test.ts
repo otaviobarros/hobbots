@@ -25,7 +25,7 @@ const quest = (state: QuestState) =>
     taskId: TaskId.make("task-1"),
     leadId: "aldric" as AgentId,
     parentQuestId: null,
-    threadId: null,
+    channelId: null,
     goal: "Spring launch",
     acceptance: [],
     limits: { maxDepth: 2, deadline: null },

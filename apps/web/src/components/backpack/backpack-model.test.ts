@@ -49,7 +49,7 @@ const entry = (
     taskId: fields.taskId === undefined ? COPY : fields.taskId,
     questId: fields.questId ?? null,
     attemptId: null,
-    threadId: null,
+    channelId: null,
     dedupeKey: id,
     payload,
     notBefore: null,

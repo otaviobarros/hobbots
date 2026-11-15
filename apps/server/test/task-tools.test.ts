@@ -16,8 +16,8 @@ import {
   type TaskToolDone,
   type TaskToolName,
   TaskToolRefused,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
 import { TaskTools } from "@hobbots/orchestration";
@@ -44,7 +44,7 @@ const ROOK = AgentId.make("rook");
 const PIP = AgentId.make("pip");
 const QUILL = AgentId.make("quill");
 const ADA = AgentId.make("ada");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 const TOP = TaskIdSchema.make("top");
 
 let work: string;
@@ -123,8 +123,8 @@ const seed = Effect.gen(function* () {
       }),
     );
   }
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
   );
   const tasks = yield* TaskRepository;
   const created = yield* tasks.createTask({
@@ -132,7 +132,7 @@ const seed = Effect.gen(function* () {
       id: TOP,
       ownerId: ALDRIC,
       parentId: null,
-      threadId,
+      channelId,
       brief: "Black Friday campaign",
       dependsOn: [],
       createdAt: now,
@@ -379,7 +379,7 @@ describe("hob tools for Tasks and Quests", () => {
           id: TaskIdSchema.make("other"),
           ownerId: QUILL,
           parentId: null,
-          threadId: null,
+          channelId: null,
           brief: "Quill's own errand",
           dependsOn: [],
           createdAt: now,
@@ -540,7 +540,7 @@ describe("hob tools for Tasks and Quests", () => {
               id: late,
               ownerId: PIP,
               parentId: TOP,
-              threadId,
+              channelId,
               brief: "Late work",
               dependsOn: [],
               createdAt: now,

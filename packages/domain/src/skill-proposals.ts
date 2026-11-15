@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { AgentId, MessageId, ThreadId } from "./ids.ts";
+import { AgentId, MessageId, ChannelId } from "./ids.ts";
 import { SkillFeedbackKind } from "./skill-tools.ts";
 import { SkillId, SkillName, SkillRevisionHash } from "./skills.ts";
 import { AttemptId } from "./task.ts";
@@ -86,7 +86,7 @@ export class SkillProposal extends Schema.Class<SkillProposal>("SkillProposal")(
   /** Learned from: the memory pages it names, as the hob gave them. */
   memoryPages: Schema.Array(Schema.String),
   /** Learned from: the reply it was made from, when it came from a chat turn. */
-  threadId: Schema.NullOr(ThreadId),
+  channelId: Schema.NullOr(ChannelId),
   messageId: Schema.NullOr(MessageId),
   /** The Attempt it was made in, for a proposal made outside any chat, as a party member's or a step's. */
   attemptId: Schema.NullOr(AttemptId),
@@ -114,7 +114,7 @@ export class SkillFeedback extends Schema.Class<SkillFeedback>("SkillFeedback")(
   note: Schema.String,
   /** The revision the hob had when it wrote the note, if it had the skill. */
   revision: Schema.NullOr(SkillRevisionHash),
-  threadId: Schema.NullOr(ThreadId),
+  channelId: Schema.NullOr(ChannelId),
   messageId: Schema.NullOr(MessageId),
   createdAt: Schema.String,
 }) {}

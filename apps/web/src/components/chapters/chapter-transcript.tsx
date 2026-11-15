@@ -1,9 +1,9 @@
-import { type Agent, ChapterId, ChapterStates, type Message, type Thread, ThreadLifecycle } from "@hobbots/domain";
+import { type Agent, ChapterId, ChapterStates, type Message, type Channel, ChannelLifecycle } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, type ReactNode, useReducer, useState } from "react";
 import { chaptersQuery, useMergeChapter, useSplitChapter } from "../../api/chapters.ts";
-import { useThreadRuns } from "../../api/hub-status.ts";
+import { useChannelRuns } from "../../api/hub-status.ts";
 import { CampSuggestions, chapterName } from "../camps/camp-suggestions.tsx";
 import { type CampFrom, MakeCampSheet } from "../camps/make-camp-sheet.tsx";
 import { messages as campCopy } from "../camps/messages.ts";
@@ -35,39 +35,39 @@ import { SplitChapterSheet } from "./split-chapter-sheet.tsx";
  * The transcript under its chapters (ADR 037, #1382): a divider where each chapter starts, resting
  * chapters folded to their summary until you open them, Merge with previous and, in a chat, Make a
  * camp from this chapter on a divider's menu, and Pin and Split here on a message's. The hub's camp
- * suggestions follow the transcript. `renderMessage` draws one message, given its menu. A thread
+ * suggestions follow the transcript. `renderMessage` draws one message, given its menu. A channel
  * that never changed topic shows no divider.
  */
 export function ChapterTranscript({
   hob,
-  thread,
+  channel,
   transcript,
   focusMessageId,
   focusPick = 0,
   renderMessage,
 }: {
   hob: Agent;
-  thread: Thread;
+  channel: Channel;
   transcript: ReadonlyArray<Message>;
   focusMessageId: string | undefined;
   /** Counts each pick of a search result, so picking the same one again opens its chapter again. */
   focusPick?: number;
   renderMessage: (message: Message, split: ReactNode) => ReactNode;
 }) {
-  const chapters = useQuery(chaptersQuery(thread.id));
+  const chapters = useQuery(chaptersQuery(channel.id));
   // The hub keeps a chat's chapters in place while its run is busy: a reply runs or waits there, or
   // waits on your approval (#1551). The hub publishes that run, so the chat shows it as it is.
-  const moveHeld = useThreadRuns()[thread.id] !== undefined;
+  const moveHeld = useChannelRuns()[channel.id] !== undefined;
   const sections = chapterSections(transcript, chapters.data);
   const [choices, dispatchFold] = useReducer(foldStep, new Map());
   const [split, dispatchSplit] = useReducer(splitStep, SPLIT_CLOSED);
   const [merge, dispatchMerge] = useReducer(mergeStep, MERGE_IDLE);
   // The chat chapter Make a camp opens with, which moves into the new camp.
   const [campFrom, setCampFrom] = useState<CampFrom>();
-  const splitting = useSplitChapter(thread.id);
-  const merging = useMergeChapter(thread.id);
+  const splitting = useSplitChapter(channel.id);
+  const merging = useMergeChapter(channel.id);
   // An archived chat's chapters stay as they are, so it offers neither.
-  const open = ThreadLifecycle.isOpen(thread);
+  const open = ChannelLifecycle.isOpen(channel);
   const focused = chapterOf(sections, focusMessageId);
   const shown = shownWithoutOpening(sections, focused);
   // Each pick of a search result opens its chapter, even one you folded, so it can scroll to it; a
@@ -123,7 +123,7 @@ export function ChapterTranscript({
               : undefined
           }
           makeCamp={
-            open && thread.kind === "chat" && section.chapter !== null && section.messages.length > 0
+            open && channel.kind === "chat" && section.chapter !== null && section.messages.length > 0
               ? () =>
                   section.chapter &&
                   setCampFrom({
@@ -140,7 +140,7 @@ export function ChapterTranscript({
               message,
               open ? (
                 <MessageMenu
-                  threadId={thread.id}
+                  channelId={channel.id}
                   messageId={message.id}
                   // A chapter's first message already starts it, so it splits nothing.
                   onSplit={
@@ -174,7 +174,7 @@ export function ChapterTranscript({
       {open && (
         <CampSuggestions
           hob={hob}
-          thread={thread}
+          channel={channel}
           chapters={chapters.data ?? []}
           busy={moveHeld}
           onMake={setCampFrom}
@@ -206,7 +206,7 @@ function Section({
   renderMessage: (message: Message, at: number) => ReactNode;
 }) {
   const { chapter } = section;
-  // The thread's first chapter starts the transcript, so it needs no line until it has a title.
+  // The channel's first chapter starts the transcript, so it needs no line until it has a title.
   const divider = chapter !== null && dividers && (!first || chapter.title !== null || !ChapterStates.isLive(chapter));
   return (
     <>

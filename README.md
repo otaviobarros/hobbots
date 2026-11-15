@@ -13,18 +13,18 @@
   <a href="CONTRIBUTING.md">Contribute</a>
 </p>
 
-Hobbots is a personal, local-first, self-hostable workspace for AI agents. Each agent is a **hob**: a small helper with a name, a face and its own threads. Your hobs chat, use tools in the folders you give them, delegate to each other, report back and keep working after you close the window, within boundaries you trust.
+Hobbots is a personal, local-first, self-hostable workspace for AI agents. Each agent is a **hob**: a small helper with a name, a face and its own channels. Your hobs chat, use tools in the folders you give them, delegate to each other, report back and keep working after you close the window, within boundaries you trust.
 
-Hobbots does not build a new model or agent engine. It hosts existing runtimes such as Claude Code, Codex and ACP-compatible agents, and adds what they lack together: persistent identities and threads, durable delegation and inboxes, enforceable permissions and one view of all the work.
+Hobbots does not build a new model or agent engine. It hosts existing runtimes such as Claude Code, Codex and ACP-compatible agents, and adds what they lack together: persistent identities and channels, durable delegation and inboxes, enforceable permissions and one view of all the work.
 
 ## A field guide to the village
 
 - **Hob:** one agent, with its own name, look, instructions, model and permissions. Every hob is a 14 × 14 pixel sprite drawn from a seed, so it looks the same everywhere.
 - **The chief:** the Hobbots mark, an elder hob in a gem crown with a lantern staff. While any hob works, the lantern burns brighter.
-- **Thread:** a conversation with one hob that survives restarts. Each reply shows the tools the hob used as steps.
+- **Channel:** a conversation with one hob that survives restarts. Each reply shows the tools the hob used as steps.
 - **Folders and the sandbox:** where a hob may work, and the OS sandbox that holds it there. Each rule is Allow, Ask or Never, and you answer an Ask from the chat or the Inbox.
-- **Hub:** the one computer that runs the hobs, their threads and every runtime. Hobs act only on the hub.
-- **Quest:** a goal that spans several hobs and threads, with who asked whom and what is still owed. You follow it in its Quest room beside the lead's chat.
+- **Hub:** the one computer that runs the hobs, their channels and every runtime. Hobs act only on the hub.
+- **Quest:** a goal that spans several hobs and channels, with who asked whom and what is still owed. You follow it in its Quest room beside the lead's chat.
 - **Inbox:** where hobs leave questions, approvals and results for you and for each other.
 - **Charm:** a connection that gives a hob new abilities, such as GitHub with Push.
 
@@ -32,7 +32,7 @@ The [glossary](docs/product/glossary.md) has the full list.
 
 ## Status
 
-**Beta.** Hobbots runs as a desktop app on macOS and Linux and in the browser. Hobs on Claude Code or Codex chat in persistent threads, use tools within the folders you choose under a policy you set, and lead Quests that other hobs join. The [0.0.5 release notes](docs/releases/0.0.5.md) list what is new in the fifth beta, including one chat per hob with camps, chapters and records you can find, and its known limits.
+**Beta.** Hobbots runs as a desktop app on macOS and Linux and in the browser. Hobs on Claude Code or Codex chat in persistent channels, use tools within the folders you choose under a policy you set, and lead Quests that other hobs join. The [0.0.5 release notes](docs/releases/0.0.5.md) list what is new in the fifth beta, including one chat per hob with camps, chapters and records you can find, and its known limits.
 
 ## Install the Mac app
 
@@ -48,7 +48,7 @@ The app runs the runtimes installed on your Mac; it does not ship its own. Each 
 3. Open Hobbots from Applications. The app is not signed by an Apple developer yet, so macOS blocks the first launch: choose **Done** in the dialog.
 4. Open System Settings › Privacy & Security, scroll to Security, choose **Open Anyway** next to the message about Hobbots, confirm with your password or Touch ID, then choose **Open**. macOS remembers this, so later launches open normally.
 
-Hobbots keeps its data, including every thread, in `~/Library/Application Support/Hobbots`, outside the app.
+Hobbots keeps its data, including every channel, in `~/Library/Application Support/Hobbots`, outside the app.
 
 **Update:** quit Hobbots, download the new `.dmg` and drag the app onto Applications again, replacing the old copy. Your data stays where it is. A new version may need Open Anyway once more.
 

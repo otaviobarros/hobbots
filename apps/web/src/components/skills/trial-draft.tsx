@@ -1,5 +1,5 @@
 import type { SkillTrialText } from "@hobbots/api";
-import { ThreadId } from "@hobbots/domain";
+import { ChannelId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQuery } from "@tanstack/react-query";
@@ -10,7 +10,7 @@ import { messages } from "./messages.ts";
 const copy = messages.trial;
 
 function DraftRead({ trial, children }: { trial: string; children: (draft: SkillTrialText | null) => ReactNode }) {
-  const draft = useQuery(skillTrialDraftQuery(ThreadId.make(trial)));
+  const draft = useQuery(skillTrialDraftQuery(ChannelId.make(trial)));
   // A read that failed on the way: the draft may still be there, so the editor waits for it.
   if (draft.isError && !draftGone(draft.error)) {
     return (

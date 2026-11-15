@@ -3,7 +3,7 @@ import {
   estimatedTokens,
   type Task,
   type TaskId,
-  type ThreadId,
+  type ChannelId,
   WEB_FETCH_DESCRIPTION,
   WEB_FETCH_LABEL,
   WEB_FETCH_TOOL,
@@ -221,16 +221,16 @@ export const searchFound = (searched: Pick<WebSearchedEvent, "query" | "results"
 
 /** The session a call belongs to, as found sets are kept. */
 export interface WebSession {
-  readonly threadId: ThreadId | null;
+  readonly channelId: ChannelId | null;
   readonly taskId?: TaskId;
 }
 
 /**
- * The work a session's found set is kept under: a chat's thread, or the Task a session outside any
+ * The work a session's found set is kept under: a chat's channel, or the Task a session outside any
  * chat works on, whose every Attempt reads the set its brief passed on. Null for neither.
  */
 export const webWorkOf = (session: WebSession): string | null => {
-  if (session.threadId !== null) return `thread:${session.threadId}`;
+  if (session.channelId !== null) return `thread:${session.channelId}`;
   if (session.taskId !== undefined) return `task:${session.taskId}`;
   return null;
 };
@@ -240,9 +240,9 @@ export const webWorkOf = (session: WebSession): string | null => {
  * your chat with its hob, and any other in the session of its parent Task. Null for the Task you
  * asked for, whose brief is your own message.
  */
-export const briefWriterOf = (task: Pick<Task, "parentId" | "rootId" | "threadId">): WebSession | null => {
+export const briefWriterOf = (task: Pick<Task, "parentId" | "rootId" | "channelId">): WebSession | null => {
   if (task.parentId === null) return null;
-  return task.parentId === task.rootId ? { threadId: task.threadId } : { threadId: null, taskId: task.parentId };
+  return task.parentId === task.rootId ? { channelId: task.channelId } : { channelId: null, taskId: task.parentId };
 };
 
 /**
@@ -263,9 +263,9 @@ export const makeWebProvenance = Effect.gen(function* () {
         for (const [url, source] of yield* store.value.sources(work, urls)) found.set(url, source);
       }
       const rest = urls.filter((url) => !found.has(url));
-      if (rest.length > 0 && session.threadId !== null && Option.isSome(repo)) {
+      if (rest.length > 0 && session.channelId !== null && Option.isSome(repo)) {
         const yours = new Set(
-          (yield* repo.value.listMessages(session.threadId))
+          (yield* repo.value.listMessages(session.channelId))
             .filter((message) => message.role === "user")
             .flatMap((message) => urlsIn(message.content)),
         );
@@ -284,13 +284,13 @@ export const makeWebProvenance = Effect.gen(function* () {
    * Passes on with a new Task the URLs in its brief that the session which wrote it had found, so a
    * URL a hob put into a brief is found in the child's session only when it was found already.
    */
-  const passOn = (task: Pick<Task, "id" | "parentId" | "rootId" | "threadId" | "brief">) =>
+  const passOn = (task: Pick<Task, "id" | "parentId" | "rootId" | "channelId" | "brief">) =>
     Effect.gen(function* () {
       const writer = briefWriterOf(task);
       if (writer === null) return;
       const found = yield* sources(writer, urlsIn(task.brief));
       yield* add(
-        { threadId: null, taskId: task.id },
+        { channelId: null, taskId: task.id },
         [...found].map(([url, source]) => ({ url, source: `passed on with the Task (${source})` })),
       );
     });
@@ -439,7 +439,7 @@ export const makeWebTools = <V extends WebVerdict>(
               new WebFetchRecord({
                 id: WebRecordId.make(crypto.randomUUID()),
                 agentId: turn.agentId,
-                threadId: place === undefined ? turn.threadId : place.threadId,
+                channelId: place === undefined ? turn.channelId : place.channelId,
                 messageId,
                 taskId: place === undefined ? (turn.taskId ?? null) : yield* place.taskId,
                 attemptId,
@@ -579,7 +579,7 @@ export const makeWebTools = <V extends WebVerdict>(
               if (pages >= limits.pagesPerTurn) {
                 return yield* new HubRefusal({ message: webLimitReason.pagesPerTurn(limits) });
               }
-              const session: WebSession = { threadId: turn.threadId, ...(turn.taskId ? { taskId: turn.taskId } : {}) };
+              const session: WebSession = { channelId: turn.channelId, ...(turn.taskId ? { taskId: turn.taskId } : {}) };
               const found = (yield* provenance.sources(session, [url.href])).has(url.href);
               // A URL the hob wrote is not looked up before you approve it: its name could carry your data.
               const target = found ? yield* fetcher.resolve(url).pipe(Effect.mapError(refused)) : null;

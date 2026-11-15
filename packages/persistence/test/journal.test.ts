@@ -6,8 +6,8 @@ import {
   Message,
   MessageId,
   OWNER_ACTOR,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { DateTime, Duration, Effect, Layer, Option } from "effect";
@@ -20,7 +20,7 @@ const Repositories = Layer.mergeAll(HobbotsRepositoryLive, EventJournal.layer);
 const TestLayer = Repositories.pipe(Layer.provideMerge(TestDatabase));
 const now = "2026-10-30T00:00:00.000Z";
 const agentId = AgentId.make("aldric");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 
 const agent = new Agent({
   id: agentId,
@@ -35,17 +35,17 @@ const agent = new Agent({
   configVersion: 1,
   createdAt: now,
 });
-const thread = new Thread({
-  id: threadId,
+const channel = new Channel({
+  id: channelId,
   agentId,
-  title: "New thread",
+  title: "New channel",
   createdAt: now,
   updatedAt: now,
 });
 const message = (id: string, status: Message["status"], role: Message["role"] = "assistant") =>
   new Message({
     id: MessageId.make(id),
-    threadId,
+    channelId,
     actor: role === "assistant" ? null : OWNER_ACTOR,
     role,
     content: id,
@@ -58,7 +58,7 @@ const message = (id: string, status: Message["status"], role: Message["role"] = 
 const seed = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
   yield* repo.insertAgent(agent);
-  yield* repo.upsertThread(thread);
+  yield* repo.upsertChannel(channel);
 });
 
 describe("EventJournal", () => {
@@ -72,12 +72,12 @@ describe("EventJournal", () => {
       // Conditional writes that change nothing append nothing and use no sequence.
       const reinserted = yield* repo.insertAgent(agent);
       const staleWake = yield* repo.setAgentStatus(new Agent({ ...agent, status: "active" }), "paused");
-      const removedMissing = yield* repo.removeQueuedMessage(threadId, MessageId.make("missing"));
+      const removedMissing = yield* repo.removeQueuedMessage(channelId, MessageId.make("missing"));
       const started = yield* repo.startQueuedMessage(
         new Message({ ...message("q", "queued", "user"), status: "complete" }),
         message("q-reply", "streaming"),
       );
-      const removedStarted = yield* repo.removeQueuedMessage(threadId, MessageId.make("q"));
+      const removedStarted = yield* repo.removeQueuedMessage(channelId, MessageId.make("q"));
       return {
         entries: yield* journal.readAfter(0),
         head: yield* journal.head,
@@ -89,20 +89,20 @@ describe("EventJournal", () => {
           Option.isNone(removedMissing),
           Option.isNone(removedStarted),
         ],
-        messages: (yield* repo.listMessages(threadId)).map((m) => [m.id, m.revision]),
+        messages: (yield* repo.listMessages(channelId)).map((m) => [m.id, m.revision]),
         agentRevision: Option.getOrThrow(yield* repo.findAgent(agentId)).revision,
-        threadRevision: Option.getOrThrow(yield* repo.findThread(threadId)).revision,
-        liveChapterId: Option.getOrThrow(yield* repo.findThread(threadId)).liveChapterId,
+        channelRevision: Option.getOrThrow(yield* repo.findChannel(channelId)).revision,
+        liveChapterId: Option.getOrThrow(yield* repo.findChannel(channelId)).liveChapterId,
       };
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
-    // A new thread starts its first chapter in the same change (ADR 037).
+    // A new channel starts its first chapter in the same change (ADR 037).
     expect(result.entries.map((e) => [e.sequence, e.type])).toEqual([
       [1, "AgentUpserted"],
-      [2, "ThreadUpserted"],
+      [2, "ChannelUpserted"],
       [3, "ChapterStarted"],
-      [4, "ThreadMemberAdded"],
-      [5, "ThreadMemberAdded"],
+      [4, "ChannelMemberAdded"],
+      [5, "ChannelMemberAdded"],
       [6, "MessageUpserted"],
       [7, "MessageQueued"],
       [8, "MessageUpserted"],
@@ -118,42 +118,42 @@ describe("EventJournal", () => {
     expect(result.noops).toEqual([true, true, true, true]);
     // An entity's revision is the sequence of the entry that last wrote it.
     expect(result.agentRevision).toBe(1);
-    expect(result.threadRevision).toBe(2);
+    expect(result.channelRevision).toBe(2);
     expect(result.messages).toEqual([
       ["r", 8],
       ["q", 10],
       ["q-reply", 12],
     ]);
     // Read back from storage, the envelope carries its payload, version and correlation.
-    const [, threadEntry, chapterEntry, ownerEntry, hobEntry, queuedEntry] = result.entries;
+    const [, channelEntry, chapterEntry, ownerEntry, hobEntry, queuedEntry] = result.entries;
     const chapterId = result.liveChapterId;
-    expect(threadEntry?.payload).toEqual({
-      _tag: "ThreadUpserted",
-      thread: new Thread({ ...thread, revision: 2, liveChapterId: chapterId }),
+    expect(channelEntry?.payload).toEqual({
+      _tag: "ChannelUpserted",
+      channel: new Channel({ ...channel, revision: 2, liveChapterId: chapterId }),
     });
     expect(chapterEntry?.payload).toMatchObject({
       _tag: "ChapterStarted",
-      threadId,
+      channelId,
       chapter: { id: chapterId, number: 1, state: "live", title: null, revision: 3 },
       ended: null,
     });
     // Its first members, the person whose session made it and its hob, follow (ADR 039).
     expect(ownerEntry?.payload).toMatchObject({
-      _tag: "ThreadMemberAdded",
-      member: { threadId, actor: OWNER_ACTOR, role: "owner", state: "active", addedBy: OWNER_ACTOR, revision: 4 },
+      _tag: "ChannelMemberAdded",
+      member: { channelId, actor: OWNER_ACTOR, role: "owner", state: "active", addedBy: OWNER_ACTOR, revision: 4 },
     });
     expect(hobEntry?.payload).toMatchObject({
-      _tag: "ThreadMemberAdded",
-      member: { threadId, actor: { kind: "hob", id: agentId }, role: "member", state: "active", revision: 5 },
+      _tag: "ChannelMemberAdded",
+      member: { channelId, actor: { kind: "hob", id: agentId }, role: "member", state: "active", revision: 5 },
     });
-    expect(hobEntry?.correlation).toEqual({ agentId, threadId, messageId: null });
+    expect(hobEntry?.correlation).toEqual({ agentId, channelId, messageId: null });
     expect(queuedEntry?.payload).toEqual({
       _tag: "MessageUpserted",
       message: new Message({ ...message("q", "queued", "user"), revision: 6, chapterId, actor: OWNER_ACTOR }),
     });
     expect(queuedEntry?.schemaVersion).toBe(EVENT_SCHEMA_VERSIONS.MessageUpserted);
     expect(queuedEntry?.causationId).toBeNull();
-    expect(queuedEntry?.correlation).toEqual({ agentId, threadId, messageId: "q" });
+    expect(queuedEntry?.correlation).toEqual({ agentId, channelId, messageId: "q" });
     expect(new Set(result.entries.map((e) => e.id)).size).toBe(result.entries.length);
   });
 
@@ -168,7 +168,7 @@ describe("EventJournal", () => {
       // The next one finds them in the journal.
       const after = yield* Effect.gen(function* () {
         const journal = yield* EventJournal;
-        // The hob, the thread, its first chapter and its first two members came before.
+        // The hob, the channel, its first chapter and its first two members came before.
         return yield* journal.readAfter(5);
       }).pipe(Effect.provide(Layer.fresh(Repositories)));
       return { before, after };
@@ -191,7 +191,7 @@ describe("EventJournal", () => {
       return (yield* journal.readAfter(0)).map((e) => e.sequence);
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
-    // Five entries for the agent, the thread, its first chapter and its first two members, then one
+    // Five entries for the agent, the channel, its first chapter and its first two members, then one
     // or two per message.
     expect(sequences).toEqual(Array.from({ length: 5 + 20 + 40 }, (_, i) => i + 1));
   });

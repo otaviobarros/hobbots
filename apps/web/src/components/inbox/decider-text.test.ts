@@ -1,4 +1,4 @@
-import { AgentId, ApprovalId, ApprovalRequest, DeviceId, MessageId, ThreadId } from "@hobbots/domain";
+import { AgentId, ApprovalId, ApprovalRequest, DeviceId, MessageId, ChannelId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { deciderText } from "./inbox-items.ts";
 
@@ -10,7 +10,7 @@ const closed = (fields: Partial<ConstructorParameters<typeof ApprovalRequest>[0]
   new ApprovalRequest({
     id: ApprovalId.make("a1"),
     agentId: AgentId.make("nettle"),
-    threadId: ThreadId.make("t1"),
+    channelId: ChannelId.make("t1"),
     messageId: MessageId.make("m1"),
     stepId: "tool-1",
     tool: "Bash",

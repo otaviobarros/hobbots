@@ -290,7 +290,7 @@ const postedCommentOf = (json: typeof PostedCommentJson.Type): GitHubPostedComme
 /** The pages of issues reading back looks through: 1,000 issues changed since the call. */
 const ISSUE_PAGES = 10;
 
-/** The pages of comments reading back looks through: 1,000 comments since the call, far more than a thread gets in minutes. */
+/** The pages of comments reading back looks through: 1,000 comments since the call, far more than a channel gets in minutes. */
 const COMMENT_PAGES = 10;
 
 /**
@@ -377,7 +377,7 @@ const gitObjectRequest = (object: GitObject): { readonly path: string; readonly 
   }
 };
 
-/** The longest body or comment a hob reads, so one long thread does not fill its context. */
+/** The longest body or comment a hob reads, so one long channel does not fill its context. */
 export const MAX_TEXT = 4000;
 
 const cut = (text: string | null | undefined) => {
@@ -774,7 +774,7 @@ export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
             const slug = repositorySlug(repository);
             const what = `issue or pull request #${number} in ${slug}`;
             const json = yield* read(agentId, repository, `/repos/${slug}/issues/${number}`, FullItemJson, what);
-            const thread =
+            const channel =
               comments === 0 || json.comments === 0
                 ? []
                 : yield* read(
@@ -795,7 +795,7 @@ export const GitHubApiLive = (api: string = GITHUB_HOSTS.api) =>
               body: cut(stripCommentMarkers(json.body ?? "")),
               labels: json.labels.map((label) => (typeof label === "string" ? label : label.name)),
               commentCount: json.comments,
-              comments: thread.map(
+              comments: channel.map(
                 (comment): GitHubComment => ({
                   author: comment.user?.login ?? null,
                   createdAt: comment.created_at,

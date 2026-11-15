@@ -1,6 +1,6 @@
 /**
  * Adds a persistence migration named by the UTC second it was made (ADR 040):
- * `pnpm migration:new thread_members` writes
+ * `pnpm migration:new channel_members` writes
  * `packages/persistence/src/migrations/20261113231542_thread_members.ts`.
  *
  * No list names the migrations, and the migrator runs every one a database has not applied, whatever
@@ -24,7 +24,7 @@ export const secondId = (date) => date.toISOString().slice(0, 19).replace(/\D/g,
  */
 export const migrationFileName = (name, date, taken) => {
   if (!/^[a-z][a-z0-9]*(_[a-z0-9]+)*$/.test(name)) {
-    throw new Error(`"${name}" is not a migration name: use lowercase words joined by _, such as thread_members`);
+    throw new Error(`"${name}" is not a migration name: use lowercase words joined by _, such as channel_members`);
   }
   const used = new Set([...taken].map((file) => file.split("_")[0]));
   let at = new Date(Math.floor(date.getTime() / 1000) * 1000);
@@ -45,7 +45,7 @@ export default Effect.gen(function* () {
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const name = process.argv[2];
   if (name === undefined) {
-    console.error("Usage: pnpm migration:new <name>, such as pnpm migration:new thread_members");
+    console.error("Usage: pnpm migration:new <name>, such as pnpm migration:new channel_members");
     process.exit(1);
   }
   const file = migrationFileName(name, new Date(), readdirSync(MIGRATIONS_FOLDER));

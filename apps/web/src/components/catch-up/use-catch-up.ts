@@ -1,8 +1,8 @@
-import { type CatchUp, hasNews, type Thread, type ThreadId } from "@hobbots/domain";
+import { type CatchUp, hasNews, type Channel, type ChannelId } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
 import { useReducer, useState } from "react";
 import { catchUpQuery } from "../../api/notes.ts";
-import { useKnownUnreadThreads, usePageShown } from "../../api/thread-reads.ts";
+import { useKnownUnreadChannels, usePageShown } from "../../api/channel-reads.ts";
 import { CATCH_UP_START, type CatchUpFlow, catchUpStep, moves, seeing } from "./catch-up-flow.ts";
 
 /** What the chat shows of catching up, and whether its read still holds back marking it read. */
@@ -32,17 +32,17 @@ const newMountId = (): string => {
  * Catch-up for the chat in front (ADR 037): read from the hub at each visit to an unread chat, before
  * the chat marks itself read, so it says what changed since you last read it on any device.
  */
-export const useCatchUp = (thread: Thread | undefined, inView: boolean): CatchUpView => {
+export const useCatchUp = (channel: Channel | undefined, inView: boolean): CatchUpView => {
   const shown = usePageShown() && inView;
   const [flow, dispatch] = useReducer(catchUpStep, CATCH_UP_START);
   // Each mount counts its visits from 1 again, so the visit's key carries this mount's own id too.
   const [mount] = useState(newMountId);
-  const seen = seeing(thread?.id, shown, useKnownUnreadThreads());
+  const seen = seeing(channel?.id, shown, useKnownUnreadChannels());
   // Where you are changed: the flow takes it in this render, as a visit or not (adjusting state to a prop).
   if (moves(flow, seen)) dispatch(seen);
-  const visit = flow.step !== "idle" && flow.threadId === thread?.id ? flow.visits : null;
+  const visit = flow.step !== "idle" && flow.channelId === channel?.id ? flow.visits : null;
   const read = useQuery({
-    ...catchUpQuery(thread?.id ?? ("" as ThreadId), `${mount}:${visit ?? 0}`),
+    ...catchUpQuery(channel?.id ?? ("" as ChannelId), `${mount}:${visit ?? 0}`),
     enabled: visit !== null,
   });
   return {

@@ -1,6 +1,6 @@
 # packages/agents
 
-Application layer for hobs and their threads ([STD-ARCH-006](../../docs/standards/architecture.md#std-arch-006-use-cases-live-in-their-feature-package)). It depends only on `effect`, `@hobbots/domain` and `@hobbots/api`.
+Application layer for hobs and their channels ([STD-ARCH-006](../../docs/standards/architecture.md#std-arch-006-use-cases-live-in-their-feature-package)). It depends only on `effect`, `@hobbots/domain` and `@hobbots/api`.
 
 ## Use cases
 
@@ -8,7 +8,7 @@ Application layer for hobs and their threads ([STD-ARCH-006](../../docs/standard
 | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `HobService`        | Creates and edits hobs, checks their brain and role, and changes their policy.                                                                                                                                        |
 | `HobLifecycle`      | Pauses, wakes and retires hobs.                                                                                                                                                                                       |
-| `ChatService`       | Starts threads, sends prompts, queues messages, stops turns and continues replies. It also stops running turns that a narrower policy takes tools from. Its turns offer the Task tools through `TaskTurns`.           |
+| `ChatService`       | Starts channels, sends prompts, queues messages, stops turns and continues replies. It also stops running turns that a narrower policy takes tools from. Its turns offer the Task tools through `TaskTurns`.           |
 | `PermissionSummary` | Sums up a hob's policy under the installation's preset and shared folders.                                                                                                                                            |
 | `ApprovalService`   | Stores a tool call the policy answers Ask for as an approval request, holds its turn until the user decides, and expires what a turn leaves pending.                                                                  |
 | `HobAdmission`      | Holds the per-hob lock that the other services share.                                                                                                                                                                 |

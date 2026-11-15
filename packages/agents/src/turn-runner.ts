@@ -14,8 +14,8 @@ import {
   systemInstructions,
   type TaskBriefMark,
   type TaskId,
-  type Thread,
-  type ThreadId,
+  type Channel,
+  type ChannelId,
   type TurnEnding,
   toolsSucceeded,
   type WebReadMark,
@@ -50,7 +50,7 @@ import type { Speaker } from "./speaker.ts";
 import { nextSteps, replyStepId } from "./steps.ts";
 import { type ChatTaskTurn, TaskTurns } from "./task-turns.ts";
 import { callScope } from "./tasks.ts";
-import type { Reply } from "./thread-run.ts";
+import type { Reply } from "./channel-run.ts";
 import { keepToolOutput } from "./tool-output.ts";
 import { ActivityRecorder, trackTurn } from "./turn-activity.ts";
 import type { makeTurnGrants } from "./turn-grants.ts";
@@ -104,7 +104,7 @@ const markReply = (
   mark: WebReadMark | null,
 ): Effect.Effect<unknown> => (mark === null ? Effect.void : update(withReadWeb(mark)));
 
-/** The thread's session with its read-the-web mark set, or null when it already holds it. */
+/** The channel's session with its read-the-web mark set, or null when it already holds it. */
 const markedSession = (known: RuntimeSession, mark: WebReadMark): RuntimeSession | null =>
   known.readWeb?.since === mark.since && known.readWeb.source === mark.source ? null : { ...known, readWeb: mark };
 
@@ -112,13 +112,13 @@ const markedSession = (known: RuntimeSession, mark: WebReadMark): RuntimeSession
 const attemptReadWeb = (turn: ChatTaskTurn | null, mark: WebReadMark | null): Effect.Effect<void> =>
   turn === null || mark === null ? Effect.void : turn.readWeb(mark);
 
-const taskBriefIn = (thread: Thread, runtime: RuntimeKind, agentId: AgentId): TaskBriefMark | null =>
-  liveSession(thread, runtime, agentId)?.taskBrief ?? null;
+const taskBriefIn = (channel: Channel, runtime: RuntimeKind, agentId: AgentId): TaskBriefMark | null =>
+  liveSession(channel, runtime, agentId)?.taskBrief ?? null;
 
 /** A chat turn's web search, recorded for its hob, chat and reply, and the Task and Attempt it works on (ADR 036). */
 const chatWebTurn = (
   agentId: AgentId,
-  threadId: ThreadId,
+  channelId: ChannelId,
   messageId: MessageId,
   runtime: RuntimeKind,
   taskTurn: ChatTaskTurn | null,
@@ -128,22 +128,22 @@ const chatWebTurn = (
     agentId,
     messageId,
     runtime,
-    work: webWorkOf({ threadId }),
-    ...chatWebPlace(threadId, taskTurn, workingOn),
+    work: webWorkOf({ channelId }),
+    ...chatWebPlace(channelId, taskTurn, workingOn),
   });
 
 /** Where a chat turn's web records belong: its chat, and the Task and Attempt it works on once known. */
 const chatWebPlace = (
-  threadId: ThreadId,
+  channelId: ChannelId,
   taskTurn: ChatTaskTurn | null,
   workingOn: Effect.Effect<TaskId | null>,
 ): WebRecordPlace => ({
-  threadId,
+  channelId,
   taskId: workingOn,
   attemptId: taskTurn === null ? Effect.succeed(null) : taskTurn.attempt,
 });
 
-/** What a turn takes from ChatService: the reply's writes, the thread's session, and the run it ends. */
+/** What a turn takes from ChatService: the reply's writes, the channel's session, and the run it ends. */
 export interface TurnRunnerDeps {
   readonly redactor: Redactor;
   readonly grants: Effect.Success<ReturnType<typeof makeTurnGrants>>;
@@ -153,14 +153,14 @@ export interface TurnRunnerDeps {
   >;
   readonly saveMessage: (message: Message) => Effect.Effect<Message>;
   readonly announce: <A>(committed: Committed<A>) => Effect.Effect<A>;
-  readonly changeThread: (
-    threadId: ThreadId,
-    change: (thread: Thread) => Thread | null,
-  ) => Effect.Effect<Option.Option<Thread>>;
+  readonly changeChannel: (
+    channelId: ChannelId,
+    change: (channel: Channel) => Channel | null,
+  ) => Effect.Effect<Option.Option<Channel>>;
   readonly transition: ReplyChange;
   readonly committedTransition: ReplyChange;
-  /** Tells the thread's run that the turn of `reply` ended. */
-  readonly turnEnded: (threadId: ThreadId, reply: Reply) => Effect.Effect<unknown>;
+  /** Tells the channel's run that the turn of `reply` ended. */
+  readonly turnEnded: (channelId: ChannelId, reply: Reply) => Effect.Effect<unknown>;
 }
 
 /** Applies a domain transition to a running reply, then `then` with the result (ChatService's reply lock). */
@@ -172,7 +172,7 @@ type ReplyChange = <A>(
 
 export const makeTurnRunner = (deps: TurnRunnerDeps) =>
   Effect.gen(function* () {
-    const { redactor, saveMessage, announce, changeThread, transition, committedTransition, turnEnded } = deps;
+    const { redactor, saveMessage, announce, changeChannel, transition, committedTransition, turnEnded } = deps;
     const { currentAccess, grant, release } = deps.grants;
     const { memoryBriefFor, rosterFor, skillsFor } = deps.inputs;
     const repo = yield* HobbotsRepository;
@@ -218,7 +218,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
       yours: Message | undefined,
     ) =>
       Effect.gen(function* () {
-        const { agent, thread } = speaker;
+        const { agent, channel } = speaker;
         const adapter = adapters(brain.runtime);
         if (adapter === undefined) {
           yield* transition(
@@ -245,16 +245,16 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
         // The top Task the turn works on, once the turn below knows it: This Task binds to it (ADR 018).
         let onTask: ChatTaskTurn | null = null;
         const session = makeTurnSession({
-          thread,
+          channel,
           runtime: brain.runtime,
           agentId: agent.id,
-          changeThread,
+          changeChannel,
           toldOfTask: () => onTask?.told ?? null,
         });
         // The skills the turn uses, mapped to the revisions it was given (ADR 029, The use line).
         const skillUses = yield* skillUseRecorder({
           agentId: agent.id,
-          threadId: thread.id,
+          channelId: channel.id,
           messageId: (yield* Ref.get(reply.current)).id,
         });
 
@@ -301,7 +301,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
         };
         const handleRedacted = (event: RuntimeEvent) => {
           switch (event._tag) {
-            // The session has now seen the thread through this reply.
+            // The session has now seen the channel through this reply.
             case "SessionStarted":
               return Effect.gen(function* () {
                 session.begin(event.sessionId, event.policyVersion ?? null, event.hubTools);
@@ -324,7 +324,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
                 (m) =>
                   bus.publishTransient({
                     _tag: "MessageDelta",
-                    threadId: m.threadId,
+                    channelId: m.channelId,
                     messageId: m.id,
                     offset: m.content.length - event.text.length,
                     delta: event.text,
@@ -354,7 +354,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
                     : yield* keepToolOutput(
                         // The Workbench keeps a command's colors; the reply's step reads as plain text (#902).
                         stripEscapes(event.output),
-                        { threadId: thread.id, messageId: current.id, stepId },
+                        { channelId: channel.id, messageId: current.id, stepId },
                         toolLogs,
                       );
                 yield* update((m) => {
@@ -394,7 +394,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
         const turnApprovals = Option.isSome(approvals)
           ? yield* Effect.acquireRelease(
               approvals.value.forTurn(
-                { agentId: agent.id, threadId: thread.id, messageId: (yield* Ref.get(reply.current)).id },
+                { agentId: agent.id, channelId: channel.id, messageId: (yield* Ref.get(reply.current)).id },
                 currentAccess(agent.id),
                 workingOn,
               ),
@@ -402,7 +402,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
             )
           : null;
         // The session's read-the-web mark (ADR 036): held from where the resumed session left it, or
-        // from a hob's reply in the turn's context, and kept on the thread's session, on the reply, so
+        // from a hob's reply in the turn's context, and kept on the channel's session, on the reply, so
         // a turn that reads it starts marked too (ADR 039), and on the Attempt the turn runs as, if any.
         const markedBefore = readWebOf(session.expected) ?? told.readWeb;
         yield* markReply(update, markedBefore);
@@ -417,13 +417,13 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
         );
         // Every call of the turn is decided under the mark, by the runtime and the hub's tools alike.
         const callApprovals = withWebMark(turnApprovals?.approvals ?? null, webMark, currentAccess(agent.id));
-        // The Task the hob works on in this thread, if any: its tools, and what its steps returned.
+        // The Task the hob works on in this channel, if any: its tools, and what its steps returned.
         // The turn's Attempt on it ends with the turn.
         const taskTurn = Option.isSome(taskTurns)
           ? yield* Effect.acquireRelease(
               taskTurns.value.forChat({
                 agentId: agent.id,
-                threadId: thread.id,
+                channelId: channel.id,
                 messageId: (yield* Ref.get(reply.current)).id,
                 promptId: (yield* Ref.get(reply.current)).promptId,
                 ...yoursIn(yours),
@@ -431,7 +431,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
                 runtime: brain.runtime,
                 configVersion: config.version,
                 holding: carry.holding,
-                told: taskBriefIn(thread, brain.runtime, agent.id),
+                told: taskBriefIn(channel, brain.runtime, agent.id),
                 webMark: webMark.current,
               }),
               (turn) =>
@@ -455,12 +455,12 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
           });
           return;
         }
-        const tools = yield* grant(thread.id, agent);
+        const tools = yield* grant(channel.id, agent);
         const expected = session.expected;
         const memory = yield* memoryBriefFor(agent, tools, expected);
         const roster = yield* rosterFor(agent, tools, expected, adapter);
         session.briefed({ memory, roster });
-        const pack = yield* packTurn(packReports, thread.id, told.pack, memory);
+        const pack = yield* packTurn(packReports, channel.id, told.pack, memory);
         const skills = yield* skillsFor(speaker, config, tools, yours);
         // A chat that tries a draft never runs without it: the hub lost its files, as a restore does,
         // so the reply says how to bring it back instead of answering as if it were loaded.
@@ -476,7 +476,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
         // What the turn runs and changes, recorded for the Workbench on the Attempt it works on (ADR 023).
         // Acquired after the Task's turn, so the end-of-turn compare lands before its Attempt ends.
         const activity = yield* activityOf(tools, taskTurn);
-        const webUse = yield* chatWebTurn(agent.id, thread.id, current.id, brain.runtime, taskTurn, workingOn);
+        const webUse = yield* chatWebTurn(agent.id, channel.id, current.id, brain.runtime, taskTurn, workingOn);
         webTurn = webUse;
         const search = webSearchRequest(tools, webUse, adapter);
         yield* activity
@@ -509,7 +509,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
               // its session is marked as having read the web (ADR 036).
               recordSearch: (event) =>
                 Effect.andThen(
-                  web.searched({ threadId: thread.id }, redactor)(event),
+                  web.searched({ channelId: channel.id }, redactor)(event),
                   webMark.read({ _tag: "Search", query: redactor.text(event.query) }),
                 ),
               // Its hub tools read the revisions this turn mounted, not what a rollout moved since.
@@ -517,9 +517,9 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
                 const messageId = (yield* Ref.get(reply.current)).id;
                 const charmTurn: CharmTurn = {
                   agentId: agent.id,
-                  threadId: thread.id,
+                  channelId: channel.id,
                   messageId,
-                  webPlace: chatWebPlace(thread.id, taskTurn, workingOn),
+                  webPlace: chatWebPlace(channel.id, taskTurn, workingOn),
                   scope: taskTurn?.scope ?? (() => callScope.reply(messageId)),
                   also: callScope.reply(messageId),
                   currentAccess: currentAccess(agent.id),
@@ -570,7 +570,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
         // Runs after the runtime's stream has closed, so "stopped" means the turn really ended.
         Effect.onInterrupt(() => transition(reply, MessageTransitions.interrupt, saveMessage)),
         // A reply already replaced by a newer turn's changes nothing.
-        Effect.ensuring(turnEnded(speaker.thread.id, reply).pipe(Effect.andThen(release(speaker.thread.id)))),
+        Effect.ensuring(turnEnded(speaker.channel.id, reply).pipe(Effect.andThen(release(speaker.channel.id)))),
       );
 
     return { runTurn } as const;

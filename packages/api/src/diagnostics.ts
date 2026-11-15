@@ -20,7 +20,7 @@ import {
   TaskId,
   TaskState,
   TaskTree,
-  ThreadId,
+  ChannelId,
   WebLimits,
 } from "@hobbots/domain";
 import { Schema } from "effect";
@@ -119,7 +119,7 @@ export const TraceEntry = Schema.Struct({
   type: Schema.String,
   occurredAt: Schema.String,
   agentId: Schema.NullOr(AgentId),
-  threadId: Schema.NullOr(ThreadId),
+  channelId: Schema.NullOr(ChannelId),
   messageId: Schema.NullOr(MessageId),
   taskId: Schema.NullOr(TaskId),
   causationId: Schema.NullOr(Schema.String),
@@ -183,7 +183,7 @@ export const ReportTask = Schema.Struct({
   taskId: TaskId,
   parentTaskId: Schema.NullOr(TaskId),
   agentId: AgentId,
-  threadId: Schema.NullOr(ThreadId),
+  channelId: Schema.NullOr(ChannelId),
   state: TaskState,
   /** Only when you turn on Include titles. */
   title: Schema.optionalKey(Schema.String),
@@ -212,7 +212,7 @@ export const ReportQuest = Schema.Struct({
   taskId: TaskId,
   leadId: AgentId,
   parentQuestId: Schema.NullOr(QuestId),
-  threadId: Schema.NullOr(ThreadId),
+  channelId: Schema.NullOr(ChannelId),
   state: QuestState,
   depth: Schema.Int,
   title: Schema.optionalKey(Schema.String),

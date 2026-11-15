@@ -1,15 +1,15 @@
-import type { ApprovalRequest, Message, Thread, ThreadId } from "@hobbots/domain";
+import type { ApprovalRequest, Message, Channel, ChannelId } from "@hobbots/domain";
 import { isInProgress } from "@hobbots/domain";
 
 /**
- * Why a thread cannot be archived now, as the hub decides it: `approval-pending` wins over
+ * Why a channel cannot be archived now, as the hub decides it: `approval-pending` wins over
  * `reply-running` when both apply.
  */
 export type ArchiveBlock = "reply-running" | "approval-pending";
 
 /**
  * What this client knows that stops an archive: a pending approval, or a reply that runs or waits
- * in the queue. `live` is whether the hub says the thread's run is busy, for a thread whose
+ * in the queue. `live` is whether the hub says the channel's run is busy, for a channel whose
  * messages are not loaded. The hub checks again and refuses when the client did not know.
  */
 export const archiveBlock = ({
@@ -27,13 +27,13 @@ export const archiveBlock = ({
 };
 
 /**
- * The thread to open after the open one is archived: the one below it, else the one above, else
+ * The channel to open after the open one is archived: the one below it, else the one above, else
  * none, which opens the fresh page.
  */
-export const nextThread = (threads: ReadonlyArray<Thread>, archived: ThreadId): Thread | undefined => {
-  const index = threads.findIndex((thread) => thread.id === archived);
+export const nextChannel = (channels: ReadonlyArray<Channel>, archived: ChannelId): Channel | undefined => {
+  const index = channels.findIndex((channel) => channel.id === archived);
   if (index === -1) return undefined;
-  return threads[index + 1] ?? threads[index - 1];
+  return channels[index + 1] ?? channels[index - 1];
 };
 
 interface KeyLike {
@@ -45,7 +45,7 @@ interface KeyLike {
   readonly shiftKey: boolean;
 }
 
-/** ⌃⌘A on a Mac, Ctrl+Alt+A elsewhere: archives the open thread. */
+/** ⌃⌘A on a Mac, Ctrl+Alt+A elsewhere: archives the open channel. */
 export const isArchiveKey = (event: KeyLike): boolean =>
   event.code === "KeyA" && event.ctrlKey && (event.metaKey || event.altKey) && !event.shiftKey;
 

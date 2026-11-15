@@ -29,7 +29,7 @@ import {
   type RuntimeKind,
   roleFields,
   TaskId,
-  type ThreadId,
+  type ChannelId,
 } from "@hobbots/domain";
 import {
   ChapterRepositoryLive,
@@ -64,7 +64,7 @@ const recorded = (runtime: RuntimeKind, fake: RuntimeAdapterShape): RuntimeAdapt
   },
 });
 
-/** The active decisions of every thread, as #1383 records them; the pack reads them through the port. */
+/** The active decisions of every channel, as #1383 records them; the pack reads them through the port. */
 const Decisions = Layer.succeed(
   PackRecordSource,
   PackRecordSource.of({
@@ -159,13 +159,13 @@ const start = async (
           createdAt: NOW,
         }),
       );
-      return (yield* (yield* ChatService).createThread(WREN)).id;
+      return (yield* (yield* ChatService).createChannel(WREN)).id;
     }),
   );
 };
 
 /** Sends `content` and waits for the turn to end. */
-const say = async (id: ThreadId, content: string): Promise<Message> => {
+const say = async (id: ChannelId, content: string): Promise<Message> => {
   await run(ChatService.use((chat) => chat.sendPrompt(id, content)));
   return vi.waitFor(async () => {
     const all = await run(HobbotsRepository.use((repo) => repo.listMessages(id)));
@@ -174,11 +174,11 @@ const say = async (id: ThreadId, content: string): Promise<Message> => {
   });
 };
 
-const startChapter = (id: ThreadId, chapter: string, title: string) =>
+const startChapter = (id: ChannelId, chapter: string, title: string) =>
   run(ChapterService.use((chapters) => chapters.startChapter(id, { id: ChapterId.make(chapter), title })));
 
 /** A Task you asked for in the chat, with a step that ran and a question that waits for an answer. */
-const openTask = (threadId: ThreadId) =>
+const openTask = (channelId: ChannelId) =>
   run(
     Effect.gen(function* () {
       const tasks = yield* TaskRepository;
@@ -186,7 +186,7 @@ const openTask = (threadId: ThreadId) =>
         id: TaskId.make(id),
         ownerId: WREN,
         parentId: parentId === null ? null : TaskId.make(parentId),
-        threadId,
+        channelId,
         brief,
         dependsOn: [],
         createdAt: NOW,
@@ -251,7 +251,7 @@ describe("the context pack", () => {
 
   // covers ADR 037 (The context pack, Records), CH-001
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "on %s, a new chapter's first session gets the decisions that hold and what the thread made, and no crossed-out decision (#1383)",
+    "on %s, a new chapter's first session gets the decisions that hold and what the channel made, and no crossed-out decision (#1383)",
     async (runtime) => {
       const id = await start(runtime, Layer.empty, StoredRecords);
       const reply = await say(id, "Plan the launch emails.");
@@ -294,7 +294,7 @@ describe("the context pack", () => {
       expect(told).toContain("## Active decisions");
       expect(told).toMatch(/- Miso eats only wet food\. \(decision [^)]+\)\n- Emails go out on Wednesdays\./);
       expect(told).not.toContain("Tuesdays");
-      expect(told).toContain("## What this thread made");
+      expect(told).toContain("## What this channel made");
       expect(told).toContain("- doc: launch.md (version 1)");
     },
   );
@@ -396,7 +396,7 @@ describe("the context pack", () => {
     const chat = await start("claude-code");
     const camp = await run(
       ChatService.use((service) =>
-        service.makeCamp(WREN, { key: "secret" as ThreadId, title: "Surprise party", goal: null, private: true }),
+        service.makeCamp(WREN, { key: "secret" as ChannelId, title: "Surprise party", goal: null, private: true }),
       ),
     );
     await say(camp.id, "Plan a surprise party for Ana.");
@@ -404,7 +404,7 @@ describe("the context pack", () => {
     await run(ChapterSummaries.use((projector) => projector.runOnce));
 
     const [summarized] = await summarizedEntries();
-    expect(summarized?.payload).toMatchObject({ _tag: "ChapterSummarized", threadId: camp.id });
+    expect(summarized?.payload).toMatchObject({ _tag: "ChapterSummarized", channelId: camp.id });
     // Memory capture reads nothing from a summary, in a private camp or any other.
     expect(capturedEntryOf(summarized as NonNullable<typeof summarized>, makeRedactor())).toBeNull();
 

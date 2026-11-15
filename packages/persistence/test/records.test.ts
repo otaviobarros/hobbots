@@ -18,8 +18,8 @@ import {
   roleFields,
   Task,
   TaskId,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer } from "effect";
 import { SqlClient } from "effect/sql";
@@ -42,7 +42,7 @@ import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const NOW = "2026-11-12T00:00:00.000Z";
 const ADA = AgentId.make("ada");
-const THREAD = ThreadId.make("t1");
+const CHANNEL = ChannelId.make("t1");
 const REPLY = MessageId.make("reply-1");
 const TASK = TaskId.make("task-1");
 const ATTEMPT = AttemptId.make("attempt-1");
@@ -64,7 +64,7 @@ const hob = new Agent({
 const message = (id: string, role: Message["role"], fields: Partial<Message> = {}) =>
   new Message({
     id: MessageId.make(id),
-    threadId: THREAD,
+    channelId: CHANNEL,
     actor: role === "assistant" ? null : OWNER_ACTOR,
     role,
     content: id,
@@ -90,7 +90,7 @@ const run = <A, E>(
 const seed = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
   yield* repo.insertAgent(hob);
-  yield* repo.upsertThread(new Thread({ id: THREAD, agentId: ADA, title: "Launch", createdAt: NOW, updatedAt: NOW }));
+  yield* repo.upsertChannel(new Channel({ id: CHANNEL, agentId: ADA, title: "Launch", createdAt: NOW, updatedAt: NOW }));
   const yours = (yield* repo.upsertMessage(message("ask-1", "user"))).value;
   const reply = (yield* repo.upsertMessage(message(REPLY, "assistant", { status: "streaming" }))).value;
   return { yours, reply };
@@ -98,7 +98,7 @@ const seed = Effect.gen(function* () {
 
 const request = (fields: Partial<DecisionRequest> = {}): DecisionRequest => ({
   id: DecisionId.make(fields.id ?? "d1"),
-  threadId: THREAD,
+  channelId: CHANNEL,
   sourceMessageId: REPLY,
   text: "Launch emails go out on Tuesdays.",
   replaces: null,
@@ -124,7 +124,7 @@ describe("decisions", () => {
             replaces: first.value.recorded.id,
           }),
         );
-        const all = yield* records.listDecisions(THREAD);
+        const all = yield* records.listDecisions(CHANNEL);
         return { reply, first, second, all };
       }),
     );
@@ -136,7 +136,7 @@ describe("decisions", () => {
       state: "active",
     });
     expect(result.first.entries.map((entry) => [entry.type, entry.correlation])).toEqual([
-      ["DecisionRecorded", { agentId: ADA, threadId: THREAD, messageId: REPLY }],
+      ["DecisionRecorded", { agentId: ADA, channelId: CHANNEL, messageId: REPLY }],
     ]);
     // Recording the new one crosses out the old in the same transaction, journaled after it.
     expect(result.second.entries.map((entry) => entry.type)).toEqual(["DecisionRecorded", "DecisionSuperseded"]);
@@ -168,7 +168,7 @@ describe("decisions", () => {
             request({ id: DecisionId.make("d4"), key: "reply:d4", text: "x".repeat(DECISION_TEXT_MAX + 1) }),
           ),
         );
-        return { first, again, reused, long, all: yield* records.listDecisions(THREAD) };
+        return { first, again, reused, long, all: yield* records.listDecisions(CHANNEL) };
       }),
     );
     expect(result.again.value.recorded.id).toBe(result.first.value.recorded.id);
@@ -195,19 +195,19 @@ describe("decisions", () => {
           }),
         );
         const crossed = yield* records.crossOutDecision({
-          threadId: THREAD,
+          channelId: CHANNEL,
           decisionId: mine.value.recorded.id,
           at: NOW,
         });
         const again = yield* records.crossOutDecision({
-          threadId: THREAD,
+          channelId: CHANNEL,
           decisionId: mine.value.recorded.id,
           at: NOW,
         });
         const missing = yield* Effect.exit(
-          records.crossOutDecision({ threadId: THREAD, decisionId: DecisionId.make("nope"), at: NOW }),
+          records.crossOutDecision({ channelId: CHANNEL, decisionId: DecisionId.make("nope"), at: NOW }),
         );
-        yield* sql`UPDATE threads SET state = 'archived' WHERE id = ${THREAD}`;
+        yield* sql`UPDATE channels SET state = 'archived' WHERE id = ${CHANNEL}`;
         const closed = yield* Effect.exit(
           records.recordDecision(request({ id: DecisionId.make("d9"), key: "reply:d9" })),
         );
@@ -220,29 +220,29 @@ describe("decisions", () => {
     expect(result.crossed.entries.map((entry) => entry.type)).toEqual(["DecisionSuperseded"]);
     expect(result.again.entries).toEqual([]);
     expect(result.missing).toMatchObject(Exit.fail({ _tag: "DecisionRefused", reason: "not-found" }));
-    expect(result.closed).toMatchObject(Exit.fail({ _tag: "DecisionRefused", reason: "thread-closed" }));
+    expect(result.closed).toMatchObject(Exit.fail({ _tag: "DecisionRefused", reason: "channel-closed" }));
   });
 
   // covers ADR 037 (Records), STD-ARCH-014
-  it("takes the same key in another thread as a new request, recording a decision there too (#1383)", async () => {
-    const other = ThreadId.make("t2");
+  it("takes the same key in another channel as a new request, recording a decision there too (#1383)", async () => {
+    const other = ChannelId.make("t2");
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
         const repo = yield* HobbotsRepository;
         const records = yield* RecordRepository;
-        yield* repo.upsertThread(
-          new Thread({ id: other, agentId: ADA, title: "Other", createdAt: NOW, updatedAt: NOW }),
+        yield* repo.upsertChannel(
+          new Channel({ id: other, agentId: ADA, title: "Other", createdAt: NOW, updatedAt: NOW }),
         );
-        yield* repo.upsertMessage(message("ask-2", "user", { threadId: other }));
+        yield* repo.upsertMessage(message("ask-2", "user", { channelId: other }));
         const yours = { sourceMessageId: null, actor: OWNER_ACTOR, key: "app:same" };
         const here = yield* records.recordDecision(request(yours));
-        const there = yield* records.recordDecision(request({ ...yours, id: DecisionId.make("d2"), threadId: other }));
+        const there = yield* records.recordDecision(request({ ...yours, id: DecisionId.make("d2"), channelId: other }));
         return { here, there, inOther: yield* records.listDecisions(other) };
       }),
     );
-    expect(result.here.value.recorded).toMatchObject({ id: "d1", threadId: THREAD });
-    expect(result.there.value.recorded).toMatchObject({ id: "d2", threadId: other });
+    expect(result.here.value.recorded).toMatchObject({ id: "d1", channelId: CHANNEL });
+    expect(result.there.value.recorded).toMatchObject({ id: "d2", channelId: other });
     expect(result.there.entries.map((entry) => entry.type)).toEqual(["DecisionRecorded"]);
     expect(result.inOther.map((decision) => decision.id)).toEqual(["d2"]);
   });
@@ -257,7 +257,7 @@ describe("decisions", () => {
         const chapters = yield* ChapterRepository;
         const first = reply.chapterId as ChapterId;
         const [c2, c3] = [ChapterId.make("c2"), ChapterId.make("c3")];
-        yield* chapters.startChapter(THREAD, { id: c2, title: "Emails", at: NOW });
+        yield* chapters.startChapter(CHANNEL, { id: c2, title: "Emails", at: NOW });
         yield* repo.upsertMessage(message("ask-2", "user"));
         const later = (yield* repo.upsertMessage(message("reply-2", "assistant", { status: "streaming" }))).value;
         yield* records.recordDecision(request({ id: DecisionId.make("d-hob"), sourceMessageId: later.id }));
@@ -280,19 +280,19 @@ describe("decisions", () => {
           }),
         );
         const where = Effect.gen(function* () {
-          const decisions = yield* records.listDecisions(THREAD);
-          const artifacts = yield* records.listArtifacts(THREAD);
+          const decisions = yield* records.listDecisions(CHANNEL);
+          const artifacts = yield* records.listArtifacts(CHANNEL);
           return [
             ...decisions.map((decision) => [decision.id, decision.chapterId]),
             ...artifacts.map((artifact) => [artifact.locator, artifact.chapterId]),
           ];
         });
         const before = yield* where;
-        yield* chapters.splitChapter(THREAD, { id: c3, messageId: later.id, title: "Reply" });
+        yield* chapters.splitChapter(CHANNEL, { id: c3, messageId: later.id, title: "Reply" });
         const split = yield* where;
-        yield* chapters.mergeChapters(THREAD, c3);
+        yield* chapters.mergeChapters(CHANNEL, c3);
         const mergedBack = yield* where;
-        yield* chapters.mergeChapters(THREAD, c2);
+        yield* chapters.mergeChapters(CHANNEL, c2);
         return { first, before, split, mergedBack, merged: yield* where };
       }),
     );
@@ -327,7 +327,7 @@ describe("artifacts", () => {
       ownerId: ADA,
       parentId: null,
       rootId: TASK,
-      threadId: THREAD,
+      channelId: CHANNEL,
       brief: "Plan the launch",
       state: "completed",
       dependsOn: [],
@@ -384,7 +384,7 @@ describe("artifacts", () => {
           id: TASK,
           owner_id: ADA,
           root_id: TASK,
-          thread_id: THREAD,
+          channel_id: CHANNEL,
           brief: "Plan the launch",
           state: "active",
           created_at: NOW,
@@ -409,7 +409,7 @@ describe("artifacts", () => {
         const byReply = yield* repo.upsertMessage(done);
         // The same records again register nothing new.
         const replayed = [yield* journal([changed, completed]), yield* repo.upsertMessage(done)];
-        return { reply, byChange, byResult, byReply, replayed, artifacts: yield* records.listArtifacts(THREAD) };
+        return { reply, byChange, byResult, byReply, replayed, artifacts: yield* records.listArtifacts(CHANNEL) };
       }),
     );
     const registered = (entries: ReadonlyArray<{ readonly type: string }>) =>
@@ -420,7 +420,7 @@ describe("artifacts", () => {
     expect(result.replayed.map((change) => registered(change.entries))).toEqual([0, 0]);
     expect(result.artifacts).toHaveLength(1);
     expect(result.artifacts[0]).toMatchObject({
-      threadId: THREAD,
+      channelId: CHANNEL,
       chapterId: result.reply.chapterId,
       locator: file,
       kind: "doc",
@@ -435,12 +435,12 @@ describe("artifacts", () => {
 
 describe("message authors", () => {
   // covers ADR 037 (Every author is an actor)
-  it("names you or the thread's hob as each message's author, read and journaled (#1383)", async () => {
+  it("names you or the channel's hob as each message's author, read and journaled (#1383)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { yours, reply } = yield* seed;
         const repo = yield* HobbotsRepository;
-        return { yours, reply, read: yield* repo.listMessages(THREAD) };
+        return { yours, reply, read: yield* repo.listMessages(CHANNEL) };
       }),
     );
     expect(result.yours.actor).toEqual(OWNER_ACTOR);
@@ -463,15 +463,15 @@ describe("message authors", () => {
         look_color: "moss",
         created_at: NOW,
       })}`;
-      yield* sql`INSERT INTO threads ${sql.insert({ id: THREAD, agent_id: ADA, title: "Launch", created_at: NOW, updated_at: NOW })}`;
-      yield* sql`INSERT INTO chapters ${sql.insert({ id: "c1", thread_id: THREAD, number: 1, state: "live", started_at: NOW })}`;
+      yield* sql`INSERT INTO channels ${sql.insert({ id: CHANNEL, agent_id: ADA, title: "Launch", created_at: NOW, updated_at: NOW })}`;
+      yield* sql`INSERT INTO chapters ${sql.insert({ id: "c1", channel_id: CHANNEL, number: 1, state: "live", started_at: NOW })}`;
       for (const [index, [id, role]] of [
         ["ask-1", "user"],
         [REPLY, "assistant"],
       ].entries()) {
         yield* sql`INSERT INTO messages ${sql.insert({
           id,
-          thread_id: THREAD,
+          channel_id: CHANNEL,
           chapter_id: "c1",
           seq: index + 1,
           role,
@@ -480,7 +480,7 @@ describe("message authors", () => {
           created_at: NOW,
         })}`;
         const sequence = index + 1;
-        const payload = { _tag: "MessageUpserted", message: { id, threadId: THREAD, chapterId: "c1", role } };
+        const payload = { _tag: "MessageUpserted", message: { id, channelId: CHANNEL, chapterId: "c1", role } };
         yield* sql`INSERT INTO event_journal ${sql.insert({
           sequence,
           id: `event-${sequence}`,
@@ -488,7 +488,7 @@ describe("message authors", () => {
           schema_version: 5,
           occurred_at: NOW,
           agent_id: ADA,
-          thread_id: THREAD,
+          channel_id: CHANNEL,
           payload: JSON.stringify(payload),
         })}`;
         yield* sql`UPDATE event_journal_head SET sequence = ${sequence}`;
@@ -501,7 +501,7 @@ describe("message authors", () => {
       const refused = yield* Effect.exit(
         sql`INSERT INTO messages ${sql.insert({
           id: "no-author",
-          thread_id: THREAD,
+          channel_id: CHANNEL,
           chapter_id: "c1",
           seq: 9,
           role: "user",

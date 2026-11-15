@@ -52,7 +52,7 @@ import {
   sharedDatabase,
   startHub,
   taskOf,
-  threadId,
+  channelId,
   treeWhen,
 } from "./dependency-hub.ts";
 
@@ -220,9 +220,9 @@ const delegate = (hob: string, lines: ReadonlyArray<string>, decisions: Record<s
 
 const pendingIn = (requests: ReadonlyArray<ApprovalRequest>) => requests.find((each) => each.state === "pending");
 
-/** The approval cards in the lead's thread once one waits. */
+/** The approval cards in the lead's channel once one waits. */
 const cardsOnceAsked = waitUntil(
-  ApprovalService.use((approvals) => approvals.listForThread(threadId)),
+  ApprovalService.use((approvals) => approvals.listForChannel(channelId)),
   (all) => pendingIn(all) !== undefined,
   { what: "an approval card" },
 );
@@ -264,7 +264,7 @@ const writesOn = async (runtime: HubCallRuntime) => {
       hub("complete_task", { delivered: true, key: `done-${name}`, summary: "Reviewed and opened a pull request" }),
     ]),
   );
-  // The comment asks, as in chat: one card, under the lead's thread, for Rook.
+  // The comment asks, as in chat: one card, under the lead's channel, for Rook.
   const cards = await run(cardsOnceAsked);
   expect(
     cards.filter((each) => each.state === "pending"),
@@ -312,7 +312,7 @@ const writesOn = async (runtime: HubCallRuntime) => {
   expect(notes, name).toEqual([expect.objectContaining({ author: "otaviobarros", pullRequest: null })]);
   expect(github.items(SLUG)[0]?.subIssues, name).toContain(notes[0]?.number);
   expect(answers.get(`issue-${name}`), name).toContain("It is a sub-issue of #1.");
-  expect(await run(ApprovalService.use((approvals) => approvals.listForThread(threadId))), name).toHaveLength(1);
+  expect(await run(ApprovalService.use((approvals) => approvals.listForChannel(channelId))), name).toHaveLength(1);
   expect(tree.refusals, name).toEqual([]);
 };
 
@@ -358,7 +358,7 @@ describe("GitHub Charm writes in a member's Task session (ADR 038)", () => {
       expect(waiting).toEqual([
         {
           call: expect.objectContaining({ tool: "github_comment", state: "uncertain", messageId: null }),
-          task: expect.objectContaining({ id: rook.id, ownerId: ROOK, threadId }),
+          task: expect.objectContaining({ id: rook.id, ownerId: ROOK, channelId }),
         },
       ]);
       const attempt = waiting[0]?.call.attempt ?? "";
@@ -378,7 +378,7 @@ describe("GitHub Charm writes in a member's Task session (ADR 038)", () => {
       );
       expect(again).toMatchObject({ _tag: "CharmCallSettled", state: "not-sent" });
       // Settled on another Task's name, it is not found.
-      const tasks = await run(TaskRepository.use((each) => each.readThreadTrees(threadId)));
+      const tasks = await run(TaskRepository.use((each) => each.readChannelTrees(channelId)));
       const other = tasks[0]?.tasks.find((task) => task.id !== rook.id)?.id;
       if (other === undefined) throw new Error("expected the lead's Task");
       const elsewhere = await asUser(
@@ -563,7 +563,7 @@ describe("gh in a member's commands (#1349)", () => {
 });
 
 /** The tree of the lead's request, or none while nothing started it. */
-const threadTrees = TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
+const channelTrees = TaskRepository.use((tasks) => tasks.readChannelTrees(channelId));
 
 /** The member's first session prompt, once its Task completed, and the tools its delegation listed. */
 const listedAndOffered = async (
@@ -603,7 +603,7 @@ describe("What a delegated member will be able to do, before it starts (#1348)",
     });
     expect(Object.keys(dropped).filter((tool) => !RUNTIME_TOOLS.includes(tool))).toEqual([]);
     // Nothing started, and nothing about Tasks was recorded, not even the call's key.
-    expect(await run(threadTrees)).toEqual([]);
+    expect(await run(channelTrees)).toEqual([]);
     const since = await run(Effect.flatMap(Effect.service(EventJournal), (each) => each.readAfter(journal.sequence)));
     expect(since.filter((entry) => /^(Task|Quest|Delegation|ToolCall|Attempt)/.test(entry.type))).toEqual([]);
 
@@ -681,7 +681,7 @@ describe("What a delegated member will be able to do, before it starts (#1348)",
     await run(send(["Check first", hub("delegate_task", { ...check, key: "outside", depends_on: ["nonexistent"] })]));
     await run(messagesWhen((all) => all.some((message) => message.role === "assistant")));
     expect(answers.get("outside")).toBe("Refused (dependency-outside-tree): A Task depends only on its siblings");
-    expect(await run(threadTrees)).toEqual([]);
+    expect(await run(channelTrees)).toEqual([]);
 
     // Pip, two Quests deep, checks bringing in Quill: a Quest 3 deep, as the delegation itself is refused.
     const pipBrief = [

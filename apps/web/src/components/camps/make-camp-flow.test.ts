@@ -1,5 +1,5 @@
 import { CAMP_HOBS_MAX } from "@hobbots/api";
-import { AgentId, THREAD_TITLE_MAX, ThreadId } from "@hobbots/domain";
+import { AgentId, CHANNEL_TITLE_MAX, ChannelId } from "@hobbots/domain";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client.ts";
@@ -29,8 +29,8 @@ const draft = (change: Partial<CampDraft> = {}): CampDraft => ({
   hobs: [ALDRIC],
   ...change,
 });
-const K1 = ThreadId.make("k1");
-const K2 = ThreadId.make("k2");
+const K1 = ChannelId.make("k1");
+const K2 = ChannelId.make("k2");
 
 const run = (events: ReadonlyArray<MakeCampEvent>, from: MakeCamp = startMakeCamp("", false, "", [ALDRIC])) =>
   events.reduce(makeCampStep, from);
@@ -39,8 +39,8 @@ describe("Make a camp", () => {
   it("checks the name and goal as the hub does: trimmed, named, and within their lengths", () => {
     expect(campProblems(draft())).toEqual({});
     expect(campProblems(draft({ title: "   " }))).toEqual({ title: "title-missing" });
-    expect(campProblems(draft({ title: "x".repeat(THREAD_TITLE_MAX + 1) }))).toEqual({ title: "title-long" });
-    expect(campProblems(draft({ title: ` ${"x".repeat(THREAD_TITLE_MAX)} ` }))).toEqual({});
+    expect(campProblems(draft({ title: "x".repeat(CHANNEL_TITLE_MAX + 1) }))).toEqual({ title: "title-long" });
+    expect(campProblems(draft({ title: ` ${"x".repeat(CHANNEL_TITLE_MAX)} ` }))).toEqual({});
     expect(campProblems(draft({ goal: "g".repeat(501) }))).toEqual({ goal: "goal-long" });
     expect(campProblems(draft({ hobs: [] }))).toEqual({ hobs: "hobs-missing" });
   });
@@ -126,7 +126,7 @@ describe("Make a camp", () => {
   it("tells a paused or retired hob from a request that got no answer", () => {
     expect(makeCampError(new ApiError("", "HobUnavailable"))).toBe("hob-unavailable");
     expect(makeCampError(new ApiError("", "AgentNotFound"))).toBe("hob-unavailable");
-    expect(makeCampError(new ApiError("", "ThreadKeyReused"))).toBe("unreachable");
+    expect(makeCampError(new ApiError("", "ChannelKeyReused"))).toBe("unreachable");
     expect(makeCampError(new ApiError("", "ChapterMoveRefused"))).toBe("chapter-refused");
     expect(makeCampError(new ApiError("", "ChapterMissing"))).toBe("chapter-refused");
     expect(makeCampError(new TypeError("Failed to fetch"))).toBe("unreachable");
@@ -139,7 +139,7 @@ describe("Make a camp", () => {
   // A model of the flow: any run of events agrees with it step by step.
   it("agrees with its model for any run of events", () => {
     const anyDraft = fc.record({
-      title: fc.constantFrom("", "  ", "Taxes", " Lisbon trip ", "x".repeat(THREAD_TITLE_MAX + 1)),
+      title: fc.constantFrom("", "  ", "Taxes", " Lisbon trip ", "x".repeat(CHANNEL_TITLE_MAX + 1)),
       goal: fc.constantFrom("", "File on time", "g".repeat(501)),
       private: fc.boolean(),
       chapter: fc.boolean(),
@@ -150,7 +150,7 @@ describe("Make a camp", () => {
       fc.constantFrom("title", "goal", "private", "hobs").map((field) => ({ _tag: "Leave" as const, field })),
       fc
         .tuple(fc.integer({ min: 1, max: 99 }), fc.boolean())
-        .map(([n, held]) => ({ _tag: "Send" as const, key: ThreadId.make(`k${n}`), held })),
+        .map(([n, held]) => ({ _tag: "Send" as const, key: ChannelId.make(`k${n}`), held })),
       fc
         .constantFrom("hob-unavailable", "chapter-busy", "chapter-refused", "unreachable")
         .map((error) => ({ _tag: "Failed" as const, error })),
@@ -160,7 +160,7 @@ describe("Make a camp", () => {
         let state = startMakeCamp("", false, "", [ALDRIC]);
         // The model: what is typed, the key in flight or last failed, and whether a request is out.
         let typed = state.draft;
-        let key: ThreadId | null = null;
+        let key: ChannelId | null = null;
         let saving = false;
         let failed = false;
         for (const event of events) {

@@ -1,4 +1,4 @@
-import { type HobUnavailable, ThreadKeyReused } from "@hobbots/api";
+import { type HobUnavailable, ChannelKeyReused } from "@hobbots/api";
 import {
   type AgentId,
   ApprovalRequest,
@@ -9,10 +9,10 @@ import {
   carriedOverRefId,
   type JournaledEvent,
   StartedFresh,
-  Thread,
-  type ThreadId,
+  Channel,
+  type ChannelId,
 } from "@hobbots/domain";
-import { carryingThread } from "@hobbots/inbox";
+import { carryingChannel } from "@hobbots/inbox";
 import { Data, Effect, Option, Schema } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
 import { approvalRow } from "./approvals.ts";
@@ -21,38 +21,38 @@ import { startFirstChapterIn } from "./chapters.ts";
 import { makeJournaledChange } from "./journal.ts";
 import { oldestFirst } from "./order.ts";
 import { decodeRows, type Row } from "./task-rows.ts";
-import { addHobsIn, copyMembersIn, startMembersIn } from "./thread-member-rows.ts";
+import { addHobsIn, copyMembersIn, startMembersIn } from "./channel-member-rows.ts";
 
-// Make a camp and Start fresh (ADR 037, #1376): each one transaction that writes the threads, moves
+// Make a camp and Start fresh (ADR 037, #1376): each one transaction that writes the channels, moves
 // what Start fresh carries, and journals the change, so a crash between the writes leaves neither half.
 
-/** The columns a thread is stored with, at `revision`; what a read works out is never stored. */
-export const threadColumns = (thread: Thread) => ({
-  id: thread.id,
-  agent_id: thread.agentId,
-  title: thread.title,
-  sessions: JSON.stringify(thread.sessions),
-  brain: thread.brain === null ? null : JSON.stringify(thread.brain),
-  kind: thread.kind,
-  goal: thread.goal,
-  private: thread.private ? 1 : 0,
-  origin_thread_id: thread.origin?.threadId ?? null,
-  origin_chapter_id: thread.origin?.chapterId ?? null,
-  state: thread.state,
-  archived_at: thread.archivedAt,
-  pinned_at: thread.pinnedAt,
-  skill_trial: thread.skillTrial === null ? null : JSON.stringify(thread.skillTrial),
-  created_at: thread.createdAt,
-  updated_at: thread.updatedAt,
-  revision: thread.revision,
+/** The columns a channel is stored with, at `revision`; what a read works out is never stored. */
+export const channelColumns = (channel: Channel) => ({
+  id: channel.id,
+  agent_id: channel.agentId,
+  title: channel.title,
+  sessions: JSON.stringify(channel.sessions),
+  brain: channel.brain === null ? null : JSON.stringify(channel.brain),
+  kind: channel.kind,
+  goal: channel.goal,
+  private: channel.private ? 1 : 0,
+  origin_channel_id: channel.origin?.channelId ?? null,
+  origin_chapter_id: channel.origin?.chapterId ?? null,
+  state: channel.state,
+  archived_at: channel.archivedAt,
+  pinned_at: channel.pinnedAt,
+  skill_trial: channel.skillTrial === null ? null : JSON.stringify(channel.skillTrial),
+  created_at: channel.createdAt,
+  updated_at: channel.updatedAt,
+  revision: channel.revision,
 });
 
 /** The hobs a camp is made with besides its lead, each once and sorted, as its request keeps them. */
-const otherHobs = (camp: Thread, hobs: ReadonlyArray<AgentId>) =>
+const otherHobs = (camp: Channel, hobs: ReadonlyArray<AgentId>) =>
   JSON.stringify([...new Set(hobs)].filter((hobId) => hobId !== camp.agentId).sort());
 
 /** What Make a camp was asked under a key, as it was asked: a later rename does not change it. */
-const campRequestColumns = (camp: Thread, hobs: ReadonlyArray<AgentId>) => ({
+const campRequestColumns = (camp: Channel, hobs: ReadonlyArray<AgentId>) => ({
   key: camp.id,
   agent_id: camp.agentId,
   title: camp.title,
@@ -65,7 +65,7 @@ const campRequestColumns = (camp: Thread, hobs: ReadonlyArray<AgentId>) => ({
  * Whether the request stored under a key is the one asked again: same hob, title, goal, privacy and
  * other hobs. A request stored before camps kept their hobs was made with none.
  */
-const sameRequest = (stored: Row, asked: Thread, hobs: ReadonlyArray<AgentId>) =>
+const sameRequest = (stored: Row, asked: Channel, hobs: ReadonlyArray<AgentId>) =>
   stored.agentId === asked.agentId &&
   stored.title === asked.title &&
   (stored.goal ?? null) === asked.goal &&
@@ -76,8 +76,8 @@ const sameRequest = (stored: Row, asked: Thread, hobs: ReadonlyArray<AgentId>) =
 class StaleChat extends Data.TaggedError("StaleChat") {}
 
 /**
- * The records a Task's turn makes outside any message, which name the Task and its thread: web use
- * and hob proposals. They follow their Task's tree to another thread (#1389); those made in a reply
+ * The records a Task's turn makes outside any message, which name the Task and its channel: web use
+ * and hob proposals. They follow their Task's tree to another channel (#1389); those made in a reply
  * follow the reply's message instead. A member's approval requests follow it too, each journaled.
  */
 const BY_TASK = ["web_searches", "web_fetches", "hob_proposals"] as const;
@@ -91,8 +91,8 @@ const carriedRows = (rows: ReadonlyArray<Row>) =>
   rows.map(
     (row) =>
       new CarriedOver({
-        fromThreadId: row.fromThreadId as ThreadId,
-        toThreadId: row.toThreadId as ThreadId,
+        fromChannelId: row.fromChannelId as ChannelId,
+        toChannelId: row.toChannelId as ChannelId,
         ref: decodeRef(
           row.refKind === "task"
             ? { _tag: "task", taskId: row.refId }
@@ -107,8 +107,8 @@ const carriedRows = (rows: ReadonlyArray<Row>) =>
 
 export const makeCampWrites = (
   sql: SqlClient.SqlClient,
-  /** The thread as a read shows it, with its last line and unread mark, or undefined. */
-  readThread: (id: ThreadId) => Effect.Effect<Thread | undefined, SqlError.SqlError>,
+  /** The channel as a read shows it, with its last line and unread mark, or undefined. */
+  readChannel: (id: ChannelId) => Effect.Effect<Channel | undefined, SqlError.SqlError>,
 ) => {
   const change = makeJournaledChange(sql);
   const items = makeItemReads(sql);
@@ -117,32 +117,32 @@ export const makeCampWrites = (
   const startMembers = startMembersIn(sql);
   const copyMembers = copyMembersIn(sql);
   const addHobs = addHobsIn(sql);
-  // A new thread's first chapter, journaled as `ChapterStarted` at `revision`, after the change's other events.
-  const firstChapterOf = (thread: Thread, revision: number) =>
-    startFirstChapter(thread, revision).pipe(
+  // A new channel's first chapter, journaled as `ChapterStarted` at `revision`, after the change's other events.
+  const firstChapterOf = (channel: Channel, revision: number) =>
+    startFirstChapter(channel, revision).pipe(
       Effect.map(
         (chapter): ReadonlyArray<JournaledEvent> =>
-          chapter === null ? [] : [{ _tag: "ChapterStarted", threadId: thread.id, chapter, ended: null }],
+          chapter === null ? [] : [{ _tag: "ChapterStarted", channelId: channel.id, chapter, ended: null }],
       ),
     );
 
-  // A thread this change just wrote is there to read.
-  const shown = (id: ThreadId) => readThread(id).pipe(Effect.flatMap(Effect.fromNullishOr), Effect.orDie);
+  // A channel this change just wrote is there to read.
+  const shown = (id: ChannelId) => readChannel(id).pipe(Effect.flatMap(Effect.fromNullishOr), Effect.orDie);
 
   /**
    * Makes `camp` at `first`, journaled as `CampMade`, its first chapter's `ChapterStarted`, its first
-   * two members' `ThreadMemberAdded` and one for each of the other `hobs` it is made with; the camp
+   * two members' `ChannelMemberAdded` and one for each of the other `hobs` it is made with; the camp
    * stored under its key already, with no events, when the same camp was asked for before.
    */
-  const insertCamp = (camp: Thread, first: number, hobs: ReadonlyArray<AgentId> = []) =>
+  const insertCamp = (camp: Channel, first: number, hobs: ReadonlyArray<AgentId> = []) =>
     Effect.gen(function* () {
-      const stored = yield* readThread(camp.id);
+      const stored = yield* readChannel(camp.id);
       if (stored !== undefined) {
         const [request] = yield* sql<Row>`SELECT * FROM camp_requests WHERE key = ${camp.id}`;
         if (request !== undefined && sameRequest(request, camp, hobs)) return { value: stored, events: [] };
-        return yield* new ThreadKeyReused({ threadId: camp.id });
+        return yield* new ChannelKeyReused({ channelId: camp.id });
       }
-      yield* sql`INSERT INTO threads ${sql.insert(threadColumns(new Thread({ ...camp, revision: first })))}`;
+      yield* sql`INSERT INTO channels ${sql.insert(channelColumns(new Channel({ ...camp, revision: first })))}`;
       yield* sql`INSERT INTO camp_requests ${sql.insert(campRequestColumns(camp, hobs))}`;
       const started = yield* firstChapterOf(camp, first + 1);
       // Its person and its hob are its first members (ADR 039).
@@ -150,21 +150,21 @@ export const makeCampWrites = (
       // The hob it is made for leads it; each other hob joins once.
       const others = [...new Set(hobs)].filter((hobId) => hobId !== camp.agentId);
       const joined = yield* addHobs(camp, others, first + 1 + started.length + members.length);
-      const thread = yield* shown(camp.id);
-      const events: ReadonlyArray<JournaledEvent> = [{ _tag: "CampMade", thread }, ...started, ...members, ...joined];
-      return { value: thread, events };
+      const channel = yield* shown(camp.id);
+      const events: ReadonlyArray<JournaledEvent> = [{ _tag: "CampMade", channel }, ...started, ...members, ...joined];
+      return { value: channel, events };
     });
 
-  const makeCamp = (camp: Thread, hobs: ReadonlyArray<AgentId> = []) =>
-    change<Thread, ThreadKeyReused | HobUnavailable>((first) => insertCamp(camp, first, hobs));
+  const makeCamp = (camp: Channel, hobs: ReadonlyArray<AgentId> = []) =>
+    change<Channel, ChannelKeyReused | HobUnavailable>((first) => insertCamp(camp, first, hobs));
 
   // The open work in a chat, as it stands before it moves: the Tasks you asked for there that are not
   // over, with their trees, the questions in them still open, and the backpack items held for the
   // chat that are not resolved. Of those, what the chat's turns carry is carried over; an item a
   // step's own session carries moves with its tree, and is not named.
-  const openWork = (threadId: ThreadId) =>
+  const openWork = (channelId: ChannelId) =>
     Effect.gen(function* () {
-      const tasks = yield* sql<Row>`SELECT * FROM tasks WHERE thread_id = ${threadId} AND parent_id IS NULL
+      const tasks = yield* sql<Row>`SELECT * FROM tasks WHERE channel_id = ${channelId} AND parent_id IS NULL
         AND state NOT IN ('completed', 'failed', 'cancelled') ORDER BY ${oldest}`.pipe(
         Effect.flatMap(decodeRows("task")),
       );
@@ -182,19 +182,19 @@ export const makeCampWrites = (
               AND task_id IN (SELECT id FROM tasks WHERE ${sql.in("root_id", roots)}) ORDER BY ${oldest}`.pipe(
               Effect.flatMap(decodeRows("question")),
             );
-      const held = yield* sql<Row>`SELECT * FROM backpack_items WHERE thread_id = ${threadId} AND state <> 'resolved'
+      const held = yield* sql<Row>`SELECT * FROM backpack_items WHERE channel_id = ${channelId} AND state <> 'resolved'
         ORDER BY ${oldest}`.pipe(Effect.flatMap(items.toItems));
-      const carried = held.filter((item) => carryingThread(item, trees) === threadId);
+      const carried = held.filter((item) => carryingChannel(item, trees) === channelId);
       return { work: { tasks, trees, questions, items: carried }, held };
     });
 
-  // Moves open work to another thread, for Start fresh and a chapter's move: whole trees, with their
+  // Moves open work to another channel, for Start fresh and a chapter's move: whole trees, with their
   // Quests and the records their Tasks' turns made outside any message. From `first` on, each of
   // their approval requests is journaled as its own `ApprovalMoved` at its new revision, so a client
-  // takes it out of the thread it left, and then each item as its own `BackpackItemChanged`.
+  // takes it out of the channel it left, and then each item as its own `BackpackItemChanged`.
   const moveWork = (
-    from: ThreadId,
-    to: ThreadId,
+    from: ChannelId,
+    to: ChannelId,
     roots: ReadonlyArray<string>,
     held: ReadonlyArray<BackpackItem>,
     at: string,
@@ -205,7 +205,7 @@ export const makeCampWrites = (
       const next = first + approvals.length;
       const moved = yield* Effect.forEach(held, (item, index) =>
         Effect.gen(function* () {
-          yield* sql`UPDATE backpack_items SET thread_id = ${to}, updated_at = ${at}, revision = ${next + index}
+          yield* sql`UPDATE backpack_items SET channel_id = ${to}, updated_at = ${at}, revision = ${next + index}
             WHERE id = ${item.id}`;
           const moved = yield* items.item(item.id);
           return { _tag: "BackpackItemChanged", item: moved as BackpackItem } as const;
@@ -216,48 +216,48 @@ export const makeCampWrites = (
 
   // The trees' Tasks and Quests, and what their turns made outside any message, with an
   // `ApprovalMoved` for each approval request from `first` on.
-  const moveTrees = (from: ThreadId, to: ThreadId, roots: ReadonlyArray<string>, first: number) =>
+  const moveTrees = (from: ChannelId, to: ChannelId, roots: ReadonlyArray<string>, first: number) =>
     Effect.gen(function* () {
       const inTrees = sql`task_id IN (SELECT id FROM tasks WHERE ${sql.in("root_id", roots)})`;
       for (const table of BY_TASK) {
-        yield* sql`UPDATE ${sql(table)} SET thread_id = ${to} WHERE thread_id = ${from} AND message_id IS NULL
+        yield* sql`UPDATE ${sql(table)} SET channel_id = ${to} WHERE channel_id = ${from} AND message_id IS NULL
           AND ${inTrees}`;
       }
-      const asked = yield* sql<{ readonly id: string }>`SELECT id FROM approval_requests WHERE thread_id = ${from}
+      const asked = yield* sql<{ readonly id: string }>`SELECT id FROM approval_requests WHERE channel_id = ${from}
         AND message_id IS NULL AND ${inTrees} ORDER BY ${oldest}`;
       const approvals = yield* Effect.forEach(asked, (row, index) =>
         Effect.gen(function* () {
-          yield* sql`UPDATE approval_requests SET thread_id = ${to}, revision = ${first + index} WHERE id = ${row.id}`;
+          yield* sql`UPDATE approval_requests SET channel_id = ${to}, revision = ${first + index} WHERE id = ${row.id}`;
           const [moved] = yield* sql<Row>`SELECT * FROM approval_requests WHERE id = ${row.id}`;
           const approval = yield* decodeApproval(approvalRow(moved as Row));
-          return { _tag: "ApprovalMoved", fromThreadId: from, approval } as const;
+          return { _tag: "ApprovalMoved", fromChannelId: from, approval } as const;
         }),
       );
-      yield* sql`UPDATE quests SET thread_id = ${to} WHERE thread_id = ${from} AND ${inTrees}`;
-      yield* sql`UPDATE tasks SET thread_id = ${to} WHERE thread_id = ${from} AND ${sql.in("root_id", roots)}`;
+      yield* sql`UPDATE quests SET channel_id = ${to} WHERE channel_id = ${from} AND ${inTrees}`;
+      yield* sql`UPDATE tasks SET channel_id = ${to} WHERE channel_id = ${from} AND ${sql.in("root_id", roots)}`;
       return approvals;
     });
 
-  const startFresh = (input: { readonly superseded: Thread; readonly chat: Thread }) => {
+  const startFresh = (input: { readonly superseded: Channel; readonly chat: Channel }) => {
     const from = input.superseded;
     const at = from.updatedAt;
     return change<StartedFresh, StaleChat>((first) =>
       Effect.gen(function* () {
-        const written = yield* sql`UPDATE threads SET state = ${from.state}, archived_at = ${from.archivedAt},
+        const written = yield* sql`UPDATE channels SET state = ${from.state}, archived_at = ${from.archivedAt},
             updated_at = ${from.updatedAt}, revision = ${first}
           WHERE id = ${from.id} AND revision = ${from.revision} AND state = 'open' RETURNING id`;
         if (written.length === 0) return yield* new StaleChat();
-        yield* sql`INSERT INTO threads ${sql.insert(threadColumns(new Thread({ ...input.chat, revision: first })))}`;
+        yield* sql`INSERT INTO channels ${sql.insert(channelColumns(new Channel({ ...input.chat, revision: first })))}`;
         const { work, held } = yield* openWork(from.id);
         const carried = carriedOverFrom(work).map(
-          (each) => new CarriedOver({ fromThreadId: from.id, toThreadId: input.chat.id, ...each, carriedAt: at }),
+          (each) => new CarriedOver({ fromChannelId: from.id, toChannelId: input.chat.id, ...each, carriedAt: at }),
         );
         yield* Effect.forEach(
           carried,
           (item, position) =>
             sql`INSERT INTO carried_over ${sql.insert({
-              from_thread_id: item.fromThreadId,
-              to_thread_id: item.toThreadId,
+              from_channel_id: item.fromChannelId,
+              to_channel_id: item.toChannelId,
               ref_kind: item.ref._tag,
               ref_id: carriedOverRefId(item.ref),
               label: item.label,
@@ -274,7 +274,7 @@ export const makeCampWrites = (
         // The moved Tasks now belong to the new chat's first chapter, and move with it (ADR 037).
         if (roots.length > 0) {
           yield* sql`UPDATE tasks SET chapter_id = (SELECT c.id FROM chapters c
-            WHERE c.thread_id = ${input.chat.id} AND c.state = 'live') WHERE ${sql.in("id", roots)}`;
+            WHERE c.channel_id = ${input.chat.id} AND c.state = 'live') WHERE ${sql.in("id", roots)}`;
         }
         const value = new StartedFresh({
           superseded: yield* shown(from.id),
@@ -295,22 +295,22 @@ export const makeCampWrites = (
     );
   };
 
-  const listCarriedOver = (threadId: ThreadId) =>
-    sql<Row>`SELECT * FROM carried_over WHERE to_thread_id = ${threadId} ORDER BY position`.pipe(
+  const listCarriedOver = (channelId: ChannelId) =>
+    sql<Row>`SELECT * FROM carried_over WHERE to_channel_id = ${channelId} ORDER BY position`.pipe(
       Effect.map(carriedRows),
       Effect.orDie,
     );
 
-  // The thread's open work as the context pack carries it (#1380), read outside any change.
-  const listOpenWork = (threadId: ThreadId) =>
-    openWork(threadId).pipe(
+  // The channel's open work as the context pack carries it (#1380), read outside any change.
+  const listOpenWork = (channelId: ChannelId) =>
+    openWork(channelId).pipe(
       Effect.map(({ work }) => work),
       Effect.orDie,
     );
 
   // What Start fresh would carry from the chat now, read with the same rule it records with.
-  const carryOver = (threadId: ThreadId) =>
-    openWork(threadId).pipe(
+  const carryOver = (channelId: ChannelId) =>
+    openWork(channelId).pipe(
       Effect.map(({ work }) => carriedOverFrom(work)),
       Effect.orDie,
     );

@@ -4,14 +4,14 @@ import {
   ChapterChangeRefused,
   type FocusRead,
   HobbotsApi,
-  type ThreadNotFound,
+  type ChannelNotFound,
 } from "@hobbots/api";
-import type { ThreadId } from "@hobbots/domain";
+import type { ChannelId } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 
-// A thread's chapters (ADR 037, #1382): read, split here and merge with the previous one, and what
-// the Focus chip shows. Each command runs through `ChapterService`, under the thread's hob lock.
+// A channel's chapters (ADR 037, #1382): read, split here and merge with the previous one, and what
+// the Focus chip shows. Each command runs through `ChapterService`, under the channel's hob lock.
 export const ChaptersHandlers = HttpApiBuilder.group(HobbotsApi, "chapters", (handlers) =>
   Effect.gen(function* () {
     // The hub always has its chapters (main.ts). A test hub built without them serves every other
@@ -27,44 +27,44 @@ export const ChaptersHandlers = HttpApiBuilder.group(HobbotsApi, "chapters", (ha
     const chat = yield* ChatService;
     const reports = yield* Effect.serviceOption(PackReports);
 
-    const refused = (threadId: ThreadId, reason: ChapterChangeRefusal) =>
-      Effect.fail(new ChapterChangeRefused({ threadId, reason }));
+    const refused = (channelId: ChannelId, reason: ChapterChangeRefusal) =>
+      Effect.fail(new ChapterChangeRefused({ channelId, reason }));
     // A refusal keeps its reason. A change its states do not allow can only touch a chapter that
     // moved into a camp, since every other chapter is live or resting.
-    const refusals = (threadId: ThreadId) => ({
-      ChapterRefused: (e: { readonly reason: ChapterChangeRefusal }) => refused(threadId, e.reason),
-      IllegalChapterTransition: () => refused(threadId, "moved"),
-      ChapterNotFound: () => refused(threadId, "chapter-not-found"),
+    const refusals = (channelId: ChannelId) => ({
+      ChapterRefused: (e: { readonly reason: ChapterChangeRefusal }) => refused(channelId, e.reason),
+      IllegalChapterTransition: () => refused(channelId, "moved"),
+      ChapterNotFound: () => refused(channelId, "chapter-not-found"),
     });
 
-    // The report of the pack the thread's last new session read; without one, the next one's.
-    const focus = (threadId: ThreadId): Effect.Effect<FocusRead, ThreadNotFound> =>
+    // The report of the pack the channel's last new session read; without one, the next one's.
+    const focus = (channelId: ChannelId): Effect.Effect<FocusRead, ChannelNotFound> =>
       Effect.gen(function* () {
-        const last = Option.isNone(reports) ? Option.none() : yield* reports.value.last(threadId);
+        const last = Option.isNone(reports) ? Option.none() : yield* reports.value.last(channelId);
         if (Option.isSome(last)) {
-          // A thread that is gone has no Focus, even when a report of it is still kept.
-          yield* chapters.listChapters(threadId);
+          // A channel that is gone has no Focus, even when a report of it is still kept.
+          yield* chapters.listChapters(channelId);
           return { of: "last-turn", report: last.value };
         }
-        const { next } = yield* chat.contextPack(threadId);
+        const { next } = yield* chat.contextPack(channelId);
         return { of: "next-session", report: next.report };
       });
 
     return handlers.handleAll({
-      list: ({ params }) => chapters.listChapters(params.threadId),
+      list: ({ params }) => chapters.listChapters(params.channelId),
       split: ({ params, payload }) =>
         chapters
-          .splitChapter(params.threadId, { id: payload.key, messageId: payload.messageId, title: payload.title })
+          .splitChapter(params.channelId, { id: payload.key, messageId: payload.messageId, title: payload.title })
           .pipe(
             Effect.map((plan) => plan.chapters),
-            Effect.catchTags(refusals(params.threadId)),
+            Effect.catchTags(refusals(params.channelId)),
           ),
       merge: ({ params }) =>
-        chapters.mergeChapters(params.threadId, params.chapterId).pipe(
+        chapters.mergeChapters(params.channelId, params.chapterId).pipe(
           Effect.map((plan) => plan.chapters),
-          Effect.catchTags(refusals(params.threadId)),
+          Effect.catchTags(refusals(params.channelId)),
         ),
-      focus: ({ params }) => focus(params.threadId),
+      focus: ({ params }) => focus(params.channelId),
     });
   }),
 );

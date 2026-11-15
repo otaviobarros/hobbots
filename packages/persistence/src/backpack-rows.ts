@@ -191,7 +191,7 @@ export const recordBackpackItems = (
           task_id: item.taskId,
           quest_id: item.questId,
           attempt_id: item.attemptId,
-          thread_id: item.threadId,
+          channel_id: item.channelId,
           dedupe_key: item.dedupeKey,
           payload: encodePayload(item.payload),
           not_before: item.notBefore,

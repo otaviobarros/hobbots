@@ -10,8 +10,8 @@ import {
   NoteId,
   QuestId,
   TaskId,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { describe, expect, it } from "vitest";
@@ -32,13 +32,13 @@ const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
 const BRAM = AgentId.make("bram");
 const you = { kind: "user" as const, id: "owner" };
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 
 const newTask = (id: string, ownerId: AgentId, parentId: string | null): NewTask => ({
   id: TaskId.make(id),
   ownerId,
   parentId: parentId === null ? null : TaskId.make(parentId),
-  threadId,
+  channelId,
   brief: `Brief for ${id}`,
   dependsOn: [],
   createdAt: now,
@@ -63,8 +63,8 @@ const hob = (id: AgentId, name: string) =>
 const campaign = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
   for (const each of [hob(ALDRIC, "Aldric"), hob(QUILL, "Quill"), hob(BRAM, "Bram")]) yield* repo.insertAgent(each);
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
   );
   const tasks = yield* TaskRepository;
   const root = yield* tasks.createTask({ task: newTask("campaign", ALDRIC, null), delegation: null, milestones: [] });

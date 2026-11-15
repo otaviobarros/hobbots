@@ -28,7 +28,7 @@ export const replyWait = (message: Pick<Message, "status" | "steps"> | undefined
 };
 
 /**
- * What the composer shows for the thread's reply, one type per mode (STD-REACT-029), so no screen can
+ * What the composer shows for the channel's reply, one type per mode (STD-REACT-029), so no screen can
  * pass a combination that cannot happen, such as stopping while no reply runs. `replying` while the
  * hob is at work; `waiting` once it has answered and only commands it started keep the reply open
  * (#1056); `stopping` from Stop until the runtime confirms the turn ended, with what it still waits
@@ -43,7 +43,7 @@ export type ReplyRun =
 const NO_REPLY: ReplyRun = { mode: "idle" };
 
 /**
- * The composer's mode from the thread's reply in progress, as the hub recorded it, and whether you
+ * The composer's mode from the channel's reply in progress, as the hub recorded it, and whether you
  * asked to stop it and the hub has not answered yet.
  */
 export const replyRun = (reply: Pick<Message, "status" | "steps"> | undefined, stopAsked: boolean): ReplyRun => {

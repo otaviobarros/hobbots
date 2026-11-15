@@ -6,7 +6,7 @@ import { defineConfig } from "vite";
 import { appFrame } from "./app-frame-plugin.ts";
 import { hubProxy } from "./hub-proxy.ts";
 
-// The React Compiler's preset as plain data, so Babel can run it in worker threads: its own preset
+// The React Compiler's preset as plain data, so Babel can run it in worker channels: its own preset
 // is a function, which cannot be sent to a worker. Its filters and hooks stay as they are.
 const reactCompiler = reactCompilerPreset();
 const compilerPreset: RolldownBabelPreset = {

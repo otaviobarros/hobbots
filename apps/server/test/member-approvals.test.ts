@@ -1,5 +1,5 @@
 import { ApprovalRepository, TaskRepository } from "@hobbots/agents";
-import { ApprovalId, ApprovalRequest, AttemptId, TaskId, ThreadId } from "@hobbots/domain";
+import { ApprovalId, ApprovalRequest, AttemptId, TaskId, ChannelId } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { FRODO, NETTLE, PIP } from "./party-hub.ts";
@@ -29,7 +29,7 @@ const nettlesDelete = (taskId: TaskId) =>
   new ApprovalRequest({
     id: ApprovalId.make("nettle-rm"),
     agentId: NETTLE,
-    threadId: ThreadId.make("tools-hub"),
+    channelId: ChannelId.make("tools-hub"),
     messageId: null,
     taskId,
     rootTaskId: TOP,

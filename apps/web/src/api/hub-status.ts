@@ -7,9 +7,9 @@ import {
   type ReplyActivity,
   type StatusView,
   shownStatus,
-  type ThreadId,
-  ThreadRunChanged,
-  type ThreadRunStatus,
+  type ChannelId,
+  ChannelRunChanged,
+  type ChannelRunStatus,
   withSnapshot,
   withStatusEvent,
 } from "@hobbots/domain";
@@ -19,9 +19,9 @@ import { call } from "./client.ts";
 import { noteRead } from "./snapshot-reads.ts";
 
 /**
- * The status the hub decides (ADR 037): each busy thread's run and each live hob's presence. The
+ * The status the hub decides (ADR 037): each busy channel's run and each live hob's presence. The
  * window renders it as published and never works it out from messages (STD-REACT-028). It reads the
- * snapshot `GET /api/status` serves, then follows `status` frames, keeping per thread and per hob
+ * snapshot `GET /api/status` serves, then follows `status` frames, keeping per channel and per hob
  * whichever has the higher revision.
  */
 
@@ -58,27 +58,27 @@ export const statusReady = (queryClient: QueryClient) => {
 };
 
 const decodeStatusEvent = Schema.decodeUnknownSync(
-  Schema.fromJsonString(Schema.Union([ThreadRunChanged, HobPresenceChanged, HobPresenceRemoved])),
+  Schema.fromJsonString(Schema.Union([ChannelRunChanged, HobPresenceChanged, HobPresenceRemoved])),
 );
 
-/** A `status` frame: a thread's run or a hob's presence changed, or a hob's presence was removed. */
+/** A `status` frame: a channel's run or a hob's presence changed, or a hob's presence was removed. */
 export const applyStatusFrame = (queryClient: QueryClient, data: string) => {
   const event = decodeStatusEvent(data);
   queryClient.setQueryData<StatusView>(statusKey, (old) => withStatusEvent(old ?? noStatus, event));
 };
 
-/** What a thread's reply is doing, by thread; a thread left out runs no reply. */
-export type ActivityMap = Readonly<Record<ThreadId, ReplyActivity>>;
-/** Each busy thread's run; a thread left out is idle. */
-export type RunMap = Readonly<Record<ThreadId, ThreadRunStatus>>;
+/** What a channel's reply is doing, by channel; a channel left out runs no reply. */
+export type ActivityMap = Readonly<Record<ChannelId, ReplyActivity>>;
+/** Each busy channel's run; a channel left out is idle. */
+export type RunMap = Readonly<Record<ChannelId, ChannelRunStatus>>;
 /** Each live hob's presence; a hob left out has none yet. */
 export type PresenceMap = Readonly<Record<AgentId, HobPresenceState>>;
 
 const runsOf = (view: StatusView): RunMap =>
-  Object.fromEntries(shownStatus(view).runs.map((run) => [run.threadId, run]));
+  Object.fromEntries(shownStatus(view).runs.map((run) => [run.channelId, run]));
 const repliesOf = (view: StatusView): ActivityMap =>
   Object.fromEntries(
-    shownStatus(view).runs.flatMap((run) => (run.reply === null ? [] : [[run.threadId, run.reply] as const])),
+    shownStatus(view).runs.flatMap((run) => (run.reply === null ? [] : [[run.channelId, run.reply] as const])),
   );
 const presenceOf = (view: StatusView): PresenceMap =>
   Object.fromEntries(shownStatus(view).hobs.map((presence) => [presence.agentId, presence.state]));
@@ -87,11 +87,11 @@ const NO_RUNS: RunMap = {};
 const NO_REPLIES: ActivityMap = {};
 const NO_PRESENCE: PresenceMap = {};
 
-/** Each busy thread's run, as the hub published it. */
-export const useThreadRuns = (): RunMap => useQuery({ ...hubStatusQuery, select: runsOf }).data ?? NO_RUNS;
+/** Each busy channel's run, as the hub published it. */
+export const useChannelRuns = (): RunMap => useQuery({ ...hubStatusQuery, select: runsOf }).data ?? NO_RUNS;
 
-/** What each thread's running reply is doing, as the hub published it. */
-export const useThreadReplies = (): ActivityMap =>
+/** What each channel's running reply is doing, as the hub published it. */
+export const useChannelReplies = (): ActivityMap =>
   useQuery({ ...hubStatusQuery, select: repliesOf }).data ?? NO_REPLIES;
 
 /** Each live hob's presence, as the hub published it. */

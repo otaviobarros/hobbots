@@ -1,7 +1,7 @@
-import type { AgentId, AttemptId, BackpackTurnEnding, CarriedItem, MessageId, TaskId, ThreadId } from "@hobbots/domain";
+import type { AgentId, AttemptId, BackpackTurnEnding, CarriedItem, MessageId, TaskId, ChannelId } from "@hobbots/domain";
 import { Context, type Effect } from "effect";
 
-/** What arrived for a hob in a thread, put into one turn there under the claims the turn holds (ADR 019). */
+/** What arrived for a hob in a channel, put into one turn there under the claims the turn holds (ADR 019). */
 export interface CarriedWork {
   /**
    * What the turn is told of the items, written by Hobbots: as its prompt, as context with your
@@ -29,7 +29,7 @@ export interface CarriedWork {
 export type CarriedEnd = { readonly _tag: "Handled" } | ({ readonly _tag: "EndedEarly" } & BackpackTurnEnding);
 
 /**
- * The turn a session runs for the work that waits there: a thread's chat, whose turns are its
+ * The turn a session runs for the work that waits there: a channel's chat, whose turns are its
  * replies, or a member's Task, whose turns go on in its Attempts.
  */
 export interface CarryingTurn<Id extends string = MessageId> {
@@ -44,22 +44,22 @@ export interface CarryingTurn<Id extends string = MessageId> {
 
 /**
  * The one wake path of ADR 019, as the chat sees it: the backpack items waiting for a hob in a
- * thread, delivered into the thread's next turn. Every turn you did not start with Send starts
- * here. Absent, as in hubs and tests without a backpack, a thread starts only your queued messages.
+ * channel, delivered into the channel's next turn. Every turn you did not start with Send starts
+ * here. Absent, as in hubs and tests without a backpack, a channel starts only your queued messages.
  */
 export class Continuations extends Context.Service<
   Continuations,
   {
-    /** The threads where work waits for their hob: of one hob, or of every hob. */
-    readonly waiting: (agentId?: AgentId) => Effect.Effect<ReadonlyArray<ThreadId>>;
-    /** Whether routine progress waits for the hob in the thread, to ride along its next turn as a digest. */
-    readonly progressWaits: (threadId: ThreadId, agentId: AgentId) => Effect.Effect<boolean>;
+    /** The channels where work waits for their hob: of one hob, or of every hob. */
+    readonly waiting: (agentId?: AgentId) => Effect.Effect<ReadonlyArray<ChannelId>>;
+    /** Whether routine progress waits for the hob in the channel, to ride along its next turn as a digest. */
+    readonly progressWaits: (channelId: ChannelId, agentId: AgentId) => Effect.Effect<boolean>;
     /**
-     * Puts every item waiting for the hob in the thread into one turn, and runs it with `turn`,
+     * Puts every item waiting for the hob in the channel into one turn, and runs it with `turn`,
      * routine progress folded in as one digest. A turn that ends early is planned and run again
      * with backoff, until its items run out of deliveries. Returns whether any turn ran.
      */
-    readonly deliver: (threadId: ThreadId, agentId: AgentId, turn: CarryingTurn) => Effect.Effect<boolean>;
+    readonly deliver: (channelId: ChannelId, agentId: AgentId, turn: CarryingTurn) => Effect.Effect<boolean>;
   }
 >()("@hobbots/agents/Continuations") {}
 
@@ -82,7 +82,7 @@ export class MemberContinuations extends Context.Service<
     readonly waiting: Effect.Effect<ReadonlyArray<MemberWorkWaiting>>;
     /**
      * Puts every item waiting for the hob under the Task into one turn, and runs it with `turn`, as
-     * `Continuations.deliver` does for a thread. Returns whether any turn ran.
+     * `Continuations.deliver` does for a channel. Returns whether any turn ran.
      */
     readonly deliver: (taskId: TaskId, agentId: AgentId, turn: CarryingTurn<AttemptId>) => Effect.Effect<boolean>;
     /**

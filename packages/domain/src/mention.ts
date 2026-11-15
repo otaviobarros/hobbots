@@ -2,7 +2,7 @@ import { type Actor, sameActor } from "./actor.ts";
 
 /**
  * A hob or a person a message can @mention (ADR 039, Who answers): the actor and the name people
- * write after `@`. The roster holds every hob and person of the hub, not only a thread's members,
+ * write after `@`. The roster holds every hob and person of the hub, not only a channel's members,
  * so a mention of a hob outside the camp is still found, and refused, rather than read as text.
  */
 export interface Mentionable {

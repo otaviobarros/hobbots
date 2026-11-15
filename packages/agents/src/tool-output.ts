@@ -1,5 +1,5 @@
 import { ToolLogNotFound } from "@hobbots/api";
-import { previewToolOutput, ThreadId, type ToolOutput } from "@hobbots/domain";
+import { previewToolOutput, ChannelId, type ToolOutput } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import type { ToolLogKey, ToolLogs } from "./ports.ts";
 import type { HobbotsRepository } from "./repository.ts";
@@ -27,7 +27,7 @@ export const keepToolOutput = (
   });
 
 /**
- * The full log of a tool step whose output the step shows cut. Only a step the thread's reply says
+ * The full log of a tool step whose output the step shows cut. Only a step the channel's reply says
  * was logged is read, so a request never reaches a file Hobbots did not keep for that step.
  */
 export const readToolLog = (
@@ -37,12 +37,12 @@ export const readToolLog = (
 ): Effect.Effect<string, ToolLogNotFound> =>
   Effect.gen(function* () {
     const missing = new ToolLogNotFound({ messageId: key.messageId, stepId: key.stepId });
-    const messages = yield* repo.listMessages(key.threadId);
+    const messages = yield* repo.listMessages(key.channelId);
     const step = messages
       .find((message) => message.id === key.messageId)
       ?.steps.find((candidate) => candidate.id === key.stepId);
     if (step?.output?.logged !== true || Option.isNone(logs)) return yield* Effect.fail(missing);
     // A message that moved with its chapter keeps reading the log it was kept under.
-    const text = yield* logs.value.read({ ...key, threadId: ThreadId.make(step.output.loggedIn ?? key.threadId) });
+    const text = yield* logs.value.read({ ...key, channelId: ChannelId.make(step.output.loggedIn ?? key.channelId) });
     return yield* Option.match(text, { onNone: () => Effect.fail(missing), onSome: Effect.succeed });
   });

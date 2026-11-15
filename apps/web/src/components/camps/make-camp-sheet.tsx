@@ -1,4 +1,4 @@
-import { type Agent, type AgentId, type Chapter, ThreadId, takesNewWork } from "@hobbots/domain";
+import { type Agent, type AgentId, type Chapter, ChannelId, takesNewWork } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@hobbots/ui/components/dialog";
 import { Input } from "@hobbots/ui/components/input";
@@ -70,7 +70,7 @@ export function MakeCampSheet({
   const directory = useQuery(agentsQuery);
   const hobs = pickableHobs(directory.data ?? [hob], hob.id, state.draft.hobs);
   const locked: AgentId | null = from !== undefined && state.draft.chapter ? hob.id : null;
-  const move = useMoveChapter(from?.chapter.threadId ?? ("" as ThreadId));
+  const move = useMoveChapter(from?.chapter.channelId ?? ("" as ChannelId));
   const navigate = useNavigate();
   const { draft } = state;
   const saving = state.step === "saving";
@@ -88,15 +88,15 @@ export function MakeCampSheet({
 
   const send = () => {
     // The reducer decides whether it saves and under which key; the request follows its answer.
-    const event: MakeCampEvent = { _tag: "Send", key: ThreadId.make(crypto.randomUUID()), held };
+    const event: MakeCampEvent = { _tag: "Send", key: ChannelId.make(crypto.randomUUID()), held };
     const next = makeCampStep(state, event);
     dispatch(event);
     if (next.step !== "saving") return;
     const lead = campLead(next.draft) ?? hob.id;
     const opened = {
-      onSuccess: ({ id }: { readonly id: ThreadId }) => {
+      onSuccess: ({ id }: { readonly id: ChannelId }) => {
         onClose();
-        void navigate({ to: "/hobs/$hobId/threads/$threadId", params: { hobId: lead, threadId: id } });
+        void navigate({ to: "/hobs/$hobId/channels/$channelId", params: { hobId: lead, channelId: id } });
       },
       onError: (error: unknown) => dispatch({ _tag: "Failed", error: makeCampError(error), hob: refusedHob(error) }),
     };

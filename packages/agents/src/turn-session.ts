@@ -1,5 +1,5 @@
 import type { AgentId, MessageId, RuntimeKind, RuntimeSession, TaskBriefMark, WebReadMark } from "@hobbots/domain";
-import { isSessionOf, isTaskToolName, liveSession, PASS_TOOL, Thread } from "@hobbots/domain";
+import { isSessionOf, isTaskToolName, liveSession, PASS_TOOL, Channel } from "@hobbots/domain";
 import { DateTime, Effect, type Option } from "effect";
 import { deliveredRoster, rosterAtStart, sameRoster, type TurnRoster } from "./hob-directory.ts";
 import { deliveredMemoryBrief, startedMemoryBrief, type TurnMemoryBrief } from "./memory-brief.ts";
@@ -11,21 +11,21 @@ const nowIso = DateTime.now.pipe(Effect.map(DateTime.formatIso));
  * longer `sessionId` or `change` leaves it as it is.
  */
 const withSession = (
-  latest: Thread,
+  latest: Channel,
   runtime: RuntimeKind,
   agentId: AgentId,
   sessionId: string | null,
   updatedAt: string,
   change: (known: RuntimeSession) => RuntimeSession | null,
-): Thread | null => {
+): Channel | null => {
   const known = latest.sessions.find((s) => isSessionOf(s, runtime, agentId));
   const next = known === undefined || known.sessionId !== sessionId ? null : change(known);
   if (next === null) return null;
-  return new Thread({ ...latest, sessions: latest.sessions.map((s) => (s === known ? next : s)), updatedAt });
+  return new Channel({ ...latest, sessions: latest.sessions.map((s) => (s === known ? next : s)), updatedAt });
 };
 
 /**
- * What a started session keeps of the session the thread knew: what it was told of its Task
+ * What a started session keeps of the session the channel knew: what it was told of its Task
  * (#1027), its read-the-web mark (ADR 036) and the Task tools it holds (#1543) hold only for the
  * same session.
  */
@@ -52,7 +52,7 @@ const sameTools = (a: ReadonlyArray<string> | undefined, b: ReadonlyArray<string
 const heldTaskTools = (hubTools: ReadonlyArray<string> | undefined) =>
   hubTools?.filter((name) => isTaskToolName(name) || name === PASS_TOOL);
 
-/** Whether recording `next` over `known` would change nothing the thread keeps of the session. */
+/** Whether recording `next` over `known` would change nothing the channel keeps of the session. */
 const sameSession = (known: RuntimeSession, next: RuntimeSession) =>
   known.sessionId === next.sessionId &&
   known.chapterId === next.chapterId &&
@@ -71,31 +71,31 @@ export interface TurnBriefs {
 }
 
 export interface TurnSessionInput {
-  readonly thread: Thread;
+  readonly channel: Channel;
   readonly runtime: RuntimeKind;
   /** The hob whose turn it is: the session it resumes and records is that hob's own (ADR 039). */
   readonly agentId: AgentId;
-  readonly changeThread: (
-    threadId: Thread["id"],
-    change: (thread: Thread) => Thread | null,
-  ) => Effect.Effect<Option.Option<Thread>>;
+  readonly changeChannel: (
+    channelId: Channel["id"],
+    change: (channel: Channel) => Channel | null,
+  ) => Effect.Effect<Option.Option<Channel>>;
   /** What the turn told its session of the Task it works on (#1027), once the turn knows its Task. */
   readonly toldOfTask: () => TaskBriefMark | null;
 }
 
 /**
- * The runtime session one chat turn runs in, as the thread records it: which session the runtime
- * started, the policy its tools ran under, and what the session was told. The thread's session
+ * The runtime session one chat turn runs in, as the channel records it: which session the runtime
+ * started, the policy its tools ran under, and what the session was told. The channel's session
  * changes only while it is still the one the turn ran in.
  */
-export const makeTurnSession = ({ thread, runtime, agentId, changeThread, toldOfTask }: TurnSessionInput) => {
+export const makeTurnSession = ({ channel, runtime, agentId, changeChannel, toldOfTask }: TurnSessionInput) => {
   // The session the turn expects to resume, and what it was last told of its Task (#1027): the one
-  // in the thread's live chapter, since a session from an earlier chapter is never resumed (ADR 037),
+  // in the channel's live chapter, since a session from an earlier chapter is never resumed (ADR 037),
   // and the hob's own, since a hob never resumes another hob's session (ADR 039).
-  const expected = liveSession(thread, runtime, agentId);
+  const expected = liveSession(channel, runtime, agentId);
   // The chapter the turn runs in, which the session it starts belongs to, even when a new chapter
   // starts during the turn: the next turn then starts a new session.
-  const chapterId = thread.liveChapterId;
+  const chapterId = channel.liveChapterId;
   // The session the turn ran in, and the policy version its tools ran under, for the Attempt it may start on a Task.
   let sessionId: string | null = null;
   let policy: string | null = null;
@@ -105,11 +105,11 @@ export const makeTurnSession = ({ thread, runtime, agentId, changeThread, toldOf
   let briefDelivered = false;
   let compacted = false;
 
-  // Changes the thread's session the turn ran in, unless another has taken its place.
+  // Changes the channel's session the turn ran in, unless another has taken its place.
   const change = (changeKnown: (known: RuntimeSession) => RuntimeSession | null) =>
     Effect.gen(function* () {
       const updatedAt = yield* nowIso;
-      yield* changeThread(thread.id, (latest) =>
+      yield* changeChannel(channel.id, (latest) =>
         withSession(latest, runtime, agentId, sessionId, updatedAt, changeKnown),
       );
     });
@@ -154,7 +154,7 @@ export const makeTurnSession = ({ thread, runtime, agentId, changeThread, toldOf
     return change((known) => (known.taskBrief == null ? null : { ...known, taskBrief: null }));
   });
 
-  // The session has now seen the thread through `seenThrough`, the turn's reply. It takes the place of
+  // The session has now seen the channel through `seenThrough`, the turn's reply. It takes the place of
   // the hob's session on the runtime in an earlier chapter, which is never resumed again; other hobs'
   // sessions stay as they are. `readWeb` is the turn's read-the-web mark, as when a relayed reply
   // marked it (ADR 039): written with the session, so no reader or restart ever finds it unmarked.
@@ -163,7 +163,7 @@ export const makeTurnSession = ({ thread, runtime, agentId, changeThread, toldOf
       if (chapterId === null) return;
       const { memory, roster } = briefs;
       const updatedAt = yield* nowIso;
-      yield* changeThread(thread.id, (latest) => {
+      yield* changeChannel(channel.id, (latest) => {
         const known = latest.sessions.find((s) => isSessionOf(s, runtime, agentId));
         // Without memory, a session keeps whatever brief it was last told of.
         const memoryBrief = memory === null ? known?.memoryBrief : startedMemoryBrief(memory, expected, started);
@@ -175,7 +175,7 @@ export const makeTurnSession = ({ thread, runtime, agentId, changeThread, toldOf
           sessionId: started,
           chapterId,
           // As the chapter stood when the turn began: a merge during the turn leaves it stale.
-          ...(thread.liveChapterMerges === 0 ? {} : { chapterMerges: thread.liveChapterMerges }),
+          ...(channel.liveChapterMerges === 0 ? {} : { chapterMerges: channel.liveChapterMerges }),
           seenThrough,
           ...(memoryBrief === undefined ? {} : { memoryBrief }),
           ...carriedMarks(known, started),
@@ -186,7 +186,7 @@ export const makeTurnSession = ({ thread, runtime, agentId, changeThread, toldOf
         if (known !== undefined && sameSession(known, session)) return null;
         const sessions =
           known === undefined ? [...latest.sessions, session] : latest.sessions.map((s) => (s === known ? session : s));
-        return new Thread({ ...latest, sessions, updatedAt });
+        return new Channel({ ...latest, sessions, updatedAt });
       });
     });
 

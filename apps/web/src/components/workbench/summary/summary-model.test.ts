@@ -28,7 +28,7 @@ import {
   checkpoint,
   milestone,
   question,
-  THREAD,
+  CHANNEL,
   task,
   tree,
 } from "../../../test/quests.ts";
@@ -82,7 +82,7 @@ const approval = (fields: Partial<Pick<ApprovalRequest, "taskId" | "rootTaskId" 
   new ApprovalRequest({
     id: ApprovalId.make(`ap-${fields.taskId ?? "chat"}-${fields.state ?? "pending"}`),
     agentId: ALDRIC,
-    threadId: THREAD,
+    channelId: CHANNEL,
     messageId: MessageId.make("m1"),
     taskId: fields.taskId ?? null,
     rootTaskId: fields.rootTaskId ?? CAMPAIGN,

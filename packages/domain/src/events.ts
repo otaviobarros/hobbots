@@ -16,12 +16,12 @@ import { Device, PairingRequest } from "./device.ts";
 import { Grant } from "./grant.ts";
 import { HobProposal } from "./hob-proposals.ts";
 import { HubQuestion } from "./hub-question.ts";
-import { AgentId, ChapterId, MessageId, ThreadId } from "./ids.ts";
+import { AgentId, ChapterId, MessageId, ChannelId } from "./ids.ts";
 import { MemoryShare } from "./memory-shares.ts";
 import { MemorySave } from "./memory-tools.ts";
 import { Message, ReplyStep } from "./message.ts";
 import { MessagePin } from "./message-pin.ts";
-import { HobPresence, ThreadRunStatus } from "./presence.ts";
+import { HobPresence, ChannelRunStatus } from "./presence.ts";
 import {
   ArtifactRef,
   Checkpoint,
@@ -50,8 +50,8 @@ import {
 } from "./skills.ts";
 import { Supervision } from "./supervision.ts";
 import { Attempt, AttemptId, Task, TaskId } from "./task.ts";
-import { Thread } from "./thread.ts";
-import { ThreadMember } from "./thread-member.ts";
+import { Channel } from "./channel.ts";
+import { ChannelMember } from "./channel-member.ts";
 import { TurnRequest, TurnRequestId } from "./turn-request.ts";
 import { HobWebLimits, WebFetchRecord, WebSearchRecord, WebSettings } from "./web-usage.ts";
 
@@ -63,46 +63,46 @@ const AgentUpserted = Schema.TaggedStruct("AgentUpserted", {
   agent: Agent,
   actor: ChangeActor.pipe(Schema.withDecodingDefaultKey(Effect.succeed(YOU))),
 });
-const ThreadUpserted = Schema.TaggedStruct("ThreadUpserted", { thread: Thread });
+const ChannelUpserted = Schema.TaggedStruct("ChannelUpserted", { channel: Channel });
 /** You made a camp for a hob, with its title, goal and whether it is private (ADR 037). */
-const CampMade = Schema.TaggedStruct("CampMade", { thread: Thread });
+const CampMade = Schema.TaggedStruct("CampMade", { channel: Channel });
 /**
  * You started a hob's chat fresh (ADR 037): `superseded` is the chat as it was left, `chat` the new
  * one, and `carried` what moved from one to the other. The backpack items that moved are journaled
  * after it, each as its own `BackpackItemChanged`.
  */
 const ChatStartedFresh = Schema.TaggedStruct("ChatStartedFresh", {
-  superseded: Thread,
-  chat: Thread,
+  superseded: Channel,
+  chat: Channel,
   carried: Schema.Array(CarriedOver),
 });
 const MessageUpserted = Schema.TaggedStruct("MessageUpserted", { message: Message });
-/** A user message joined its thread's queue because a reply was running. */
+/** A user message joined its channel's queue because a reply was running. */
 const MessageQueued = Schema.TaggedStruct("MessageQueued", { message: Message });
 /**
  * A queued message left the queue: its turn started, or Stop all dropped what was owed for it, so it
  * stays said (each after its MessageUpserted), or the user removed it.
  */
 const MessageDequeued = Schema.TaggedStruct("MessageDequeued", {
-  threadId: ThreadId,
+  channelId: ChannelId,
   messageId: MessageId,
   reason: Schema.Literals(["started", "dropped", "removed"]),
 });
 /**
- * A thread started a chapter (ADR 037): its first, as the thread was made, or the next one, which
+ * A channel started a chapter (ADR 037): its first, as the channel was made, or the next one, which
  * `ended` (the live chapter until then) made way for.
  */
 const ChapterStarted = Schema.TaggedStruct("ChapterStarted", {
-  threadId: ThreadId,
+  channelId: ChannelId,
   chapter: Chapter,
   ended: Schema.NullOr(Chapter),
 });
 /**
  * Chapter `from` was cut at message `messageId`: its messages from there on now belong to the new
- * chapter `chapter`, right after it. `chapters` is the thread's chapters afterwards, in order.
+ * chapter `chapter`, right after it. `chapters` is the channel's chapters afterwards, in order.
  */
 const ChapterSplit = Schema.TaggedStruct("ChapterSplit", {
-  threadId: ThreadId,
+  channelId: ChannelId,
   from: ChapterId,
   chapter: ChapterId,
   messageId: MessageId,
@@ -110,10 +110,10 @@ const ChapterSplit = Schema.TaggedStruct("ChapterSplit", {
 });
 /**
  * Chapter `absorbed` merged into `into`, the chapter before it, which now holds its messages; it is
- * gone. `chapters` is the thread's chapters afterwards, in order.
+ * gone. `chapters` is the channel's chapters afterwards, in order.
  */
 const ChapterMerged = Schema.TaggedStruct("ChapterMerged", {
-  threadId: ThreadId,
+  channelId: ChannelId,
   into: ChapterId,
   absorbed: ChapterId,
   chapters: Schema.Array(Chapter),
@@ -122,18 +122,18 @@ const ChapterMerged = Schema.TaggedStruct("ChapterMerged", {
  * The chapter summary projector wrote a resting chapter's one-line summary (#1380). A private
  * camp's stays in that camp: memory capture takes nothing from it.
  */
-const ChapterSummarized = Schema.TaggedStruct("ChapterSummarized", { threadId: ThreadId, chapter: Chapter });
+const ChapterSummarized = Schema.TaggedStruct("ChapterSummarized", { channelId: ChannelId, chapter: Chapter });
 /**
- * A chapter of thread `threadId` moved into `camp` (ADR 037, #1385), with its messages, decisions,
- * artifacts and the quests started in it, whose open questions go with them. The thread keeps
- * `stub`, moved, and the camp holds them in `chapter`, its live chapter. `thread` and `camp` are the
- * two threads afterwards, and `chapters` and `campChapters` their chapters, in order. The backpack
+ * A chapter of channel `channelId` moved into `camp` (ADR 037, #1385), with its messages, decisions,
+ * artifacts and the quests started in it, whose open questions go with them. The channel keeps
+ * `stub`, moved, and the camp holds them in `chapter`, its live chapter. `channel` and `camp` are the
+ * two channels afterwards, and `chapters` and `campChapters` their chapters, in order. The backpack
  * items that moved are journaled after it, each as its own `BackpackItemChanged`.
  */
 const ChapterMoved = Schema.TaggedStruct("ChapterMoved", {
-  threadId: ThreadId,
-  thread: Thread,
-  camp: Thread,
+  channelId: ChannelId,
+  channel: Channel,
+  camp: Channel,
   stub: Chapter,
   chapter: Chapter,
   chapters: Schema.Array(Chapter),
@@ -143,20 +143,20 @@ const ChapterMoved = Schema.TaggedStruct("ChapterMoved", {
  * The hub raised a suggestion to make a chat's chapter a camp (ADR 037, #1385): a threshold rule or
  * the hub's brain raised it, pending until the hub offers it (#1557).
  */
-const CampSuggested = Schema.TaggedStruct("CampSuggested", { threadId: ThreadId, suggestion: CampSuggestion });
+const CampSuggested = Schema.TaggedStruct("CampSuggested", { channelId: ChannelId, suggestion: CampSuggestion });
 /** The hub offered a pending suggestion, with the camp's name and goal it suggests (#1557). */
 const CampSuggestionOffered = Schema.TaggedStruct("CampSuggestionOffered", {
-  threadId: ThreadId,
+  channelId: ChannelId,
   suggestion: CampSuggestion,
 });
 /** You kept a suggested chapter in the chat; it is never suggested again. */
 const CampSuggestionKept = Schema.TaggedStruct("CampSuggestionKept", {
-  threadId: ThreadId,
+  channelId: ChannelId,
   suggestion: CampSuggestion,
 });
 /** A suggested chapter moved into a camp, journaled after its `ChapterMoved`. */
 const CampSuggestionAccepted = Schema.TaggedStruct("CampSuggestionAccepted", {
-  threadId: ThreadId,
+  channelId: ChannelId,
   suggestion: CampSuggestion,
 });
 /**
@@ -164,20 +164,20 @@ const CampSuggestionAccepted = Schema.TaggedStruct("CampSuggestionAccepted", {
  * chat closed.
  */
 const CampSuggestionExpired = Schema.TaggedStruct("CampSuggestionExpired", {
-  threadId: ThreadId,
+  channelId: ChannelId,
   suggestion: CampSuggestion,
 });
 /** The user asked to stop a reply; it shows as stopping until the runtime confirms. */
-const TurnStopRequested = Schema.TaggedStruct("TurnStopRequested", { threadId: ThreadId, messageId: MessageId });
+const TurnStopRequested = Schema.TaggedStruct("TurnStopRequested", { channelId: ChannelId, messageId: MessageId });
 /** The runtime confirmed the stopped turn ended; the reply is now stopped. */
-const TurnStopped = Schema.TaggedStruct("TurnStopped", { threadId: ThreadId, messageId: MessageId });
+const TurnStopped = Schema.TaggedStruct("TurnStopped", { channelId: ChannelId, messageId: MessageId });
 /**
  * A person let the hobs go on past the relay budget (ADR 039, Hobs talking to hobs; #1463): the
  * line's paused `requests` wait again, counting the budget from their own turn. Its line is
- * `rootMessageId`, null for the thread's main line.
+ * `rootMessageId`, null for the channel's main line.
  */
 const RelayBudgetReset = Schema.TaggedStruct("RelayBudgetReset", {
-  threadId: ThreadId,
+  channelId: ChannelId,
   rootMessageId: Schema.NullOr(MessageId),
   by: Actor,
   requests: Schema.Array(TurnRequestId),
@@ -187,7 +187,7 @@ const RelayBudgetReset = Schema.TaggedStruct("RelayBudgetReset", {
  * and the turn's reply `messageId` is gone, so the conversation shows the pass and no message.
  */
 const TurnPassed = Schema.TaggedStruct("TurnPassed", {
-  threadId: ThreadId,
+  channelId: ChannelId,
   messageId: MessageId,
   request: TurnRequest,
 });
@@ -196,11 +196,11 @@ const ApprovalRequested = Schema.TaggedStruct("ApprovalRequested", { approval: A
 /** A pending approval was approved, denied or expired; `approval.state` says which. */
 const ApprovalResolved = Schema.TaggedStruct("ApprovalResolved", { approval: ApprovalRequest });
 /**
- * A request a party member's Task asked moved to another thread with its quest, as a chapter moved
- * into a camp or a chat started fresh takes it (ADR 037, #1389): `approval` names its new thread at
- * the revision of the move, and `fromThreadId` the thread it left.
+ * A request a party member's Task asked moved to another channel with its quest, as a chapter moved
+ * into a camp or a chat started fresh takes it (ADR 037, #1389): `approval` names its new channel at
+ * the revision of the move, and `fromChannelId` the channel it left.
  */
-const ApprovalMoved = Schema.TaggedStruct("ApprovalMoved", { fromThreadId: ThreadId, approval: ApprovalRequest });
+const ApprovalMoved = Schema.TaggedStruct("ApprovalMoved", { fromChannelId: ChannelId, approval: ApprovalRequest });
 /** A decision with a lifetime saved a standing grant for its hob (ADR 015). */
 const GrantCreated = Schema.TaggedStruct("GrantCreated", { grant: Grant });
 /** A grant stopped applying: the user removed it, or a change took away the authority it relied on. */
@@ -211,10 +211,10 @@ const PairingRequested = Schema.TaggedStruct("PairingRequested", { request: Pair
 const PairingChanged = Schema.TaggedStruct("PairingChanged", { request: PairingRequest });
 /** The user revoked a device: its requests are refused from now on (ADR 021). Carries no token. */
 const DeviceRevoked = Schema.TaggedStruct("DeviceRevoked", { device: Device });
-/** A person or a hob added to a thread (ADR 039, Members): its first two when it is made, and anyone added to a camp. */
-const ThreadMemberAdded = Schema.TaggedStruct("ThreadMemberAdded", { member: ThreadMember });
+/** A person or a hob added to a channel (ADR 039, Members): its first two when it is made, and anyone added to a camp. */
+const ChannelMemberAdded = Schema.TaggedStruct("ChannelMemberAdded", { member: ChannelMember });
 /** A member left, was removed or came back (`MemberMachine`), as a hob does when it retires and returns. */
-const ThreadMemberChanged = Schema.TaggedStruct("ThreadMemberChanged", { member: ThreadMember });
+const ChannelMemberChanged = Schema.TaggedStruct("ChannelMemberChanged", { member: ChannelMember });
 /** A Task, a step or a delegated Task was created, with its Delegation and planned Milestones (ADR 018). */
 const TaskCreated = Schema.TaggedStruct("TaskCreated", {
   task: Task,
@@ -309,7 +309,7 @@ const ClaimReleased = Schema.TaggedStruct("ClaimReleased", { claim: Claim });
 /** You pinned a message, so it shows under Mine (ADR 037); pinning it again journals nothing. */
 const MessagePinned = Schema.TaggedStruct("MessagePinned", { pin: MessagePin });
 /** You unpinned a message; unpinning one that is not pinned journals nothing. */
-const MessageUnpinned = Schema.TaggedStruct("MessageUnpinned", { threadId: ThreadId, messageId: MessageId });
+const MessageUnpinned = Schema.TaggedStruct("MessageUnpinned", { channelId: ChannelId, messageId: MessageId });
 /** A decision was recorded in a chat or camp, by a hob's `record_decision` or by you (ADR 037). */
 const DecisionRecorded = Schema.TaggedStruct("DecisionRecorded", { decision: Decision });
 /**
@@ -477,7 +477,7 @@ export type CommandOutput = typeof CommandOutput.Type;
  * applies it idempotently: it skips text it already has.
  */
 export const MessageDelta = Schema.TaggedStruct("MessageDelta", {
-  threadId: ThreadId,
+  channelId: ChannelId,
   messageId: MessageId,
   offset: Schema.Int,
   delta: Schema.String,
@@ -487,28 +487,28 @@ export const MessageDelta = Schema.TaggedStruct("MessageDelta", {
  * A turn joined the hub's running turns, so `GET /api/activity` reports its hob working. Transient:
  * the running turns live in the hub's process, so a replay could name a turn a restart already ended.
  */
-export const TurnStarted = Schema.TaggedStruct("TurnStarted", { threadId: ThreadId, agentId: AgentId });
+export const TurnStarted = Schema.TaggedStruct("TurnStarted", { channelId: ChannelId, agentId: AgentId });
 /**
  * A turn left the hub's running turns, after its runtime exited, so `GET /api/activity` no longer
  * reports it. Transient, like `TurnStarted`.
  */
-export const TurnEnded = Schema.TaggedStruct("TurnEnded", { threadId: ThreadId, agentId: AgentId });
+export const TurnEnded = Schema.TaggedStruct("TurnEnded", { channelId: ChannelId, agentId: AgentId });
 export type TurnStarted = typeof TurnStarted.Type;
 export type TurnEnded = typeof TurnEnded.Type;
 
 /**
- * A thread's run changed (ADR 037): published once for every transition of its `ThreadRun`, after
+ * A channel's run changed (ADR 037): published once for every transition of its `ChannelRun`, after
  * the change, with the run as it now is. Transient: runs live in the hub's process and a restart
  * leaves every one idle, so on every `Ready` a client drops the status it held and reads
  * `GET /api/status` again instead.
  */
-export const ThreadRunChanged = Schema.TaggedStruct("ThreadRunChanged", { run: ThreadRunStatus });
-export type ThreadRunChanged = typeof ThreadRunChanged.Type;
+export const ChannelRunChanged = Schema.TaggedStruct("ChannelRunChanged", { run: ChannelRunStatus });
+export type ChannelRunChanged = typeof ChannelRunChanged.Type;
 
 /**
- * A hob's presence changed (ADR 037): its lifecycle, what waits on you, or what its threads' replies
+ * A hob's presence changed (ADR 037): its lifecycle, what waits on you, or what its channels' replies
  * are doing. Published only when the presence differs from the last one published. Transient, like
- * `ThreadRunChanged`.
+ * `ChannelRunChanged`.
  */
 export const HobPresenceChanged = Schema.TaggedStruct("HobPresenceChanged", { presence: HobPresence });
 export type HobPresenceChanged = typeof HobPresenceChanged.Type;
@@ -526,14 +526,14 @@ export type TransientEvent =
   | TurnStarted
   | TurnEnded
   | CommandOutput
-  | ThreadRunChanged
+  | ChannelRunChanged
   | HobPresenceChanged
   | HobPresenceRemoved;
 
 /** State events: each is written to the event journal in the transaction that makes its change (ADR 013). */
 export const JournaledEvent = Schema.Union([
   AgentUpserted,
-  ThreadUpserted,
+  ChannelUpserted,
   CampMade,
   ChatStartedFresh,
   MessageUpserted,
@@ -594,8 +594,8 @@ export const JournaledEvent = Schema.Union([
   PairingRequested,
   PairingChanged,
   DeviceRevoked,
-  ThreadMemberAdded,
-  ThreadMemberChanged,
+  ChannelMemberAdded,
+  ChannelMemberChanged,
   CommandRecorded,
   FileChangesRecorded,
   FolderScanned,
@@ -639,7 +639,7 @@ export const HobbotsEvent = Schema.Union([
   TurnStarted,
   TurnEnded,
   CommandOutput,
-  ThreadRunChanged,
+  ChannelRunChanged,
   HobPresenceChanged,
   HobPresenceRemoved,
 ]);
@@ -651,15 +651,15 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   // A hob's GitHub overrides moved to its Charm overrides under their Charm ids, read from the old names, compatibly.
   // Its `actor`, and the hob's `summonedBy`, `summonedFor` and `summonedUnattended`, were added with defaults, compatibly.
   AgentUpserted: 1,
-  // 2: a thread carries its `sessions` and its own `brain`. 3: its `archivedAt`. Its `pinnedAt` was
+  // 2: a channel carries its `sessions` and its own `brain`. 3: its `archivedAt`. Its `pinnedAt` was
   // added with a default, compatibly. 4: its `kind`, `goal`, `private`, `origin` and `state` (ADR 037).
-  // 5: each session's `chapterId`, and the thread's `liveChapterId` (ADR 037, migration 0099).
+  // 5: each session's `chapterId`, and the channel's `liveChapterId` (ADR 037, migration 0099).
   // 6: no `unread`, which is each person's own now (ADR 039, migration 20261114004500).
   // 7: each session's `agentId` (ADR 039, migration 20261114005209_hob_sessions).
-  ThreadUpserted: 7,
-  // 2: its threads' sessions' `chapterId` and `liveChapterId`, as `ThreadUpserted` 5 (migration 0099).
-  // 3: its threads carry no `unread`, as `ThreadUpserted` 6 (migration 20261114004500).
-  // 4: its threads' sessions' `agentId`, as `ThreadUpserted` 7 (migration 20261114005209_hob_sessions).
+  ChannelUpserted: 7,
+  // 2: its channels' sessions' `chapterId` and `liveChapterId`, as `ChannelUpserted` 5 (migration 0099).
+  // 3: its channels carry no `unread`, as `ChannelUpserted` 6 (migration 20261114004500).
+  // 4: its channels' sessions' `agentId`, as `ChannelUpserted` 7 (migration 20261114005209_hob_sessions).
   CampMade: 4,
   ChatStartedFresh: 4,
   // 2: a reply can be `limited`, with `resetsAt`. 3: a reply carries its `steps`. 4: its `runtime` and `model`.
@@ -674,7 +674,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   ChapterSplit: 1,
   ChapterMerged: 1,
   ChapterSummarized: 1,
-  // 2: its threads carry no `unread`, as `ThreadUpserted` 6 (migration 20261114004500).
+  // 2: its channels carry no `unread`, as `ChannelUpserted` 6 (migration 20261114004500).
   ChapterMoved: 2,
   // A suggestion's `title`, `goal` and `pending` state (#1557) were added with defaults, compatibly:
   // every entry from before holds an open suggestion or a settled one.
@@ -742,8 +742,8 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   PairingChanged: 1,
   // 2: its device's `userId` (ADR 039, migration 0112).
   DeviceRevoked: 2,
-  ThreadMemberAdded: 1,
-  ThreadMemberChanged: 1,
+  ChannelMemberAdded: 1,
+  ChannelMemberChanged: 1,
   CommandRecorded: 1,
   FileChangesRecorded: 1,
   FolderScanned: 1,
@@ -782,7 +782,7 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
 /** The IDs a journaled event applies to, for authorization filtering and tracing. */
 export const EventCorrelation = Schema.Struct({
   agentId: Schema.NullOr(AgentId),
-  threadId: Schema.NullOr(ThreadId),
+  channelId: Schema.NullOr(ChannelId),
   messageId: Schema.NullOr(MessageId),
 });
 export type EventCorrelation = typeof EventCorrelation.Type;
@@ -811,7 +811,7 @@ export interface Committed<A> {
 
 /** The events a saved message produces: always its upsert, then that it queued or any stop outcome it records. */
 export const messageEvents = (message: Message): ReadonlyArray<JournaledEvent> => {
-  const ids = { threadId: message.threadId, messageId: message.id };
+  const ids = { channelId: message.channelId, messageId: message.id };
   const upserted: JournaledEvent = { _tag: "MessageUpserted", message };
   switch (message.status) {
     case "queued":
@@ -837,7 +837,7 @@ export type StreamReady = typeof StreamReady.Type;
  * The SSE event names on the event stream; a journaled entry is a plain `message` frame (ADR 013).
  * `turn` carries `TurnStarted` and `TurnEnded`, `remote-access` carries `RemoteAccessChanged`,
  * `command-output` carries `CommandOutput`, `memory` carries `MemoryChanged` and `status` carries
- * `ThreadRunChanged`, `HobPresenceChanged` and `HobPresenceRemoved`.
+ * `ChannelRunChanged`, `HobPresenceChanged` and `HobPresenceRemoved`.
  */
 export const STREAM_FRAME = {
   ready: "ready",

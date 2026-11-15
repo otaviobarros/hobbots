@@ -15,18 +15,18 @@ import {
   planMerge,
   planSplit,
   planStart,
-  ThreadId,
+  ChannelId,
 } from "../src/index.ts";
 import { agreesWithModel } from "../testing/machine-model.ts";
 
-const THREAD = ThreadId.make("thread-1");
-const CAMP = ThreadId.make("camp-1");
+const CHANNEL = ChannelId.make("channel-1");
+const CAMP = ChannelId.make("camp-1");
 const at = (minute: number) => new Date(Date.UTC(2026, 10, 11) + minute * 60_000).toISOString();
 
 const chapter = (id: string, number: number, state: ChapterState, fields: Partial<Chapter> = {}) =>
   new Chapter({
     id: ChapterId.make(id),
-    threadId: THREAD,
+    channelId: CHANNEL,
     number,
     title: null,
     summary: null,
@@ -66,7 +66,7 @@ const stepModel = (m: ChapterView, e: ChapterEvent): ChapterView | "refused" => 
         ? { ...m, state: "live", endedAt: null, summary: null }
         : { ...m, endedAt: e.endedAt, summary: null };
     case "Move":
-      return m.state === "resting" && e.to !== THREAD ? { ...m, state: "moved", movedTo: e.to } : "refused";
+      return m.state === "resting" && e.to !== CHANNEL ? { ...m, state: "moved", movedTo: e.to } : "refused";
     case "Summarize":
       return m.state === "resting" && m.summary === null && e.summary !== "" ? { ...m, summary: e.summary } : "refused";
   }
@@ -77,7 +77,7 @@ const events: fc.Arbitrary<ChapterEvent> = fc.oneof(
   fc.record({ _tag: fc.constant("End" as const), at: times }),
   fc.record({ _tag: fc.constant("Split" as const), at: times }),
   fc.record({ _tag: fc.constant("Absorb" as const), live: fc.boolean(), endedAt: fc.option(times, { nil: null }) }),
-  fc.record({ _tag: fc.constant("Move" as const), to: fc.constantFrom(THREAD, CAMP, ThreadId.make("camp-2")) }),
+  fc.record({ _tag: fc.constant("Move" as const), to: fc.constantFrom(CHANNEL, CAMP, ChannelId.make("camp-2")) }),
   fc.record({ _tag: fc.constant("Summarize" as const), summary: fc.constantFrom("", "Planted tomatoes", "Lamps") }),
 );
 
@@ -98,7 +98,7 @@ describe("ChapterStateMachine", () => {
       new IllegalChapterTransition({ chapterId: ChapterId.make("c1"), from: "moved", to: "resting" }),
     );
     expect(ChapterStates.isLive(chapter("c1", 1, "live"))).toBe(true);
-    expect(ChapterStates.isInThread(chapter("c1", 1, "moved"))).toBe(false);
+    expect(ChapterStates.isInChannel(chapter("c1", 1, "moved"))).toBe(false);
   });
 
   // covers ADR 037 (Chapters), STD-ARCH-013
@@ -127,7 +127,7 @@ describe("chapter commands' rules", () => {
   // covers ADR 037 (Chapters)
   it("starts a chapter after the live one, which rests, and refuses an empty title or an empty live chapter (#1379)", () => {
     const started = plan(
-      planStart(THREAD, two, { id: ChapterId.make("c3"), title: "  The\n garden ", at: at(9), liveHasMessages: true }),
+      planStart(CHANNEL, two, { id: ChapterId.make("c3"), title: "  The\n garden ", at: at(9), liveHasMessages: true }),
     );
     expect(shape(started.chapters)).toEqual([
       ["c1", 1, "resting", at(5)],
@@ -137,18 +137,18 @@ describe("chapter commands' rules", () => {
     expect(started.chapters[2]).toMatchObject({ title: "The garden", startedAt: at(9) });
     expect(started.changed.map((c) => c.id)).toEqual(["c2", "c3"]);
     const input = { id: ChapterId.make("c3"), at: at(9) };
-    expect(planStart(THREAD, two, { ...input, title: " ", liveHasMessages: true })).toEqual(
-      new ChapterRefused({ threadId: THREAD, reason: "empty-title" }),
+    expect(planStart(CHANNEL, two, { ...input, title: " ", liveHasMessages: true })).toEqual(
+      new ChapterRefused({ channelId: CHANNEL, reason: "empty-title" }),
     );
-    expect(planStart(THREAD, two, { ...input, title: "Next", liveHasMessages: false })).toEqual(
-      new ChapterRefused({ threadId: THREAD, reason: "live-chapter-empty" }),
+    expect(planStart(CHANNEL, two, { ...input, title: "Next", liveHasMessages: false })).toEqual(
+      new ChapterRefused({ channelId: CHANNEL, reason: "live-chapter-empty" }),
     );
   });
 
   // covers ADR 037 (Chapters)
   it("splits a chapter at a message into the chapter after it, numbering the rest again (#1379)", () => {
     const point = { messageId: MessageId.make("m4"), chapterId: ChapterId.make("c1"), createdAt: at(3), first: false };
-    const split = plan(planSplit(THREAD, two, point, { id: ChapterId.make("n"), title: "Lamps" }));
+    const split = plan(planSplit(CHANNEL, two, point, { id: ChapterId.make("n"), title: "Lamps" }));
     expect(shape(split.chapters)).toEqual([
       ["c1", 1, "resting", at(3)],
       ["n", 2, "resting", at(5)],
@@ -157,7 +157,7 @@ describe("chapter commands' rules", () => {
     // Splitting the live chapter makes its second half the live one.
     const live = plan(
       planSplit(
-        THREAD,
+        CHANNEL,
         two,
         { ...point, chapterId: ChapterId.make("c2"), createdAt: at(7) },
         {
@@ -172,32 +172,32 @@ describe("chapter commands' rules", () => {
       ["n", 3, "live", null],
     ]);
     expect(live.changed.map((c) => c.id)).toEqual(["c2", "n"]);
-    expect(planSplit(THREAD, two, { ...point, first: true }, { id: ChapterId.make("n"), title: "Lamps" })).toEqual(
-      new ChapterRefused({ threadId: THREAD, reason: "chapter-start" }),
+    expect(planSplit(CHANNEL, two, { ...point, first: true }, { id: ChapterId.make("n"), title: "Lamps" })).toEqual(
+      new ChapterRefused({ channelId: CHANNEL, reason: "chapter-start" }),
     );
-    expect(planSplit(THREAD, two, null, { id: ChapterId.make("n"), title: "Lamps" })).toEqual(
-      new ChapterRefused({ threadId: THREAD, reason: "message-not-found" }),
+    expect(planSplit(CHANNEL, two, null, { id: ChapterId.make("n"), title: "Lamps" })).toEqual(
+      new ChapterRefused({ channelId: CHANNEL, reason: "message-not-found" }),
     );
   });
 
   // covers ADR 037 (Chapters)
   it("merges a chapter into the one before it, which is live when the merged one was (#1379)", () => {
-    const merged = plan(planMerge(THREAD, two, ChapterId.make("c2")));
+    const merged = plan(planMerge(CHANNEL, two, ChapterId.make("c2")));
     expect(shape(merged.chapters)).toEqual([["c1", 1, "live", null]]);
     const three = [...two.slice(0, 1), chapter("c2", 2, "resting", { endedAt: at(7) }), chapter("c3", 3, "live")];
-    const middle = plan(planMerge(THREAD, three, ChapterId.make("c2")));
+    const middle = plan(planMerge(CHANNEL, three, ChapterId.make("c2")));
     expect(shape(middle.chapters)).toEqual([
       ["c1", 1, "resting", at(7)],
       ["c3", 2, "live", null],
     ]);
-    expect(planMerge(THREAD, two, ChapterId.make("c1"))).toEqual(
-      new ChapterRefused({ threadId: THREAD, reason: "first-chapter" }),
+    expect(planMerge(CHANNEL, two, ChapterId.make("c1"))).toEqual(
+      new ChapterRefused({ channelId: CHANNEL, reason: "first-chapter" }),
     );
-    expect(planMerge(THREAD, two, ChapterId.make("gone"))).toEqual(
-      new ChapterNotFound({ threadId: THREAD, chapterId: ChapterId.make("gone") }),
+    expect(planMerge(CHANNEL, two, ChapterId.make("gone"))).toEqual(
+      new ChapterNotFound({ channelId: CHANNEL, chapterId: ChapterId.make("gone") }),
     );
     // A moved chapter takes nothing in.
     const moved = [chapter("c1", 1, "moved"), chapter("c2", 2, "live")];
-    expect(planMerge(THREAD, moved, ChapterId.make("c2"))).toBeInstanceOf(IllegalChapterTransition);
+    expect(planMerge(CHANNEL, moved, ChapterId.make("c2"))).toBeInstanceOf(IllegalChapterTransition);
   });
 });

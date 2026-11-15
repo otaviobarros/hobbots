@@ -1,4 +1,4 @@
-import { ThreadId } from "@hobbots/domain";
+import { ChannelId } from "@hobbots/domain";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../api/client.ts";
@@ -11,8 +11,8 @@ import {
   startFreshStep,
 } from "./start-fresh-flow.ts";
 
-const K1 = ThreadId.make("k1");
-const K2 = ThreadId.make("k2");
+const K1 = ChannelId.make("k1");
+const K2 = ChannelId.make("k2");
 
 describe("Start fresh", () => {
   it("starts under a new key, and tries again under the same one", () => {
@@ -42,13 +42,13 @@ describe("Start fresh", () => {
   it("agrees with its model for any run of events", () => {
     const errors: ReadonlyArray<StartFreshError> = ["reply-running", "approval-pending", "unreachable"];
     const anyEvent: fc.Arbitrary<StartFreshEvent> = fc.oneof(
-      fc.integer({ min: 1, max: 99 }).map((n) => ({ _tag: "Start" as const, key: ThreadId.make(`k${n}`) })),
+      fc.integer({ min: 1, max: 99 }).map((n) => ({ _tag: "Start" as const, key: ChannelId.make(`k${n}`) })),
       fc.constantFrom(...errors).map((error) => ({ _tag: "Failed" as const, error })),
     );
     fc.assert(
       fc.property(fc.array(anyEvent, { maxLength: 30 }), (events) => {
         let state = ASKING;
-        let key: ThreadId | null = null;
+        let key: ChannelId | null = null;
         for (const event of events) {
           const before = state.step;
           state = startFreshStep(state, event);

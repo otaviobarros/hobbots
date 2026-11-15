@@ -7,10 +7,10 @@ import {
   HubQuestion,
   HubQuestionId,
   Revision,
-  ThreadId,
+  ChannelId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { ADA, ALDRIC, COPY, memberApproval, QUILL, question, stuckItem, THREAD, task } from "../../test/quests.ts";
+import { ADA, ALDRIC, COPY, memberApproval, QUILL, question, stuckItem, CHANNEL, task } from "../../test/quests.ts";
 import { scopedTray, shownEntry, trayEntries } from "./tray-entries.ts";
 
 const pending = new ApprovalRequest({ ...memberApproval(COPY, QUILL), state: "pending" });
@@ -20,12 +20,12 @@ const asked = {
   task: task(COPY, { ownerId: ADA }),
 };
 
-/** A question the hub itself asks (#976), about the chat `threadId` or about no chat. */
-const fromHub = (id: string, threadId: ThreadId | null, state: "open" | "answered" = "open") =>
+/** A question the hub itself asks (#976), about the chat `channelId` or about no chat. */
+const fromHub = (id: string, channelId: ChannelId | null, state: "open" | "answered" = "open") =>
   new HubQuestion({
     id: HubQuestionId.make(id),
     key: id,
-    chat: threadId === null ? null : { agentId: AgentId.make("aldric"), threadId },
+    chat: channelId === null ? null : { agentId: AgentId.make("aldric"), channelId },
     ask: { kind: "commit-identity", reason: "no-git-identity", github: null, unread: null },
     options: [],
     recommended: null,
@@ -41,31 +41,31 @@ const fromHub = (id: string, threadId: ThreadId | null, state: "open" | "answere
 
 describe("trayEntries", () => {
   it("asks approvals first, then stuck work, then questions, leaving out what no longer waits", () => {
-    const entries = trayEntries({ requests: [decided, pending], blockers: [stuckItem(THREAD)], questions: [asked] });
+    const entries = trayEntries({ requests: [decided, pending], blockers: [stuckItem(CHANNEL)], questions: [asked] });
     expect(entries.map((entry) => entry.kind)).toEqual(["approval", "stuck", "question"]);
   });
 
-  it("keeps only what is about the chat's thread", () => {
-    const other = ThreadId.make("other");
+  it("keeps only what is about the chat's channel", () => {
+    const other = ChannelId.make("other");
     const entries = trayEntries({
       requests: [pending],
       blockers: [stuckItem(other)],
       questions: [asked],
-      threadId: THREAD,
+      channelId: CHANNEL,
     });
     expect(entries.map((entry) => entry.kind)).toEqual(["approval", "question"]);
   });
 });
 
-/** A hob proposal (ADR 034) made in the chat `threadId`, open or settled. */
-const proposalIn = (id: string, threadId: ThreadId | null, state: "open" | "settled" = "open") => ({
+/** A hob proposal (ADR 034) made in the chat `channelId`, open or settled. */
+const proposalIn = (id: string, channelId: ChannelId | null, state: "open" | "settled" = "open") => ({
   proposal: new HobProposal({
     id: HobProposalId.make(id),
     agentId: AgentId.make("aldric"),
     kind: "summon",
     tool: "summoning_summon",
     call: { scope: "reply:m1", key: id },
-    threadId,
+    channelId,
     messageId: null,
     taskId: null,
     stepId: null,
@@ -85,14 +85,14 @@ const proposalIn = (id: string, threadId: ThreadId | null, state: "open" | "sett
 
 describe("trayEntries with hob proposals", () => {
   // covers ADR 034 (Asking is a proposal), the design system's "one place asks for you"
-  it("asks an open proposal of the chat's thread with the approvals, before stuck work, and leaves out a settled one", () => {
-    const other = ThreadId.make("other");
+  it("asks an open proposal of the chat's channel with the approvals, before stuck work, and leaves out a settled one", () => {
+    const other = ChannelId.make("other");
     const entries = trayEntries({
       requests: [pending],
-      blockers: [stuckItem(THREAD)],
+      blockers: [stuckItem(CHANNEL)],
       questions: [],
-      hobProposals: [proposalIn("open", THREAD), proposalIn("elsewhere", other), proposalIn("done", THREAD, "settled")],
-      threadId: THREAD,
+      hobProposals: [proposalIn("open", CHANNEL), proposalIn("elsewhere", other), proposalIn("done", CHANNEL, "settled")],
+      channelId: CHANNEL,
     });
     expect(entries.slice(0, 2).map((entry) => entry.key)).toEqual([pending.id, "hob-proposal:open"]);
     expect(entries.map((entry) => entry.kind)).toEqual(["approval", "hob-proposal", "stuck"]);
@@ -101,14 +101,14 @@ describe("trayEntries with hob proposals", () => {
 
 describe("trayEntries with the hub's own questions", () => {
   it("asks them after hobs' questions, in the chat they concern and on Home, while they are open", () => {
-    const hubQuestions = [fromHub("here", THREAD), fromHub("nowhere", null), fromHub("done", THREAD, "answered")];
+    const hubQuestions = [fromHub("here", CHANNEL), fromHub("nowhere", null), fromHub("done", CHANNEL, "answered")];
     const home = trayEntries({ requests: [], blockers: [], questions: [asked], hubQuestions });
     expect(home.map((entry) => entry.key)).toEqual([
       `question:${asked.question.id}`,
       "hub-question:here",
       "hub-question:nowhere",
     ]);
-    const chat = trayEntries({ requests: [], blockers: [], questions: [], hubQuestions, threadId: THREAD });
+    const chat = trayEntries({ requests: [], blockers: [], questions: [], hubQuestions, channelId: CHANNEL });
     expect(chat.map((entry) => entry.key)).toEqual(["hub-question:here"]);
   });
 });
@@ -116,11 +116,11 @@ describe("trayEntries with the hub's own questions", () => {
 describe("scopedTray", () => {
   // A camp's tray holds that camp's asks, and Everywhere holds every chat's and camp's (#1423).
   it("keeps only what is about the chat or camp in here, and everything, in the tray's order, everywhere (#1423)", () => {
-    const camp = ThreadId.make("camp-launch");
+    const camp = ChannelId.make("camp-launch");
     const inCamp = new ApprovalRequest({
       ...memberApproval(COPY, QUILL),
       id: ApprovalId.make("in-camp"),
-      threadId: camp,
+      channelId: camp,
       state: "pending",
     });
     const all = trayEntries({
@@ -136,7 +136,7 @@ describe("scopedTray", () => {
       "hub-question:about-camp",
     ]);
     expect(everywhere).toBe(all);
-    expect(scopedTray(all, THREAD).here.map((entry) => entry.key)).toEqual([
+    expect(scopedTray(all, CHANNEL).here.map((entry) => entry.key)).toEqual([
       pending.id,
       `question:${asked.question.id}`,
     ]);
@@ -144,7 +144,7 @@ describe("scopedTray", () => {
 });
 
 describe("shownEntry", () => {
-  const entries = trayEntries({ requests: [pending], blockers: [stuckItem(THREAD)], questions: [asked] });
+  const entries = trayEntries({ requests: [pending], blockers: [stuckItem(CHANNEL)], questions: [asked] });
 
   it("keeps showing the entry it showed while that one still waits", () => {
     expect(shownEntry(entries, entries[2]?.key, 0)?.index).toBe(2);

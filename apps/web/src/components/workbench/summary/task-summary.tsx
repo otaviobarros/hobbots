@@ -1,4 +1,4 @@
-import { AgentId, AttemptId, isLiveAttempt, type Task, type TaskTree, ThreadId } from "@hobbots/domain";
+import { AgentId, AttemptId, isLiveAttempt, type Task, type TaskTree, ChannelId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useSearch } from "@tanstack/react-router";
@@ -26,11 +26,11 @@ const copy = messages.summary;
 export function TaskSummary({ tree, task, hobs }: { tree: TaskTree; task: Task; hobs: HobLookup }) {
   const route = useParams({ strict: false });
   const hobId = AgentId.make(route.hobId ?? "");
-  const threadId = ThreadId.make(route.threadId ?? "");
+  const channelId = ChannelId.make(route.channelId ?? "");
   const topId = tree.tasks[0]?.id ?? task.id;
-  const room = useQuestMoves(hobId, threadId, topId);
-  const toChat = useTaskChat(tree, hobId, threadId);
-  const reads = useOpenReads(task.threadId);
+  const room = useQuestMoves(hobId, channelId, topId);
+  const toChat = useTaskChat(tree, hobId, channelId);
+  const reads = useOpenReads(task.channelId);
   const read = useQuery(workbenchTreeQuery(topId));
   const recorded = read.data?.activity.attempts ?? [];
   const activityOf = (id: string) => recorded.find((each) => each.activity.attempt.id === id)?.activity;

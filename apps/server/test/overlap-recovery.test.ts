@@ -25,8 +25,8 @@ import {
   QuestId,
   TaskId,
   type TaskToolDone,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
 import { TaskTools } from "@hobbots/orchestration";
@@ -56,7 +56,7 @@ const now = "2026-11-03T01:06:00.000Z";
 const FRODO = AgentId.make("frodo");
 const ROOK = AgentId.make("rook");
 const PIP = AgentId.make("pip");
-const threadId = ThreadId.make("badge");
+const channelId = ChannelId.make("badge");
 const LEAD = TaskId.make("site");
 const ROOK_TASK = TaskId.make("make-badge");
 const PIP_TASK = TaskId.make("review");
@@ -153,8 +153,8 @@ const seed = Effect.gen(function* () {
     [PIP, "Pip"],
   ] as const)
     yield* repo.insertAgent(hob(id, name));
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: FRODO, title: "Badge", createdAt: now, updatedAt: now }),
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, agentId: FRODO, title: "Badge", createdAt: now, updatedAt: now }),
   );
   const tasks = yield* TaskRepository;
   yield* tasks.createTask({
@@ -162,7 +162,7 @@ const seed = Effect.gen(function* () {
       id: LEAD,
       ownerId: FRODO,
       parentId: null,
-      threadId,
+      channelId,
       brief: "Build the shop",
       dependsOn: [],
       createdAt: now,
@@ -187,7 +187,7 @@ const seed = Effect.gen(function* () {
         id: taskId,
         ownerId,
         parentId: LEAD,
-        threadId,
+        channelId,
         brief: `Brief for ${taskId}`,
         dependsOn: [],
         createdAt: now,
@@ -435,14 +435,14 @@ describe("A finding on two Tasks changing the same file", () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
-        // A thread with no Task yet: the delegation starts Frodo's Task and his turn's Attempt on it.
-        const elsewhere = ThreadId.make("rebuild");
-        yield* (yield* HobbotsRepository).upsertThread(
-          new Thread({ id: elsewhere, agentId: FRODO, title: "Rebuild", createdAt: now, updatedAt: now }),
+        // A channel with no Task yet: the delegation starts Frodo's Task and his turn's Attempt on it.
+        const elsewhere = ChannelId.make("rebuild");
+        yield* (yield* HobbotsRepository).upsertChannel(
+          new Channel({ id: elsewhere, agentId: FRODO, title: "Rebuild", createdAt: now, updatedAt: now }),
         );
         const chat = yield* (yield* TaskTools).forChat({
           agentId: FRODO,
-          threadId: elsewhere,
+          channelId: elsewhere,
           messageId: MessageId.make("rebuild-1"),
           prompt: "Clear the badge, then have Pip make it again",
           runtime: "claude-code",

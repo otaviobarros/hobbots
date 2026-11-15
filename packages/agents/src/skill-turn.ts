@@ -9,7 +9,7 @@ import {
   SkillUse,
   SkillUseId,
   skillMentionOf,
-  type ThreadId,
+  type ChannelId,
   type TurnSkill,
   type UsedSkill,
 } from "@hobbots/domain";
@@ -189,10 +189,10 @@ export const skillMounter = Effect.gen(function* () {
   return shape;
 });
 
-/** Where a turn's skill uses are counted: the hob, and the thread and reply when it has them. */
+/** Where a turn's skill uses are counted: the hob, and the channel and reply when it has them. */
 export interface SkillUseTurn {
   readonly agentId: AgentId;
-  readonly threadId: ThreadId | null;
+  readonly channelId: ChannelId | null;
   readonly messageId: MessageId | null;
 }
 

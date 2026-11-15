@@ -55,7 +55,7 @@ export interface PassedNote {
  * Where a chat message of yours went next (#900): the notes the lead's turn on it sent to its
  * members, oldest first, each with the notes a nested lead passed on from it. Empty when the lead
  * answered without passing anything on. The turn that read the message is the reply whose
- * `promptId` names it. `trees` are the thread's, as `readThreadTrees` gives them.
+ * `promptId` names it. `trees` are the channel's, as `readChannelTrees` gives them.
  */
 export const steerReceipt = (trees: ReadonlyArray<TaskTree>, messageId: MessageId): ReadonlyArray<PassedNote> => {
   const traced = trees.flatMap((tree) =>

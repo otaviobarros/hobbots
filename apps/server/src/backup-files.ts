@@ -37,7 +37,7 @@ export const BackupManifest = Schema.Struct({
   installationId: Schema.String,
   counts: Schema.Struct({
     hobs: Schema.Int,
-    threads: Schema.Int,
+    channels: Schema.Int,
     quests: Schema.Int,
     tasks: Schema.Int,
     /** Skills in the library, not counting the Archive. A backup made before the library has none. */

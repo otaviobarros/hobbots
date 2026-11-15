@@ -1,4 +1,4 @@
-import { skillTitle, type Thread } from "@hobbots/domain";
+import { skillTitle, type Channel } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { draftGone, skillTrialDraftQuery } from "../../api/skill-trials.ts";
@@ -14,10 +14,10 @@ const copy = messages.trial;
  * the text you tried. Once the hub no longer has the draft, as after a restore, it says so and how to
  * try it again. Nothing in any other chat.
  */
-export function TrialNotice({ thread }: { thread: Thread | undefined }) {
-  const trial = thread?.skillTrial ?? null;
-  const draft = useQuery({ ...skillTrialDraftQuery(thread?.id ?? ("" as Thread["id"])), enabled: trial !== null });
-  if (thread === undefined || trial === null) return null;
+export function TrialNotice({ channel }: { channel: Channel | undefined }) {
+  const trial = channel?.skillTrial ?? null;
+  const draft = useQuery({ ...skillTrialDraftQuery(channel?.id ?? ("" as Channel["id"])), enabled: trial !== null });
+  if (channel === undefined || trial === null) return null;
   const title = skillTitle(trial.name);
   // Only the hub saying so makes the draft gone; a read that failed on the way leaves Back to the draft,
   // whose editor reads it again.
@@ -35,7 +35,7 @@ export function TrialNotice({ thread }: { thread: Thread | undefined }) {
         {gone ? <span role="alert">{copy.draftGone}</span> : copy.noticeHint}
       </span>
       {!gone && (
-        <Link to="/skills" search={draftSearch(trial, thread.id)} className="text-ui text-link">
+        <Link to="/skills" search={draftSearch(trial, channel.id)} className="text-ui text-link">
           {copy.backToDraft}
         </Link>
       )}

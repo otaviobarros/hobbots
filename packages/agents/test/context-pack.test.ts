@@ -10,7 +10,7 @@ import {
   QuestionId,
   Task,
   TaskId,
-  ThreadId,
+  ChannelId,
 } from "@hobbots/domain";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -32,14 +32,14 @@ import {
 // The context pack (ADR 037, #1380): built from records within a budget, never over it, and never
 // dropping an active decision or open work silently.
 
-const THREAD = ThreadId.make("camp-1");
+const CHANNEL = ChannelId.make("camp-1");
 const WREN = AgentId.make("wren");
 const at = (minute: number) => new Date(Date.UTC(2026, 10, 12) + minute * 60_000).toISOString();
 
 const message = (n: number, role: "user" | "assistant", content: string, chapter = "live") =>
   new Message({
     id: MessageId.make(`m${n}`),
-    threadId: THREAD,
+    channelId: CHANNEL,
     role,
     content,
     status: "complete",
@@ -57,7 +57,7 @@ const task = (id: string, brief: string, fields: Partial<Task> = {}) =>
     ownerId: WREN,
     parentId: null,
     rootId: TaskId.make(id),
-    threadId: THREAD,
+    channelId: CHANNEL,
     brief,
     state: "active",
     dependsOn: [],
@@ -126,8 +126,8 @@ const fixed = (): PackRecords => {
     work: { tasks: [root], trees: [root, step], questions: [question], items: [] },
     carried: [
       new CarriedOver({
-        fromThreadId: ThreadId.make("chat-0"),
-        toThreadId: THREAD,
+        fromChannelId: ChannelId.make("chat-0"),
+        toChannelId: CHANNEL,
         ref: { _tag: "task", taskId: root.id },
         label: "Plant the spring garden",
         carriedAt: at(0),
@@ -469,14 +469,14 @@ describe("chapter summaries in the pack", () => {
   const chapter = (id: string, number: number, state: Chapter["state"], summary: string | null) =>
     new Chapter({
       id: ChapterId.make(id),
-      threadId: THREAD,
+      channelId: CHANNEL,
       number,
       title: number === 2 ? "The garden" : null,
       summary,
       state,
       startedAt: at(number),
       endedAt: state === "live" ? null : at(number + 1),
-      movedTo: state === "moved" ? ThreadId.make("camp-2") : null,
+      movedTo: state === "moved" ? ChannelId.make("camp-2") : null,
     });
 
   // covers ADR 037 (The context pack), #1380

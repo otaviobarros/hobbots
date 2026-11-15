@@ -348,14 +348,14 @@ describe("a hob's folders", () => {
 
   it("finishes a running reply with the configuration it started with when the folders change", async () => {
     const agent = await newHob();
-    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
-    const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
+    const channel = (await request("POST", `/api/agents/${agent.id}/channels`)).body;
+    const messages = async () => (await request("GET", `/api/channels/${channel.id}/messages`)).body as Array<Message>;
 
     let release = () => {};
     replyGate = new Promise((resolve) => {
       release = resolve;
     });
-    await request("POST", `/api/threads/${thread.id}/messages`, { content: "first" });
+    await request("POST", `/api/channels/${channel.id}/messages`, { content: "first" });
     await waitFor(async () => (await messages()).some((m) => m.status === "streaming"));
 
     const changed = await request("PATCH", permissions(agent), { ownFolders: [own] });

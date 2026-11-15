@@ -1,9 +1,9 @@
 import type { Page } from "@playwright/test";
-import { campAt, emptyDataDir, expect, type Hub, removeDataDir, sidebarThread, startHub, test } from "./hub.ts";
+import { campAt, emptyDataDir, expect, type Hub, removeDataDir, sidebarChannel, startHub, test } from "./hub.ts";
 
 // The archive slice's done-when journey as the user sees it, with the fake runtime: archive from the
-// thread's menu, find it in the Archived list and in search, read it with no composer, restore it.
-// Archiving refused while a reply runs or an approval waits is in archive-thread.e2e.ts; the
+// channel's menu, find it in the Archived list and in search, read it with no composer, restore it.
+// Archiving refused while a reply runs or an approval waits is in archive-channel.e2e.ts; the
 // hub-level checks on SQLite and PostgreSQL are in apps/server/test/archive-end-to-end.test.ts.
 let hub: Hub | undefined;
 let dataDir = "";
@@ -47,8 +47,8 @@ const summonPip = async (current: Hub) => {
   });
 };
 
-// The open hob's threads show under it in the expanded sidebar.
-const threadLink = sidebarThread;
+// The open hob's channels show under it in the expanded sidebar.
+const channelLink = sidebarChannel;
 
 /** Makes a camp with Pip named by the prompt, sends the prompt there and waits for its echo. */
 const chat = async (page: Page, current: Hub, pipId: string, prompt: string) => {
@@ -57,10 +57,10 @@ const chat = async (page: Page, current: Hub, pipId: string, prompt: string) => 
   await composer.fill(prompt);
   await composer.press("Enter");
   await expect(page.getByRole("main").getByText(`Echo: ${prompt}`, { exact: true })).toBeVisible();
-  await expect(threadLink(page, prompt)).toBeVisible();
+  await expect(channelLink(page, prompt)).toBeVisible();
 };
 
-test("a thread archived from its menu is found in the Archive and in search, opens read-only and comes back on Restore", async ({
+test("a channel archived from its menu is found in the Archive and in search, opens read-only and comes back on Restore", async ({
   page,
 }) => {
   hub = await startHub(dataDir);
@@ -76,8 +76,8 @@ test("a thread archived from its menu is found in the Archive and in search, ope
   await page.getByRole("menuitem", { name: /Archive chat/ }).click();
   await expect(page.getByRole("status").filter({ hasText: "Archived “Rename the newsletter”." })).toBeVisible();
   await expect(chats.getByRole("link", { name: "Open Rename the newsletter" })).toHaveCount(0);
-  await expect(threadLink(page, "Rename the newsletter")).toHaveCount(0);
-  await expect(threadLink(page, "Plan my week")).toBeVisible();
+  await expect(channelLink(page, "Rename the newsletter")).toHaveCount(0);
+  await expect(channelLink(page, "Plan my week")).toBeVisible();
 
   // Found in the Archive, narrowed to the hob, and it opens read-only.
   await chats.getByRole("link", { name: "Archived chats · 1" }).click();
@@ -97,7 +97,7 @@ test("a thread archived from its menu is found in the Archive and in search, ope
   await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
   await page.keyboard.press("ControlOrMeta+k");
   const finder = page.getByRole("dialog", { name: "Jump anywhere" });
-  await finder.getByRole("combobox", { name: "Find a hob, thread or message" }).fill("newsletter");
+  await finder.getByRole("combobox", { name: "Find a hob, channel or message" }).fill("newsletter");
   const result = finder.getByRole("option", { name: /Rename the newsletter/ });
   await expect(result).toContainText("Archived");
   await result.click();
@@ -106,7 +106,7 @@ test("a thread archived from its menu is found in the Archive and in search, ope
   await expect(read.getByRole("note")).toContainText("Pip takes no new messages here");
   await expect(read.getByRole("textbox")).toHaveCount(0);
 
-  const address = new URL(page.url()).hash.replace("#/archive/chats/", "#/hobs/").replace(/\/([^/]+)$/, "/threads/$1");
+  const address = new URL(page.url()).hash.replace("#/archive/chats/", "#/hobs/").replace(/\/([^/]+)$/, "/channels/$1");
 
   // Restore: back in the hob's list with its history, and it takes messages again.
   await read.getByRole("button", { name: "Restore to Pip's chats" }).click();
@@ -114,7 +114,7 @@ test("a thread archived from its menu is found in the Archive and in search, ope
     page.getByRole("status").filter({ hasText: "Restored “Rename the newsletter” to Pip's chats." }),
   ).toBeVisible();
   await page.goto(`${current.url}/${address}`);
-  await expect(threadLink(page, "Rename the newsletter")).toBeVisible();
+  await expect(channelLink(page, "Rename the newsletter")).toBeVisible();
   await expect(main.getByText("Echo: Rename the newsletter", { exact: true })).toBeVisible();
   const composer = main.getByRole("textbox", { name: /^Message Pip/ });
   await composer.fill("Try a shorter name");

@@ -13,10 +13,10 @@ import {
   OWNER_ACTOR,
   QuestId,
   RegisteredArtifactId,
-  ThreadId,
+  ChannelId,
 } from "../src/index.ts";
 
-const THREAD = ThreadId.make("thread-1");
+const CHANNEL = ChannelId.make("channel-1");
 const CHAPTER = ChapterId.make("chapter-1");
 const HOB = { kind: "hob", id: "hob-1" } as const;
 const at = (minute: number) => new Date(Date.UTC(2026, 10, 12) + minute * 60_000).toISOString();
@@ -38,7 +38,7 @@ const message = (id: string, revision: number, fields: Partial<Row> = {}): Row =
 const decision = (id: string, revision: number, fields: Partial<Decision> = {}) =>
   new Decision({
     id: DecisionId.make(id),
-    threadId: THREAD,
+    channelId: CHANNEL,
     chapterId: CHAPTER,
     sourceMessageId: MessageId.make(`from-${id}`),
     text: `Decision ${id}`,
@@ -54,7 +54,7 @@ const decision = (id: string, revision: number, fields: Partial<Decision> = {}) 
 const artifact = (id: string, revision: number, fields: Partial<Artifact> = {}) =>
   new Artifact({
     id: RegisteredArtifactId.make(id),
-    threadId: THREAD,
+    channelId: CHANNEL,
     chapterId: CHAPTER,
     kind: "doc",
     title: `${id}.md`,
@@ -102,7 +102,7 @@ describe("catchUpOf", () => {
     expect(hasNews(caught)).toBe(true);
   });
 
-  it("finds nothing new in a thread read past every record", () => {
+  it("finds nothing new in a channel read past every record", () => {
     const caught = catchUpOf(
       input({
         marker: 50,
@@ -157,7 +157,7 @@ describe("catchUpOf", () => {
     expect(caught.more).toBe(3);
   });
 
-  it("counts everything new in a thread you never read, with no time you left", () => {
+  it("counts everything new in a channel you never read, with no time you left", () => {
     const caught = catchUpOf(input({ marker: null, messages: [message("a", 1)], decisions: [decision("d", 2)] }));
     expect(caught).toMatchObject({ readUpTo: null, firstUnread: "a", replies: 1 });
     expect(caught.items).toHaveLength(1);

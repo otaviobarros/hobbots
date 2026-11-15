@@ -324,7 +324,7 @@ const approvalFor = (approval: ApprovalRequest, task: Task, under: ReadonlySet<s
   (approval.taskId === null ? task.parentId === null && approval.rootTaskId === task.id : under.has(approval.taskId));
 
 /**
- * The Summary of a Task for the chosen Attempt. `approvals` are the thread's requests, whatever
+ * The Summary of a Task for the chosen Attempt. `approvals` are the channel's requests, whatever
  * their state. What it made follows the chosen Attempt; its brief, what is still open and its
  * result are the Task's.
  */

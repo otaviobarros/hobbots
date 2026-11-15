@@ -7,7 +7,7 @@ import {
   RuntimeAdapter,
   type RuntimeEvent,
 } from "@hobbots/agents";
-import { Agent, AgentId, type HobbotsEvent, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, type HobbotsEvent, Message, MessageId, Channel, ChannelId } from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
@@ -82,14 +82,14 @@ const run = <A, E>(
 
 type Services = ChatService | HobbotsRepository;
 
-const statusOf = (threadId: ThreadId, messageId: MessageId) =>
+const statusOf = (channelId: ChannelId, messageId: MessageId) =>
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
-    return (yield* repo.listMessages(threadId)).find((m) => m.id === messageId);
+    return (yield* repo.listMessages(channelId)).find((m) => m.id === messageId);
   });
 
-const waitFor = (threadId: ThreadId, messageId: MessageId, status: Message["status"]) =>
-  statusOf(threadId, messageId).pipe(
+const waitFor = (channelId: ChannelId, messageId: MessageId, status: Message["status"]) =>
+  statusOf(channelId, messageId).pipe(
     Effect.flatMap((m) => (m?.status === status ? Effect.succeed(m) : Effect.fail("not yet" as const))),
     Effect.retry(Schedule.spaced("5 millis")),
   );
@@ -108,8 +108,8 @@ describe("Stopping a reply", () => {
     const result = await run((events, confirm) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
-        const thread = yield* chat.createThread(HOB_ID);
-        const { assistantMessage } = yield* chat.sendPrompt(thread.id, "write a poem");
+        const channel = yield* chat.createChannel(HOB_ID);
+        const { assistantMessage } = yield* chat.sendPrompt(channel.id, "write a poem");
         if (assistantMessage === null) return yield* Effect.die("the first message did not start");
         // The partial text is on the reply before Stop is pressed.
         yield* Effect.retry(
@@ -119,16 +119,16 @@ describe("Stopping a reply", () => {
           Schedule.spaced("5 millis"),
         );
 
-        yield* chat.stop(thread.id);
-        const requested = yield* statusOf(thread.id, assistantMessage.id);
-        const busyWhileStopping = yield* chat.activeThreads;
+        yield* chat.stop(channel.id);
+        const requested = yield* statusOf(channel.id, assistantMessage.id);
+        const busyWhileStopping = yield* chat.activeChannels;
 
         yield* Deferred.succeed(confirm, undefined);
-        const stopped = yield* waitFor(thread.id, assistantMessage.id, "stopped");
+        const stopped = yield* waitFor(channel.id, assistantMessage.id, "stopped");
 
-        // The thread and hob take the next message as usual: it starts right away, or just after
-        // the stopped turn has left the thread.
-        yield* chat.sendPrompt(thread.id, "again");
+        // The channel and hob take the next message as usual: it starts right away, or just after
+        // the stopped turn has left the channel.
+        yield* chat.sendPrompt(channel.id, "again");
         // Waits for the next reply's event, not its row: the row is written before the event is
         // published, so reading the row could end the test before the event arrives.
         const next = yield* Effect.suspend(() => {
@@ -140,12 +140,12 @@ describe("Stopping a reply", () => {
             ? Effect.succeed(upserted.message)
             : Effect.fail("not yet" as const);
         }).pipe(Effect.retry(Schedule.spaced("5 millis")));
-        return { requested, busyWhileStopping, stopped, events: stopEvents(events), next, threadId: thread.id };
+        return { requested, busyWhileStopping, stopped, events: stopEvents(events), next, channelId: channel.id };
       }),
     );
 
     expect(result.requested?.status).toBe("stopping");
-    expect(result.busyWhileStopping).toEqual([result.threadId]);
+    expect(result.busyWhileStopping).toEqual([result.channelId]);
     expect(result.stopped).toMatchObject({ status: "stopped", content: "Partial", error: null });
     expect(result.events).toEqual([
       "MessageUpserted:streaming",
@@ -163,15 +163,15 @@ describe("Stopping a reply", () => {
     const result = await run((events, confirm) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
-        const thread = yield* chat.createThread(HOB_ID);
-        const { assistantMessage } = yield* chat.sendPrompt(thread.id, "write a poem");
+        const channel = yield* chat.createChannel(HOB_ID);
+        const { assistantMessage } = yield* chat.sendPrompt(channel.id, "write a poem");
         if (assistantMessage === null) return yield* Effect.die("the first message did not start");
         // As cancelling another hob's Task asks: Wren speaks, so the reply runs on.
-        yield* chat.stop(thread.id, AgentId.make("rook"));
-        const untouched = yield* statusOf(thread.id, assistantMessage.id);
-        yield* chat.stop(thread.id, HOB_ID);
+        yield* chat.stop(channel.id, AgentId.make("rook"));
+        const untouched = yield* statusOf(channel.id, assistantMessage.id);
+        yield* chat.stop(channel.id, HOB_ID);
         yield* Deferred.succeed(confirm, undefined);
-        const stopped = yield* waitFor(thread.id, assistantMessage.id, "stopped");
+        const stopped = yield* waitFor(channel.id, assistantMessage.id, "stopped");
         return { untouched, stopped, events: stopEvents(events) };
       }),
     );
@@ -185,19 +185,19 @@ describe("Stopping a reply", () => {
     const result = await run((events, confirm) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
-        const idle = yield* chat.createThread(HOB_ID);
+        const idle = yield* chat.createChannel(HOB_ID);
         yield* chat.stop(idle.id);
 
-        const thread = yield* chat.createThread(HOB_ID);
-        const { assistantMessage } = yield* chat.sendPrompt(thread.id, "write a poem");
+        const channel = yield* chat.createChannel(HOB_ID);
+        const { assistantMessage } = yield* chat.sendPrompt(channel.id, "write a poem");
         if (assistantMessage === null) return yield* Effect.die("the first message did not start");
-        yield* Effect.all([chat.stop(thread.id), chat.stop(thread.id), chat.stop(thread.id)], {
+        yield* Effect.all([chat.stop(channel.id), chat.stop(channel.id), chat.stop(channel.id)], {
           concurrency: "unbounded",
         });
         yield* Deferred.succeed(confirm, undefined);
-        const stopped = yield* waitFor(thread.id, assistantMessage.id, "stopped");
-        yield* chat.stop(thread.id);
-        return { stopped, events: stopEvents(events), after: yield* statusOf(thread.id, assistantMessage.id) };
+        const stopped = yield* waitFor(channel.id, assistantMessage.id, "stopped");
+        yield* chat.stop(channel.id);
+        return { stopped, events: stopEvents(events), after: yield* statusOf(channel.id, assistantMessage.id) };
       }),
     );
 
@@ -212,11 +212,11 @@ describe("Stopping a reply", () => {
   });
 
   it("on restart, a reply left stopping is stopped and one left streaming is interrupted", async () => {
-    const threadId = ThreadId.make("t1");
+    const channelId = ChannelId.make("t1");
     const reply = (id: string, status: Message["status"]) =>
       new Message({
         id: MessageId.make(id),
-        threadId,
+        channelId,
         role: "assistant",
         content: id,
         status,
@@ -228,9 +228,9 @@ describe("Stopping a reply", () => {
     const result = await Effect.gen(function* () {
       const events: Array<HobbotsEvent> = [];
       const repo = yield* HobbotsRepository;
-      yield* repo.upsertThread(
-        new Thread({
-          id: threadId,
+      yield* repo.upsertChannel(
+        new Channel({
+          id: channelId,
           agentId: HOB_ID,
           title: "t",
           createdAt: NOW,
@@ -256,7 +256,7 @@ describe("Stopping a reply", () => {
           ),
         ),
       );
-      return { messages: yield* repo.listMessages(threadId), events: stopEvents(events) };
+      return { messages: yield* repo.listMessages(channelId), events: stopEvents(events) };
     }).pipe(
       Effect.provide(
         Layer.effectDiscard(summonHob).pipe(Layer.provideMerge(HobbotsRepositoryLive), Layer.provide(TestDatabase)),

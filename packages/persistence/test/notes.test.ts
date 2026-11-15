@@ -9,8 +9,8 @@ import {
   OWNER_ACTOR,
   QuestId,
   TaskId,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer, Option } from "effect";
 import type { SqlClient } from "effect/sql";
@@ -26,8 +26,8 @@ import {
 import { TestDatabase } from "../src/testing.ts";
 
 // Issue #1387 (ADR 037, Mine and Catch-up): a pin marks a message without changing it, so pinning
-// leaves the thread read; it follows its message into a camp and goes when the message does. What
-// catch-up reads besides the transcript is the read marker and the Quests started in the thread.
+// leaves the channel read; it follows its message into a camp and goes when the message does. What
+// catch-up reads besides the transcript is the read marker and the Quests started in the channel.
 // On SQLite and PostgreSQL alike.
 
 const TestLayer = Layer.mergeAll(
@@ -51,13 +51,13 @@ const run = <A, E>(effect: Effect.Effect<A, E, Services>) =>
 
 const NOW = "2026-11-12T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
-const CHAT = ThreadId.make("chat-1");
-const CAMP = ThreadId.make("camp-1");
+const CHAT = ChannelId.make("chat-1");
+const CAMP = ChannelId.make("camp-1");
 
 const message = (id: string, role: Message["role"], status: Message["status"] = "complete") =>
   new Message({
     id: MessageId.make(id),
-    threadId: CHAT,
+    channelId: CHAT,
     actor: role === "assistant" ? null : OWNER_ACTOR,
     role,
     content: id,
@@ -85,8 +85,8 @@ const chat = Effect.gen(function* () {
       createdAt: NOW,
     }),
   );
-  yield* repo.upsertThread(
-    new Thread({ id: CHAT, agentId: ALDRIC, title: "Chat", kind: "chat", createdAt: NOW, updatedAt: NOW }),
+  yield* repo.upsertChannel(
+    new Channel({ id: CHAT, agentId: ALDRIC, title: "Chat", kind: "chat", createdAt: NOW, updatedAt: NOW }),
   );
   yield* repo.upsertMessage(message("ask", "user"));
   const reply = yield* repo.upsertMessage(message("reply", "assistant"));
@@ -94,37 +94,37 @@ const chat = Effect.gen(function* () {
   return reply.value;
 });
 
-const pin = (messageId: string, pinned = true, threadId: ThreadId = CHAT) =>
+const pin = (messageId: string, pinned = true, channelId: ChannelId = CHAT) =>
   Effect.gen(function* () {
     const pins = yield* PinRepository;
-    return yield* pins.setPinned(threadId, MessageId.make(messageId), pinned, NOW);
+    return yield* pins.setPinned(channelId, MessageId.make(messageId), pinned, NOW);
   });
 
 describe("pins", () => {
   // covers ADR 037 (Mine: pins)
-  it("pins a message once without making the thread unread, and journals each change (#1387)", async () => {
+  it("pins a message once without making the channel unread, and journals each change (#1387)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
         const reply = yield* chat;
-        yield* repo.markThreadRead(CHAT, reply.id, reply.revision);
+        yield* repo.markChannelRead(CHAT, reply.id, reply.revision);
         const first = yield* pin("reply");
         const again = yield* pin("reply");
-        const unread = (yield* repo.listUnreadThreads).threadIds.includes(CHAT);
+        const unread = (yield* repo.listUnreadChannels).channelIds.includes(CHAT);
         const listed = yield* (yield* PinRepository).listPins(CHAT);
         const off = yield* pin("reply", false);
         const offAgain = yield* pin("reply", false);
-        const elsewhere = yield* Effect.exit(pin("reply", true, ThreadId.make("other")));
+        const elsewhere = yield* Effect.exit(pin("reply", true, ChannelId.make("other")));
         return { first, again, unread, listed, off, offAgain, elsewhere };
       }),
     );
-    expect(result.first.value).toMatchObject({ messageId: "reply", threadId: CHAT, pinnedAt: NOW });
+    expect(result.first.value).toMatchObject({ messageId: "reply", channelId: CHAT, pinnedAt: NOW });
     expect(result.first.entries.map((entry) => entry.type)).toEqual(["MessagePinned"]);
     expect(result.again).toMatchObject({ value: result.first.value, entries: [] });
     expect(result.unread).toBe(false);
     expect(result.listed).toEqual([result.first.value]);
     expect(result.off.entries.map((entry) => entry.payload)).toEqual([
-      { _tag: "MessageUnpinned", threadId: CHAT, messageId: "reply" },
+      { _tag: "MessageUnpinned", channelId: CHAT, messageId: "reply" },
     ]);
     expect(result.offAgain).toMatchObject({ value: null, entries: [] });
     expect(Exit.isFailure(result.elsewhere)).toBe(true);
@@ -141,16 +141,16 @@ describe("pins", () => {
         yield* pin("later");
         yield* repo.removeQueuedMessage(CHAT, MessageId.make("later"));
         yield* repo.moveChapter({
-          threadId: CHAT,
+          channelId: CHAT,
           chapterId: reply.chapterId as ChapterId,
           target: {
             _tag: "new",
-            camp: new Thread({
+            camp: new Channel({
               id: CAMP,
               agentId: ALDRIC,
               title: "Launch",
               kind: "camp",
-              origin: { threadId: CHAT, chapterId: null },
+              origin: { channelId: CHAT, chapterId: null },
               createdAt: NOW,
               updatedAt: NOW,
             }),
@@ -161,13 +161,13 @@ describe("pins", () => {
       }),
     );
     expect(result.chat).toEqual([]);
-    expect(result.camp.map((each) => [each.messageId, each.threadId])).toEqual([["reply", CAMP]]);
+    expect(result.camp.map((each) => [each.messageId, each.channelId])).toEqual([["reply", CAMP]]);
   });
 });
 
 describe("what catch-up reads", () => {
   // covers ADR 037 (Catch-up)
-  it("reads no marker in a thread never read, the marker once read, and the Quests started there (#1387)", async () => {
+  it("reads no marker in a channel never read, the marker once read, and the Quests started there (#1387)", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -176,12 +176,12 @@ describe("what catch-up reads", () => {
         const reply = yield* chat;
         const never = yield* reads.marker(CHAT);
         const none = yield* reads.quests(CHAT);
-        yield* repo.markThreadRead(CHAT, reply.id, reply.revision);
+        yield* repo.markChannelRead(CHAT, reply.id, reply.revision);
         const task = {
           id: TaskId.make("launch"),
           ownerId: ALDRIC,
           parentId: null,
-          threadId: CHAT,
+          channelId: CHAT,
           brief: "Launch",
           dependsOn: [],
           createdAt: NOW,

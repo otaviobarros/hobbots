@@ -1,4 +1,4 @@
-import { type Agent, type AgentId, type HistoryEvent, historyNeedsYou, type ThreadId } from "@hobbots/domain";
+import { type Agent, type AgentId, type HistoryEvent, historyNeedsYou, type ChannelId } from "@hobbots/domain";
 import { firstLine, formatList, formatWeekdayDate } from "../../lib/format.ts";
 import { localDay } from "../../lib/usage.ts";
 import { messages } from "./messages.ts";
@@ -11,7 +11,7 @@ export type HistoryMark = "done" | "fail" | "ask" | "quest" | "you" | "quiet";
 /** Where an event's Chat or Workbench opens. */
 interface HistoryPlace {
   readonly hobId: AgentId;
-  readonly threadId: ThreadId;
+  readonly channelId: ChannelId;
 }
 
 export interface HistoryRow {
@@ -87,9 +87,9 @@ export const historyRow = (event: HistoryEvent, hob: Agent, hobs: ReadonlyMap<Ag
   // Chat and Workbench open in the chat that holds the work, which for a member's Task is the hob you
   // asked, not the member.
   const chat =
-    event.threadId === null || event.threadAgentId === null
+    event.channelId === null || event.channelAgentId === null
       ? null
-      : { hobId: event.threadAgentId, threadId: event.threadId };
+      : { hobId: event.channelAgentId, channelId: event.channelId };
   const bench = chat && event.taskId !== null ? { ...chat, taskId: event.taskId, attemptId: event.attemptId } : null;
   const row: Row = (mark, line, extra = {}) => ({
     id: event.id,

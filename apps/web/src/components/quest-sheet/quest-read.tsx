@@ -2,11 +2,11 @@ import { Button } from "@hobbots/ui/components/button";
 import { HubWait } from "../loading/hub-wait.tsx";
 import { messages } from "./messages.ts";
 
-/** How the thread's Tasks read while the quest is not found among them. */
+/** How the channel's Tasks read while the quest is not found among them. */
 export type TasksRead = { isPending: boolean; isError: boolean; refetch: () => unknown };
 
 /**
- * What stands in for a quest the thread's Tasks do not hold yet: the hub's wait while they load, an
+ * What stands in for a quest the channel's Tasks do not hold yet: the hub's wait while they load, an
  * alert with Try again when they could not be read, and else that the quest is not there.
  */
 export function QuestRead({ read, missing }: { read: TasksRead; missing: boolean }) {

@@ -1,4 +1,4 @@
-import { type Decision, DecisionStates, type Thread } from "@hobbots/domain";
+import { type Decision, DecisionStates, type Channel } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Textarea } from "@hobbots/ui/components/textarea";
 import { cn } from "@hobbots/ui/lib/utils";
@@ -23,11 +23,11 @@ const copy = messages.decisions;
  * The Decisions tab (ADR 037): every decision, newest first, crossed-out ones kept with what changed
  * them. You add one, change one, which crosses the old one out, or cross one out.
  */
-export function DecisionsTab({ thread, hobName }: { thread: Thread; hobName: string }) {
-  const decisions = useQuery(decisionsQuery(thread.id));
+export function DecisionsTab({ channel, hobName }: { channel: Channel; hobName: string }) {
+  const decisions = useQuery(decisionsQuery(channel.id));
   const [form, dispatch] = useReducer(decisionFormStep, DECISION_FORM_CLOSED);
-  const record = useRecordDecision(thread.id);
-  const crossOut = useCrossOutDecision(thread.id);
+  const record = useRecordDecision(channel.id);
+  const crossOut = useCrossOutDecision(channel.id);
   const list = decisions.data ?? [];
 
   const send = () => {

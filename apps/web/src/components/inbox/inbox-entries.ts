@@ -20,7 +20,7 @@ import {
   skillProposalOpen,
   type TaskId,
   type TaskTree,
-  type ThreadId,
+  type ChannelId,
 } from "@hobbots/domain";
 import { firstLine } from "../../lib/format.ts";
 import { blockerTries, blockerWhat } from "../blockers/blocker-model.ts";
@@ -156,27 +156,27 @@ export const needsEntries = ({
     .map(hobProposalEntry),
 ];
 
-/** The thread an entry is about, or null for a device, or a hub question about no chat, which are about this hub. */
-export const entryThread = (entry: InboxEntry): ThreadId | null => {
+/** The channel an entry is about, or null for a device, or a hub question about no chat, which are about this hub. */
+export const entryChannel = (entry: InboxEntry): ChannelId | null => {
   switch (entry.kind) {
     case "approval":
-      return entry.request.threadId;
+      return entry.request.channelId;
     case "question":
-      return entry.waiting.task.threadId;
+      return entry.waiting.task.channelId;
     case "hub-question":
-      return entry.question.chat?.threadId ?? null;
+      return entry.question.chat?.channelId ?? null;
     case "stuck":
-      return entry.item.threadId;
+      return entry.item.channelId;
     case "failed":
-      return entry.failed.task.threadId;
+      return entry.failed.task.channelId;
     case "memory":
-      return entry.share.threadId;
+      return entry.share.channelId;
     case "skill":
-      return entry.view.proposal.threadId;
+      return entry.view.proposal.channelId;
     case "hob-proposal":
-      return entry.hobs.proposal.threadId;
+      return entry.hobs.proposal.channelId;
     case "charm-call":
-      return entry.waiting.task.threadId;
+      return entry.waiting.task.channelId;
     default:
       return null;
   }
@@ -247,12 +247,12 @@ export const topQuests = (trees: ReadonlyArray<TaskTree>): Map<TaskId, Quest> =>
 };
 
 /**
- * Where a group of entries belongs: a quest, a thread with no quest, this hub for devices, memory
+ * Where a group of entries belongs: a quest, a channel with no quest, this hub for devices, memory
  * for the shares, which wait together however they were learned, or skills for the proposals.
  */
 export type InboxPlace =
   | { readonly kind: "quest"; readonly quest: Quest }
-  | { readonly kind: "thread"; readonly threadId: ThreadId }
+  | { readonly kind: "channel"; readonly channelId: ChannelId }
   | { readonly kind: "hub" }
   | { readonly kind: "memory" }
   | { readonly kind: "skills" };
@@ -270,16 +270,16 @@ export const entryPlace = (entry: InboxEntry, questOf: (taskId: TaskId) => Quest
   const taskId = entryTask(entry);
   const quest = taskId === null ? undefined : questOf(taskId);
   if (quest !== undefined) return { kind: "quest", quest };
-  const threadId = entryThread(entry);
-  return threadId === null ? { kind: "hub" } : { kind: "thread", threadId };
+  const channelId = entryChannel(entry);
+  return channelId === null ? { kind: "hub" } : { kind: "channel", channelId };
 };
 
 const placeKey = (place: InboxPlace): string => {
   switch (place.kind) {
     case "quest":
       return `quest:${place.quest.id}`;
-    case "thread":
-      return `thread:${place.threadId}`;
+    case "channel":
+      return `thread:${place.channelId}`;
     default:
       return place.kind;
   }
@@ -357,7 +357,7 @@ export const byUrgency = (a: InboxEntry, b: InboxEntry): number => {
 };
 
 /**
- * Entries grouped by quest, or by thread outside a quest, with this hub's devices apart. The most
+ * Entries grouped by quest, or by channel outside a quest, with this hub's devices apart. The most
  * urgent entry leads each group, and the group with the most urgent entry comes first.
  */
 export const groupByPlace = (
@@ -527,8 +527,8 @@ const deviceRow = ({ request }: WaitingDevice, now: Date): InboxRow => ({
 });
 
 /**
- * An entry's row. `lead` is the hob whose chat the entry's thread is, when that is known: a party
- * member asks in its lead's thread, so the chain starts from that lead.
+ * An entry's row. `lead` is the hob whose chat the entry's channel is, when that is known: a party
+ * member asks in its lead's channel, so the chain starts from that lead.
  */
 export const entryRow = (entry: InboxEntry, names: HobName, lead: AgentId | undefined, now: Date): InboxRow => {
   switch (entry.kind) {

@@ -16,8 +16,8 @@ const base = (agentId: string, rest: Record<string, unknown>) =>
     at: "2026-11-04T12:00:00.000Z",
     agentId,
     taskId: "t1",
-    threadId: "th1",
-    threadAgentId: "aldric",
+    channelId: "th1",
+    channelAgentId: "aldric",
     attemptId: null,
     quest: null,
     ...rest,
@@ -38,8 +38,8 @@ describe("historyRow", () => {
       }),
     );
     expect(done).toMatchObject({ mark: "done", glyph: "✓", line: "Sent the weekly report", who: null, waiting: false });
-    expect(done.bench).toEqual({ hobId: "aldric", threadId: "th1", taskId: "t1", attemptId: "a1" });
-    expect(done.chat).toEqual({ hobId: "aldric", threadId: "th1" });
+    expect(done.bench).toEqual({ hobId: "aldric", channelId: "th1", taskId: "t1", attemptId: "a1" });
+    expect(done.chat).toEqual({ hobId: "aldric", channelId: "th1" });
   });
 
   it("says how many tries a failed Task took", () => {
@@ -57,8 +57,8 @@ describe("historyRow", () => {
       who: { name: "Ada", hob: ada },
       quest: "Spring launch",
     });
-    // The Quest's thread is Aldric's chat, where you asked for the work, never Ada's.
-    expect(picked.chat).toEqual({ hobId: "aldric", threadId: "th1" });
+    // The Quest's channel is Aldric's chat, where you asked for the work, never Ada's.
+    expect(picked.chat).toEqual({ hobId: "aldric", channelId: "th1" });
   });
 
   it("asks you to Review an approval that waits, and credits you with one you decided", () => {
@@ -86,8 +86,8 @@ describe("historyRow", () => {
     expect(ended).toMatchObject({ mark: "quest", glyph: "★", line: "Spring launch finished" });
   });
 
-  it("leaves out Chat and Workbench when the event has no thread", () => {
-    const asked = row(base("aldric", { _tag: "TaskAsked", brief: "Plan it", threadId: null }));
+  it("leaves out Chat and Workbench when the event has no channel", () => {
+    const asked = row(base("aldric", { _tag: "TaskAsked", brief: "Plan it", channelId: null }));
     expect(asked).toMatchObject({ chat: null, bench: null, who: { name: "You" } });
   });
 });

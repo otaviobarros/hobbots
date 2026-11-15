@@ -57,15 +57,15 @@ export const memoryCharmCalls = (rows: Map<string, CharmCall> = new Map()) => {
             scopes.map((scope) => rows.get(idOf(agentId, scope, key))).find((row) => row !== undefined),
           ),
         ),
-      findByStep: (threadId, messageId, stepId) =>
+      findByStep: (channelId, messageId, stepId) =>
         Effect.sync(() =>
           Option.fromUndefinedOr(
             [...rows.values()].find(
-              (row) => row.threadId === threadId && row.messageId === messageId && row.stepId === stepId,
+              (row) => row.channelId === channelId && row.messageId === messageId && row.stepId === stepId,
             ),
           ),
         ),
-      listForThread: (threadId) => Effect.sync(() => [...rows.values()].filter((row) => row.threadId === threadId)),
+      listForChannel: (channelId) => Effect.sync(() => [...rows.values()].filter((row) => row.channelId === channelId)),
       findSending: (scope, attempt) =>
         Effect.sync(() =>
           Option.fromUndefinedOr([...rows.values()].find((row) => row.scope === scope && row.attempt === attempt)),

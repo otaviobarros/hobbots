@@ -21,7 +21,7 @@ import {
   type SuggestionState,
   suggestedCampGoal,
   suggestedCampTitle,
-  ThreadId,
+  ChannelId,
 } from "../src/index.ts";
 import { agreesWithModel } from "../testing/machine-model.ts";
 
@@ -29,15 +29,15 @@ import { agreesWithModel } from "../testing/machine-model.ts";
 // changes only once, and is raised by a pure rule at most once per chapter, from named thresholds.
 // Issue #1557: it is raised pending, then offered with a name and goal, or withdrawn.
 
-const CHAT = ThreadId.make("chat-1");
-const CAMP = ThreadId.make("camp-1");
+const CHAT = ChannelId.make("chat-1");
+const CAMP = ChannelId.make("camp-1");
 const CHAPTER = ChapterId.make("chapter-1");
 const at = (minute: number) => new Date(Date.UTC(2026, 10, 12) + minute * 60_000).toISOString();
 
 const suggestion = (state: SuggestionState = "open") =>
   new CampSuggestion({
     id: CampSuggestionId.make("s1"),
-    threadId: CHAT,
+    channelId: CHAT,
     chapterId: CHAPTER,
     reasons: [{ code: "decisions", count: CAMP_SUGGESTION_DECISIONS }],
     title: state === "pending" ? null : "Launch",
@@ -169,7 +169,7 @@ describe("the suggestion rule", () => {
   it("raises a suggestion only in an open chat, for a chapter still in it, once (#1385)", () => {
     const chapter = new Chapter({
       id: CHAPTER,
-      threadId: CHAT,
+      channelId: CHAT,
       number: 1,
       title: null,
       summary: null,
@@ -179,7 +179,7 @@ describe("the suggestion rule", () => {
       movedTo: null,
     });
     const facts = {
-      thread: { id: CHAT, openChat: true },
+      channel: { id: CHAT, openChat: true },
       chapter,
       suggested: false,
       reasons: [{ code: "quests" as const, count: CAMP_SUGGESTION_QUESTS }],
@@ -196,7 +196,7 @@ describe("the suggestion rule", () => {
     });
     expect(planCampSuggestion({ ...facts, suggested: true })).toBeNull();
     expect(planCampSuggestion({ ...facts, reasons: [] })).toBeNull();
-    expect(planCampSuggestion({ ...facts, thread: { id: CHAT, openChat: false } })).toBeNull();
+    expect(planCampSuggestion({ ...facts, channel: { id: CHAT, openChat: false } })).toBeNull();
     expect(
       planCampSuggestion({ ...facts, chapter: new Chapter({ ...chapter, state: "moved", movedTo: CAMP }) }),
     ).toBeNull();
@@ -205,7 +205,7 @@ describe("the suggestion rule", () => {
 
 describe("a suggested camp's name and goal", () => {
   // covers ADR 037 (Records: CampSuggestion), #1557
-  it("keeps them to one line, within a thread title's and a camp goal's length, and none without text (#1557)", () => {
+  it("keeps them to one line, within a channel title's and a camp goal's length, and none without text (#1557)", () => {
     expect(suggestedCampTitle("  The\n launch  ")).toBe("The launch");
     expect(suggestedCampTitle("x".repeat(80))).toHaveLength(60);
     expect(suggestedCampTitle(" \n ")).toBeNull();

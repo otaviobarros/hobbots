@@ -1,5 +1,5 @@
 import type { StartFreshRefusal } from "@hobbots/api";
-import type { ThreadId } from "@hobbots/domain";
+import type { ChannelId } from "@hobbots/domain";
 import { ApiError } from "../../api/client.ts";
 
 // Start fresh (ADR 037, #1378) as one reducer over a union of its steps (STD-REACT-029): the sheet
@@ -10,12 +10,12 @@ export type StartFreshError = StartFreshRefusal | "unreachable";
 
 export type StartFresh =
   | { readonly step: "asking" }
-  | { readonly step: "starting"; readonly key: ThreadId }
-  | { readonly step: "failed"; readonly key: ThreadId; readonly error: StartFreshError };
+  | { readonly step: "starting"; readonly key: ChannelId }
+  | { readonly step: "failed"; readonly key: ChannelId; readonly error: StartFreshError };
 
 export type StartFreshEvent =
   /** `key` is a new key, used unless a failed try is tried again, whose key is kept. */
-  { readonly _tag: "Start"; readonly key: ThreadId } | { readonly _tag: "Failed"; readonly error: StartFreshError };
+  { readonly _tag: "Start"; readonly key: ChannelId } | { readonly _tag: "Failed"; readonly error: StartFreshError };
 
 export const ASKING: StartFresh = { step: "asking" };
 

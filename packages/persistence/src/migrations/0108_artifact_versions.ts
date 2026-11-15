@@ -41,7 +41,7 @@ const nullable = (value: unknown) => (value == null ? null : String(value));
 const artifactOf = (row: Row) =>
   Schema.decodeUnknownEffect(Artifact)({
     id: text(row.id),
-    threadId: text(row.thread_id),
+    channelId: text(row.thread_id),
     chapterId: text(row.chapter_id),
     kind: text(row.kind),
     title: text(row.title),
@@ -111,7 +111,7 @@ const canonicalize = (sql: Sql, revision: number) =>
       if (!isFile(artifact.locator)) continue;
       const place = yield* placeOf(sql, artifact.id, artifact.locator);
       if (place === artifact.locator) continue;
-      const [other] = yield* sql<Row>`SELECT * FROM artifacts WHERE thread_id = ${artifact.threadId}
+      const [other] = yield* sql<Row>`SELECT * FROM artifacts WHERE thread_id = ${artifact.channelId}
       AND locator = ${place} AND id <> ${artifact.id}`;
       if (other === undefined) {
         yield* sql`UPDATE artifacts SET locator = ${place}, revision = ${revision} WHERE id = ${artifact.id}`;
@@ -186,7 +186,7 @@ const recountQuests = (sql: Sql, revision: number, merged: ReadonlySet<string>) 
             taskId: text(stored.task_id) as TaskId,
             leadId: text(stored.lead_id) as AgentId,
             parentQuestId: null,
-            threadId: null,
+            channelId: null,
             state: text(stored.state) as QuestState,
           },
           // Only the ready-for-review count changes, so nothing else is read.

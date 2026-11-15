@@ -30,8 +30,8 @@ import {
   SkillName,
   SkillRevisionHash,
   TaskId,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { MemoryEngine } from "@hobbots/memory";
 import {
@@ -156,7 +156,7 @@ const now = "2026-11-01T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
 const ADA = AgentId.make("ada");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 const GOAL = "Plan the Black Friday campaign\nKeep it under budget";
 const COPY_BRIEF = "Draft the landing copy\nUse the brand voice";
 const BUILD_BRIEF = "Build the campaign pages";
@@ -192,15 +192,15 @@ const twoHobQuest = Effect.gen(function* () {
       }),
     );
   }
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
   );
   const tasks = yield* TaskRepository;
   const task = (id: string, ownerId: AgentId, parentId: string | null, brief: string, second: number) => ({
     id: TaskId.make(id),
     ownerId,
     parentId: parentId === null ? null : TaskId.make(parentId),
-    threadId,
+    channelId,
     brief,
     dependsOn: [],
     createdAt: `2026-11-01T00:00:0${second}.000Z`,

@@ -7,9 +7,9 @@ Domain terms used across Hobbots. Each entry points to the document that owns th
 | Agent / hob | A persistent identity with versioned configuration, runtime preference, instructions and policy. The domain model says *agent*; the UI says *hob*. | [Agent model](../architecture/agent-model.md), [ADR 008](../decisions/008-design.md) |
 | Retire | Archiving a hob. New dispatch stops and history stays inspectable. Bring back makes it active again. | [Agent model](../architecture/agent-model.md) |
 | Orchestrator | A role an agent plays when it coordinates others, not a privileged runtime type. | [ADR 005](../decisions/005-agent-parity.md) |
-| Thread | A durable conversation that belongs to one agent. Its `kind` is *chat* or *camp*; the UI never says thread. | [Conversations](../architecture/conversations.md), [ADR 037](../decisions/037-chat-and-camps.md) |
-| Chat | A hob's one open thread, always there, for quick questions and small jobs on any topic. Start fresh replaces it and carries its open items over. | [ADR 037](../decisions/037-chat-and-camps.md) |
-| Camp | A thread with a goal of its own, made when a topic grows. Quests started there belong to it. A private camp is never captured into memory. | [ADR 037](../decisions/037-chat-and-camps.md) |
+| Channel | A durable conversation that belongs to one agent. Its `kind` is *chat* or *camp*; the UI never says channel. | [Conversations](../architecture/conversations.md), [ADR 037](../decisions/037-chat-and-camps.md) |
+| Chat | A hob's one open channel, always there, for quick questions and small jobs on any topic. Start fresh replaces it and carries its open items over. | [ADR 037](../decisions/037-chat-and-camps.md) |
+| Camp | A channel with a goal of its own, made when a topic grows. Quests started there belong to it. A private camp is never captured into memory. | [ADR 037](../decisions/037-chat-and-camps.md) |
 | Chapter | One topic's run of messages in a chat or camp. Exactly one is live; a new chapter starts a new runtime session. A chapter can move into a camp and leave a stub. | [ADR 037](../decisions/037-chat-and-camps.md) |
 | Decision | A choice recorded once in a chat or camp, with who made it. A changed decision is kept, crossed out. | [ADR 037](../decisions/037-chat-and-camps.md) |
 | Artifact | What a hob makes or changes: a doc, page, email, image, code file, PR or link. The registry indexes what Attempts and Quests record and copies nothing. | [ADR 037](../decisions/037-chat-and-camps.md) |
@@ -43,7 +43,7 @@ Domain terms used across Hobbots. Each entry points to the document that owns th
 | Built-in Charm | A Charm written as reviewed Hobbots code, such as GitHub. Used only where the hub must hold a rule a server cannot. | [ADR 031](../decisions/031-charm-actions-and-registry.md) |
 | MCP Charm | A Charm made from an MCP server you add, running outside the hub's process. Its tools are named `mcp_<server>_<tool>`. | [ADR 031](../decisions/031-charm-actions-and-registry.md) |
 | Hob directory | What every hob may see of the others: a public card per hob, the roster each turn carries, and `read_hob`. | [ADR 032](../decisions/032-hob-directory.md) |
-| Public card | A hob's name, role, good at, status, brain, connected Charms and who summoned it, as other hobs see them. Never its instructions, memory, threads or Tasks. | [ADR 032](../decisions/032-hob-directory.md) |
+| Public card | A hob's name, role, good at, status, brain, connected Charms and who summoned it, as other hobs see them. Never its instructions, memory, channels or Tasks. | [ADR 032](../decisions/032-hob-directory.md) |
 | Good at | One line, up to 200 characters, that tells other hobs when to come to a hob. Prefilled from the chores or the starter role, editable, and never part of the hob's own prompt. | [ADR 032](../decisions/032-hob-directory.md), [Agent model](../architecture/agent-model.md) |
 | Roster | The short list of the other visible hobs in a turn's context block, sent again only when it changed. | [ADR 032](../decisions/032-hob-directory.md) |
 | Executor | An authorized execution environment with its platform, runtime versions and boundaries. | [Agent model](../architecture/agent-model.md) |
@@ -65,7 +65,7 @@ Change a row here in the same pull request that renames the word or the code.
 | UI | Code | Never in the UI | Never in the docs |
 | --- | --- | --- | --- |
 | hob | `Agent` | | |
-| chat, camp | `Thread` | `thread` | |
+| chat, camp | `Channel` | `channel` | |
 | chapter | `Chapter` | | |
 | decision | `Decision` | | |
 | artifact | `Artifact` | | |

@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { AgentId, MessageId, ThreadId } from "./ids.ts";
+import { AgentId, MessageId, ChannelId } from "./ids.ts";
 
 /**
  * A Charm's write, recorded with its key before anything is sent (ADR 020, ADR 031), so a retried
@@ -54,7 +54,7 @@ export class CharmCall extends Schema.Class<CharmCall>("CharmCall")({
   /** What the hob was or will be told, once there is a result. */
   result: Schema.NullOr(Schema.String),
   /** The reply step the call showed as, when the runtime gave one, so the user can settle it there. */
-  threadId: Schema.NullOr(ThreadId),
+  channelId: Schema.NullOr(ChannelId),
   messageId: Schema.NullOr(MessageId),
   stepId: Schema.NullOr(Schema.String),
   createdAt: Schema.String,

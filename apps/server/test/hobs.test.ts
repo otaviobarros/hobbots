@@ -161,8 +161,8 @@ describe("creating hobs", () => {
     const list = await request("GET", "/api/agents");
     expect(list.body).toEqual([agent]);
 
-    const thread = await request("POST", `/api/agents/${agent.id}/threads`);
-    await request("POST", `/api/threads/${thread.body.id}/messages`, { content: "hello" });
+    const channel = await request("POST", `/api/agents/${agent.id}/channels`);
+    await request("POST", `/api/channels/${channel.body.id}/messages`, { content: "hello" });
     // The turn runs in the background; its request is recorded as soon as it starts.
     await Effect.runPromise(
       Effect.suspend(() => (prompts.length > 0 ? Effect.void : Effect.fail("waiting"))).pipe(
@@ -174,7 +174,7 @@ describe("creating hobs", () => {
     ]);
   });
 
-  it("a second hob with another model chats on its own threads, apart from the first", async () => {
+  it("a second hob with another model chats on its own channels, apart from the first", async () => {
     const first: Agent = (await request("POST", "/api/agents", hob)).body;
     const second: Agent = (
       await request("POST", "/api/agents", {
@@ -187,10 +187,10 @@ describe("creating hobs", () => {
     ).body;
     expect((await request("GET", "/api/agents")).body.map((a: Agent) => a.name).sort()).toEqual(["Moss", "Wren"]);
 
-    const firstThread = (await request("POST", `/api/agents/${first.id}/threads`)).body;
-    const secondThread = (await request("POST", `/api/agents/${second.id}/threads`)).body;
-    await request("POST", `/api/threads/${firstThread.id}/messages`, { content: "hello Wren" });
-    await request("POST", `/api/threads/${secondThread.id}/messages`, { content: "hello Moss" });
+    const firstChannel = (await request("POST", `/api/agents/${first.id}/channels`)).body;
+    const secondChannel = (await request("POST", `/api/agents/${second.id}/channels`)).body;
+    await request("POST", `/api/channels/${firstChannel.id}/messages`, { content: "hello Wren" });
+    await request("POST", `/api/channels/${secondChannel.id}/messages`, { content: "hello Moss" });
     await Effect.runPromise(
       Effect.suspend(() => (prompts.length > 1 ? Effect.void : Effect.fail("waiting"))).pipe(
         Effect.retry(Schedule.spaced("5 millis")),
@@ -204,19 +204,19 @@ describe("creating hobs", () => {
         JSON.stringify(["fake-quick", null, told("Tidy files.", "Moss")]),
       ]),
     );
-    // Each hob sees only its own thread, and each thread only its own messages.
-    expect((await request("GET", `/api/agents/${first.id}/threads`)).body.map((t: { id: string }) => t.id)).toEqual([
-      firstThread.id,
+    // Each hob sees only its own channel, and each channel only its own messages.
+    expect((await request("GET", `/api/agents/${first.id}/channels`)).body.map((t: { id: string }) => t.id)).toEqual([
+      firstChannel.id,
     ]);
-    expect((await request("GET", `/api/agents/${second.id}/threads`)).body.map((t: { id: string }) => t.id)).toEqual([
-      secondThread.id,
+    expect((await request("GET", `/api/agents/${second.id}/channels`)).body.map((t: { id: string }) => t.id)).toEqual([
+      secondChannel.id,
     ]);
-    const said = async (threadId: string) =>
-      (await request("GET", `/api/threads/${threadId}/messages`)).body
+    const said = async (channelId: string) =>
+      (await request("GET", `/api/channels/${channelId}/messages`)).body
         .filter((m: { role: string }) => m.role === "user")
         .map((m: { content: string }) => m.content);
-    expect(await said(firstThread.id)).toEqual(["hello Wren"]);
-    expect(await said(secondThread.id)).toEqual(["hello Moss"]);
+    expect(await said(firstChannel.id)).toEqual(["hello Wren"]);
+    expect(await said(secondChannel.id)).toEqual(["hello Moss"]);
   });
 
   it("rejects invalid input with a typed error and creates nothing", async () => {
@@ -284,15 +284,15 @@ describe("editing hobs", () => {
   it("runs a reply with the configuration it started with and the next reply with the edit", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     expect(agent.configVersion).toBe(1);
-    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
-    const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
+    const channel = (await request("POST", `/api/agents/${agent.id}/channels`)).body;
+    const messages = async () => (await request("GET", `/api/channels/${channel.id}/messages`)).body as Array<Message>;
     const settled = () => waitFor(async () => (await messages()).every((m) => m.status !== "streaming"));
 
     let release = () => {};
     replyGate = new Promise((resolve) => {
       release = resolve;
     });
-    await request("POST", `/api/threads/${thread.id}/messages`, { content: "first" });
+    await request("POST", `/api/channels/${channel.id}/messages`, { content: "first" });
     await waitFor(async () => prompts.length === 1);
 
     // The edit lands while the first reply is still running.
@@ -305,7 +305,7 @@ describe("editing hobs", () => {
     release();
     await settled();
 
-    await request("POST", `/api/threads/${thread.id}/messages`, { content: "second" });
+    await request("POST", `/api/channels/${channel.id}/messages`, { content: "second" });
     // The second message may wait in the queue before its reply exists, so wait for it to start.
     await waitFor(async () => prompts.length === 2);
     await settled();
@@ -319,21 +319,21 @@ describe("editing hobs", () => {
     ]);
     // The resumed session follows the edit, which only the turn after it carried (#164).
     expect(prompts.map((p) => p.instructionsChanged)).toEqual([false, true]);
-    await request("POST", `/api/threads/${thread.id}/messages`, { content: fakeInstructionsPrompt });
+    await request("POST", `/api/channels/${channel.id}/messages`, { content: fakeInstructionsPrompt });
     await waitFor(async () => (await messages()).filter((m) => m.status === "complete").length === 6);
     expect((await messages()).findLast((m) => m.role === "assistant")?.content).toBe(told("Write long answers."));
-    // Which instructions a session follows is not stored, so a thread that spans an edit keeps carrying them.
+    // Which instructions a session follows is not stored, so a channel that spans an edit keeps carrying them.
     expect(prompts.at(-1)?.instructionsChanged).toBe(true);
     expect((await request("GET", "/api/agents")).body).toEqual([edited.body]);
   });
 
   it("restores the earlier instructions after a stopped turn that may have delivered the edit", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
-    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
-    const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
+    const channel = (await request("POST", `/api/agents/${agent.id}/channels`)).body;
+    const messages = async () => (await request("GET", `/api/channels/${channel.id}/messages`)).body as Array<Message>;
     const replies = async () => (await messages()).filter((m) => m.role === "assistant");
     const ask = async (content: string, count: number) => {
-      await request("POST", `/api/threads/${thread.id}/messages`, { content });
+      await request("POST", `/api/channels/${channel.id}/messages`, { content });
       await waitFor(async () => (await replies()).filter((m) => m.status !== "streaming").length === count);
       return (await replies()).at(-1);
     };
@@ -342,9 +342,9 @@ describe("editing hobs", () => {
     // The edited turn reaches the runtime, which takes its instructions, and is stopped before it completes.
     await request("PATCH", `/api/agents/${agent.id}`, { instructions: "Write long answers." });
     replyGate = new Promise(() => {});
-    await request("POST", `/api/threads/${thread.id}/messages`, { content: "second" });
+    await request("POST", `/api/channels/${channel.id}/messages`, { content: "second" });
     await waitFor(async () => prompts.length === 2);
-    await request("POST", `/api/threads/${thread.id}/interrupt`);
+    await request("POST", `/api/channels/${channel.id}/interrupt`);
     await waitFor(async () => (await replies()).at(-1)?.status === "stopped");
     expect(prompts.at(-1)?.instructionsChanged).toBe(true);
 
@@ -355,15 +355,15 @@ describe("editing hobs", () => {
     expect(prompts.at(-1)?.instructionsChanged).toBe(true);
   });
 
-  it("brings a thread edited before #164 back to its hob's current instructions", async () => {
+  it("brings a channel edited before #164 back to its hob's current instructions", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
-    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+    const channel = (await request("POST", `/api/agents/${agent.id}/channels`)).body;
     const replies = async () =>
-      ((await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>).filter(
+      ((await request("GET", `/api/channels/${channel.id}/messages`)).body as Array<Message>).filter(
         (m) => m.role === "assistant",
       );
     const ask = async (content: string, count: number) => {
-      await request("POST", `/api/threads/${thread.id}/messages`, { content });
+      await request("POST", `/api/channels/${channel.id}/messages`, { content });
       await waitFor(async () => (await replies()).filter((m) => m.status === "complete").length === count);
       return (await replies()).at(-1)?.content;
     };
@@ -442,10 +442,10 @@ describe("editing hobs", () => {
 
   it("tells the runtime the hob's current role on the next turn, ahead of its instructions", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
-    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
-    const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
+    const channel = (await request("POST", `/api/agents/${agent.id}/channels`)).body;
+    const messages = async () => (await request("GET", `/api/channels/${channel.id}/messages`)).body as Array<Message>;
     const send = async (content: string, count: number) => {
-      await request("POST", `/api/threads/${thread.id}/messages`, { content });
+      await request("POST", `/api/channels/${channel.id}/messages`, { content });
       await waitFor(async () => (await messages()).filter((m) => m.status === "complete").length === count);
     };
 
@@ -464,10 +464,10 @@ describe("editing hobs", () => {
 
   it("renames a hob and changes its look as a new version, and tells the runtime its new name on the next turn", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
-    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
-    const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
+    const channel = (await request("POST", `/api/agents/${agent.id}/channels`)).body;
+    const messages = async () => (await request("GET", `/api/channels/${channel.id}/messages`)).body as Array<Message>;
     const send = async (content: string, count: number) => {
-      await request("POST", `/api/threads/${thread.id}/messages`, { content });
+      await request("POST", `/api/channels/${channel.id}/messages`, { content });
       await waitFor(async () => (await messages()).filter((m) => m.status === "complete").length === count);
     };
 
@@ -494,10 +494,10 @@ describe("editing hobs", () => {
   it("starts a hob at Default and Balanced, and tells the runtime a tone saved as a new version", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     expect([agent.voice, agent.length]).toEqual(["default", "balanced"]);
-    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
-    const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
+    const channel = (await request("POST", `/api/agents/${agent.id}/channels`)).body;
+    const messages = async () => (await request("GET", `/api/channels/${channel.id}/messages`)).body as Array<Message>;
     const send = async (content: string, count: number) => {
-      await request("POST", `/api/threads/${thread.id}/messages`, { content });
+      await request("POST", `/api/channels/${channel.id}/messages`, { content });
       await waitFor(async () => (await messages()).filter((m) => m.status === "complete").length === count);
     };
 
@@ -547,10 +547,10 @@ describe("what a hob is good at", () => {
 
   it("stores an edit of good at as a new version that the instructions never change, and never tells the hob (#1232)", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
-    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
-    const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
+    const channel = (await request("POST", `/api/agents/${agent.id}/channels`)).body;
+    const messages = async () => (await request("GET", `/api/channels/${channel.id}/messages`)).body as Array<Message>;
     const send = async (content: string, count: number) => {
-      await request("POST", `/api/threads/${thread.id}/messages`, { content });
+      await request("POST", `/api/channels/${channel.id}/messages`, { content });
       await waitFor(async () => (await messages()).filter((m) => m.status === "complete").length === count);
     };
 
@@ -612,8 +612,8 @@ describe("visible to other hobs", () => {
   it("creates a hob hidden when asked, and never tells the runtime about the switch (#1233)", async () => {
     const quiet: Agent = (await request("POST", "/api/agents", { ...hob, visibleToHobs: false })).body;
     expect(quiet.visibleToHobs).toBe(false);
-    const thread = (await request("POST", `/api/agents/${quiet.id}/threads`)).body;
-    await request("POST", `/api/threads/${thread.id}/messages`, { content: "hello" });
+    const channel = (await request("POST", `/api/agents/${quiet.id}/channels`)).body;
+    await request("POST", `/api/channels/${channel.id}/messages`, { content: "hello" });
     await waitFor(async () => prompts.length === 1);
     expect(prompts.map((p) => p.instructions)).toEqual([told("Write short answers.")]);
   });
@@ -633,14 +633,14 @@ describe("several hobs at once", () => {
       effort: null,
       instructions: "Find bugs.",
     });
-    const threadOf = async (agent: Agent) =>
-      (await request("POST", `/api/agents/${agent.id}/threads`)).body.id as string;
-    const threads = { wren: await threadOf(wren), moss: await threadOf(moss), ash: await threadOf(ash) };
-    const messages = async (threadId: string) =>
-      (await request("GET", `/api/threads/${threadId}/messages`)).body as Array<Message>;
+    const channelOf = async (agent: Agent) =>
+      (await request("POST", `/api/agents/${agent.id}/channels`)).body.id as string;
+    const channels = { wren: await channelOf(wren), moss: await channelOf(moss), ash: await channelOf(ash) };
+    const messages = async (channelId: string) =>
+      (await request("GET", `/api/channels/${channelId}/messages`)).body as Array<Message>;
     const settled = () =>
       waitFor(async () => {
-        for (const id of Object.values(threads)) {
+        for (const id of Object.values(channels)) {
           if ((await messages(id)).some((m) => m.status !== "complete")) return false;
         }
         return true;
@@ -651,22 +651,22 @@ describe("several hobs at once", () => {
     replyGate = new Promise((resolve) => {
       release = resolve;
     });
-    await request("POST", `/api/threads/${threads.wren}/messages`, { content: "first for Wren" });
-    await request("POST", `/api/threads/${threads.moss}/messages`, { content: "first for Moss" });
-    await request("POST", `/api/threads/${threads.ash}/messages`, { content: "first for Ash" });
+    await request("POST", `/api/channels/${channels.wren}/messages`, { content: "first for Wren" });
+    await request("POST", `/api/channels/${channels.moss}/messages`, { content: "first for Moss" });
+    await request("POST", `/api/channels/${channels.ash}/messages`, { content: "first for Ash" });
     await waitFor(async () => prompts.length === 3);
 
     // Editing Wren while its reply runs makes a new version of Wren only.
     const edited = await request("PATCH", `/api/agents/${wren.id}`, { instructions: "Write long answers." });
     expect(edited.body).toMatchObject({ id: wren.id, configVersion: 2 });
-    for (const id of Object.values(threads)) {
+    for (const id of Object.values(channels)) {
       expect((await messages(id)).map((m) => m.status)).toEqual(["complete", "streaming"]);
     }
     release();
     await settled();
 
-    await request("POST", `/api/threads/${threads.wren}/messages`, { content: "second for Wren" });
-    await request("POST", `/api/threads/${threads.moss}/messages`, { content: "second for Moss" });
+    await request("POST", `/api/channels/${channels.wren}/messages`, { content: "second for Wren" });
+    await request("POST", `/api/channels/${channels.moss}/messages`, { content: "second for Moss" });
     await settled();
 
     // Each turn ran with its own hob's model, effort and instructions; only Wren's next turn took the edit.
@@ -683,7 +683,7 @@ describe("several hobs at once", () => {
       ["second for Wren", "fake-thinker", "high", told("Write long answers.")],
       ["second for Moss", "fake-quick", null, told("Tidy files.", "Moss")],
     ]);
-    // Each first turn starts its own runtime session, and each second turn resumes its own thread's.
+    // Each first turn starts its own runtime session, and each second turn resumes its own channel's.
     const resumed = (prompt: string) => byPrompt.get(prompt)?.sessionId;
     expect([resumed("first for Wren"), resumed("first for Moss"), resumed("first for Ash")]).toEqual([
       null,
@@ -695,61 +695,61 @@ describe("several hobs at once", () => {
     expect(started).toEqual([expect.any(String), expect.any(String), expect.any(String)]);
     expect([resumed("second for Wren"), resumed("second for Moss")]).toEqual([started[0], started[1]]);
 
-    // Each thread holds only its own hob's messages, marked with the version that wrote each reply.
-    const transcript = async (threadId: string) =>
-      (await messages(threadId)).map((m) => [m.content, m.configVersion] as const);
-    expect(await transcript(threads.wren)).toEqual([
+    // Each channel holds only its own hob's messages, marked with the version that wrote each reply.
+    const transcript = async (channelId: string) =>
+      (await messages(channelId)).map((m) => [m.content, m.configVersion] as const);
+    expect(await transcript(channels.wren)).toEqual([
       ["first for Wren", null],
       ["Echo: first for Wren", 1],
       ["second for Wren", null],
       ["Echo: second for Wren", 2],
     ]);
-    expect(await transcript(threads.moss)).toEqual([
+    expect(await transcript(channels.moss)).toEqual([
       ["first for Moss", null],
       ["Echo: first for Moss", 1],
       ["second for Moss", null],
       ["Echo: second for Moss", 1],
     ]);
-    expect(await transcript(threads.ash)).toEqual([
+    expect(await transcript(channels.ash)).toEqual([
       ["first for Ash", null],
       ["Echo: first for Ash", 1],
     ]);
 
     // Wren's resumed session follows the edit and Moss's keeps its own instructions (#164).
-    await request("POST", `/api/threads/${threads.wren}/messages`, { content: fakeInstructionsPrompt });
-    await request("POST", `/api/threads/${threads.moss}/messages`, { content: fakeInstructionsPrompt });
+    await request("POST", `/api/channels/${channels.wren}/messages`, { content: fakeInstructionsPrompt });
+    await request("POST", `/api/channels/${channels.moss}/messages`, { content: fakeInstructionsPrompt });
     await waitFor(
-      async () => (await messages(threads.wren)).length === 6 && (await messages(threads.moss)).length === 6,
+      async () => (await messages(channels.wren)).length === 6 && (await messages(channels.moss)).length === 6,
     );
     await settled();
-    expect((await messages(threads.wren)).findLast((m) => m.role === "assistant")?.content).toBe(
+    expect((await messages(channels.wren)).findLast((m) => m.role === "assistant")?.content).toBe(
       told("Write long answers."),
     );
-    expect((await messages(threads.moss)).findLast((m) => m.role === "assistant")?.content).toBe(
+    expect((await messages(channels.moss)).findLast((m) => m.role === "assistant")?.content).toBe(
       told("Tidy files.", "Moss"),
     );
 
     // Retiring Ash refuses its new work and keeps its chat; the other hobs carry on.
     expect((await request("POST", `/api/agents/${ash.id}/retire`, { activeWork: "finish" })).status).toBe(200);
-    expect(await request("POST", `/api/threads/${threads.ash}/messages`, { content: "again" })).toMatchObject({
+    expect(await request("POST", `/api/channels/${channels.ash}/messages`, { content: "again" })).toMatchObject({
       status: 409,
       body: { _tag: "HobUnavailable", status: "retired" },
     });
-    expect(await transcript(threads.ash)).toEqual([
+    expect(await transcript(channels.ash)).toEqual([
       ["first for Ash", null],
       ["Echo: first for Ash", 1],
     ]);
-    expect((await request("GET", `/api/agents/${ash.id}/threads`)).body).toMatchObject([{ id: threads.ash }]);
+    expect((await request("GET", `/api/agents/${ash.id}/channels`)).body).toMatchObject([{ id: channels.ash }]);
     expect((await request("GET", "/api/agents?status=retired")).body).toMatchObject([{ id: ash.id }]);
     expect((await request("GET", "/api/agents")).body.map((a: Agent) => [a.name, a.configVersion]).sort()).toEqual([
       ["Moss", 1],
       ["Wren", 2],
     ]);
-    expect((await request("POST", `/api/threads/${threads.moss}/messages`, { content: "third for Moss" })).status).toBe(
+    expect((await request("POST", `/api/channels/${channels.moss}/messages`, { content: "third for Moss" })).status).toBe(
       200,
     );
     await settled();
-    expect((await transcript(threads.moss)).at(-1)).toEqual(["Echo: third for Moss", 1]);
+    expect((await transcript(channels.moss)).at(-1)).toEqual(["Echo: third for Moss", 1]);
   });
 });
 

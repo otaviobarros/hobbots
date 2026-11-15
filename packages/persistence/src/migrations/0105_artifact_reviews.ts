@@ -73,7 +73,7 @@ export default Effect.gen(function* () {
           taskId: String(stored.task_id) as TaskId,
           leadId: String(stored.lead_id) as AgentId,
           parentQuestId: null,
-          threadId: null,
+          channelId: null,
           state: String(stored.state) as QuestState,
         },
         tree,

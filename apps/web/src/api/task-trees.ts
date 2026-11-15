@@ -13,7 +13,7 @@ import {
   type TaskNote,
   TaskTree,
   type TaskWait,
-  type ThreadId,
+  type ChannelId,
 } from "@hobbots/domain";
 
 /**
@@ -286,18 +286,18 @@ const newTree = (task: Task, milestones: ReadonlyArray<Milestone>): TaskTree =>
   });
 
 /**
- * A thread's Task trees with an event applied: a top Task started in the thread adds its tree, and
+ * A channel's Task trees with an event applied: a top Task started in the channel adds its tree, and
  * every other event goes to the tree it belongs to.
  */
-export const applyToThreadTrees = (
-  threadId: ThreadId,
+export const applyToChannelTrees = (
+  channelId: ChannelId,
   trees: ReadonlyArray<TaskTree>,
   event: TaskEvent,
 ): ReadonlyArray<TaskTree> => {
   if (event._tag === "TaskCreated" && event.task.parentId === null) {
     const { task } = event;
     const known = trees.some((tree) => tree.tasks[0]?.id === task.id);
-    if (task.threadId === threadId && !known) return [...trees, newTree(task, event.milestones)];
+    if (task.channelId === channelId && !known) return [...trees, newTree(task, event.milestones)];
   }
   const next = trees.map((tree) => applyToTree(tree, event));
   return next.every((tree, index) => tree === trees[index]) ? trees : next;

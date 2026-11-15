@@ -15,7 +15,7 @@ const decodeQuestions = Schema.decodeUnknownEffect(Schema.Array(HubQuestion));
 const fromRow = (row: Row) => ({
   id: row.id,
   key: row.subjectKey,
-  chat: row.agentId === null || row.threadId === null ? null : { agentId: row.agentId, threadId: row.threadId },
+  chat: row.agentId === null || row.channelId === null ? null : { agentId: row.agentId, channelId: row.channelId },
   ask: JSON.parse(String(row.ask)),
   options: JSON.parse(String(row.options)),
   recommended: row.recommended,
@@ -68,7 +68,7 @@ export const HubQuestionRepositoryLive = Layer.effect(
             subject_kind: question.ask.kind,
             subject_key: question.key,
             agent_id: question.chat?.agentId ?? null,
-            thread_id: question.chat?.threadId ?? null,
+            channel_id: question.chat?.channelId ?? null,
             ask: JSON.stringify(question.ask),
             options: JSON.stringify(question.options),
             recommended: question.recommended,

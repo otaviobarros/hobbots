@@ -6,7 +6,7 @@ import {
   BlockerRecipientRetired,
   type EventEnvelope,
   openBlocker,
-  type ThreadId,
+  type ChannelId,
 } from "@hobbots/domain";
 import { Context, Effect } from "effect";
 import { Backpack } from "./backpack.ts";
@@ -19,8 +19,8 @@ export class BlockersHost extends Context.Service<
     readonly isRetired: (agentId: AgentId) => Effect.Effect<boolean>;
     /** Announces what a backpack write committed, after it committed. */
     readonly announce: (entries: ReadonlyArray<EventEnvelope>) => Effect.Effect<void>;
-    /** Asks the thread for its work again, even where you had stopped it. */
-    readonly resume: (threadId: ThreadId) => Effect.Effect<void>;
+    /** Asks the channel for its work again, even where you had stopped it. */
+    readonly resume: (channelId: ChannelId) => Effect.Effect<void>;
   }
 >()("@hobbots/inbox/BlockersHost") {}
 
@@ -33,7 +33,7 @@ const madeAlready = (item: BackpackItem, blocker: number, action: "retry" | "dis
  * once the item failed again, a choice made for the earlier one is refused rather than taken by the
  * newer. Making the same choice again for the same blocker, as a client retrying its request, finds
  * it made and changes nothing. Retry is refused while the item's hob is retired, and asks the
- * item's thread for its work again even where you had stopped it.
+ * item's channel for its work again even where you had stopped it.
  */
 export const decideBlocker = (itemId: BackpackItemId, blocker: number, action: "retry" | "dismiss") =>
   Effect.gen(function* () {
@@ -56,8 +56,8 @@ export const decideBlocker = (itemId: BackpackItemId, blocker: number, action: "
       ),
     );
     yield* host.announce(committed.entries);
-    const threadId = committed.value.threadId;
-    if (action === "retry" && committed.entries.length > 0 && threadId !== null) yield* host.resume(threadId);
+    const channelId = committed.value.channelId;
+    if (action === "retry" && committed.entries.length > 0 && channelId !== null) yield* host.resume(channelId);
     return committed.value;
   });
 

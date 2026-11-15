@@ -160,11 +160,11 @@ describe("The GitHub Charm on a hub", () => {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
       const connection = yield* GitHubConnection;
-      const thread = yield* chat.createThread(HOB_ID);
+      const channel = yield* chat.createChannel(HOB_ID);
       /** One turn that tries the Charm, and what the hob read. */
       const turn = Effect.gen(function* () {
-        yield* chat.sendPrompt(thread.id, "Which repository is this?\nfake:hub github_repository {}");
-        const reply = yield* repo.listMessages(thread.id).pipe(
+        yield* chat.sendPrompt(channel.id, "Which repository is this?\nfake:hub github_repository {}");
+        const reply = yield* repo.listMessages(channel.id).pipe(
           Effect.flatMap((messages) => {
             const last = messages.at(-1);
             return last?.role === "assistant" && !isInProgress(last.status)

@@ -1,13 +1,13 @@
-import { AgentId, Sidebar, SidebarPlace, ThreadId, UserId } from "@hobbots/domain";
+import { AgentId, Sidebar, SidebarPlace, ChannelId, UserId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { namedPeople } from "../src/sidebar.ts";
 
 // Issue #1563 (ADR 039, The sidebar): a shared camp's row names who wrote its last line, so the
 // sidebar's read lists that person even once they have left the camp.
 
-const place = (threadId: string, section: SidebarPlace["section"], others: SidebarPlace["others"]) =>
+const place = (channelId: string, section: SidebarPlace["section"], others: SidebarPlace["others"]) =>
   new SidebarPlace({
-    threadId: ThreadId.make(threadId),
+    channelId: ChannelId.make(channelId),
     agentId: AgentId.make("aldric"),
     section,
     others,
@@ -28,9 +28,9 @@ describe("namedPeople", () => {
       directMessages: [place("chat", "direct-message", [{ kind: "hob", id: "aldric" }])],
     });
     const named = namedPeople(sidebar, [
-      { id: ThreadId.make("team"), lastAuthor: { kind: "user", id: "leo" } },
-      { id: ThreadId.make("chat"), lastAuthor: { kind: "user", id: "marina" } },
-      { id: ThreadId.make("gone"), lastAuthor: { kind: "user", id: "rui" } },
+      { id: ChannelId.make("team"), lastAuthor: { kind: "user", id: "leo" } },
+      { id: ChannelId.make("chat"), lastAuthor: { kind: "user", id: "marina" } },
+      { id: ChannelId.make("gone"), lastAuthor: { kind: "user", id: "rui" } },
     ]);
     expect([...named].sort()).toEqual([UserId.make("bruna"), UserId.make("leo")]);
   });

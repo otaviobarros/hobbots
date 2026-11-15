@@ -8,8 +8,8 @@ import {
   GrantId,
   Message,
   MessageId,
-  Thread,
-  ThreadId,
+  Channel,
+  ChannelId,
 } from "@hobbots/domain";
 import { ApprovalRepositoryLive, GrantRepositoryLive, HobbotsRepositoryLive } from "@hobbots/persistence";
 import { Effect, Layer, Option } from "effect";
@@ -21,14 +21,14 @@ const TestLayer = Layer.mergeAll(HobbotsRepositoryLive, ApprovalRepositoryLive, 
 );
 const now = "2026-10-31T00:00:00.000Z";
 const agentId = AgentId.make("aldric");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 const messageId = MessageId.make("m1");
 
 const request = (id: string, onceOnly = false) =>
   new ApprovalRequest({
     id: ApprovalId.make(id),
     agentId,
-    threadId,
+    channelId,
     messageId,
     stepId: "tool-1",
     tool: "Bash",
@@ -63,11 +63,11 @@ const seed = Effect.gen(function* () {
       createdAt: now,
     }),
   );
-  yield* repo.upsertThread(new Thread({ id: threadId, agentId, title: "t", createdAt: now, updatedAt: now }));
+  yield* repo.upsertChannel(new Channel({ id: channelId, agentId, title: "t", createdAt: now, updatedAt: now }));
   yield* repo.upsertMessage(
     new Message({
       id: messageId,
-      threadId,
+      channelId,
       role: "assistant",
       content: "",
       status: "streaming",
@@ -96,13 +96,13 @@ describe("ApprovalRepository", () => {
         first,
         second,
         found: yield* approvals.find(ApprovalId.make("a1")),
-        thread: yield* approvals.listForThread(threadId),
+        channel: yield* approvals.listForChannel(channelId),
         pending: yield* approvals.listPending,
       };
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
 
     expect(result.inserted.entries.map((e) => e.type)).toEqual(["ApprovalRequested"]);
-    expect(result.inserted.entries[0]?.correlation).toEqual({ agentId, threadId, messageId });
+    expect(result.inserted.entries[0]?.correlation).toEqual({ agentId, channelId, messageId });
     expect(Option.getOrThrow(result.first).entries.map((e) => e.type)).toEqual(["ApprovalResolved"]);
     expect(Option.isNone(result.second)).toBe(true);
     const found = Option.getOrThrow(result.found);
@@ -111,7 +111,7 @@ describe("ApprovalRepository", () => {
     expect(found.targets).toEqual(["origin main"]);
     expect(found.onceOnly).toBe(true);
     expect(found.revision).toBe(Option.getOrThrow(result.first).value.revision);
-    expect(result.thread.map((a) => [a.id, a.onceOnly])).toEqual([
+    expect(result.channel.map((a) => [a.id, a.onceOnly])).toEqual([
       ["a1", true],
       ["a2", false],
     ]);

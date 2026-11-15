@@ -33,7 +33,7 @@ import { type CanonicalPath, isInside, PathResolver, type ScopeGitResources } fr
 /**
  * The policy engine of ADR 014: Allow, Ask or Deny for a normalized operation on a concrete
  * resource (PE-002). The effective answer is the narrowest of the preset, the hob's overrides and
- * every restriction the thread, Quest, task or delegation adds, so nothing can widen it (AG-004,
+ * every restriction the channel, Quest, task or delegation adds, so nothing can widen it (AG-004,
  * PE-004). Requests carry only the operation and its resource, never the model's account of it.
  */
 
@@ -56,7 +56,7 @@ export interface PolicyContext {
    * engine adds the current ones from `HubHosts` to every decision.
    */
   readonly hubHosts?: ReadonlyArray<string>;
-  /** Narrowing added by the thread, Quest, task or delegation. Each may only narrow. */
+  /** Narrowing added by the channel, Quest, task or delegation. Each may only narrow. */
   readonly restrictions: ReadonlyArray<PolicyLayer>;
   /**
    * The operations the Charms declare (ADR 031), which `@hobbots/agents` fills from the Charms the
@@ -204,7 +204,7 @@ export const ReasonCode = Schema.Literals([
   "preset",
   /** The hob's own override, narrower than the preset. */
   "override",
-  /** A thread, Quest, task or delegation restriction, narrower than the rest. */
+  /** A channel, Quest, task or delegation restriction, narrower than the rest. */
   "restriction",
   "outside-folders",
   "data-folder",

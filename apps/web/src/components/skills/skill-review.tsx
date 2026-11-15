@@ -28,7 +28,7 @@ const shownOf = (views: ReadonlyArray<SkillProposalView>, item: string | null) =
 
 /** Where a proposal came from: a chat whenever it was asked for in one, even one that read memory pages. */
 const fromLine = (view: SkillProposalView, who: string) =>
-  view.proposal.threadId === null && view.proposal.memoryPages.length > 0
+  view.proposal.channelId === null && view.proposal.memoryPages.length > 0
     ? copy.fromMemory({ who })
     : copy.from({ who });
 
@@ -75,7 +75,7 @@ function ReviewDetail({
   const learned =
     proposal.memoryPages.length > 0
       ? proposal.memoryPages.join(", ")
-      : proposal.threadId !== null
+      : proposal.channelId !== null
         ? reviewCopy.learnedChat
         : null;
   return (
@@ -97,10 +97,10 @@ function ReviewDetail({
           </>
         )}
       </dl>
-      {proposal.threadId !== null && (
+      {proposal.channelId !== null && (
         <Link
-          to="/hobs/$hobId/threads/$threadId"
-          params={{ hobId: proposal.agentId, threadId: proposal.threadId }}
+          to="/hobs/$hobId/channels/$channelId"
+          params={{ hobId: proposal.agentId, channelId: proposal.channelId }}
           className="self-start text-ui text-link"
         >
           {copy.openChat}

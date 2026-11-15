@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import type { ApprovalRequest } from "./approval.ts";
 import { type Artifact, ArtifactReviews } from "./artifact.ts";
-import { AgentId, type RegisteredArtifactId, ThreadId } from "./ids.ts";
+import { AgentId, type RegisteredArtifactId, ChannelId } from "./ids.ts";
 import { isActiveQuest, type Quest, QuestId, type Question, QuestState } from "./quest.ts";
 import { Revision } from "./revision.ts";
 import { descendantsOf, isCompletedTask, type Task, TaskId, type TaskState } from "./task.ts";
@@ -52,7 +52,7 @@ export class QuestSummary extends Schema.Class<QuestSummary>("QuestSummary")({
   /** The Quest it sits in, for a member's own Quest; null for a top Quest. */
   parentQuestId: Schema.NullOr(QuestId),
   /** The chat or camp the Quest is followed in, which moves with it when a chat starts fresh. */
-  threadId: Schema.NullOr(ThreadId),
+  channelId: Schema.NullOr(ChannelId),
   state: QuestState,
   /** Every Task under the Quest's own, steps, members' Tasks and nested Quests included, by tone. */
   tones: ToneCounts,
@@ -95,7 +95,7 @@ const NO_TONES: ToneCounts = { needs: 0, working: 0, waiting: 0, done: 0, proble
 
 /** A Quest's summary, folded from the Task tree it sits in. */
 export const questSummaryOf = (
-  quest: Pick<Quest, "id" | "taskId" | "leadId" | "parentQuestId" | "threadId" | "state">,
+  quest: Pick<Quest, "id" | "taskId" | "leadId" | "parentQuestId" | "channelId" | "state">,
   tree: SummaryTree,
 ): QuestSummaryFields => {
   const own = tree.tasks.find((task) => task.id === quest.taskId);
@@ -123,7 +123,7 @@ export const questSummaryOf = (
     taskId: quest.taskId,
     leadId: quest.leadId,
     parentQuestId: quest.parentQuestId,
-    threadId: quest.threadId,
+    channelId: quest.channelId,
     state: quest.state,
     tones,
     needsYou: running ? questions + approvals + tones.problem : 0,
@@ -137,7 +137,7 @@ export const sameSummary = (a: QuestSummaryFields, b: QuestSummaryFields): boole
   a.taskId === b.taskId &&
   a.leadId === b.leadId &&
   a.parentQuestId === b.parentQuestId &&
-  a.threadId === b.threadId &&
+  a.channelId === b.channelId &&
   a.state === b.state &&
   WorkTone.literals.every((tone) => a.tones[tone] === b.tones[tone]) &&
   a.needsYou === b.needsYou &&
