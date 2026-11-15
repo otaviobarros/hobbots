@@ -65,7 +65,7 @@ import {
 import type { makeTurnInputs } from "./turn-inputs.ts";
 import { makePackSources } from "./turn-pack.ts";
 import { type Carry, makeTurnRunner, type TurnRunnerDeps } from "./turn-runner.ts";
-import { FREE_SLOT, type TurnSlot, takeSlot, turnSlots } from "./turn-slots.ts";
+import { type TurnSlot, takeSlot, turnSlots } from "./turn-slots.ts";
 import { workHeld } from "./work-hold.ts";
 
 // Every thread's run (#1397): when its turns start and end, what queued behind them, and the work
@@ -313,26 +313,14 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
       turnEnded: (threadId, reply) => step(threadId, { _tag: "TurnEnded", reply }),
     });
 
-    // A slot for a turn in the thread (#1448), counted against its hob, the runtime of its brain and
-    // the Quest of the Task its hob works on there; null when the turn must wait, and then the
-    // thread is woken once a slot may be its. Runs under the hob's lock.
+    // A slot for a turn in the thread, under the hub's cap on turns (#1590); null when the turn must
+    // wait, and then the thread is woken once a slot may be its. Runs under the hob's lock.
     const slotFor = (thread: Thread, agent: Agent): Effect.Effect<TurnSlot | null> =>
-      Effect.gen(function* () {
-        if (slots === null) return FREE_SLOT;
-        const config = yield* repo.findAgentConfig(agent.id, agent.configVersion);
-        if (Option.isNone(config)) return FREE_SLOT;
-        const trees = Option.isSome(taskRecords) ? yield* taskRecords.value.readThreadTrees(thread.id) : [];
-        return yield* takeSlot(
-          slots,
-          {
-            id: `thread:${thread.id}`,
-            agentId: agent.id,
-            runtime: brainFor(thread, config.value).runtime,
-            quest: openThreadTask(trees, agent.id)?.top.rootId ?? null,
-          },
-          Effect.suspend(() => drainThreads([thread.id])),
-        );
-      });
+      takeSlot(
+        slots,
+        { id: `thread:${thread.id}`, agentId: agent.id },
+        Effect.suspend(() => drainThreads([thread.id])),
+      );
 
     // Starts a turn for a prompt that is already stored, or for a continuation's prompt, which
     // Hobbots wrote from the work that arrived (ADR 019): a continuation has no message of yours, so

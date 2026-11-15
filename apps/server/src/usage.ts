@@ -1,6 +1,6 @@
 import { runtimeAdapters, TaskRepository, TurnSlots } from "@hobbots/agents";
 import { HobbotsApi, QuestNotFound } from "@hobbots/api";
-import { DEFAULT_TURN_LIMITS, type QuestId, RuntimeKind, type TurnSlotsReport, unreportedPlan } from "@hobbots/domain";
+import { MAX_ACTIVE_TURNS, type QuestId, RuntimeKind, type TurnSlotsReport, unreportedPlan } from "@hobbots/domain";
 import { UsageLedger } from "@hobbots/persistence";
 import { DateTime, Duration, Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
@@ -46,9 +46,9 @@ export const UsageHandlers = HttpApiBuilder.group(HobbotsApi, "usage", (handlers
       (kind) => adapters(kind)?.planUsage ?? Effect.succeed(unreportedPlan(kind)),
       { concurrency: "unbounded" },
     );
-    // A hub without turn slots, as in tests of one part, limits no turn and reports none.
+    // A hub without turn slots, as in tests of one part, caps no turn and reports none.
     const slots = Option.getOrUndefined(yield* Effect.serviceOption(TurnSlots));
-    const unlimited: TurnSlotsReport = { limits: DEFAULT_TURN_LIMITS, active: [], waiting: [], usage: "after-turn" };
+    const unlimited: TurnSlotsReport = { cap: MAX_ACTIVE_TURNS, active: [], waiting: [], usage: "after-turn" };
     const turns = slots === undefined ? Effect.succeed(unlimited) : slots.report;
     return handlers.handleAll({
       usage: ({ query }) =>
@@ -66,8 +66,6 @@ export const UsageHandlers = HttpApiBuilder.group(HobbotsApi, "usage", (handlers
           return { questId: top.id, ...(yield* ledger.spentOn(top.id)) };
         }),
       turns: () => turns,
-      setTurnLimits: ({ payload }) =>
-        slots === undefined ? Effect.succeed(unlimited) : Effect.andThen(slots.setLimits(payload), slots.report),
     });
   }),
 ).pipe(Layer.provide(UsageLedger.layer));

@@ -10,25 +10,17 @@ import {
   type RuntimeAdapterShape,
   TurnSlots,
 } from "@hobbots/agents";
-import {
-  Agent,
-  AgentId,
-  DEFAULT_TURN_LIMITS,
-  type RuntimeKind,
-  Thread,
-  ThreadId,
-  type TurnLimits,
-} from "@hobbots/domain";
+import { Agent, AgentId, type RuntimeKind, Thread, ThreadId } from "@hobbots/domain";
 import { waitUntil } from "@hobbots/domain/testing";
-import { HobbotsRepositoryLive, TurnLimitsRepositoryLive } from "@hobbots/persistence";
+import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeAdditionalRuntimesLayer, FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Deferred, Effect, Layer, ManagedRuntime, Scope, Stream } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 
-// Issue #1448 (OR-005): chat turns past a limit per hob or per runtime wait, queued, and start once
-// a slot frees, on Claude Code and Codex alike; the limits hold across a restart. Every runtime turn
+// Issue #1590 (OR-005): chat turns past the hub's cap wait, queued, and start once a slot frees, in
+// the order they asked, on Claude Code and Codex alike, and after a restart. Every runtime turn
 // is held on a gate until the test lets it finish, and the test waits on what the hub reports,
 // never on a fixed delay (STD-TEST-009).
 
@@ -71,8 +63,8 @@ const gatedRuntimes = (starts: Array<Start>) =>
 
 type Database = Layer.Layer<Layer.Success<typeof TestDatabase>>;
 
-/** One life of the hub over `database`: its chat and its turn slots, with the limits it keeps. */
-const hubLayer = (database: Database, starts: Array<Start>) =>
+/** One life of the hub over `database`: its chat and its turn slots under `cap`. */
+const hubLayer = (database: Database, starts: Array<Start>, cap: number) =>
   HobLifecycle.layer.pipe(
     Layer.provideMerge(ChatService.layer.pipe(Layer.provide(HobTools.chatOnly))),
     Layer.provideMerge(
@@ -80,7 +72,7 @@ const hubLayer = (database: Database, starts: Array<Start>) =>
         HobbotsRepositoryLive,
         EventBus.layer,
         HobAdmission.layer,
-        TurnSlots.layer.pipe(Layer.provide(TurnLimitsRepositoryLive)),
+        TurnSlots.layerWith(cap),
         gatedRuntimes(starts),
       ),
     ),
@@ -142,18 +134,17 @@ afterEach(async () => {
 });
 
 /** A hub over a new database, and what it is asked to run. */
-const start = async (threads: Parameters<typeof openDatabase>[1], limits: TurnLimits) => {
+const start = async (threads: Parameters<typeof openDatabase>[1], cap: number) => {
   const scope = await Effect.runPromise(Scope.make());
   scopes.push(scope);
   const database = await openDatabase(scope, threads);
   const starts: Array<Start> = [];
   const open = () => {
-    const hub = ManagedRuntime.make(hubLayer(database, starts));
+    const hub = ManagedRuntime.make(hubLayer(database, starts, cap));
     hubs.push(hub);
     return hub;
   };
   const hub = open();
-  await hub.runPromise(TurnSlots.use((slots) => slots.setLimits(limits)));
   return { hub, starts, open };
 };
 
@@ -173,12 +164,9 @@ const startedCount = (starts: ReadonlyArray<Start>, count: number) => Effect.syn
 const finish = (start: Start | undefined) =>
   Effect.runPromise(Deferred.succeed(start?.gate as Deferred.Deferred<void>, undefined));
 
-describe("turn limits in chat", () => {
-  it("keeps a message queued while its hob runs as many turns as allowed, then starts it (#1448)", async () => {
-    const { hub, starts } = await start([{ hob: "aldric", runtime: "claude-code", ids: ["a-1", "a-2"] }], {
-      ...DEFAULT_TURN_LIMITS,
-      perHob: 1,
-    });
+describe("the turn cap in chat", () => {
+  it("keeps a message queued while the hub runs as many turns as its cap, then starts it (#1590)", async () => {
+    const { hub, starts } = await start([{ hob: "aldric", runtime: "claude-code", ids: ["a-1", "a-2"] }], 1);
     await send(hub, "a-1", "first");
     await until(hub, startedCount(starts, 1), (ok) => ok);
     const second = await send(hub, "a-2", "second");
@@ -186,7 +174,7 @@ describe("turn limits in chat", () => {
     expect(await statusOf(hub, "a-2")).toEqual(["user:queued"]);
     const waiting = await report(hub);
     expect(waiting.active.map((each) => each.id)).toEqual(["thread:a-1"]);
-    expect(waiting.waiting.map((each) => [each.id, each.waitingOn])).toEqual([["thread:a-2", "hob"]]);
+    expect(waiting.waiting.map((each) => each.id)).toEqual(["thread:a-2"]);
     expect(starts.map((each) => each.prompt)).toEqual(["first"]);
 
     // The first turn ends: its slot goes to the message that waited.
@@ -208,7 +196,7 @@ describe("turn limits in chat", () => {
     expect(await statusOf(hub, "a-2")).toEqual(["user:complete", "assistant:complete"]);
   });
 
-  it("limits each runtime on its own, Claude Code and Codex alike (#1448)", async () => {
+  it("caps turns across runtimes, and gives a freed slot to the turn that asked first (#1590)", async () => {
     const { hub, starts } = await start(
       [
         { hob: "aldric", runtime: "claude-code", ids: ["a-1"] },
@@ -216,7 +204,7 @@ describe("turn limits in chat", () => {
         { hob: "cora", runtime: "codex", ids: ["c-1"] },
         { hob: "dain", runtime: "codex", ids: ["d-1"] },
       ],
-      { ...DEFAULT_TURN_LIMITS, perRuntime: { "claude-code": 1, codex: 1 } },
+      2,
     );
     await send(hub, "a-1", "aldric");
     await send(hub, "c-1", "cora");
@@ -224,25 +212,19 @@ describe("turn limits in chat", () => {
     await send(hub, "b-1", "bram");
     await send(hub, "d-1", "dain");
     const full = await report(hub);
-    expect(full.active.map((each) => [each.id, each.runtime])).toEqual([
-      ["thread:a-1", "claude-code"],
-      ["thread:c-1", "codex"],
-    ]);
-    expect(full.waiting.map((each) => [each.id, each.waitingOn])).toEqual([
-      ["thread:b-1", "runtime"],
-      ["thread:d-1", "runtime"],
-    ]);
-    // Each runtime's slot goes to the turn waiting on that runtime.
+    expect(full.active.map((each) => each.id)).toEqual(["thread:a-1", "thread:c-1"]);
+    expect(full.waiting.map((each) => each.id)).toEqual(["thread:b-1", "thread:d-1"]);
+    // Codex's turn ends: Claude Code's waiting turn asked first, so it takes the slot.
     await finish(starts.find((each) => each.prompt === "cora"));
     await until(hub, startedCount(starts, 3), (ok) => ok);
     expect(starts.map((each) => [each.runtime, each.prompt])).toEqual([
       ["claude-code", "aldric"],
       ["codex", "cora"],
-      ["codex", "dain"],
+      ["claude-code", "bram"],
     ]);
     await finish(starts.find((each) => each.prompt === "aldric"));
     await until(hub, startedCount(starts, 4), (ok) => ok);
-    expect(starts.at(-1)).toMatchObject({ runtime: "claude-code", prompt: "bram" });
+    expect(starts.at(-1)).toMatchObject({ runtime: "codex", prompt: "dain" });
     for (const each of starts.slice(2)) await finish(each);
     await until(
       hub,
@@ -251,11 +233,8 @@ describe("turn limits in chat", () => {
     );
   });
 
-  it("keeps the limits and the waiting message across a restart, and starts it then (#1448)", async () => {
-    const { hub, starts, open } = await start([{ hob: "aldric", runtime: "claude-code", ids: ["a-1", "a-2"] }], {
-      ...DEFAULT_TURN_LIMITS,
-      perHob: 1,
-    });
+  it("keeps the waiting message across a restart, and starts it then (#1590)", async () => {
+    const { hub, starts, open } = await start([{ hob: "aldric", runtime: "claude-code", ids: ["a-1", "a-2"] }], 1);
     await send(hub, "a-1", "first");
     await until(hub, startedCount(starts, 1), (ok) => ok);
     await send(hub, "a-2", "second");
@@ -269,7 +248,7 @@ describe("turn limits in chat", () => {
     await until(again, startedCount(starts, 2), (ok) => ok);
     expect(starts.map((each) => each.prompt)).toEqual(["first", "second"]);
     const after = await report(again);
-    expect(after.limits).toEqual({ ...DEFAULT_TURN_LIMITS, perHob: 1 });
+    expect(after.cap).toBe(1);
     expect(after.active.map((each) => each.id)).toEqual(["thread:a-2"]);
     await finish(starts[1]);
     await until(
