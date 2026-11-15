@@ -259,21 +259,28 @@ const currentBranch = async (top: string): Promise<string | null> => {
 };
 
 /**
- * Every checkout of the repository whose top is `top` (#1578): its main worktree and each linked
- * one Git lists, by the real path of each top folder. A worktree whose folder is gone, or a bare
- * repository's own folder, is left out; `top` itself is always in it while it is a checkout.
+ * The Git folder every checkout of the repository at `top` shares (#1578): the main repository's
+ * own Git folder, by its real path, whether `top` is the main checkout or a linked worktree. Null
+ * when `top` is in no repository.
  */
-const worktreesOf = async (top: string): Promise<ReadonlyArray<string>> => {
+const gitFolderOf = async (top: string): Promise<string | null> => {
   const real = isAbsolute(top) ? await realpath(top).catch(() => null) : null;
   const repository = real === null ? null : await repositoryOf(real, new Map());
-  if (real === null || repository === null) return [];
-  const common = repository.common ?? repository.gitdir;
-  const found = new Set<string>([await realpath(repository.dir)]);
+  return repository === null ? null : realpath(repository.common ?? repository.gitdir).catch(() => null);
+};
+
+/**
+ * Every checkout of the repository whose shared Git folder is `gitFolder` (#1578): its main
+ * worktree and each linked one Git lists, by the real path of each top folder. A worktree whose
+ * folder is gone, and a bare repository's own folder, are left out, so a removed worktree costs the
+ * others nothing.
+ */
+const worktreesOf = async (gitFolder: string): Promise<ReadonlyArray<string>> => {
+  const common = isAbsolute(gitFolder) ? await realpath(gitFolder).catch(() => null) : null;
+  if (common === null) return [];
+  const found = new Set<string>();
   // The main worktree holds the shared Git folder as its `.git`.
-  if (basename(common) === ".git") {
-    const main = await realpath(dirname(common)).catch(() => null);
-    if (main !== null && (await gitdirIn(main)) !== null) found.add(main);
-  }
+  if (basename(common) === ".git" && (await gitdirIn(dirname(common))) === common) found.add(dirname(common));
   // Each linked worktree's own Git folder names, in `gitdir`, the `.git` file in its top folder.
   const linked = await readdir(join(common, "worktrees")).catch(() => []);
   for (const name of linked) {
@@ -298,6 +305,7 @@ export const GitWorkspaceLive = Layer.succeed(
     namesOnMain: (repository, directory) => Effect.promise(() => namesOnMain(repository, directory).catch(() => null)),
     placeOf: (path) => Effect.promise(() => placeOf(path).catch(() => null)),
     currentBranch: (top) => Effect.promise(() => currentBranch(top).catch(() => null)),
-    worktreesOf: (top) => Effect.promise(() => worktreesOf(top).catch(() => [])),
+    gitFolder: (top) => Effect.promise(() => gitFolderOf(top).catch(() => null)),
+    worktreesOf: (gitFolder) => Effect.promise(() => worktreesOf(gitFolder).catch(() => [])),
   }),
 );

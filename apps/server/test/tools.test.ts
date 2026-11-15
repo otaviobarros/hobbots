@@ -94,7 +94,7 @@ describe("a hob's tools", () => {
     execFileSync("git", ["init", "-q"], { cwd: project });
     mkdirSync(join(project, "docs"), { recursive: true });
     let reads = 0;
-    let taken: ReadonlyArray<{ key: string; checkout: string }> = [];
+    let taken: ReadonlyArray<{ key: string; gitFolder: string }> = [];
     const git = Layer.effect(
       GitWorkspace,
       Effect.map(Effect.service(GitWorkspace), (live) =>
@@ -124,7 +124,7 @@ describe("a hob's tools", () => {
       expect(reads).toBe(0);
 
       // `docs` taken: the full read closes it; a read of the folders alone asks nothing.
-      taken = [{ key: "docs", checkout: project }];
+      taken = [{ key: "docs", gitFolder: join(project, ".git") }];
       expect(yield* full()).toEqual([join(project, "docs")]);
       const plain = yield* folders();
       expect(plain?.taken).toBeUndefined();

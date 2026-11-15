@@ -200,11 +200,12 @@ export const makeTakenWrites = (separator: PathSeparator) =>
 
 /**
  * What a hob's turn may not write at all, because you took it over from a Task (#1537): each taken
- * path, by absolute path, as claimed and where its links land, in the checkout it was claimed in and
- * in every worktree Git lists for that checkout, where it lies in or around the turn's folders. The
+ * path, by absolute path, as claimed and where its links land, in every worktree of the repository it
+ * was claimed in, as Git lists them in the Git folder they share, where it lies in or around the
+ * turn's folders. The
  * turn's sandbox closes them, so a write the call-level check cannot see, from a script, a variable
  * or an interpreter, fails too. No folder is walked (#1578): a separate clone of the repository, and
- * a path claimed before checkouts were kept, are left to the call-level check, as a taken branch is,
+ * a path claimed before Git folders were kept, are left to the call-level check, as a taken branch is,
  * since Git keeps every branch of a repository in the same files. Every hob's turn gets them,
  * whatever Task it works on. Empty when nothing is taken, which is one query, or when the hub keeps
  * no claims register.
@@ -236,9 +237,9 @@ export const makeTakenPlaces = (separator: PathSeparator) =>
         const keysOf = makeKeysOf(git, separator);
         const checkouts = new Map<string, ReadonlyArray<string>>();
         const closed = new Set<string>();
-        for (const { key, checkout } of taken) {
-          const tops = checkouts.get(checkout) ?? (yield* git.worktreesOf(checkout));
-          checkouts.set(checkout, tops);
+        for (const { key, gitFolder } of taken) {
+          const tops = checkouts.get(gitFolder) ?? (yield* git.worktreesOf(gitFolder));
+          checkouts.set(gitFolder, tops);
           for (const top of tops) {
             for (const path of yield* closedBy(top, key, keysOf)) if (near(path)) closed.add(path);
           }

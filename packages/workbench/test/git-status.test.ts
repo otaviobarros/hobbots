@@ -132,22 +132,26 @@ describe("What the sandbox closes for what you took over (#1537, #1578)", () => 
     Effect.runPromise(Effect.flatMap(Effect.service(GitWorkspace), use).pipe(Effect.provide(GitWorkspaceLive)));
 
   // covers PE-005, #1578
-  it("[TC-PE-1578-03] lists every checkout of a repository: its main worktree and each linked one, from any of them", async () => {
+  it("[TC-PE-1578-03] lists every checkout of a repository from the Git folder they share, and keeps the rest when one is removed", async () => {
     const ledger = join(work, "checkouts", "ledger");
     const camp = join(work, "checkouts", "camp");
-    const gone = join(work, "checkouts", "gone");
+    const other = join(work, "checkouts", "other");
     mkdirSync(ledger, { recursive: true });
     gitIn(ledger, "init", "-q", "-b", "main");
     gitIn(ledger, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "first");
     gitIn(ledger, "worktree", "add", "-q", "-b", "camp", camp);
-    gitIn(ledger, "worktree", "add", "-q", "-b", "gone", gone);
-    // A worktree whose folder was removed is no checkout any more.
-    rmSync(gone, { recursive: true, force: true });
-    const both = [camp, ledger].sort();
-    expect(await read((git) => git.worktreesOf(ledger))).toEqual(both);
-    expect(await read((git) => git.worktreesOf(camp))).toEqual(both);
-    // A folder in no repository, or missing, has none.
-    expect(await read((git) => git.worktreesOf(join(work, "checkouts")))).toEqual([]);
+    gitIn(ledger, "worktree", "add", "-q", "-b", "other", other);
+    // Every checkout names the same shared Git folder, the main repository's own.
+    const shared = join(ledger, ".git");
+    expect(await read((git) => git.gitFolder(join(camp, "src")))).toBeNull();
+    expect(await read((git) => git.gitFolder(camp))).toBe(shared);
+    expect(await read((git) => git.gitFolder(ledger))).toBe(shared);
+    expect(await read((git) => git.worktreesOf(shared))).toEqual([camp, ledger, other].sort());
+    // A path claimed in `camp` stays closed in the others once `camp` is removed.
+    rmSync(camp, { recursive: true, force: true });
+    expect(await read((git) => git.worktreesOf(shared))).toEqual([ledger, other].sort());
+    // A folder in no repository, or a missing one, has no Git folder and no checkouts.
+    expect(await read((git) => git.gitFolder(join(work, "checkouts")))).toBeNull();
     expect(await read((git) => git.worktreesOf(join(work, "missing")))).toEqual([]);
   });
 });

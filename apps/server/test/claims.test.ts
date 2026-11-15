@@ -361,7 +361,7 @@ const hub = () => {
   /** What every hob turn's sandbox closes in `folders`, as the hub reads it when the turn starts (#1537). */
   const takenPlaces = (folders: ReadonlyArray<string>) =>
     run(Effect.flatMap(makeTakenPlaces(sep === "\\" ? "\\" : "/"), (places) => places(folders)));
-  /** The same, with how many times the hub asked Git for a checkout's worktrees to find them (#1578). */
+  /** The same, with how many times the hub asked Git for a repository's worktrees to find them (#1578). */
   const takenPlacesRead = (folders: ReadonlyArray<string>) => {
     let reads = 0;
     return run(
@@ -702,7 +702,7 @@ describe("the claims register", () => {
   });
 
   // covers OR-006, PE-006, #1578
-  it("[TC-OR-1578-02] walks no shared folder, however large: nothing is read while nothing is taken, and a takeover reads only its checkout's worktrees", async () => {
+  it("[TC-OR-1578-02] walks no shared folder, however large: nothing is read while nothing is taken, and a takeover reads only its repository's worktrees", async () => {
     const h = hub();
     // A large shared folder beside the repositories: thousands of folders a walk would read.
     const big = join(root, "big");
@@ -716,7 +716,7 @@ describe("the claims register", () => {
       // A Task holds a path, but nothing is yours: Git is not asked.
       expect(await h.takenPlacesRead([root, big])).toEqual({ places: [], reads: 0 });
 
-      // Taken: the checkout it was claimed in names its worktrees once, and `docs` is closed in each.
+      // Taken: the repository's Git folder names its worktrees once, and `docs` is closed in each.
       await h.takeOver(A);
       const taken = await h.takenPlacesRead([root, big]);
       expect(taken.places).toEqual(expect.arrayContaining([join(checkout, "docs"), join(worktree, "docs")]));

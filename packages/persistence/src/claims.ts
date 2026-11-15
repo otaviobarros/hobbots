@@ -106,9 +106,9 @@ export const ClaimRegisterLive = Layer.effect(
           );
           const clashes = found.map((each) => contested.find((moved) => moved.id === each.id) ?? each);
           const claimed = found.length === 0 ? made : movedClaim(made, { _tag: "Contest", at: request.at }, first);
-          // Only a path is closed in a checkout (#1578): a number or a branch keeps none.
-          const checkout = request.scope === "path" ? (request.checkout ?? null) : null;
-          yield* sql`INSERT INTO claims ${sql.insert({ ...claimToRow(claimed), checkout })}`;
+          // Only a path is closed in the repository's checkouts (#1578): a number or a branch keeps none.
+          const git_folder = request.scope === "path" ? (request.gitFolder ?? null) : null;
+          yield* sql`INSERT INTO claims ${sql.insert({ ...claimToRow(claimed), git_folder })}`;
           for (const each of contested) yield* saveClaim(sql, each);
           const value: ClaimOutcome = { _tag: "Made", claim: claimed, clashes, taken };
           return {
@@ -261,9 +261,9 @@ export const ClaimRegisterLive = Layer.effect(
         ),
       takenCheckouts: sqlOrDie(
         Effect.map(
-          sql<{ readonly claimKey: string; readonly checkout: string }>`SELECT claim_key, checkout FROM claims
-            WHERE state = 'taken' AND scope = 'path' AND checkout IS NOT NULL ORDER BY checkout, claim_key`,
-          (rows) => rows.map((row) => ({ key: row.claimKey, checkout: row.checkout })),
+          sql<{ readonly claimKey: string; readonly gitFolder: string }>`SELECT claim_key, git_folder FROM claims
+            WHERE state = 'taken' AND scope = 'path' AND git_folder IS NOT NULL ORDER BY git_folder, claim_key`,
+          (rows) => rows.map((row) => ({ key: row.claimKey, gitFolder: row.gitFolder })),
         ),
       ),
       clashesIn: (threadId) => sqlOrDie(clashesIn(threadId)),
