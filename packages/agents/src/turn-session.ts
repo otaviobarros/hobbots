@@ -1,4 +1,4 @@
-import type { AgentId, MessageId, RuntimeKind, RuntimeSession, TaskBriefMark } from "@hobbots/domain";
+import type { AgentId, MessageId, RuntimeKind, RuntimeSession, TaskBriefMark, WebReadMark } from "@hobbots/domain";
 import { isSessionOf, isTaskToolName, liveSession, PASS_TOOL, Thread } from "@hobbots/domain";
 import { DateTime, Effect, type Option } from "effect";
 import { deliveredRoster, rosterAtStart, sameRoster, type TurnRoster } from "./hob-directory.ts";
@@ -60,7 +60,9 @@ const sameSession = (known: RuntimeSession, next: RuntimeSession) =>
   known.seenThrough === next.seenThrough &&
   known.memoryBrief === next.memoryBrief &&
   sameRoster(known.roster, next.roster) &&
-  sameTools(known.taskTools, next.taskTools);
+  sameTools(known.taskTools, next.taskTools) &&
+  known.readWeb?.since === next.readWeb?.since &&
+  known.readWeb?.source === next.readWeb?.source;
 
 /** What the turn tells its session ahead of the prompt, once the turn has built it. */
 export interface TurnBriefs {
@@ -154,8 +156,9 @@ export const makeTurnSession = ({ thread, runtime, agentId, changeThread, toldOf
 
   // The session has now seen the thread through `seenThrough`, the turn's reply. It takes the place of
   // the hob's session on the runtime in an earlier chapter, which is never resumed again; other hobs'
-  // sessions stay as they are.
-  const record = (started: string, seenThrough: MessageId) =>
+  // sessions stay as they are. `readWeb` is the turn's read-the-web mark, as when a relayed reply
+  // marked it (ADR 039): written with the session, so no reader or restart ever finds it unmarked.
+  const record = (started: string, seenThrough: MessageId, readWeb: WebReadMark | null) =>
     Effect.gen(function* () {
       if (chapterId === null) return;
       const { memory, roster } = briefs;
@@ -176,6 +179,7 @@ export const makeTurnSession = ({ thread, runtime, agentId, changeThread, toldOf
           seenThrough,
           ...(memoryBrief === undefined ? {} : { memoryBrief }),
           ...carriedMarks(known, started),
+          ...(readWeb === null ? {} : { readWeb }),
           ...(rosterMark === undefined ? {} : { roster: rosterMark }),
           ...(taskTools === undefined ? {} : { taskTools }),
         };
