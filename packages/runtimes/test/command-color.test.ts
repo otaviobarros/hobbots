@@ -62,8 +62,7 @@ const withColor = (command: string, cwd: string) => {
 };
 
 describe("color in a hob's commands", () => {
-  // covers UX-006, ADR 014, ADR 023
-  it("[TC-RT-501] makes git diff and git status print color through a pipe, and keeps the hub's git settings", () => {
+  it("makes git diff and git status print color through a pipe, and keeps the hub's git settings", () => {
     const repo = join(root, "repo");
     mkdirSync(repo);
     withColor("git init -q && echo a > f && git add f && git -c user.email=h@b commit -qm one && echo b > f", repo);
@@ -77,7 +76,7 @@ describe("color in a hob's commands", () => {
   });
 
   // covers ADR 014, STD-SEC-002
-  it("[TC-RT-504] replaces a link or hard link a command planted at the script's path, never the file it reaches", async () => {
+  it("replaces a link or hard link a command planted at the script's path, never the file it reaches", async () => {
     const runtime = join(root, "planted-runtime");
     mkdirSync(runtime);
     const outside = join(root, "outside.txt");
@@ -120,8 +119,7 @@ describe("what a hob reads of a colored command", () => {
     expect(plainBashResponse("Read", { stdout: COLORED_DIFF })).toBeUndefined();
   });
 
-  // covers UX-006, ADR 023
-  it("[TC-RT-502] records a colored command's output on Claude Code and gives the hob the same output without escapes", async () => {
+  it("records a colored command's output on Claude Code and gives the hob the same output without escapes", async () => {
     const turn = toolTurn(access, "on");
     if (turn === null) throw new Error("expected a tool turn");
     const events: Array<RuntimeEvent> = [];
@@ -149,8 +147,7 @@ describe("what a hob reads of a colored command", () => {
     });
   });
 
-  // covers UX-006, ADR 023
-  it("[TC-RT-503] records a colored command's output on the fake runtime as it was printed", async () => {
+  it("records a colored command's output on the fake runtime as it was printed", async () => {
     const output = `${GREEN}✓${RESET} built in 1.2s\n`;
     const events = await makeFakeRuntime({ engine })
       .sendPrompt({

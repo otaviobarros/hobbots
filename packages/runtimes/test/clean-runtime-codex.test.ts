@@ -204,8 +204,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     }
   };
 
-  // covers RT-001, ADR 029
-  it("[TC-RT-510] a chat-only turn loads only the skills Hobbots mounted, from no home folder", {
+  it("a chat-only turn loads only the skills Hobbots mounted, from no home folder", {
     timeout: 60_000,
   }, async () => {
     const { exit, offered } = await turn({});
@@ -213,8 +212,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     expectClean(offered, Exit.isSuccess(exit) ? exit.value : []);
   });
 
-  // covers RT-001, PE-001, ADR 029
-  it("[TC-RT-511] a turn in a repository loads none of its skills, MCP servers or configuration", {
+  it("a turn in a repository loads none of its skills, MCP servers or configuration", {
     timeout: 60_000,
   }, async () => {
     const { exit, offered } = await turn({ tools: access });
@@ -224,8 +222,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     expect(readdirSync(join(access.runtimeFolder, "skill-mounts"))).toEqual([]);
   });
 
-  // covers EX-004, ADR 031
-  it("[TC-PE-472] records a hub tool call's step with the turn's recorder before the hub runs it", {
+  it("records a hub tool call's step with the turn's recorder before the hub runs it", {
     timeout: 60_000,
   }, async () => {
     for (const records of [true, false]) {
@@ -243,8 +240,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
   const toolNames = (asked: number) =>
     model.requests.slice(asked).map((request) => (request.tools ?? []).map((tool) => tool.name ?? tool.type));
 
-  // covers PE-008, ADR 031 (#1347, #1245)
-  it("[TC-PE-1347-04] a resumed session keeps the hub tools it started with, and a new one is offered the turn's", {
+  it("a resumed session keeps the hub tools it started with, and a new one is offered the turn's", {
     timeout: 120_000,
   }, async () => {
     const { hubTools } = stepRecordingContract();
@@ -272,8 +268,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     ]);
   });
 
-  // covers PE-001, ADR 014 (#1356)
-  it("[TC-PE-1356-02] a call to a tool the thread was not offered is reported as refused, new or resumed", {
+  it("a call to a tool the thread was not offered is reported as refused, new or resumed", {
     timeout: 120_000,
   }, async () => {
     const contract = stepRecordingContract();
@@ -312,7 +307,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
   });
 
   // covers ADR 039 (The context pack with several hobs), RT-001
-  it("[TC-RT-1464-02] two hobs' sessions in one workspace each resume their own history, never the other's", {
+  it("two hobs' sessions in one workspace each resume their own history, never the other's", {
     timeout: 180_000,
   }, async () => {
     const started = async (prompt: string) => {
@@ -339,7 +334,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
   });
 
   // covers ADR 036 (On every runtime)
-  it("[TC-PE-1267-17] records a web_fetch call's step before the hub reads the page", {
+  it("records a web_fetch call's step before the hub reads the page", {
     timeout: 60_000,
   }, async () => {
     const tool = WEB_FETCH_CONTRACT_TOOL.name;
@@ -354,8 +349,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     }
   });
 
-  // covers RT-001, ADR 029
-  it("[TC-RT-526] a skill you picked loads as Codex's skill item, even Only when asked, and counts as used", {
+  it("a skill you picked loads as Codex's skill item, even Only when asked, and counts as used", {
     timeout: 60_000,
   }, async () => {
     const { exit, offered } = await turn({ prompt: "Release it.", askedSkill: ASKED_SKILL });
@@ -367,8 +361,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     ]);
   });
 
-  // covers RT-001, ADR 029
-  it("[TC-RT-527] the model reading a mounted skill's SKILL.md counts as using it, and reading another file does not", {
+  it("the model reading a mounted skill's SKILL.md counts as using it, and reading another file does not", {
     timeout: 60_000,
   }, async () => {
     const skills = join(access.runtimeFolder, SKILL_MOUNTS, skillMountsHash(fixture.mounts), "skills");
@@ -388,8 +381,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
   const setSkillFolder = (name: string) =>
     join(access.runtimeFolder, SKILL_MOUNTS, skillMountsHash(fixture.mounts), "sets", TEAM_SET, "skills", name);
 
-  // covers RT-001, ADR 029
-  it("[TC-RT-1143-04] a skill of a set you picked loads from its set's folder and follows its links", {
+  it("a skill of a set you picked loads from its set's folder and follows its links", {
     timeout: 60_000,
   }, async () => {
     const base = setSkillFolder(SET_SKILL);
@@ -414,8 +406,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     ]);
   });
 
-  // covers RT-001, ADR 029
-  it("[TC-RT-1143-05] reading a set's skill's SKILL.md counts as using it, with its set", {
+  it("reading a set's skill's SKILL.md counts as using it, with its set", {
     timeout: 60_000,
   }, async () => {
     const { exit } = await turn({ tools: access }, [
@@ -437,8 +428,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
         (request.tools ?? []).filter((tool) => tool.type === "web_search" || tool.name === "web_search"),
       );
 
-  // covers RT-001, PE-001, ADR 036
-  it("[TC-RT-1266-09] a hob allowed to search is offered Codex's cached search only, on a new thread and a resumed one", {
+  it("a hob allowed to search is offered Codex's cached search only, on a new thread and a resumed one", {
     timeout: 120_000,
   }, async () => {
     const searching = { ...config, cachedSearch: Effect.succeed(true) };
@@ -456,8 +446,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     for (const tools of offered) expect(tools).toEqual([expect.objectContaining({ external_web_access: false })]);
   });
 
-  // covers RT-001, PE-001, ADR 036
-  it("[TC-RT-1266-10] a hob set to Never, or a turn the hub did not let search, is offered no search", {
+  it("a hob set to Never, or a turn the hub did not let search, is offered no search", {
     timeout: 120_000,
   }, async () => {
     const searching = { ...config, cachedSearch: Effect.succeed(true) };
@@ -479,8 +468,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     expect(searchTools(asked)).toEqual([[], [], [], []]);
   });
 
-  // covers RT-001, ADR 036 (On every runtime)
-  it("[TC-RT-1272-02] a hob searches with cached search, reads two pages from the results and answers with them as sources", {
+  it("a hob searches with cached search, reads two pages from the results and answers with them as sources", {
     timeout: 120_000,
   }, async () => {
     const contract = searchAndReadContract();
@@ -545,8 +533,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     expect(said).toContain(CONTRACT_ANSWER);
   });
 
-  // covers RT-001, ADR 029
-  it("[TC-RT-512] a turn without skills is offered none", { timeout: 60_000 }, async () => {
+  it("a turn without skills is offered none", { timeout: 60_000 }, async () => {
     const { exit, offered } = await turn({ skills: null });
     expect(Exit.isSuccess(exit), String(exit)).toBe(true);
     for (const marker of [...FOREIGN_MARKERS, `${LIBRARY_SKILL}-offered`, `${AGENTS_SKILL}-offered`]) {
@@ -554,8 +541,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
     }
   });
 
-  // covers RT-001, ADR 029
-  it("[TC-RT-513] a turn does not start when Codex would load a skill Hobbots did not turn off", {
+  it("a turn does not start when Codex would load a skill Hobbots did not turn off", {
     timeout: 60_000,
   }, async () => {
     // A skill that appears after Hobbots looked, as one written while the turn starts would.
@@ -598,7 +584,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
   });
 
   // covers ADR 039 (The context pack with several hobs), RT-001
-  it("[TC-RT-1465-02] the pack with several hobs reaches the model with the turn's prompt, never in its instructions", {
+  it("the pack with several hobs reaches the model with the turn's prompt, never in its instructions", {
     timeout: 60_000,
   }, async () => {
     const asked = model.requests.length;
@@ -615,7 +601,7 @@ describe.runIf(codex !== undefined)("a clean Codex runtime (ADR 029)", () => {
   });
 
   // covers ADR 032 (The roster, Every runtime)
-  it("[TC-RT-1235-02] the roster of other hobs reaches the model with the turn's prompt, never in its instructions", {
+  it("the roster of other hobs reaches the model with the turn's prompt, never in its instructions", {
     timeout: 60_000,
   }, async () => {
     const asked = model.requests.length;

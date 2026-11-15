@@ -3,7 +3,7 @@ import { campAt, emptyDataDir, expect, type Hub, removeDataDir, sidebarThread, s
 
 // The archive slice's done-when journey as the user sees it, with the fake runtime: archive from the
 // thread's menu, find it in the Archived list and in search, read it with no composer, restore it.
-// Archiving refused while a reply runs or an approval waits is `[TC-CH-152]` and `[TC-CH-156]`; the
+// Archiving refused while a reply runs or an approval waits is in archive-thread.e2e.ts; the
 // hub-level checks on SQLite and PostgreSQL are in apps/server/test/archive-end-to-end.test.ts.
 let hub: Hub | undefined;
 let dataDir = "";
@@ -60,8 +60,7 @@ const chat = async (page: Page, current: Hub, pipId: string, prompt: string) => 
   await expect(threadLink(page, prompt)).toBeVisible();
 };
 
-// covers CH-006, CH-009
-test("[TC-CH-157] a thread archived from its menu is found in the Archive and in search, opens read-only and comes back on Restore", async ({
+test("a thread archived from its menu is found in the Archive and in search, opens read-only and comes back on Restore", async ({
   page,
 }) => {
   hub = await startHub(dataDir);

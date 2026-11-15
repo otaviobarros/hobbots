@@ -127,7 +127,7 @@ describe("the steer receipt under a message of yours", () => {
     expect(hop?.approval?.id).toBe(approval.id);
   });
 
-  it("[TC-OR-1446-08] starts at the member a message of yours mentioned, sent, waiting for its turn or interrupting it", () => {
+  it("starts at the member a message of yours mentioned, sent, waiting for its turn or interrupting it", () => {
     const yours = { senderId: null, delivery: "steer" as const };
     const base = work();
     const busy = base.tasks.map((each) =>

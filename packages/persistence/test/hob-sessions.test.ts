@@ -96,7 +96,7 @@ describe("20261114005209_hob_sessions", () => {
     });
 
   // covers ADR 039 (The context pack with several hobs), DP-003
-  it("[TC-DP-1464-01] gives every stored and journaled session its thread's hob, which alone resumes it", async () => {
+  it("gives every stored and journaled session its thread's hob, which alone resumes it", async () => {
     const result = await Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();
       for (const id of [ADA, QUILL]) {

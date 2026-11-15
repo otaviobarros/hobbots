@@ -110,7 +110,7 @@ const update = (flags: SkillUpdate["flags"] = []) =>
 
 describe("updates from a source", () => {
   // covers ADR 029 (Updates from a source), #1097
-  it("[TC-UX-1097-01] opens Updates, and an update in it, from the address it writes", () => {
+  it("opens Updates, and an update in it, from the address it writes", () => {
     for (const view of [
       { _tag: "Updates", item: null },
       { _tag: "Updates", item: SkillId.make("release") },
@@ -119,14 +119,14 @@ describe("updates from a source", () => {
   });
 
   // covers ADR 029 (Updates from a source), #1097
-  it("[TC-UX-1097-02] follows only skills from Git, and names where each updates from", () => {
+  it("follows only skills from Git, and names where each updates from", () => {
     expect(library.skills.map((one) => fromGit(one, library))).toEqual([true, false, false]);
     expect(gitSkillCount(library)).toBe(1);
     expect(updatesFrom(SkillSourceId.make("git"), library)).toBe("github.com/acme/skills · main");
   });
 
   // covers ADR 029 (Updates from a source), #1097
-  it("[TC-UX-1097-03] tags a clean update Clean and a flagged one by its first flag, and notes a new script", () => {
+  it("tags a clean update Clean and a flagged one by its first flag, and notes a new script", () => {
     expect(tagOf(update())).toEqual({ tone: "set", text: copy.clean });
     const flagged = update([{ _tag: "Script", path: "scripts/check.sh" }]);
     expect(tagOf(flagged)).toEqual({ tone: "needs", text: copy.addsScript });
@@ -137,7 +137,7 @@ describe("updates from a source", () => {
   });
 
   // covers ADR 029 (Updates from a source), #1097
-  it("[TC-UX-1097-04] rolls out to every place that is not held, and says who gets it", () => {
+  it("rolls out to every place that is not held, and says who gets it", () => {
     const id = SkillId.make("release");
     expect(rolloutOf(id, library).map((one) => one.id)).toEqual(["a1", "a2"]);
     expect(whoGetsIt(id, library, hobs)).toBe("Everyone, Pip");

@@ -126,7 +126,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect(old.id).toBe(CheckpointId.make("c"));
   });
 
-  it("[TC-GEN-158] takes a question with no choices or 2 to 4, and a recommended one among them (#740)", () => {
+  it("takes a question with no choices or 2 to 4, and a recommended one among them (#740)", () => {
     const decode = Schema.decodeUnknownSync(TaskToolInputs.ask);
     const choice = (label: string) => ({ label, consequence: `${label} it is.` });
     expect(decode({ key: "k", question: "Which theme?" })).not.toHaveProperty("options");
@@ -155,7 +155,7 @@ describe("hob tools for Tasks and Quests", () => {
     expect(collidingLabel([{ label: "Light" }, { label: "Dark" }])).toBeUndefined();
   });
 
-  it("[TC-GEN-159] reads a question's choices and how it was answered, and an old question as one without (#740)", () => {
+  it("reads a question's choices and how it was answered, and an old question as one without (#740)", () => {
     const old = Schema.decodeUnknownSync(Question)({
       id: "q",
       taskId: "t",
@@ -240,7 +240,7 @@ describe("hob tools for Tasks and Quests", () => {
 describe("holdsEveryTaskTool", () => {
   const all = TASK_TOOLS.map((tool) => tool.name);
   // covers ADR 024, RT-001 (#1543)
-  it("[TC-RT-1543-03] holds only a session whose recorded tools include every Task tool, in any order", () => {
+  it("holds only a session whose recorded tools include every Task tool, in any order", () => {
     // Not known, as for every session recorded before #1543: not held, so the session is replaced.
     expect(holdsEveryTaskTool(undefined)).toBe(false);
     expect(holdsEveryTaskTool([])).toBe(false);
@@ -287,8 +287,7 @@ describe("the ids a Task tool takes", () => {
   };
   const ID_LISTS = new Set(["tasks", "depends_on", "criteria", "evidence", "expected_revision"]);
 
-  // covers OR-006 (#1555)
-  it("[TC-OR-1555-02] each have a place a lead reads them again from the records", () => {
+  it("each have a place a lead reads them again from the records", () => {
     const taken = Object.entries(TaskToolInputs).flatMap(([tool, schema]) =>
       Object.keys(schema.fields)
         .filter((field) => field.endsWith("_id") || ID_LISTS.has(field))

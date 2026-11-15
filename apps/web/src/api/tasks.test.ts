@@ -23,8 +23,7 @@ const slowRead = () => {
 };
 
 describe("Task reads kept live", () => {
-  // covers OR-007
-  it("[TC-OR-011] applies an event that arrived while a thread's read was on its way", async () => {
+  it("applies an event that arrived while a thread's read was on its way", async () => {
     const queryClient = new QueryClient();
     const answer = slowRead();
     const loading = queryClient.fetchQuery(threadTasksQuery(THREAD));
@@ -70,7 +69,7 @@ describe("Task reads kept live", () => {
   });
 
   // covers ADR 036 (The read-the-web mark), UX-006
-  it("[TC-UX-1268-02] shows an Attempt's read-the-web mark as it changes, keeping the state the tree knows", () => {
+  it("shows an Attempt's read-the-web mark as it changes, keeping the state the tree knows", () => {
     const queryClient = new QueryClient();
     const running = attempt(COPY, "running");
     queryClient.setQueryData<TaskTreeRead>(taskKeys.tree(CAMPAIGN), {

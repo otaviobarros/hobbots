@@ -19,8 +19,7 @@ const aldricsChat = (page: Page) =>
 const campNames = (rail: Locator) =>
   rail.getByRole("link").evaluateAll((links) => links.map((link) => link.getAttribute("aria-label")));
 
-// covers CH-001, CH-009
-test("[TC-CH-1378-02] makes a private camp with a goal, sends in it, and archives and restores it", async ({
+test("makes a private camp with a goal, sends in it, and archives and restores it", { tag: "@smoke" }, async ({
   page,
 }) => {
   const { url, aldric, hub } = await aldricHub();
@@ -86,10 +85,7 @@ test("[TC-CH-1378-02] makes a private camp with a goal, sends in it, and archive
   await expect(rail.getByRole("link", { name: "2027 taxes" })).toBeVisible();
 });
 
-// covers CH-009, IN-001
-test("[TC-CH-1378-03] starts the chat fresh from its menu, and the open question carries over to the new chat", async ({
-  page,
-}) => {
+test("starts the chat fresh from its menu, and the open question carries over to the new chat", async ({ page }) => {
   const { url, aldric, hub } = await aldricHub();
   const main = page.getByRole("main", { name: "Chat" });
   const header = main.locator("header").first();
@@ -137,8 +133,7 @@ test("[TC-CH-1378-03] starts the chat fresh from its menu, and the open question
   expect(oldChat).toContain(archived[0]?.id);
 });
 
-// covers CH-009
-test("[TC-CH-1378-04] a pinned camp stays above a camp with newer messages in the sidebar", async ({ page }) => {
+test("a pinned camp stays above a camp with newer messages in the sidebar", async ({ page }) => {
   const { url, aldric, hub } = await aldricHub();
   const rail = page.getByRole("list", { name: "Camps" });
   const kept = await campAt({ url, headers: hub.headers }, aldric, "Kitchen plans");
@@ -162,8 +157,7 @@ test("[TC-CH-1378-04] a pinned camp stays above a camp with newer messages in th
   await expect.poll(() => campNames(rail)).toEqual(["Kitchen plans", "Garden"]);
 });
 
-// covers CH-009
-test("[TC-CH-1378-05] a long Start fresh list scrolls inside the sheet, which keeps its title and buttons in the window", async ({
+test("a long Start fresh list scrolls inside the sheet, which keeps its title and buttons in the window", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1024, height: 600 });

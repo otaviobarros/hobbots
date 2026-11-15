@@ -330,8 +330,7 @@ const chain = (briefs: ReadonlyArray<string>) =>
   briefs.map((brief, index) => (index === 0 ? { brief } : { brief, after: [index] }));
 
 describe("a Task's steps in fresh sessions", () => {
-  // covers OR-001, OR-005, EX-001
-  it("[TC-OR-025] a Task split into four steps shows step 2 of 4 and finishes with one result", async () => {
+  it("a Task split into four steps shows step 2 of 4 and finishes with one result", async () => {
     const { run, control, stepsAsked } = setUp();
     const thread = await run(seed);
     const briefs = ["Outline the campaign", "Write the copy", "Pick the images", "Proofread everything"];
@@ -381,9 +380,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(finished.tasks.filter((task) => task.parentId === null)).toHaveLength(1);
   });
 
-  // covers OR-005, IN-005
-  // covers RT-001, ADR 029 (Delivery per runtime)
-  it("[TC-OR-647] a step's fresh session gets its hob's skills, as its chat does", async () => {
+  it("a step's fresh session gets its hob's skills, as its chat does", async () => {
     const library = makeSkillLibraryFake();
     const hash = SkillRevisionHash.make("a".repeat(64));
     const added = await Effect.runPromise(
@@ -447,7 +444,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(uses).toMatchObject([{ name: "release", pin: hash, number: 1, threadId: null, messageId: null }]);
   });
 
-  it("[TC-OR-026] the owner's session holds the steps' checkpoints and results, not their transcripts", async () => {
+  it("the owner's session holds the steps' checkpoints and results, not their transcripts", async () => {
     const { run, control } = setUp();
     const thread = await run(seed);
     const steps = [
@@ -480,8 +477,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(next.content).toContain("Copy drafted");
   });
 
-  // covers OR-004, OR-005
-  it("[TC-OR-060] a step works from the whole result and artifacts of the step it comes after, not a summary", async () => {
+  it("a step works from the whole result and artifacts of the step it comes after, not a summary", async () => {
     const { run, control, stepsAsked } = setUp();
     const thread = await run(seed);
     // Longer than a summary, as an outline or a draft is: only its end says it arrived whole.
@@ -515,8 +511,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(told).not.toContain("End of the draft.");
   });
 
-  // covers OR-004, OR-005
-  it("[TC-OR-061] a step is given at most 4,000 characters of each step it comes after, and 16,000 in all", async () => {
+  it("a step is given at most 4,000 characters of each step it comes after, and 16,000 in all", async () => {
     const { run, control, stepsAsked } = setUp({
       limits: { maxRunningStepsPerHob: 5, maxRunningStepsPerTree: 5, cancelTimeoutMs: 30_000 },
     });
@@ -544,8 +539,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(joined.length).toBeLessThan(17_000);
   });
 
-  // covers OR-004, OR-005
-  it("[TC-OR-027] steps without an order run in parallel, up to the hob's limit", async () => {
+  it("steps without an order run in parallel, up to the hob's limit", async () => {
     const { run, control } = setUp({
       limits: { maxRunningStepsPerHob: 2, maxRunningStepsPerTree: 3, cancelTimeoutMs: 30_000 },
     });
@@ -565,8 +559,7 @@ describe("a Task's steps in fresh sessions", () => {
     await run(treeWhen(thread.id, (tree) => states(tree).every((state) => state === "completed")));
   });
 
-  // covers OR-005
-  it("[TC-OR-1448-01] steps of two Quests take the one free slot in turn, not in the order they asked", async () => {
+  it("steps of two Quests take the one free slot in turn, not in the order they asked", async () => {
     const { run, control, stepsAsked } = setUp({
       turnLimits: { ...DEFAULT_TURN_LIMITS, perRuntime: { "claude-code": 1, codex: 1 } },
     });
@@ -622,8 +615,7 @@ describe("a Task's steps in fresh sessions", () => {
     await run(treeWhen(second.id, (tree) => states(tree).every((state) => state === "completed")));
   });
 
-  // covers OR-004
-  it("[TC-OR-028] the tree's limit holds steps back across its hob's limit", async () => {
+  it("the tree's limit holds steps back across its hob's limit", async () => {
     const { run } = setUp({ limits: { maxRunningStepsPerHob: 4, maxRunningStepsPerTree: 1, cancelTimeoutMs: 30_000 } });
     const thread = await run(seed);
     await run(send(thread.id, hub("plan_steps", { key: "plan", steps: [{ brief: "One" }, { brief: "Two" }] })));
@@ -631,8 +623,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(states(one)).toEqual(["active", "queued"]);
   });
 
-  // covers OR-005, CH-001
-  it("[TC-OR-029] the owner keeps answering while its steps run", async () => {
+  it("the owner keeps answering while its steps run", async () => {
     const { run, control } = setUp();
     const thread = await run(seed);
     await run(send(thread.id, hub("plan_steps", { key: "plan", steps: [{ brief: "Long research" }] })));
@@ -647,8 +638,7 @@ describe("a Task's steps in fresh sessions", () => {
     await run(treeWhen(thread.id, (tree) => states(tree)[0] === "completed"));
   });
 
-  // covers EX-001, OR-005
-  it("[TC-OR-030] a step whose session fails fails with the reason, and the steps after it wait", async () => {
+  it("a step whose session fails fails with the reason, and the steps after it wait", async () => {
     const { run, control } = setUp();
     const thread = await run(seed);
     const steps = [{ brief: "fake:cut-off the outline" }, { brief: "Write from the outline", after: [1] }];
@@ -664,8 +654,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(control.requests.at(-1)?.briefing).toContain("failed");
   });
 
-  // covers OR-003, EX-001
-  it("[TC-OR-031] cancelling a running step stops its session and confirms the cancel", async () => {
+  it("cancelling a running step stops its session and confirms the cancel", async () => {
     const { run } = setUp();
     const thread = await run(seed);
     await run(send(thread.id, hub("plan_steps", { key: "plan", steps: [{ brief: "Slow work" }] })));
@@ -680,8 +669,7 @@ describe("a Task's steps in fresh sessions", () => {
     });
   });
 
-  // covers OR-001
-  it("[TC-OR-032] a chat turn's report outside any Task is refused, and starts no Task", async () => {
+  it("a chat turn's report outside any Task is refused, and starts no Task", async () => {
     const { run } = setUp();
     const thread = await run(seed);
     const answer = await run(
@@ -691,8 +679,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(await run(TaskRepository.use((tasks) => tasks.readThreadTrees(thread.id)))).toEqual([]);
   });
 
-  // covers EX-004, EX-005
-  it("[TC-OR-033] after a restart, a step that was running fails and no Attempt stays live", async () => {
+  it("after a restart, a step that was running fails and no Attempt stays live", async () => {
     const TOP = TaskId.make("top");
     const STEP = TaskId.make("step");
     const leftRunning = Layer.effectDiscard(
@@ -728,8 +715,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(tree.tasks.map((task) => task.state)).toEqual(["active", "failed"]);
   });
 
-  // covers OR-003
-  it("[TC-OR-035] a Task whose cancel was asked for is confirmed once its last step stops", async () => {
+  it("a Task whose cancel was asked for is confirmed once its last step stops", async () => {
     const { run } = setUp();
     const thread = await run(seed);
     await run(send(thread.id, hub("plan_steps", { key: "plan", steps: [{ brief: "Slow work" }] })));
@@ -754,8 +740,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(ended.tasks.map((task) => task.state)).toEqual(["cancelled", "cancelled"]);
   });
 
-  // covers OR-001, EX-005
-  it("[TC-OR-036] a key from an earlier request is a new call in a later one, never replayed or refused (#660)", async () => {
+  it("a key from an earlier request is a new call in a later one, never replayed or refused (#660)", async () => {
     const { run, control } = setUp();
     const thread = await run(seed);
     const plan = hub("plan_steps", { key: "plan", steps: [{ brief: "Draft" }] });
@@ -770,8 +755,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(trees.flatMap((tree) => tree.refusals)).toEqual([]);
   });
 
-  // covers PE-008
-  it("[TC-OR-037] narrowing its hob's folders stops a running step and fails it with the reason", async () => {
+  it("narrowing its hob's folders stops a running step and fails it with the reason", async () => {
     folders = ["/work/site", "/work/brand"];
     const { run } = setUp();
     const thread = await run(seed);
@@ -787,8 +771,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(attempt?.outcome).toBe("Stopped because its hob's permissions were narrowed.");
   });
 
-  // covers PE-008
-  it("[TC-OR-038] narrowing its hob's folders while a step starts stops that step before it works", async () => {
+  it("narrowing its hob's folders while a step starts stops that step before it works", async () => {
     folders = ["/work/site", "/work/brand"];
     // Fibers yield every few operations, so the waiting review runs as soon as the start lets go of
     // the authority lock. Before the fix it then found the step with no session to stop.
@@ -815,7 +798,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(attempt?.state).toBe("interrupted");
     expect(attempt?.outcome).toBe("Stopped because its hob's permissions were narrowed.");
   }, 30_000);
-  it("[TC-OR-039] a hob at its open-Task limit cannot start another request's Task from a chat turn", async () => {
+  it("a hob at its open-Task limit cannot start another request's Task from a chat turn", async () => {
     const { run } = setUp({ taskLimits: { ...DEFAULT_TASK_TOOL_LIMITS, maxOpenTasksPerHob: 1 } });
     const first = await run(seed);
     const started = await run(
@@ -830,8 +813,7 @@ describe("a Task's steps in fresh sessions", () => {
     // The refused call leaves no Task behind in the second conversation.
     expect(await run(TaskRepository.use((tasks) => tasks.readThreadTrees(second.id)))).toEqual([]);
   });
-  // covers IN-006, CH-005
-  it("[TC-OR-051] a request whose hob asked you a question completes once the next turn is briefed with your answer", async () => {
+  it("a request whose hob asked you a question completes once the next turn is briefed with your answer", async () => {
     const { run, control } = setUp();
     const thread = await run(seed);
     const steps = [{ brief: `Outline\n${hub("complete_task", { delivered: true, key: "o", summary: "Outlined" })}` }];
@@ -860,8 +842,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(Option.getOrThrow(ledger).open).toEqual([]);
   });
 
-  // covers IN-006, OR-005
-  it("[TC-OR-052] a step that was handed an artifact completes from the prompt that showed it, and so does its Task", async () => {
+  it("a step that was handed an artifact completes from the prompt that showed it, and so does its Task", async () => {
     const { run, control } = setUp();
     const thread = await run(seed);
     const steps = [
@@ -890,8 +871,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(finished.tasks[0]?.result?.summary).toBe("The post is out");
   });
 
-  // covers IN-006
-  it("[TC-OR-054] a result that lands after the turn's briefing was read is not settled by that turn", async () => {
+  it("a result that lands after the turn's briefing was read is not settled by that turn", async () => {
     const { run, control } = setUp();
     const thread = await run(seed);
     const steps = [{ brief: `Outline\n${hub("complete_task", { delivered: true, key: "o", summary: "Outlined" })}` }];
@@ -934,8 +914,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(finished.tasks[0]?.result?.summary).toBe("Launched");
   });
 
-  // covers IN-006, OR-005
-  it("[TC-OR-055] a hand-off made after a step's tree was read reaches its prompt before the step settles it", async () => {
+  it("a hand-off made after a step's tree was read reaches its prompt before the step settles it", async () => {
     const { run, control } = setUp();
     const thread = await run(seed);
     const steps = [
@@ -966,8 +945,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(prompt).toMatch(/Handed to this step:\n {2}- Doc \(text, artifact [0-9a-f-]+\): The draft/);
   });
 
-  // covers IN-006, OR-003
-  it("[TC-OR-056] the owner's briefing shows the steps of its steps, so a cancelled nested step does not keep its request open", async () => {
+  it("the owner's briefing shows the steps of its steps, so a cancelled nested step does not keep its request open", async () => {
     const { run, control } = setUp();
     const thread = await run(seed);
     await run(send(thread.id, `Research\n${hub("plan_steps", { key: "plan", steps: [{ brief: "Survey" }] })}`));
@@ -986,8 +964,7 @@ describe("a Task's steps in fresh sessions", () => {
     expect(finished.tasks[0]?.result?.summary).toBe("Dropped the research");
   });
 
-  // covers IN-006, EX-006
-  it("[TC-OR-053] a step that ends without reaching a milestone it promised fails with a blocker that says so", async () => {
+  it("a step that ends without reaching a milestone it promised fails with a blocker that says so", async () => {
     const { run, control } = setUp();
     const thread = await run(seed);
     const steps = [{ brief: "Research the market", milestones: ["Sources listed"] }];

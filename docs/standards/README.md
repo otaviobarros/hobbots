@@ -56,7 +56,6 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 - a title differs between the index and the rule,
 - a retired ID comes back,
 - a rule sits in the wrong area file,
-- an ADR does not end with a Validation section that lists scenarios (STD-DOCS-009),
 - an evidence record misses a field or the status page does not link it (STD-DOCS-010).
 
 ## Index
@@ -161,7 +160,7 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-DESKTOP-008 | The main process never blocks | Active |
 | STD-DESKTOP-009 | Electron stays on a supported release | Active |
 | STD-DESKTOP-010 | A window never flashes blank or fails silently | Active |
-| STD-TEST-001 | Integration and end-to-end tests carry a case ID | Active |
+| STD-TEST-001 | Integration and end-to-end tests carry a case ID | Retired |
 | STD-TEST-002 | Fakes first, then the real runtime | Active |
 | STD-TEST-003 | Pure logic has unit tests | Active |
 | STD-TEST-004 | Each user flow has an end-to-end test | Active |
@@ -171,6 +170,7 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-TEST-008 | Each main flow works by keyboard alone | Active |
 | STD-TEST-009 | Tests wait on state, and a flaky test is a bug | Active |
 | STD-TEST-010 | The window never scrolls | Active |
+| STD-TEST-011 | A regression test names its issue, and tags group browser tests | Active |
 | STD-DOCS-001 | Decided choices change only through an ADR | Active |
 | STD-DOCS-002 | Read the contract before changing its area | Active |
 | STD-DOCS-003 | Public text links only public sources | Active |
@@ -179,6 +179,6 @@ Add a ✅/❌ example only when the rule is not obvious. Every rule with an ID i
 | STD-DOCS-006 | Dependencies take the latest stable release, pinned exactly | Active |
 | STD-DOCS-007 | Docs use short, plain sentences | Active |
 | STD-DOCS-008 | Work stays inside the requested scope | Active |
-| STD-DOCS-009 | An ADR ends with the scenarios that validate it | Active |
+| STD-DOCS-009 | An ADR ends with the scenarios that validate it | Retired |
 | STD-DOCS-010 | A proof leaves a dated evidence record | Active |
 | STD-DOCS-011 | UI words and code names follow the glossary | Active |

@@ -21,7 +21,7 @@ const attempt = (number: number, sessionId: string | null, readWeb: WebReadMark 
 
 describe("the read-the-web mark a resumed session holds", () => {
   // covers ADR 036 (The read-the-web mark)
-  it("[TC-PE-1268-09] names what the session's latest Attempt read, since its first read the web, and ignores other sessions", () => {
+  it("names what the session's latest Attempt read, since its first read the web, and ignores other sessions", () => {
     const pageA = { since: "2026-11-09T10:01:30.000Z", source: "https://a.test/page" };
     const pageB = { since: "2026-11-09T10:03:30.000Z", source: "https://b.test/page" };
     const elsewhere = { since: "2026-11-09T09:00:00.000Z", source: "https://c.test/page" };

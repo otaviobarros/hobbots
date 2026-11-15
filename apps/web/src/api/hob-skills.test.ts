@@ -26,7 +26,7 @@ const watched = () => {
 };
 
 describe("hobSkillsChanged (ADR 029)", () => {
-  it("[TC-UI-1096-08] drops a first read taken before a skill was assigned, so the new skill shows", async () => {
+  it("drops a first read taken before a skill was assigned, so the new skill shows", async () => {
     const skills = watched();
     expect(skills.reads()).toBe(1);
     const changed = hobSkillsChanged(skills.client);
@@ -40,7 +40,7 @@ describe("hobSkillsChanged (ADR 029)", () => {
     skills.unsubscribe();
   });
 
-  it("[TC-UI-1096-09] reads a loaded hob's skills again, while they are fresh, so one taken off goes", async () => {
+  it("reads a loaded hob's skills again, while they are fresh, so one taken off goes", async () => {
     const skills = watched();
     skills.answer(0, view("release", "review"));
     await skills.settled();

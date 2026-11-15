@@ -62,7 +62,7 @@ const pausedRelays = () => {
 };
 
 // covers ADR 039 (Hobs talking to hobs)
-test("[TC-CH-1463-05] two hobs that mention each other pause after 3 turns, and Let them go on gives them 3 more, in the four themes", async ({
+test("two hobs that mention each other pause after 3 turns, and Let them go on gives them 3 more, in the four themes", async ({
   page,
 }) => {
   // Each relayed turn echoes a briefing that grows, so the fourteen turns take a few minutes.

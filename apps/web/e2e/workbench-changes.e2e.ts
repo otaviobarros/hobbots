@@ -39,8 +39,7 @@ const openChanges = async (page: Page, title: string) => {
   return { bench, panel: bench.getByRole("tabpanel", { name: /^Changes/ }) };
 };
 
-// covers UX-002, UX-006
-test("[TC-UX-035] a finished Task's Changes show a document rendered with its changed parts marked, code as a diff, and each file marked added, edited or deleted", async ({
+test("a finished Task's Changes show a document rendered with its changed parts marked, code as a diff, and each file marked added, edited or deleted", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub({
@@ -138,8 +137,7 @@ test("[TC-UX-035] a finished Task's Changes show a document rendered with its ch
   ).toHaveCount(0);
 });
 
-// covers UX-002, UX-006
-test("[TC-UX-036] Changes are Live while the turn runs, showing each file as the hob changes it, and read as History once it ends", async ({
+test("Changes are Live while the turn runs, showing each file as the hob changes it, and read as History once it ends", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub({ "notes.md": "# Notes\n" });
@@ -170,8 +168,7 @@ test("[TC-UX-036] Changes are Live while the turn runs, showing each file as the
   await expect(notes).not.toContainText("So far");
 });
 
-// covers UX-002, UX-006
-test("[TC-UX-037] an image the Task deleted shows its earlier version, and one past the size limit says why it was not kept", async ({
+test("an image the Task deleted shows its earlier version, and one past the size limit says why it was not kept", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub({
@@ -200,8 +197,7 @@ test("[TC-UX-037] an image the Task deleted shows its earlier version, and one p
   await expect(poster.getByRole("img")).toHaveCount(0);
 });
 
-// covers UX-002, UX-006
-test("[TC-UX-038] past the retention window a Task's Changes keep their list and read Unavailable, with why, in place of each file's contents", async ({
+test("past the retention window a Task's Changes keep their list and read Unavailable, with why, in place of each file's contents", async ({
   page,
 }) => {
   const started = await aldricHub({ "notes.md": "# Notes\n" });
@@ -237,8 +233,7 @@ test("[TC-UX-038] past the retention window a Task's Changes keep their list and
   }
 });
 
-// covers UX-002, UX-006
-test("[TC-UX-148] in the room at 1024, with the chat column beside it, Changes and Files swap their lists for a picker", async ({
+test("in the room at 1024, with the chat column beside it, Changes and Files swap their lists for a picker", async ({
   page,
 }) => {
   // At 1024 the chat column beside the room leaves the docked Workbench under 720px.

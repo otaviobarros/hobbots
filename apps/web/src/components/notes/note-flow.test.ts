@@ -9,7 +9,7 @@ const K2 = MessageId.make("note-2");
 const run = (events: ReadonlyArray<NoteEvent>, from: NoteFlow = NOTE_OFF) => events.reduce(noteStep, from);
 
 describe("a note to self", () => {
-  it("[TC-CH-1387-25] saves a note only while Note to self is on, trimmed, and turns back to messages once saved", () => {
+  it("saves a note only while Note to self is on, trimmed, and turns back to messages once saved", () => {
     expect(run([{ _tag: "Send", key: K1, content: "Hi" }])).toEqual(NOTE_OFF);
     const on = run([{ _tag: "Toggle" }]);
     expect(writesNote(on)).toBe(true);
@@ -23,7 +23,7 @@ describe("a note to self", () => {
     expect(noteFits("x".repeat(NOTE_TEXT_MAX + 1))).toBe(false);
   });
 
-  it("[TC-CH-1387-26] keeps a failed note's key when the same note is sent again, and a new key for another", () => {
+  it("keeps a failed note's key when the same note is sent again, and a new key for another", () => {
     const failed = run([{ _tag: "Toggle" }, { _tag: "Send", key: K1, content: "Ask Ana." }, { _tag: "Failed" }]);
     expect(failed).toMatchObject({ step: "failed", key: K1 });
     expect(writesNote(failed)).toBe(true);

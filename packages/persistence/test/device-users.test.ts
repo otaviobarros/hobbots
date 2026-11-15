@@ -45,7 +45,7 @@ const oldDevice = (id: string, revokedAt: string | null) =>
 
 describe("devices and users", () => {
   // covers ADR 039 (Users as actors)
-  it("[TC-PE-1452-01] gives every device a hub had, the window and a revoked one too, to the owner", async () => {
+  it("gives every device a hub had, the window and a revoked one too, to the owner", async () => {
     const devices = await run(
       Effect.gen(function* () {
         yield* oldDevice(WINDOW_DEVICE_ID, null);
@@ -64,7 +64,7 @@ describe("devices and users", () => {
   });
 
   // covers ADR 039 (Users as actors), ADR 013 (The envelope)
-  it("[TC-PE-1452-05] keeps a revocation journaled before the upgrade readable, with its device the owner's", async () => {
+  it("keeps a revocation journaled before the upgrade readable, with its device the owner's", async () => {
     const entries = await run(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
@@ -102,7 +102,7 @@ describe("devices and users", () => {
   });
 
   // covers ADR 039 (Users as actors)
-  it("[TC-PE-1452-02] keeps a new device's user, and refuses a device with none or with an unknown one", async () => {
+  it("keeps a new device's user, and refuses a device with none or with an unknown one", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* DeviceRepository;
@@ -133,7 +133,7 @@ describe("devices and users", () => {
   });
 
   // covers ADR 039 (Users as actors), STD-ARCH-019
-  it("[TC-PE-1452-03] stores a person's message only when it names its author, and never assumes the owner", async () => {
+  it("stores a person's message only when it names its author, and never assumes the owner", async () => {
     const exit = await run(
       Effect.exit(
         Effect.gen(function* () {

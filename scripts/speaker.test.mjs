@@ -6,7 +6,7 @@ import { checkFile, isChecked } from "./speaker.mjs";
 const gen = (body) => `function* run() {\n  ${body}\n}`;
 
 // covers #1549 (STD-ARCH-021)
-test("[TC-GEN-1549-01] a thread's agentId read as the hob of a turn fails", () => {
+test("a thread's agentId read as the hob of a turn fails", () => {
   const problems = checkFile("a.ts", "const hob = thread.agentId;");
   assert.equal(problems.length, 1);
   assert.match(problems[0], /^a\.ts:1: reads a thread's `agentId`.*\(STD-ARCH-021\)$/);

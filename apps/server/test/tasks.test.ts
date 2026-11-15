@@ -197,8 +197,7 @@ const quest = Effect.gen(function* () {
 });
 
 describe("Task and Quest reads", () => {
-  // covers OR-002, OR-007
-  it("[TC-OR-006] reads a Task tree and a Quest with a cursor the event stream resumes from without missing a change", async () => {
+  it("reads a Task tree and a Quest with a cursor the event stream resumes from without missing a change", async () => {
     const copy = await runtime.runPromise(quest);
 
     const treeResponse = await get("/api/tasks/campaign");
@@ -237,7 +236,7 @@ describe("Task and Quest reads", () => {
   });
 
   // covers ADR 037 (Quests in camps), OR-007
-  it("[TC-OR-1373-04] serves each Quest's summary as the sync snapshot, with a cursor the stream resumes from with its next change", async () => {
+  it("serves each Quest's summary as the sync snapshot, with a cursor the stream resumes from with its next change", async () => {
     const copy = await runtime.runPromise(quest);
 
     const response = await get(`/api/quest-summaries?threadId=${threadId}`);
@@ -292,8 +291,7 @@ describe("Task and Quest reads", () => {
     expect(after.summaries).toEqual(changed?.payload._tag === "QuestSummaryChanged" ? [changed.payload.summary] : []);
   });
 
-  // covers OR-001, OR-007
-  it("[TC-OR-010] reads the Tasks a thread's requests started, each with its tree, oldest first", async () => {
+  it("reads the Tasks a thread's requests started, each with its tree, oldest first", async () => {
     await runtime.runPromise(
       Effect.gen(function* () {
         yield* quest;
@@ -327,8 +325,7 @@ describe("Task and Quest reads", () => {
     });
   });
 
-  // covers OR-004, PE-006
-  it("[TC-OR-012] records your answer to a question that reached you, once, from the app only", async () => {
+  it("records your answer to a question that reached you, once, from the app only", async () => {
     await runtime.runPromise(
       Effect.gen(function* () {
         yield* quest;
@@ -366,8 +363,7 @@ describe("Task and Quest reads", () => {
     expect(events.filter((entry) => entry.type === "QuestionAnswered")).toHaveLength(1);
   });
 
-  // covers OR-004, PE-006
-  it("[TC-OR-485] records the device and the place you answered from, and a second answer keeps the first's", async () => {
+  it("records the device and the place you answered from, and a second answer keeps the first's", async () => {
     const asked = ["q-chat", "q-inbox", "q-task", "q-unsaid"];
     await runtime.runPromise(
       Effect.gen(function* () {
@@ -411,8 +407,7 @@ describe("Task and Quest reads", () => {
     ]);
   });
 
-  // covers OR-004, IN-002
-  it("[TC-OR-134] lists the questions no lead could answer, with their Task, until you answer them", async () => {
+  it("lists the questions no lead could answer, with their Task, until you answer them", async () => {
     await runtime.runPromise(
       Effect.gen(function* () {
         yield* quest;
@@ -447,8 +442,7 @@ describe("Task and Quest reads", () => {
     expect((await get("/api/questions")).body).toMatchObject({ questions: [] });
   });
 
-  // covers OR-004, PE-006
-  it("[TC-PE-220] leaves your note on a member's Task for its lead, once per key, from an approved device only", async () => {
+  it("leaves your note on a member's Task for its lead, once per key, from an approved device only", async () => {
     await runtime.runPromise(quest);
     const note = { key: "n-1", text: "Keep it short" };
 
@@ -485,13 +479,11 @@ describe("Task and Quest reads", () => {
     ]);
   });
 
-  // covers OR-007
-  it("[TC-OR-007] answers 404 for a Task or Quest that is not there", async () => {
+  it("answers 404 for a Task or Quest that is not there", async () => {
     expect(await get("/api/tasks/nope")).toEqual({ status: 404, body: { _tag: "TaskNotFound", taskId: "nope" } });
     expect(await get("/api/quests/nope")).toEqual({ status: 404, body: { _tag: "QuestNotFound", questId: "nope" } });
   });
-  // covers OR-001, UX-001, CH-005
-  it("[TC-OR-022] reads a hob's work on other hobs' Quests, and answers 404 for a hob that is not there", async () => {
+  it("reads a hob's work on other hobs' Quests, and answers 404 for a hob that is not there", async () => {
     await runtime.runPromise(quest);
 
     const response = await get("/api/agents/quill/quest-work");
@@ -516,8 +508,7 @@ describe("Task and Quest reads", () => {
 });
 
 describe("a hob's History", () => {
-  // covers OR-001, UX-001
-  it("[TC-OR-494] reads a page of a hob's days in your time zone with a cursor, and refuses a zone it does not know", async () => {
+  it("reads a page of a hob's days in your time zone with a cursor, and refuses a zone it does not know", async () => {
     await runtime.runPromise(quest);
     const read = async (path: string) => {
       const response = await get(path);
@@ -551,8 +542,7 @@ describe("a hob's History", () => {
 });
 
 describe("Backpack reads", () => {
-  // covers IN-001
-  it("[TC-IN-026] reads a hob's, a Quest's and the workspace's open backpack items with a cursor, and answers 404 for what is not there", async () => {
+  it("reads a hob's, a Quest's and the workspace's open backpack items with a cursor, and answers 404 for what is not there", async () => {
     const copy = await runtime.runPromise(quest);
     const read = async (path: string) => {
       const response = await get(path);

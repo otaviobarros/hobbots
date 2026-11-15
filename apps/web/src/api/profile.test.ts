@@ -176,8 +176,7 @@ describe("hob profile", () => {
     expect(retiredSummary("Pip", "finish-first", false)).toMatch(/^Pip finishes its open Tasks, then retires/);
   });
 
-  // covers AG-006
-  it("[TC-AG-1247] offers handing over or finishing first only for a hob with open Tasks, and sends the choice made", () => {
+  it("offers handing over or finishing first only for a hob with open Tasks, and sends the choice made", () => {
     expect(retireChoices(0, false)).toEqual(["finish", "stop"]);
     expect(retireChoices(2, false)).toEqual(["finish-first", "hand-over", "stop"]);
     // A hob already finishing first can still be handed over or stopped.

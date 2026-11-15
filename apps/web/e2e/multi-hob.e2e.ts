@@ -64,8 +64,7 @@ const send = async (page: Page, name: string, content: string) => {
 
 const threadOf = (page: Page) => page.url().match(/threads\/([^/?#]+)/)?.[1] ?? "";
 
-// covers AG-001, AG-002, AG-006
-test("[TC-AG-098] three hobs with different models chat at once in the app, an edit mid-reply reaches only the next reply, and a retired hob stays readable", async ({
+test("three hobs with different models chat at once in the app, an edit mid-reply reaches only the next reply, and a retired hob stays readable", async ({
   context,
 }) => {
   test.setTimeout(90_000);

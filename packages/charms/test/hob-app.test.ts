@@ -236,7 +236,7 @@ const run = <A, E>(w: World, effect: Effect.Effect<A, E, HobGitHubAppService | H
 
 describe("A hob's own GitHub App", () => {
   // covers ADR 022
-  it("[TC-GEN-051] is made from a manifest with the hob's name and the Charm's permissions, and keeps only its key", async () => {
+  it("is made from a manifest with the hob's name and the Charm's permissions, and keeps only its key", async () => {
     const w = world();
     const result = await run(
       w,
@@ -287,7 +287,7 @@ describe("A hob's own GitHub App", () => {
   });
 
   // covers ADR 022
-  it("[TC-PE-250] answers a state only once, for an hour, and only for the hob and device it was made for", async () => {
+  it("answers a state only once, for an hour, and only for the hob and device it was made for", async () => {
     const w = world();
     const outcome = await run(
       w,
@@ -318,7 +318,7 @@ describe("A hob's own GitHub App", () => {
   });
 
   // covers ADR 022
-  it("[TC-PE-251] keeps no app for a removed device or a retired hob, and links to delete the one GitHub made", async () => {
+  it("keeps no app for a removed device or a retired hob, and links to delete the one GitHub made", async () => {
     const w = world();
     const outcome = await run(
       w,
@@ -345,7 +345,7 @@ describe("A hob's own GitHub App", () => {
   });
 
   // covers ADR 022
-  it("[TC-PE-252] refuses to make an app without a keychain, and links to delete one whose key it could not keep", async () => {
+  it("refuses to make an app without a keychain, and links to delete one whose key it could not keep", async () => {
     const w = world();
     const noKeychain = new KeychainError({ reason: "unavailable", message: "No keychain here." });
     const none = Layer.succeed(
@@ -388,7 +388,7 @@ describe("A hob's own GitHub App", () => {
   });
 
   // covers ADR 022
-  it("[TC-GEN-052] lists the app's installations, and disconnecting or retiring removes them, then the key", async () => {
+  it("lists the app's installations, and disconnecting or retiring removes them, then the key", async () => {
     const w = world();
     const outcome = await run(
       w,
@@ -443,7 +443,7 @@ describe("A hob's own GitHub App", () => {
   });
 
   // covers ADR 022, #227
-  it("[TC-GEN-084] names the repositories each installation reaches, with one metadata-only token an hour", async () => {
+  it("names the repositories each installation reaches, with one metadata-only token an hour", async () => {
     const w = world();
     github.createRepository({ owner: "otaviobarros", name: "frodo-docs" });
     github.createRepository({ owner: "otaviobarros", name: "frodo-site" });
@@ -473,7 +473,7 @@ describe("A hob's own GitHub App", () => {
   });
 
   // covers ADR 022, #227
-  it("[TC-GEN-085] still removes every installation on disconnect when GitHub will not name their repositories", async () => {
+  it("still removes every installation on disconnect when GitHub will not name their repositories", async () => {
     const w = world();
     const outcome = await run(
       w,
@@ -507,7 +507,7 @@ describe("A hob's own GitHub App", () => {
   });
 
   // covers ADR 022
-  it("[TC-PE-253] shows what it could not remove when GitHub refuses the key, and still deletes the key", async () => {
+  it("shows what it could not remove when GitHub refuses the key, and still deletes the key", async () => {
     const w = world();
     const outcome = await run(
       w,
@@ -555,7 +555,7 @@ describe("A hob's own GitHub App", () => {
   });
 
   // covers ADR 022
-  it("[TC-PE-256] keeps what retiring a hob could not remove from its app, even when retired again, with where to delete it", async () => {
+  it("keeps what retiring a hob could not remove from its app, even when retired again, with where to delete it", async () => {
     const w = world();
     const outcome = await run(
       w,
@@ -592,7 +592,7 @@ describe("A hob's own GitHub App", () => {
   });
 
   // covers #948
-  it("[TC-OP-101] counts a key delete the keychain never answered as kept while the hob's app is recorded, until it is gone", async () => {
+  it("counts a key delete the keychain never answered as kept while the hob's app is recorded, until it is gone", async () => {
     const w = world();
     const stalled = { value: false };
     // The keychain tool times out, which the hub cannot tell from one that is not there.
@@ -637,7 +637,7 @@ describe("A hob's own GitHub App", () => {
   });
 
   // covers #948
-  it("[TC-OP-106] keeps the hob's app as left over when a key write fails and the key may still be there", async () => {
+  it("keeps the hob's app as left over when a key write fails and the key may still be there", async () => {
     const w = world();
     const timedOut = new KeychainError({ reason: "unavailable", message: "The keychain did not answer in time." });
     const stalled = Layer.succeed(
@@ -666,7 +666,7 @@ describe("A hob's own GitHub App", () => {
   });
 
   // covers ADR 022
-  it("[TC-PE-257] counts a platform without a keychain Hobbots can use as having none", async () => {
+  it("counts a platform without a keychain Hobbots can use as having none", async () => {
     const windows = HobAppKeysLive("win32", {}, "0123456789abcdef").pipe(Layer.provide(NodeServices.layer));
     const outcome = await Effect.runPromise(
       Effect.gen(function* () {
@@ -690,7 +690,7 @@ const linkBy = (agentId: AgentId, appId: string | number, pem: string) =>
 
 describe("Linking a GitHub App the user already has", () => {
   // covers #1321, ADR 022
-  it("[TC-GEN-405] links an app by its ID or client ID and key, keeps the key only in the keychain, and lists its installations", async () => {
+  it("links an app by its ID or client ID and key, keeps the key only in the keychain, and lists its installations", async () => {
     const w = world();
     const mine = github.makeAppByHand("Frodo's bot");
     const lean = github.makeAppByHand("Sam's helper", { metadata: "read", contents: "read", issues: "write" });
@@ -759,7 +759,7 @@ describe("Linking a GitHub App the user already has", () => {
   });
 
   // covers #1321, ADR 022
-  it("[TC-PE-520] refuses an ID or key that is not the app's, an app another hob has, and a hob that cannot take one", async () => {
+  it("refuses an ID or key that is not the app's, an app another hob has, and a hob that cannot take one", async () => {
     const w = world();
     const first = github.makeAppByHand("First by hand");
     const second = github.makeAppByHand("Second by hand");
@@ -847,7 +847,7 @@ describe("Linking a GitHub App the user already has", () => {
   });
 
   // covers #1321, ADR 022
-  it("[TC-GEN-406] unlinking an app, or retiring its hob, forgets its key and leaves its installations on GitHub", async () => {
+  it("unlinking an app, or retiring its hob, forgets its key and leaves its installations on GitHub", async () => {
     const w = world();
     const frodoApp = github.makeAppByHand("Frodo unlinks");
     const samApp = github.makeAppByHand("Sam retires");
@@ -952,7 +952,7 @@ const tokensSince = (from: number) => github.installationTokens.slice(from);
 
 describe("A hob's own GitHub App's tokens", () => {
   // covers ADR 022
-  it("[TC-GEN-059] acts as the hob's bot with a token for one repository and the action's permissions, never as you", async () => {
+  it("acts as the hob's bot with a token for one repository and the action's permissions, never as you", async () => {
     const w = world();
     const calls: Array<string> = [];
     const repository = repositoryFor("pony-shed");
@@ -996,7 +996,7 @@ describe("A hob's own GitHub App's tokens", () => {
   });
 
   // covers ADR 022
-  it("[TC-GEN-060] keeps a token until five minutes before it expires, then mints a new one, and mints one for two calls at once", async () => {
+  it("keeps a token until five minutes before it expires, then mints a new one, and mints one for two calls at once", async () => {
     const w = world();
     const repository = repositoryFor("pony-mill");
     const fromToken = github.installationTokens.length;
@@ -1030,7 +1030,7 @@ describe("A hob's own GitHub App's tokens", () => {
   });
 
   // covers ADR 022
-  it("[TC-GEN-061] refuses a repository the hob's app is not installed on, with where to install it, and never asks for a token", async () => {
+  it("refuses a repository the hob's app is not installed on, with where to install it, and never asks for a token", async () => {
     const w = world();
     const calls: Array<string> = [];
     const repository = repositoryFor("pony-barn");
@@ -1059,7 +1059,7 @@ describe("A hob's own GitHub App's tokens", () => {
   });
 
   // covers ADR 022
-  it("[TC-GEN-062] marks the hob's app as needing a new one when GitHub refuses its key, and sends nothing more until then", async () => {
+  it("marks the hob's app as needing a new one when GitHub refuses its key, and sends nothing more until then", async () => {
     const w = world();
     const calls: Array<string> = [];
     const repository = repositoryFor("pony-forge");
@@ -1100,7 +1100,7 @@ describe("A hob's own GitHub App's tokens", () => {
   });
 
   // covers ADR 022
-  it("[TC-GEN-063] mints once more when GitHub refuses a token, and marks the app for reinstalling when it refuses again", async () => {
+  it("mints once more when GitHub refuses a token, and marks the app for reinstalling when it refuses again", async () => {
     const w = world();
     const calls: Array<string> = [];
     const repository = repositoryFor("pony-yard");
@@ -1142,7 +1142,7 @@ describe("A hob's own GitHub App's tokens", () => {
   });
 
   // covers ADR 022
-  it("[TC-GEN-155] marks the hob's app for reinstalling when it is uninstalled everywhere, and sends nothing more until then", async () => {
+  it("marks the hob's app for reinstalling when it is uninstalled everywhere, and sends nothing more until then", async () => {
     const w = world();
     const calls: Array<string> = [];
     const repository = repositoryFor("pony-pen");
@@ -1185,7 +1185,7 @@ describe("A hob's own GitHub App's tokens", () => {
   });
 
   // covers ADR 022
-  it("[TC-GEN-156] leaves the hob's app unmarked when one installation goes but another is left", async () => {
+  it("leaves the hob's app unmarked when one installation goes but another is left", async () => {
     const w = world();
     const calls: Array<string> = [];
     const loft = repositoryFor("pony-loft");
@@ -1219,7 +1219,7 @@ describe("A hob's own GitHub App's tokens", () => {
   });
 
   // covers ADR 022
-  it("[TC-GEN-064] stops a call checked under the hob's app once the app is disconnected, and the hob acts as you after", async () => {
+  it("stops a call checked under the hob's app once the app is disconnected, and the hob acts as you after", async () => {
     const w = world();
     const calls: Array<string> = [];
     const repository = repositoryFor("pony-gate");
@@ -1253,7 +1253,7 @@ describe("A hob's own GitHub App's tokens", () => {
     expect(calls).toEqual(["tokenFor"]);
   });
   // covers ADR 022
-  it("[TC-GEN-066] gives every call GitHub refused the same token at once one new token, minted once", async () => {
+  it("gives every call GitHub refused the same token at once one new token, minted once", async () => {
     const w = world();
     const repository = repositoryFor("pony-pen");
     const outcome = await runCharm(
@@ -1405,7 +1405,7 @@ const runWrites = <A, E>(
 
 describe("A hob's own GitHub App's pull requests and comments", () => {
   // covers ADR 022, PE-003, PE-007
-  it("[TC-GEN-092] opens a draft pull request as the hob's bot, with a card and a step that name the bot", async () => {
+  it("opens a draft pull request as the hob's bot, with a card and a step that name the bot", async () => {
     const w = world();
     const calls: Array<string> = [];
     const project = projectFor("pr-shed");
@@ -1452,7 +1452,7 @@ describe("A hob's own GitHub App's pull requests and comments", () => {
   });
 
   // covers ADR 022, PE-003, PE-007
-  it("[TC-GEN-093] comments as the hob's bot, with the hidden marker, after a card that names the bot", async () => {
+  it("comments as the hob's bot, with the hidden marker, after a card that names the bot", async () => {
     const w = world();
     const calls: Array<string> = [];
     const project = projectFor("comment-shed");
@@ -1484,7 +1484,7 @@ describe("A hob's own GitHub App's pull requests and comments", () => {
   });
 
   // covers ADR 022, PE-003, PE-007
-  it("[TC-GEN-1350-01] opens a labelled sub-issue as the hob's bot after one card, with tokens for opening issues only", async () => {
+  it("opens a labelled sub-issue as the hob's bot after one card, with tokens for opening issues only", async () => {
     const w = world();
     const calls: Array<string> = [];
     const project = projectFor("issue-shed");
@@ -1542,7 +1542,7 @@ describe("A hob's own GitHub App's pull requests and comments", () => {
   });
 
   // covers ADR 022, PE-003, PE-005
-  it("[TC-GEN-094] keeps the hob's policy: runs under Trusting without asking, sends nothing under Never or when denied", async () => {
+  it("keeps the hob's policy: runs under Trusting without asking, sends nothing under Never or when denied", async () => {
     const w = world();
     const calls: Array<string> = [];
     const project = projectFor("policy-shed");
@@ -1593,7 +1593,7 @@ describe("A hob's own GitHub App's pull requests and comments", () => {
   });
 
   // covers ADR 022, PE-005
-  it("[TC-GEN-095] does not send when the hob's app is disconnected while the card waits, and asks again as you", async () => {
+  it("does not send when the hob's app is disconnected while the card waits, and asks again as you", async () => {
     const w = world();
     const calls: Array<string> = [];
     const project = projectFor("switch-shed");
@@ -1637,7 +1637,7 @@ describe("A hob's own GitHub App's pull requests and comments", () => {
   });
 
   // covers ADR 022, IN-003, EX-004
-  it("[TC-GEN-096] reads a lost pull request back as the bot's, and never takes the user's own for it", async () => {
+  it("reads a lost pull request back as the bot's, and never takes the user's own for it", async () => {
     const w = world();
     const calls: Array<string> = [];
     const project = projectFor("lost-shed");
@@ -1875,7 +1875,7 @@ const PUSH_TIMEOUT = 30_000;
 describe("Push as a hob's own GitHub App", () => {
   // covers ADR 022
   it(
-    "[TC-GEN-087] makes the hob's commits on GitHub as its bot, verified, then moves the branch with Git",
+    "makes the hob's commits on GitHub as its bot, verified, then moves the branch with Git",
     async () => {
       const w = world();
       const calls: Array<string> = [];
@@ -1941,7 +1941,7 @@ describe("Push as a hob's own GitHub App", () => {
 
   // covers ADR 022
   it(
-    "[TC-GEN-088] sends only newer commits on the next push, and counts only those on its card",
+    "sends only newer commits on the next push, and counts only those on its card",
     async () => {
       const w = world();
       const { folder, repository, slug } = pushSetUp("pony-again");
@@ -1980,7 +1980,7 @@ describe("Push as a hob's own GitHub App", () => {
 
   // covers ADR 022
   it(
-    "[TC-GEN-089] refuses a branch that moved on GitHub, and a force push keeps its lease",
+    "refuses a branch that moved on GitHub, and a force push keeps its lease",
     async () => {
       const w = world();
       const { folder, repository, slug } = pushSetUp("pony-moved");
@@ -2026,7 +2026,7 @@ describe("Push as a hob's own GitHub App", () => {
 
   // covers ADR 022
   it(
-    "[TC-GEN-090] changes no branch when GitHub fails before the branch moves, and moves it once when called again",
+    "changes no branch when GitHub fails before the branch moves, and moves it once when called again",
     async () => {
       const w = world();
       const { folder, repository, slug } = pushSetUp("pony-retry");
@@ -2077,7 +2077,7 @@ describe("Push as a hob's own GitHub App", () => {
 
   // covers ADR 022
   it(
-    "[TC-GEN-091] asks for Workflows only when a commit changes one, and reads a lost answer back by GitHub's ID",
+    "asks for Workflows only when a commit changes one, and reads a lost answer back by GitHub's ID",
     async () => {
       const w = world();
       const { folder, repository, slug } = pushSetUp("pony-workflow");
@@ -2120,7 +2120,7 @@ describe("Push as a hob's own GitHub App", () => {
 describe("Push as a hob's own GitHub App, when a step after GitHub made the commits fails", () => {
   // covers ADR 022
   it(
-    "[TC-GEN-097] keeps Workflows when the branch did not move after GitHub made a commit that changes one",
+    "keeps Workflows when the branch did not move after GitHub made a commit that changes one",
     async () => {
       const w = world();
       const { folder, repository, slug } = pushSetUp("pony-workflow-retry");
@@ -2161,7 +2161,7 @@ describe("Push as a hob's own GitHub App, when a step after GitHub made the comm
 
   // covers ADR 022
   it(
-    "[TC-GEN-098] moves no branch when the hub cannot save which commits GitHub made, and pushes once it can",
+    "moves no branch when the hub cannot save which commits GitHub made, and pushes once it can",
     async () => {
       const w = world();
       const { folder, repository, slug } = pushSetUp("pony-map");

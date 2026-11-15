@@ -17,13 +17,13 @@ const trial = (more: Partial<SkillTrial>) =>
 
 describe("Try in a chat (ADR 029, Try in a chat)", () => {
   // covers ADR 029 (Try in a chat), #1099
-  it("[TC-UI-1099-03] offers the hobs that are awake, the one that proposed it first", () => {
+  it("offers the hobs that are awake, the one that proposed it first", () => {
     const hobs = [hob("pip", "active"), hob("quill", "active"), hob("moss", "paused")];
     expect(trialHobs(hobs, AgentId.make("quill")).map((one) => one.id)).toEqual(["quill", "pip"]);
     expect(trialHobs(hobs, AgentId.make("moss")).map((one) => one.id)).toEqual(["pip", "quill"]);
   });
 
-  it("[TC-UI-1099-04] says why a try failed: a check refused it, the draft or the hob is gone", () => {
+  it("says why a try failed: a check refused it, the draft or the hob is gone", () => {
     expect(trialErrorText(new ApiError("SKILL.md has no front matter.", "SkillImportRefused"))).toContain(
       "SKILL.md has no front matter.",
     );
@@ -33,7 +33,7 @@ describe("Try in a chat (ADR 029, Try in a chat)", () => {
     expect(trialErrorText(new ApiError("gone", "HobUnavailable"))).not.toBe(trialErrorText(new Error("network")));
   });
 
-  it("[TC-UI-1099-05] leads back to the draft you tried in the editor it came from, opened on that text", () => {
+  it("leads back to the draft you tried in the editor it came from, opened on that text", () => {
     const base = SkillRevisionHash.make("2".repeat(64));
     expect(draftSearch(trial({ proposalId: "p1", skillId: SkillId.make("release") }), "t1")).toEqual({
       view: "review",

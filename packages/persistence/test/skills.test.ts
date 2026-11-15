@@ -66,7 +66,7 @@ const input = (hash: SkillRevisionHash, more: Partial<SkillRevisionInput> = {}):
 
 describe("skills library", () => {
   // covers ADR 029 (Storage and revisions), #1060
-  it("[TC-DP-276] keeps one revision per content, numbered in order, and records a source once", () =>
+  it("keeps one revision per content, numbered in order, and records a source once", () =>
     run(
       Effect.gen(function* () {
         const library = yield* SkillLibrary;
@@ -105,7 +105,7 @@ describe("skills library", () => {
       }),
     ));
 
-  it("[TC-DP-277] refuses a new skill whose name is taken and a revision that renames its skill", () =>
+  it("refuses a new skill whose name is taken and a revision that renames its skill", () =>
     run(
       Effect.gen(function* () {
         const library = yield* SkillLibrary;
@@ -122,7 +122,7 @@ describe("skills library", () => {
     ));
 
   // covers ADR 029 (~/.agents/skills stays, through Hobbots), #1139
-  it("[TC-DP-285] takes a new revision of a ~/.agents/skills skill only from that folder", () =>
+  it("takes a new revision of a ~/.agents/skills skill only from that folder", () =>
     run(
       Effect.gen(function* () {
         const library = yield* SkillLibrary;
@@ -144,7 +144,7 @@ describe("skills library", () => {
       }),
     ));
 
-  it("[TC-DP-278] assigns a skill once per scope, rolls it out, holds it and takes it off", () =>
+  it("assigns a skill once per scope, rolls it out, holds it and takes it off", () =>
     run(
       Effect.gen(function* () {
         yield* seed;
@@ -184,7 +184,7 @@ describe("skills library", () => {
     ));
 
   // covers ADR 029 (Pins and rollout), #1061
-  it("[TC-DP-281] rolls a revision out once, to every assignment that is not held, and a later save never undoes a rollback", () =>
+  it("rolls a revision out once, to every assignment that is not held, and a later save never undoes a rollback", () =>
     run(
       Effect.gen(function* () {
         yield* seed;
@@ -225,7 +225,7 @@ describe("skills library", () => {
     ));
 
   // covers ADR 029 (Pins and rollout), #1062
-  it("[TC-DP-282] refuses a revision made from an older one, but takes the same edit again so it can finish its rollout, whose holds only its claim sets", () =>
+  it("refuses a revision made from an older one, but takes the same edit again so it can finish its rollout, whose holds only its claim sets", () =>
     run(
       Effect.gen(function* () {
         const library = yield* SkillLibrary;
@@ -268,7 +268,7 @@ describe("skills library", () => {
       }),
     ));
 
-  it("[TC-DP-279] keeps a hob's opt-outs, journaling only a change", () =>
+  it("keeps a hob's opt-outs, journaling only a change", () =>
     run(
       Effect.gen(function* () {
         yield* seed;
@@ -284,7 +284,7 @@ describe("skills library", () => {
     ));
 
   // covers ADR 029 (Skill sets), #1143
-  it("[TC-DP-1143-01] keeps a set's skills with its revision, a hob's opt-out of one of them, and a use with its set", () =>
+  it("keeps a set's skills with its revision, a hob's opt-out of one of them, and a use with its set", () =>
     run(
       Effect.gen(function* () {
         yield* seed;
@@ -343,7 +343,7 @@ describe("skills library", () => {
     ));
 
   // covers ADR 029 (The use line), #1096
-  it("[TC-DP-282] records each use with its hob, thread and reply, journals it, and reads a skill's or a hob's", () =>
+  it("records each use with its hob, thread and reply, journals it, and reads a skill's or a hob's", () =>
     run(
       Effect.gen(function* () {
         yield* seed;
@@ -381,7 +381,7 @@ describe("skills library", () => {
     ));
 
   // covers ADR 029 (The use line), STD-DATA-001
-  it("[TC-DP-284] saves a reply's Used line and its use in one transaction, so a failed write keeps neither", () =>
+  it("saves a reply's Used line and its use in one transaction, so a failed write keeps neither", () =>
     run(
       Effect.gen(function* () {
         yield* seed;
@@ -431,7 +431,7 @@ describe("skills library", () => {
     ));
 
   // covers ADR 029 (The use line)
-  it("[TC-DP-283] counts a skill's uses, its week, and each hob's last uses in the database, one row per answer", () =>
+  it("counts a skill's uses, its week, and each hob's last uses in the database, one row per answer", () =>
     run(
       Effect.gen(function* () {
         yield* seed;
@@ -486,7 +486,7 @@ describe("skills library", () => {
       }),
     ));
 
-  it("[TC-DP-280] refuses to remove a skill something assigns, naming who, and frees its name once removed", () =>
+  it("refuses to remove a skill something assigns, naming who, and frees its name once removed", () =>
     run(
       Effect.gen(function* () {
         yield* seed;

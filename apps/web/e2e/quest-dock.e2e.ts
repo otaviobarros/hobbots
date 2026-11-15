@@ -54,8 +54,7 @@ const lists = async (page: Page) => {
   };
 };
 
-// covers UX-002, OR-001
-test("[TC-UX-280] a party's Workbench lists every hob's changes and files in one list, each with its hob, and a lane filters every tab", async ({
+test("a party's Workbench lists every hob's changes and files in one list, each with its hob, and a lane filters every tab", async ({
   page,
 }) => {
   await startParty(page, [
@@ -102,8 +101,7 @@ test("[TC-UX-280] a party's Workbench lists every hob's changes and files in one
   await expect(changes.getByRole("button")).toHaveCount(2);
 });
 
-// covers UX-002, OR-001, OR-007
-test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, with the tries before it, and every other Task's latest that did work", async ({
+test("the Workbench follows the try picked for a lane's Task, with the tries before it, and every other Task's latest that did work", async ({
   page,
 }) => {
   // Quill writes the copy and fails; on her second try she changes nothing and finishes with a result.
@@ -148,8 +146,7 @@ test("[TC-UX-281] the Workbench follows the try picked for a lane's Task, with t
   ).not.toContainText("Changed in attempt");
 });
 
-// covers UX-002, OR-007
-test("[TC-UX-1145] a file a stopped try made and its retry rewrote reads Added with every line, not Edited by the retry", async ({
+test("a file a stopped try made and its retry rewrote reads Added with every line, not Edited by the retry", async ({
   page,
   scan,
 }) => {
@@ -180,11 +177,7 @@ test("[TC-UX-1145] a file a stopped try made and its retry rewrote reads Added w
   await scan(bench);
 });
 
-// covers UX-002, OR-001
-test("[TC-UX-1146] a file reads under the same path for a lead and for a member narrowed to a subfolder", async ({
-  page,
-  scan,
-}) => {
+test("a file reads under the same path for a lead and for a member narrowed to a subfolder", async ({ page, scan }) => {
   const { url, aldric, members, api, folder } = await aldricHub({ "test/README.md": "# Tests\n" }, ["Quill"]);
   await api("PATCH", `/agents/${members[0]}/permissions`, { ownFolders: [folder] });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
@@ -225,8 +218,7 @@ test("[TC-UX-1146] a file reads under the same path for a lead and for a member 
   await scan(bench);
 });
 
-// covers UX-002, UX-006
-test("[TC-UX-282] a file two hobs changed opens the hob's own record when Files and Changes link to each other", async ({
+test("a file two hobs changed opens the hob's own record when Files and Changes link to each other", async ({
   page,
 }) => {
   await startParty(page, [
@@ -277,8 +269,7 @@ test("[TC-UX-282] a file two hobs changed opens the hob's own record when Files 
   await expect(files.getByRole("button", { name: /^notes\.md\s*, by Aldric/ })).toHaveAttribute("aria-pressed", "true");
 });
 
-// covers UX-006, CH-005, CH-009
-test("[TC-UX-283] a member's History opens an archived Quest's room in its lead's chat, and Close room reads the chat in the Archive", async ({
+test("a member's History opens an archived Quest's room in its lead's chat, and Close room reads the chat in the Archive", async ({
   page,
 }) => {
   const { url, aldric, members, api, folder } = await aldricHub(undefined, ["Quill"]);

@@ -105,8 +105,7 @@ const change = (path: string, settled: boolean, after = version("h2", contents(3
 });
 
 describe("Workbench records across the turns of one Attempt", () => {
-  // covers UX-002, EX-001
-  it("[TC-OR-312] a later turn's changes leave the earlier turn's in place, replace one at the same path, and take back only its own", async () => {
+  it("a later turn's changes leave the earlier turn's in place, replace one at the same path, and take back only its own", async () => {
     const { second, third, activity } = await run(
       Effect.gen(function* () {
         yield* seed;

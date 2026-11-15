@@ -351,15 +351,14 @@ const fake: Runtime = {
 const RUNTIMES: ReadonlyArray<Runtime> = [claudeCode, codex, fake];
 
 describe.each(RUNTIMES)("writes to what you took over, on $name", (runtime) => {
-  // covers OR-006, #1449
-  it("[TC-OR-1449-01] refuses a file tool's write to a path you took over, and lets one elsewhere run", async () => {
+  it("refuses a file tool's write to a path you took over, and lets one elsewhere run", async () => {
     const asked: Array<CallWrites> = [];
     expect(await runtime.write(PLAN, steering(asked))).toContain(TAKEN);
     expect(asked.at(-1)?.paths).toEqual([PLAN]);
     expect(await runtime.write(join(project, "notes.md"), steering(asked))).not.toContain(TAKEN);
   });
 
-  it("[TC-OR-1449-02] refuses a command that writes there, pushes the branch or commits on it", async () => {
+  it("refuses a command that writes there, pushes the branch or commits on it", async () => {
     const asked: Array<CallWrites> = [];
     expect(await runtime.run(`echo plan > ${PLAN}`, steering(asked))).toContain(TAKEN);
     expect(asked.at(-1)?.paths).toEqual([PLAN]);
@@ -373,8 +372,7 @@ describe.each(RUNTIMES)("writes to what you took over, on $name", (runtime) => {
     expect(asked).toHaveLength(before);
   });
 
-  // covers OR-006, #1538
-  it("[TC-OR-1538-04] lets a write through once you give back what it writes, asking the hub on every call", async () => {
+  it("lets a write through once you give back what it writes, asking the hub on every call", async () => {
     const asked: Array<CallWrites> = [];
     let yours = true;
     const live: CallSteering = {
@@ -397,8 +395,7 @@ describe.each(RUNTIMES)("writes to what you took over, on $name", (runtime) => {
 });
 
 describe.each(RUNTIMES)("writes the hub cannot read from the call, on $name", (runtime) => {
-  // covers PE-005, OR-006, #1537
-  it("[TC-PE-1537-01] fails a script's write to a path you took over in the turn's sandbox, and makes its others", async () => {
+  it("fails a script's write to a path you took over in the turn's sandbox, and makes its others", async () => {
     const files = ["docs/plan.md", "notes.md"];
     const taken = { ...access, taken: [join(project, "docs")] };
     const run = await runtime.hidden(taken, files);
@@ -410,8 +407,7 @@ describe.each(RUNTIMES)("writes the hub cannot read from the call, on $name", (r
 });
 
 describe("a write the user approved", () => {
-  // covers OR-006, PE-008, #1449
-  it("[TC-OR-1449-07] is refused if you took over what it writes while its card waited", async () => {
+  it("is refused if you took over what it writes while its card waited", async () => {
     const careful = { ...access, policy: { ...access.policy, preset: "careful" as const } };
     const turn = toolTurn(careful, "on");
     if (turn === null) throw new Error("expected a tool turn");

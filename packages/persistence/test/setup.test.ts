@@ -26,8 +26,7 @@ const aldric = new Agent({
 });
 
 describe("SetupRepository", () => {
-  // covers OP-001, PE-001
-  it("[TC-OP-001] starts a new installation with setup to do and the Balanced preset", async () => {
+  it("starts a new installation with setup to do and the Balanced preset", async () => {
     const setup = await Effect.gen(function* () {
       return yield* (yield* SetupRepository).get;
     }).pipe(Effect.provide(TestLayer), Effect.runPromise);
@@ -41,8 +40,7 @@ describe("SetupRepository", () => {
     });
   });
 
-  // covers OP-001, DP-003
-  it("[TC-OP-002] marks an installation that already has hobs as set up when it migrates", async () => {
+  it("marks an installation that already has hobs as set up when it migrates", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       // Back to the schema before migration 0004, with the hob earlier versions seeded.
@@ -69,8 +67,7 @@ describe("SetupRepository", () => {
     expect(result.hobs.map((hob) => hob.name)).toEqual(["Aldric"]);
   });
 
-  // covers OP-001, PE-001
-  it("[TC-OP-003] keeps fields a change leaves out and stores the folders in order", async () => {
+  it("keeps fields a change leaves out and stores the folders in order", async () => {
     const result = await Effect.gen(function* () {
       const setup = yield* SetupRepository;
       const first = (yield* setup.update({ safetyPreset: "careful", approvedFolders: ["/b", "/a"] }, OWNER_ACTOR))
@@ -96,8 +93,7 @@ describe("SetupRepository", () => {
     expect({ ...result.stored }).toEqual({ ...result.second });
   });
 
-  // covers OP-001, DP-003
-  it("[TC-OP-007] keeps every field when changes to different fields arrive at once", async () => {
+  it("keeps every field when changes to different fields arrive at once", async () => {
     const stored = await Effect.gen(function* () {
       const setup = yield* SetupRepository;
       yield* Effect.all(
@@ -122,8 +118,7 @@ describe("SetupRepository", () => {
     });
   });
 
-  // covers OP-001, DP-003
-  it("[TC-OP-012] keeps an unfinished setup's providers empty when it migrates, then stores the user's choice", async () => {
+  it("keeps an unfinished setup's providers empty when it migrates, then stores the user's choice", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       // Back to the schema before migration 0006, with setup still to do.

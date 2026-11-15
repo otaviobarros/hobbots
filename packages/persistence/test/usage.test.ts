@@ -227,8 +227,7 @@ const seedTurns = Effect.gen(function* () {
 
 describe("UsageLedger", () => {
   // regression for #1011: a party member's turns wrote no reply, so Usage left them out
-  // covers OP-002
-  it("[TC-OP-107] counts each turn outside a chat under its hob, and a party member's for its Quest", async () => {
+  it("counts each turn outside a chat under its hob, and a party member's for its Quest", async () => {
     const { hobs, quests, minutes } = await Effect.gen(function* () {
       yield* seed;
       yield* seedQuests;
@@ -258,8 +257,7 @@ describe("UsageLedger", () => {
     });
   });
 
-  // covers OP-002, #1449
-  it("[TC-OP-1449-04] sums what a Quest's whole party ever spent, a sub-quest's and turns outside a chat included", async () => {
+  it("sums what a Quest's whole party ever spent, a sub-quest's and turns outside a chat included", async () => {
     const spent = await Effect.gen(function* () {
       yield* seed;
       yield* seedQuests;
@@ -275,8 +273,7 @@ describe("UsageLedger", () => {
     ]);
   });
 
-  // covers OP-002
-  it("[TC-OP-070] sums each hob's settled replies in the period by runtime and model", async () => {
+  it("sums each hob's settled replies in the period by runtime and model", async () => {
     const { hobs } = await run(
       UsageLedger.use((ledger) => ledger.usage("2026-10-25T00:00:00.000Z", "2026-11-01T00:00:00.000Z")),
     );
@@ -304,8 +301,7 @@ describe("UsageLedger", () => {
     });
   });
 
-  // covers OP-002, ADR 039 (One hob speaks at a time)
-  it("[TC-OP-1462-01] counts a passed turn, whose reply was removed, under the hob that passed", async () => {
+  it("counts a passed turn, whose reply was removed, under the hob that passed", async () => {
     const { hobs } = await run(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
@@ -331,8 +327,7 @@ describe("UsageLedger", () => {
   });
 
   // regression for #1011: a turn the hub stopped before it ended was never recorded
-  // covers OP-002
-  it("[TC-OP-109] counts a turn the hub never saw end, as unreported, once a later turn or a restart ends it", async () => {
+  it("counts a turn the hub never saw end, as unreported, once a later turn or a restart ends it", async () => {
     const period = (ledger: UsageLedger["Service"]) =>
       ledger.usage("2026-10-25T00:00:00.000Z", "2026-11-01T00:00:00.000Z");
     const haiku = (hobs: ReadonlyArray<HobUsage>) =>
@@ -375,8 +370,7 @@ describe("UsageLedger", () => {
     ]);
   });
 
-  // covers OP-002
-  it("[TC-OP-071] counts the period's replies and tokens by the minute they started, in UTC", async () => {
+  it("counts the period's replies and tokens by the minute they started, in UTC", async () => {
     // A minute, not an hour, so a reader in a time zone a half or quarter hour off UTC gets its own days.
     const { minutes } = await run(
       UsageLedger.use((ledger) => ledger.usage("2026-10-25T00:00:00.000Z", "2026-11-01T00:00:00.000Z")),
@@ -390,8 +384,7 @@ describe("UsageLedger", () => {
     ]);
   });
 
-  // covers OP-002
-  it("[TC-OP-090] sums the period's replies by the Quest whose chat they were written in while it ran", async () => {
+  it("sums the period's replies by the Quest whose chat they were written in while it ran", async () => {
     const { quests } = await run(
       UsageLedger.use((ledger) => ledger.usage("2026-10-25T00:00:00.000Z", "2026-11-01T00:00:00.000Z")),
     );

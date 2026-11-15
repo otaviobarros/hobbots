@@ -46,7 +46,7 @@ const decide = () => Effect.runPromise(decider.decide(clash));
 
 describe("the hub's brain", () => {
   // covers ADR 037
-  it("[TC-GEN-1367-01] asks the chosen runtime for a choice and a confidence, as a turn of no hob's", async () => {
+  it("asks the chosen runtime for a choice and a confidence, as a turn of no hob's", async () => {
     claude.answer({ _tag: "Reply", text: '```json\n{"choice":"clash","confidence":0.9}\n```' });
     expect(await decide()).toEqual({ choice: "clash", confidence: 0.9, by: "brain" });
     expect(claude.turns).toMatchObject([
@@ -64,7 +64,7 @@ describe("the hub's brain", () => {
   });
 
   // covers ADR 037
-  it("[TC-GEN-1367-02] keeps the rule when the answer does not decode, on Claude Code and Codex", async () => {
+  it("keeps the rule when the answer does not decode, on Claude Code and Codex", async () => {
     for (const [provider, runtime] of [
       ["claude", claude],
       ["chatgpt", codex],
@@ -79,7 +79,7 @@ describe("the hub's brain", () => {
   });
 
   // covers ADR 037
-  it("[TC-GEN-1367-03] calls no model with No AI, for the brain or for the task, and the rule answers", async () => {
+  it("calls no model with No AI, for the brain or for the task, and the rule answers", async () => {
     settings = { ...DEFAULT_MEMORY_SETTINGS, provider: "none" };
     expect(await decide()).toEqual({ choice: "apart", confidence: 1, by: "rule" });
     settings = { ...DEFAULT_MEMORY_SETTINGS, tasks: { ...DEFAULT_MEMORY_SETTINGS.tasks, judgments: "none" } };
@@ -89,7 +89,7 @@ describe("the hub's brain", () => {
   });
 
   // covers ADR 037
-  it("[TC-GEN-1367-04] passes a judgment its runtime cannot run to the fallback, or keeps the rule", async () => {
+  it("passes a judgment its runtime cannot run to the fallback, or keeps the rule", async () => {
     claude.answer({ _tag: "Fail", error: new RuntimeError({ message: "Claude Code is not signed in." }) });
     expect(await decide()).toEqual({ choice: "apart", confidence: 1, by: "fallback" });
     expect(codex.turns).toHaveLength(0);
@@ -104,7 +104,7 @@ describe("the hub's brain", () => {
   });
 
   // covers ADR 037
-  it("[TC-GEN-1367-05] counts the brain's own turns and their tokens for Usage", async () => {
+  it("counts the brain's own turns and their tokens for Usage", async () => {
     const before = await Effect.runPromise(endpoint.hubUsage);
     claude.answer({ _tag: "Reply", text: '{"choice":"clash","confidence":0.9}' });
     await decide();

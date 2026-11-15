@@ -136,7 +136,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, TestClock.TestClock>) =>
   Effect.runPromise(effect.pipe(Effect.provide(Layer.fresh(TestClock.layer()))));
 
 describe("Connecting GitHub", () => {
-  it("[TC-GEN-018] signs in with the device flow, polling no faster than GitHub asks, and keeps the tokens in the keychain", async () => {
+  it("signs in with the device flow, polling no faster than GitHub asks, and keeps the tokens in the keychain", async () => {
     const script: Script = {
       polls: [
         { _tag: "Pending" },
@@ -183,7 +183,7 @@ describe("Connecting GitHub", () => {
     expect(Buffer.from(Redacted.value(item), "base64url").toString("utf8")).toContain("ghr_ghu_first");
   });
 
-  it("[TC-GEN-019] says why it did not connect: the code lapsed, the person said no, or they cancelled", async () => {
+  it("says why it did not connect: the code lapsed, the person said no, or they cancelled", async () => {
     const lapsed: Script = { polls: [{ _tag: "Pending" }], refreshes: [], asked: [] };
     const denied: Script = {
       polls: [new GitHubSignInError({ reason: "denied", message: "GitHub says the sign-in was cancelled." })],
@@ -229,7 +229,7 @@ describe("Connecting GitHub", () => {
     expect(cancelled.asked).toEqual(["code for Iv23liHobbots"]);
   });
 
-  it("[TC-GEN-020] refuses to connect without an app or a keychain, and an environment token replaces the account", async () => {
+  it("refuses to connect without an app or a keychain, and an environment token replaces the account", async () => {
     const noKeychain = Layer.succeed(
       Keychain,
       Keychain.of({
@@ -283,7 +283,7 @@ describe("Connecting GitHub", () => {
 });
 
 describe("A sign-in already on the hub", () => {
-  it("[TC-GEN-021] is offered with its account, read again for each call, and replaces the app's sign-in", async () => {
+  it("is offered with its account, read again for each call, and replaces the app's sign-in", async () => {
     const local: Partial<Record<LocalSource, string>> = { gh: "gho_fromTheCli000000000000000" };
     const script: Script = { polls: [{ _tag: "Granted", tokens: tokens("ghu_first") }], refreshes: [], asked: [] };
     const result = await run(
@@ -360,7 +360,7 @@ describe("The connected account's token", () => {
       }),
     );
 
-  it("[TC-PE-142] is refreshed once before it expires, and the new pair is kept before it is used", async () => {
+  it("is refreshed once before it expires, and the new pair is kept before it is used", async () => {
     const script: Script = { polls: [], refreshes: [tokens("ghu_second", 20 * HOUR)], asked: [] };
     const result = await connected(script, tokens("ghu_first", 2 * HOUR), (credential, keychain) =>
       Effect.gen(function* () {
@@ -383,7 +383,7 @@ describe("The connected account's token", () => {
     expect(result.state).toMatchObject({ _tag: "Connected" });
   });
 
-  it("[TC-PE-143] disconnects when GitHub will not refresh it: the keychain item and the account go", async () => {
+  it("disconnects when GitHub will not refresh it: the keychain item and the account go", async () => {
     const script: Script = {
       polls: [],
       refreshes: [new GitHubSignInError({ reason: "refused", message: "GitHub no longer accepts the hub's sign-in." })],
@@ -412,7 +412,7 @@ describe("The connected account's token", () => {
     });
   });
 
-  it("[TC-GEN-023] reaches only repositories the app is installed on, as GitHub listed them within a minute", async () => {
+  it("reaches only repositories the app is installed on, as GitHub listed them within a minute", async () => {
     const script: Script = { polls: [], refreshes: [], asked: [], installed: ["otaviobarros/hobbots"] };
     const result = await connected(script, tokens("ghu_first"), (credential) =>
       Effect.gen(function* () {
@@ -433,7 +433,7 @@ describe("The connected account's token", () => {
     expect(script.asked.filter((asked) => asked.startsWith("installations"))).toHaveLength(2);
   });
 
-  it("[TC-GEN-025] is forgotten on disconnect", async () => {
+  it("is forgotten on disconnect", async () => {
     const script: Script = { polls: [], refreshes: [], asked: [] };
     const result = await connected(script, tokens("ghu_first"), (credential, keychain, connection) =>
       Effect.gen(function* () {
@@ -446,7 +446,7 @@ describe("The connected account's token", () => {
     expect(Option.isNone(result.value.item)).toBe(true);
     expect(result.row).toBeNull();
   });
-  it("[TC-GEN-026] refreshes once more before a refused listing of installations disconnects", async () => {
+  it("refreshes once more before a refused listing of installations disconnects", async () => {
     const script: Script = {
       polls: [],
       refreshes: [tokens("ghu_second"), tokens("ghu_third")],
@@ -474,7 +474,7 @@ describe("The connected account's token", () => {
     ]);
   });
 
-  it("[TC-GEN-027] keeps a refreshed pair when the call is stopped, and never writes one back after a disconnect", async () => {
+  it("keeps a refreshed pair when the call is stopped, and never writes one back after a disconnect", async () => {
     const script: Script = {
       polls: [],
       refreshes: [tokens("ghu_second", 2 * HOUR), tokens("ghu_third")],
@@ -514,7 +514,7 @@ describe("The connected account's token", () => {
 });
 
 describe("Edge cases of the hub's sign-in", () => {
-  it("[TC-GEN-028] keeps the account when the keychain gives nothing back, since a locked keyring looks the same as a missing item", async () => {
+  it("keeps the account when the keychain gives nothing back, since a locked keyring looks the same as a missing item", async () => {
     const script: Script = { polls: [], refreshes: [], asked: [] };
     const result = await run(
       Effect.gen(function* () {
@@ -532,7 +532,7 @@ describe("Edge cases of the hub's sign-in", () => {
     expect(result.row).not.toBeNull();
   });
 
-  it("[TC-GEN-029] starts one device flow when Connect is pressed twice at once", async () => {
+  it("starts one device flow when Connect is pressed twice at once", async () => {
     const script: Script = { polls: [{ _tag: "Pending" }], refreshes: [], asked: [] };
     await run(
       Effect.gen(function* () {
@@ -545,7 +545,7 @@ describe("Edge cases of the hub's sign-in", () => {
     );
     expect(script.asked.filter((asked) => asked.startsWith("code for"))).toHaveLength(1);
   });
-  it("[TC-GEN-030] does not use a refreshed pair the keychain would not save, and uses it once it does", async () => {
+  it("does not use a refreshed pair the keychain would not save, and uses it once it does", async () => {
     const script: Script = { polls: [], refreshes: [tokens("ghu_second", 20 * HOUR)], asked: [] };
     const items = new Map<string, Redacted.Redacted<string>>();
     let refuseWrites = false;
@@ -589,7 +589,7 @@ describe("Edge cases of the hub's sign-in", () => {
     expect(script.asked.filter((asked) => asked.startsWith("refresh"))).toEqual(["refresh ghr_ghu_first"]);
   });
 
-  it("[TC-GEN-031] lets no refusal of an old sign-in disconnect the one connected after it", async () => {
+  it("lets no refusal of an old sign-in disconnect the one connected after it", async () => {
     const script: Script = {
       polls: [{ _tag: "Granted", tokens: tokens("ghu_first", 2 * HOUR) }],
       refreshes: [new GitHubSignInError({ reason: "refused", message: "bad_refresh_token" })],
@@ -631,7 +631,7 @@ describe("Edge cases of the hub's sign-in", () => {
     expect(result.token).toBe("ghu_new");
   });
 
-  it("[TC-GEN-032] stops a Connect still waiting for its code when Disconnect is pressed", async () => {
+  it("stops a Connect still waiting for its code when Disconnect is pressed", async () => {
     const script: Script = {
       polls: [{ _tag: "Granted", tokens: tokens("ghu_first") }],
       refreshes: [],
@@ -659,7 +659,7 @@ describe("Edge cases of the hub's sign-in", () => {
     expect(result.row).toBeNull();
     expect(script.asked.filter((asked) => asked.startsWith("poll"))).toEqual([]);
   });
-  it("[TC-GEN-035] keeps no keychain read that finished after a disconnect and a new connection", async () => {
+  it("keeps no keychain read that finished after a disconnect and a new connection", async () => {
     const script: Script = { polls: [{ _tag: "Granted", tokens: tokens("ghu_b") }], refreshes: [], asked: [] };
     const item = (access: string) =>
       Redacted.make(
@@ -709,7 +709,7 @@ describe("Edge cases of the hub's sign-in", () => {
     expect(result.during).toMatchObject({ _tag: "Failure", failure: { reason: "signed-out" } });
     expect(result.after).toBe("ghu_b");
   });
-  it("[TC-GEN-036] never lets a call checked under one sign-in act with another", async () => {
+  it("never lets a call checked under one sign-in act with another", async () => {
     const script: Script = {
       polls: [{ _tag: "Granted", tokens: tokens("ghu_app") }],
       refreshes: [],
@@ -812,7 +812,7 @@ describe("Edge cases of the hub's sign-in", () => {
       return { ...result, held, refreshes: script.asked.filter((asked) => asked.startsWith("refresh")) };
     });
 
-  it("[TC-GEN-037] keeps a refreshed pair when a slower cold read of the old one finishes after it, and uses it only once saved", async () => {
+  it("keeps a refreshed pair when a slower cold read of the old one finishes after it, and uses it only once saved", async () => {
     const saved = await run(coldReadsAroundRefresh("accepted"));
     expect(saved).toMatchObject({ quick: "ghu_b", late: "ghu_b", next: "ghu_b", connected: true });
     expect(saved.held).toContain("ghr_ghu_b");
@@ -829,7 +829,7 @@ describe("Edge cases of the hub's sign-in", () => {
 
 describe("Starting over with GitHub connected", () => {
   // covers #948
-  it("[TC-OP-102] keeps the account and says so when the keychain never answers the delete, and forgets it once it does", async () => {
+  it("keeps the account and says so when the keychain never answers the delete, and forgets it once it does", async () => {
     const stalled = { value: true };
     const keychain = Layer.effect(
       Keychain,
@@ -872,7 +872,7 @@ describe("Starting over with GitHub connected", () => {
   });
 
   // covers #948
-  it("[TC-OP-105] keeps the account after a Disconnect the keychain refused, so a later erase it cannot answer is not taken as done", async () => {
+  it("keeps the account after a Disconnect the keychain refused, so a later erase it cannot answer is not taken as done", async () => {
     const remove = { error: null as KeychainError | null };
     const keychain = Layer.effect(
       Keychain,
@@ -908,7 +908,7 @@ describe("Starting over with GitHub connected", () => {
   });
 
   // covers #948
-  it("[TC-OP-103] counts a sign-in the hub never stored as gone, even when the keychain cannot be reached", async () => {
+  it("counts a sign-in the hub never stored as gone, even when the keychain cannot be reached", async () => {
     const unreachable = Layer.succeed(
       Keychain,
       Keychain.of({

@@ -21,8 +21,7 @@ import {
 // its first prompt showed, so it can finish without asking its lead whether the work is done.
 
 describe("a resumed member hears where its inputs stand", () => {
-  // covers OR-003, OR-005
-  it("[TC-OR-212] Rook, resumed after Quill's Task completed and its artifact was handed to him, gets Quill's result once and finishes without asking again", async () => {
+  it("Rook, resumed after Quill's Task completed and its artifact was handed to him, gets Quill's result once and finishes without asking again", async () => {
     const { run, requests, release } = await startHub(await sharedDatabase(), [
       {
         on: "was answered by hob aldric",

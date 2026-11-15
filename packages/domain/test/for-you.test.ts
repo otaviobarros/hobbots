@@ -216,7 +216,7 @@ const threadArb = (threadId: string): fc.Arbitrary<ForYouThread> =>
 
 describe("forYouOf", () => {
   // covers ADR 039 (Cards every thread shares › For you; Validation)
-  it("[TC-DM-1456-01] lists the same mentions, decisions and changed artifacts as catch-up, for the same records and read marker", () => {
+  it("lists the same mentions, decisions and changed artifacts as catch-up, for the same records and read marker", () => {
     fc.assert(
       fc.property(fc.constantFrom<Actor>(...PEOPLE), fc.tuple(threadArb("camp"), threadArb("chat")), (you, threads) => {
         const forYou = forYouOf({ you, threads, ...empty });
@@ -251,7 +251,7 @@ describe("forYouOf", () => {
   });
 
   // covers ADR 039 (Users as actors: mentions of you are per person)
-  it("[TC-DM-1456-02] gives Bruna and Leo their own mentions in a camp they share", () => {
+  it("gives Bruna and Leo their own mentions in a camp they share", () => {
     const camp = thread("camp", {
       marker: 0,
       messages: [
@@ -284,7 +284,7 @@ describe("forYouOf", () => {
   });
 
   // covers ADR 039 (Cards every thread shares › Approval: the decider)
-  it("[TC-DM-1456-03] gives approvals, questions and reviews to the thread's owner, else the hub's owner, oldest first", () => {
+  it("gives approvals, questions and reviews to the thread's owner, else the hub's owner, oldest first", () => {
     const input = {
       hubOwner: OWNER_ACTOR,
       threads: [],
@@ -312,14 +312,14 @@ describe("forYouOf", () => {
     expect(kinds(LEO)).toEqual([]);
   });
 
-  it("[TC-DM-1456-04] names the requester as decider before the owner, and the hub's owner when there is neither", () => {
+  it("names the requester as decider before the owner, and the hub's owner when there is neither", () => {
     const hubOwner = OWNER_ACTOR;
     expect(deciderOf({ requester: LEO, owner: BRUNA, hubOwner })).toEqual(LEO);
     expect(deciderOf({ requester: null, owner: BRUNA, hubOwner })).toEqual(BRUNA);
     expect(deciderOf({ requester: null, owner: null, hubOwner })).toEqual(OWNER_ACTOR);
   });
 
-  it("[TC-DM-1456-05] lists in While you were away only threads with news, the latest change first", () => {
+  it("lists in While you were away only threads with news, the latest change first", () => {
     const forYou = forYouOf({
       you: OWNER_ACTOR,
       threads: [
@@ -334,7 +334,7 @@ describe("forYouOf", () => {
   });
 
   // covers ADR 039 (Cards every thread shares › Approval: the decider)
-  it("[TC-DM-1456-06] says a Quest needs you only to its decider, and tells every member when it ends", () => {
+  it("says a Quest needs you only to its decider, and tells every member when it ends", () => {
     const quest = (id: string, revision: number, state: "active" | "completed", needsYou: number) => ({
       summary: { questId: QuestId.make(id), parentQuestId: null, state, needsYou, revision },
       goal: `Goal ${id}`,

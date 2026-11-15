@@ -75,10 +75,9 @@ const pipAsks = async (page: Page, prompt: string, safetyPreset = "balanced") =>
   return { current, card, thread };
 };
 
-// covers PE-003
-test("[TC-PE-074] the card shows the exact action and why, and Allow once by keyboard resumes the paused reply", async ({
-  page,
-}) => {
+test("the card shows the exact action and why, and Allow once by keyboard resumes the paused reply", {
+  tag: "@smoke",
+}, async ({ page }) => {
   const { card } = await pipAsksToPush(page);
   await expect(card).toContainText("Pip asks to push your work");
   await expect(card.getByText("git push origin feature", { exact: true })).toBeVisible();
@@ -101,10 +100,7 @@ test("[TC-PE-074] the card shows the exact action and why, and Allow once by key
   await expect(page.getByRole("main").getByText(/^Echo: Ship it/)).toBeVisible();
 });
 
-// covers PE-007
-test("[TC-PE-078] a push to the default branch is high risk and needs the confirmation box before Allow once", async ({
-  page,
-}) => {
+test("a push to the default branch is high risk and needs the confirmation box before Allow once", async ({ page }) => {
   const { card } = await pipAsksToPush(page, "main");
   await expect(card).toContainText("High risk · once only");
   // High risk is once only: no Always, and no note about rules, since the check box says why.
@@ -125,8 +121,7 @@ test("[TC-PE-078] a push to the default branch is high risk and needs the confir
   await expect(page.locator('[data-state="done"]', { hasText: "git push" })).toBeVisible();
 });
 
-// covers PE-003
-test("[TC-PE-075] Deny with a reason works by keyboard and the reply shows the reason", async ({ page }) => {
+test("Deny with a reason works by keyboard and the reply shows the reason", async ({ page }) => {
   // Denying a high-risk push needs no confirmation.
   const { card } = await pipAsksToPush(page, "main");
   await card.getByRole("button", { name: "Deny" }).focus();
@@ -148,10 +143,7 @@ test("[TC-PE-075] Deny with a reason works by keyboard and the reply shows the r
   await expect(steps.locator('[data-state="denied"]')).toContainText("Not on Fridays");
 });
 
-// covers PE-003, PE-007
-test("[TC-PE-076] the card follows a decision made elsewhere, and a stopped reply's request expires", async ({
-  page,
-}) => {
+test("the card follows a decision made elsewhere, and a stopped reply's request expires", async ({ page }) => {
   const { current, card, thread } = await pipAsksToPush(page);
   const [pending] = await api<ReadonlyArray<Approval>>(current, "GET", `/api/threads/${thread}/approvals`);
   if (pending === undefined) throw new Error("No approval request");
@@ -192,8 +184,7 @@ const sendNext = async (page: Page, prompt: string) => {
   await composer.press("Enter");
 };
 
-// covers PE-007
-test("[TC-PE-101] Always shows the rule it saves, saves exactly that rule, and only matching calls skip asking", async ({
+test("Always shows the rule it saves, saves exactly that rule, and only matching calls skip asking", async ({
   page,
 }) => {
   const { current, card } = await pipAsks(page, remove("old.txt"));
@@ -230,10 +221,7 @@ test("[TC-PE-101] Always shows the rule it saves, saves exactly that rule, and o
   await expect(cards).toHaveCount(2);
 });
 
-// covers PE-007
-test("[TC-PE-102] Always narrowed to the action's files saves only those files, and another file still asks", async ({
-  page,
-}) => {
+test("Always narrowed to the action's files saves only those files, and another file still asks", async ({ page }) => {
   const { current, card } = await pipAsks(page, write("notes.md"), "careful");
   await card.getByRole("button", { name: "Always for this folder" }).click();
   const form = card.getByRole("form", { name: "Always for this folder" });
@@ -255,8 +243,7 @@ test("[TC-PE-102] Always narrowed to the action's files saves only those files, 
   await expect(page.getByRole("region", { name: "Pip asks permission" })).toHaveCount(2);
 });
 
-// covers PE-007
-test("[TC-PE-125] an Always rule shows in Inbox History and Settings, and removing it there makes the next call ask again", async ({
+test("an Always rule shows in Inbox History and Settings, and removing it there makes the next call ask again", async ({
   page,
 }) => {
   const { current, card } = await pipAsks(page, remove("old.txt"));

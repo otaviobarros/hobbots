@@ -377,11 +377,10 @@ describe("A finding on two Tasks changing the same file", () => {
     expect(result.found).toEqual([]);
   };
 
-  // covers OR-004
   it.each([
-    ["TC-OR-412", "naming the Task to delegate under", { task_id: LEAD }],
-    ["TC-OR-413", "leaving out the Task, so it is the caller's own", {}],
-  ])("[%s] is not recorded for a file the lead deleted before it delegated, %s", async (_id, _how, named) => {
+    ["naming the Task to delegate under", { task_id: LEAD }],
+    ["leaving out the Task, so it is the caller's own", {}],
+  ])("is not recorded for a file the lead deleted before it delegated, %s", async (_how, named) => {
     const run = start(Hub);
     const result = await run(
       Effect.gen(function* () {
@@ -404,8 +403,7 @@ describe("A finding on two Tasks changing the same file", () => {
     expectNoFinding(result);
   });
 
-  // covers OR-004
-  it("[TC-OR-415] is not recorded when the member makes the file again while the lead's turn still runs", async () => {
+  it("is not recorded when the member makes the file again while the lead's turn still runs", async () => {
     // The lead's last scan then sees the badge Pip made, not the one it deleted: that is Pip's
     // change, and the lead's stays the delete it made before it delegated.
     const run = start(Hub);
@@ -432,8 +430,7 @@ describe("A finding on two Tasks changing the same file", () => {
     expectNoFinding(result);
   });
 
-  // covers OR-004
-  it("[TC-OR-414] is not recorded for a file a chat turn deleted before the delegation that starts its Task", async () => {
+  it("is not recorded for a file a chat turn deleted before the delegation that starts its Task", async () => {
     const run = start(Hub);
     const result = await run(
       Effect.gen(function* () {
@@ -466,8 +463,7 @@ describe("A finding on two Tasks changing the same file", () => {
     expectNoFinding(result);
   });
 
-  // covers OR-004
-  it("[TC-OR-416] is recorded when one member overwrites the other's file before the other's turn scanned it", async () => {
+  it("is recorded when one member overwrites the other's file before the other's turn scanned it", async () => {
     // Rook's edit to the badge is not on the record yet when Pip's edit takes the file over: Rook's
     // change is still his, so the two edits are one finding.
     const run = start(Hub);
@@ -489,8 +485,7 @@ describe("A finding on two Tasks changing the same file", () => {
     expect(found.map((each) => [each.taskId, each.aboutTaskId].sort())).toEqual([[ROOK_TASK, PIP_TASK].sort()]);
   });
 
-  // covers OR-004
-  it("[TC-OR-289] is recorded when a member's turn completes its Task before its last scan records the change", async () => {
+  it("is recorded when a member's turn completes its Task before its last scan records the change", async () => {
     const run = start(Hub);
     const result = await run(
       Effect.gen(function* () {
@@ -570,8 +565,7 @@ describe("A finding on two Tasks changing the same file", () => {
     expect(result.found[0]?.summary).toContain("Pip changed web/badge.png");
   });
 
-  // covers OR-004
-  it("[TC-OR-290] is recorded when the hub starts again after it stopped before recording it", async () => {
+  it("is recorded when the hub starts again after it stopped before recording it", async () => {
     // The hub records both changes and stops before the finding: no overlap layer is listening.
     const run = start(Records);
     /** The overlap layer as the hub starts it, until `then` is done. */

@@ -114,8 +114,7 @@ const memoryHub = () => {
 };
 
 describe("the memory brief", () => {
-  // covers CH-001, CH-002
-  it("[TC-CH-285] a lesson saved in one thread is in the next thread's brief for the same hob, and never another hob's", async () => {
+  it("a lesson saved in one thread is in the next thread's brief for the same hob, and never another hob's", async () => {
     const hub = memoryHub();
     await hub.run(
       Effect.gen(function* () {
@@ -139,7 +138,7 @@ describe("the memory brief", () => {
   });
 
   // covers ADR 037 (A camp is a thread with a kind), CH-001
-  it("[TC-GEN-1377-05] a private camp's turn still carries the memory brief", async () => {
+  it("a private camp's turn still carries the memory brief", async () => {
     const hub = memoryHub();
     await hub.run(
       Effect.gen(function* () {
@@ -154,8 +153,7 @@ describe("the memory brief", () => {
     );
   });
 
-  // covers CH-001, CH-002
-  it("[TC-CH-286] is sent again only when it changed, as the only briefing of a resumed turn", async () => {
+  it("is sent again only when it changed, as the only briefing of a resumed turn", async () => {
     const hub = memoryHub();
     await hub.run(
       Effect.gen(function* () {
@@ -187,8 +185,7 @@ describe("the memory brief", () => {
     );
   });
 
-  // covers CH-001, EX-005
-  it("[TC-CH-287] says memory is unavailable during an outage, and the turn goes on", async () => {
+  it("says memory is unavailable during an outage, and the turn goes on", async () => {
     const hub = memoryHub();
     await hub.run(
       Effect.gen(function* () {
@@ -207,8 +204,7 @@ describe("the memory brief", () => {
       }),
     );
   });
-  // covers CH-001, CH-002
-  it("[TC-CH-288] a brief whose prompt the runtime refused after starting the session is sent again next turn", async () => {
+  it("a brief whose prompt the runtime refused after starting the session is sent again next turn", async () => {
     const hub = memoryHub();
     await hub.run(
       Effect.gen(function* () {

@@ -60,7 +60,7 @@ const message = (id: string, second: number) =>
   });
 
 describe("a Heads-up for a clash", () => {
-  it("[TC-UX-1390-10] names each side by its hob, task and claim, says which is elsewhere and who claimed last", () => {
+  it("names each side by its hob, task and claim, says which is elsewhere and who claimed last", () => {
     const clash = new ClaimClash({
       sides: [side("badge", QUILL, "web/badge.png", 5, CAMP), side("review", ADA, "web", 9, ThreadId.make("other"))],
       since: at(9),
@@ -77,7 +77,7 @@ describe("a Heads-up for a clash", () => {
     ).toBeNull();
   });
 
-  it("[TC-UX-1390-11] sits under the last message written before the clash began", () => {
+  it("sits under the last message written before the clash began", () => {
     const clash = (second: number) =>
       headsUpOf(
         new ClaimClash({

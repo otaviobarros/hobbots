@@ -4,8 +4,7 @@ import { cancelInLane, laneHead, laneTask, openQuest, questSheet, taskDetails, t
 
 test.afterEach(stopQuestHub);
 
-// covers OR-001, OR-004, CH-005, UX-001, UX-002
-test("[TC-OR-013] the Black Friday Quest can be followed end to end from the chat with its lead", async ({ page }) => {
+test("the Black Friday Quest can be followed end to end from the chat with its lead", async ({ page }) => {
   const { url, aldric } = await questHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
@@ -60,8 +59,7 @@ test("[TC-OR-013] the Black Friday Quest can be followed end to end from the cha
   await expect(laneTask(page, "Plan the Black Friday campaign", "Aldric")).toContainText("Black Friday campaign ready");
 });
 
-// covers OR-004, IN-002
-test("[TC-IN-132] a question no lead could answer waits in the Inbox's Needs you, and your answer there reaches the chat", async ({
+test("a question no lead could answer waits in the Inbox's Needs you, and your answer there reaches the chat", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();
@@ -96,8 +94,7 @@ test("[TC-IN-132] a question no lead could answer waits in the Inbox's Needs you
   await expect(asksInChat).toContainText("You answered in the Inbox: Yes, Dec 12 for international orders.");
 });
 
-// covers OR-004, OR-006, IN-002
-test("[TC-IN-154] cancelling the work a question waits on withdraws it from the Inbox, the chat and the Quest room, and the lead still finishes", async ({
+test("cancelling the work a question waits on withdraws it from the Inbox, the chat and the Quest room, and the lead still finishes", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();

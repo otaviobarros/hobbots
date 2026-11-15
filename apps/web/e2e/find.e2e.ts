@@ -22,8 +22,7 @@ const say = async (page: Page, lines: ReadonlyArray<string>) => {
 
 const threadOf = (page: Page) => new URL(page.url()).hash.split("/threads/")[1]?.split("?")[0] ?? "";
 
-// covers CH-009, ADR 037 (Find)
-test("[TC-CH-1386-08] Ask answers about an old decision, cites it, and the citation opens its message; a crossed-out one shows crossed out", async ({
+test("Ask answers about an old decision, cites it, and the citation opens its message; a crossed-out one shows crossed out", async ({
   page,
 }) => {
   const { url, aldric, hub } = await aldricHub();
@@ -86,8 +85,7 @@ test("[TC-CH-1386-08] Ask answers about an old decision, cites it, and the citat
   await expect(box).toBeHidden();
 });
 
-// covers CH-009, ADR 037 (Find, No AI)
-test("[TC-CH-1386-10] under No AI, Ask lists the records it found, even ones Find's every-word search misses, and each opens its message", async ({
+test("under No AI, Ask lists the records it found, even ones Find's every-word search misses, and each opens its message", async ({
   page,
 }) => {
   const { url, aldric, api } = await aldricHub();

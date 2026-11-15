@@ -63,8 +63,7 @@ const LONG_JOB = "fake:tool Bash sleep 600";
  */
 const LONG_REPLY = Array.from({ length: 250 }, (_, index) => `word${index}`).join(" ");
 
-// covers OR-003, UX-001
-test("[TC-OR-242] the quest sheet shows the lead Running while the turn that waits still runs, and Waiting after it", async ({
+test("the quest sheet shows the lead Running while the turn that waits still runs, and Waiting after it", async ({
   page,
 }) => {
   const current = await startHub(dataDir);

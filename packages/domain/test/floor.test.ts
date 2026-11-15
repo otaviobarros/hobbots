@@ -208,7 +208,7 @@ const arbSnapshot: fc.Arbitrary<FloorSnapshot> = fc.record({
 
 describe("decideFloor", () => {
   // covers ADR 039 (One hob speaks at a time), ADR 019 (One wake path)
-  it("[TC-DM-1549-01] agrees with a model of the floor for any line: requests, dispatch, holds per hob, availability, archive", () => {
+  it("agrees with a model of the floor for any line: requests, dispatch, holds per hob, availability, archive", () => {
     fc.assert(
       fc.property(arbSnapshot, (s) => {
         expect(decideFloor(s)).toEqual(modelDecide(s));
@@ -217,7 +217,7 @@ describe("decideFloor", () => {
     );
   });
 
-  it("[TC-DM-1549-02] never gives the floor to a hob that cannot take it, nor lets a held hob or an outsider carry work", () => {
+  it("never gives the floor to a hob that cannot take it, nor lets a held hob or an outsider carry work", () => {
     fc.assert(
       fc.property(arbSnapshot, (s) => {
         const { action, release } = decideFloor(s);
@@ -254,32 +254,32 @@ describe("decideFloor", () => {
   // The #1527 findings, by group, each as the case that broke.
 
   describe("who goes next", () => {
-    it("[TC-DM-1549-03] picks the oldest request before attaching backpack work, so work never moves a hob ahead", () => {
+    it("picks the oldest request before attaching backpack work, so work never moves a hob ahead", () => {
       const older = request("a", QUILL, { queuedAt: 1 });
       const newer = request("b", PIP, { queuedAt: 2 });
       const s = snapshot({ requests: [newer, older], hobs: hobsWith({ [PIP]: { work: true } }) });
       expect(decideFloor(s).action).toEqual(start(older));
     });
 
-    it("[TC-DM-1549-04] dispatches a member speaker's backpack work too, before its request starts", () => {
+    it("dispatches a member speaker's backpack work too, before its request starts", () => {
       const asked = request("a", PIP);
       const s = snapshot({ requests: [asked], hobs: hobsWith({ [PIP]: { work: true } }) });
       expect(decideFloor(s).action).toEqual(dispatch(PIP));
       expect(decideFloor({ ...s, phase: carrying(PIP) }).action).toEqual(start(asked, true));
     });
 
-    it("[TC-DM-1549-05] starts the next request after a dispatch that delivered nothing", () => {
+    it("starts the next request after a dispatch that delivered nothing", () => {
       const asked = request("a", QUILL);
       expect(decideFloor(snapshot({ requests: [asked] })).action).toEqual(start(asked));
     });
 
-    it("[TC-DM-1549-06] checks the selected speaker's backpack, not the camp hob's, before admitting it at once", () => {
+    it("checks the selected speaker's backpack, not the camp hob's, before admitting it at once", () => {
       const asked = request("a", PIP);
       const s = snapshot({ requests: [asked], hobs: hobsWith({ [QUILL]: { work: true }, [PIP]: { progress: true } }) });
       expect(decideFloor(s).action).toEqual(dispatch(PIP));
     });
 
-    it("[TC-DM-1549-07] gives the floor to Send now's pick ahead of older requests", () => {
+    it("gives the floor to Send now's pick ahead of older requests", () => {
       const older = request("a", QUILL, { queuedAt: 1 });
       const picked = request("b", PIP, { queuedAt: 2 });
       expect(decideFloor(snapshot({ requests: [older, picked], chosen: picked.messageId })).action).toEqual(
@@ -287,7 +287,7 @@ describe("decideFloor", () => {
       );
     });
 
-    it("[TC-DM-1549-22] never gives the floor to a hob that is not of the camp, as one that left it", () => {
+    it("never gives the floor to a hob that is not of the camp, as one that left it", () => {
       const left = request("a", PIP, { queuedAt: 1 });
       const next = request("b", ROOK, { queuedAt: 2 });
       const s = snapshot({ requests: [left, next], hobs: hobsWith({ [PIP]: { member: false } }) });
@@ -295,7 +295,7 @@ describe("decideFloor", () => {
       expect(decideFloor({ ...s, requests: [left] }).action).toEqual(IDLE);
     });
 
-    it("[TC-DM-1549-08] gives the floor to nobody while a hob speaks, and carries nobody's work alongside", () => {
+    it("gives the floor to nobody while a hob speaks, and carries nobody's work alongside", () => {
       const speaking = request("s", QUILL, { state: "speaking", replyId: MessageId.make("reply") });
       const waiting = request("w", PIP, { queuedAt: 2 });
       const s = snapshot({ requests: [speaking, waiting], hobs: hobsWith({ [ROOK]: { work: true } }) });
@@ -304,14 +304,14 @@ describe("decideFloor", () => {
   });
 
   describe("who can carry work", () => {
-    it("[TC-DM-1549-09] skips a hob that cannot take work when picking a backpack carrier", () => {
+    it("skips a hob that cannot take work when picking a backpack carrier", () => {
       const s = snapshot({
         hobs: hobsWith({ [QUILL]: { work: true, available: false }, [PIP]: { work: true } }),
       });
       expect(decideFloor(s).action).toEqual(dispatch(PIP));
     });
 
-    it("[TC-DM-1549-10] dispatches only when a hob that can run has work, and leaves the floor idle otherwise", () => {
+    it("dispatches only when a hob that can run has work, and leaves the floor idle otherwise", () => {
       const s = snapshot({
         hobs: hobsWith({ [QUILL]: { work: true, held: true }, [PIP]: { work: true, member: false } }),
       });
@@ -319,7 +319,7 @@ describe("decideFloor", () => {
       expect(decideFloor(snapshot()).action).toEqual(IDLE);
     });
 
-    it("[TC-DM-1549-11] lets routine progress ride only along a request of its own hob", () => {
+    it("lets routine progress ride only along a request of its own hob", () => {
       const s = snapshot({ hobs: hobsWith({ [QUILL]: { progress: true } }) });
       expect(decideFloor(s).action).toEqual(IDLE);
       const other = request("a", PIP);
@@ -328,12 +328,12 @@ describe("decideFloor", () => {
       );
     });
 
-    it("[TC-DM-1549-12] starts a continuation for work that needs its hob, unless it went late meanwhile", () => {
+    it("starts a continuation for work that needs its hob, unless it went late meanwhile", () => {
       expect(decideFloor(snapshot({ phase: carrying(QUILL) })).action).toEqual({ _tag: "Continue", hobId: QUILL });
       expect(decideFloor(snapshot({ phase: carrying(QUILL, { late: true }) })).action).toEqual(IDLE);
     });
 
-    it("[TC-DM-1549-13] starts no turn for a dispatch whose hob paused, left or was held since it was planned", () => {
+    it("starts no turn for a dispatch whose hob paused, left or was held since it was planned", () => {
       for (const change of [{ available: false }, { member: false }, { held: true }]) {
         expect(decideFloor(snapshot({ phase: carrying(PIP), hobs: hobsWith({ [PIP]: change }) })).action).toEqual(IDLE);
       }
@@ -341,18 +341,18 @@ describe("decideFloor", () => {
   });
 
   describe("holds", () => {
-    it("[TC-DM-1549-14] applies a hold only to the hob whose work was stopped: another hob's work still runs", () => {
+    it("applies a hold only to the hob whose work was stopped: another hob's work still runs", () => {
       const s = snapshot({ hobs: hobsWith({ [QUILL]: { work: true, held: true }, [PIP]: { work: true } }) });
       expect(decideFloor(s).action).toEqual(dispatch(PIP));
     });
 
-    it("[TC-DM-1549-15] starts a held hob's request without its work, which keeps waiting for you", () => {
+    it("starts a held hob's request without its work, which keeps waiting for you", () => {
       const asked = request("a", QUILL);
       const s = snapshot({ requests: [asked], hobs: hobsWith({ [QUILL]: { work: true, held: true } }) });
       expect(decideFloor(s)).toEqual({ action: start(asked), release: false });
     });
 
-    it("[TC-DM-1549-16] releases every hold for a queued message of yours, and its work goes along again", () => {
+    it("releases every hold for a queued message of yours, and its work goes along again", () => {
       const asked = request("a", QUILL);
       const s = snapshot({
         requests: [asked],
@@ -364,7 +364,7 @@ describe("decideFloor", () => {
   });
 
   describe("stop, removal and archive", () => {
-    it("[TC-DM-1549-17] admits nothing in an archived thread, nor while the hub holds what waited after a restore", () => {
+    it("admits nothing in an archived thread, nor while the hub holds what waited after a restore", () => {
       const asked = request("a", QUILL);
       const busy = { requests: [asked], hobs: hobsWith({ [QUILL]: { work: true } }) };
       expect(decideFloor(snapshot({ ...busy, open: false })).action).toEqual(IDLE);
@@ -373,7 +373,7 @@ describe("decideFloor", () => {
       expect(decideFloor(snapshot({ ...busy, restoring: true, phase: carrying(QUILL) })).action).toEqual(IDLE);
     });
 
-    it("[TC-DM-1549-20] starts the message you send after a restore, in its turn and without the work that waited", () => {
+    it("starts the message you send after a restore, in its turn and without the work that waited", () => {
       const yours = request("a", QUILL);
       const held = { restoring: true, hobs: hobsWith({ [QUILL]: { work: true } }) };
       expect(decideFloor(snapshot({ ...held, requests: [yours], sent: yours.messageId })).action).toEqual(start(yours));
@@ -381,7 +381,7 @@ describe("decideFloor", () => {
       expect(decideFloor(snapshot({ ...held, requests: [older, yours], sent: yours.messageId })).action).toEqual(IDLE);
     });
 
-    it("[TC-DM-1549-21] starts a message you send at once only when nothing is ahead of it and no work of its hob goes first", () => {
+    it("starts a message you send at once only when nothing is ahead of it and no work of its hob goes first", () => {
       const yours = request("y", QUILL, { queuedAt: 9, messageId: MessageId.make("m-yours") });
       expect(startsAtOnce(snapshot(), yours)).toBe(true);
       // Behind a request whose hob can speak, it waits its turn.
@@ -400,13 +400,13 @@ describe("decideFloor", () => {
       );
     });
 
-    it("[TC-DM-1549-18] goes to the next request once the one in front is removed or dropped", () => {
+    it("goes to the next request once the one in front is removed or dropped", () => {
       const removed = request("a", QUILL, { state: "dropped", droppedBy: OWNER });
       const next = request("b", PIP, { queuedAt: 2 });
       expect(decideFloor(snapshot({ requests: [removed, next] })).action).toEqual(start(next));
     });
 
-    it("[TC-DM-1549-19] starts no request without a backpack and nothing at all with none owed", () => {
+    it("starts no request without a backpack and nothing at all with none owed", () => {
       const asked = request("a", PIP);
       const s = snapshot({ backpack: false, requests: [asked], hobs: hobsWith({ [PIP]: { work: true } }) });
       expect(decideFloor(s).action).toEqual(start(asked));

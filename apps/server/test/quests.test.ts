@@ -331,8 +331,7 @@ const expectAdaFinished = (
 };
 
 describe("leading a party on a Quest", () => {
-  // covers OR-002, OR-003, IN-004
-  it("[TC-OR-090] Aldric delegates to Quill and Ada; Ada's Task waits for Quill's to complete and starts with his copy, and Aldric wraps up in the chat", async () => {
+  it("Aldric delegates to Quill and Ada; Ada's Task waits for Quill's to complete and starts with his copy, and Aldric wraps up in the chat", async () => {
     const { run, requests, answers, release } = setUp();
     const prompt = [
       "Plan the Black Friday campaign",
@@ -427,8 +426,7 @@ describe("leading a party on a Quest", () => {
     expect(digested.map((request) => request.prompt)).toContain("How is it going?");
   }, 20_000);
 
-  // covers OR-003, IN-005
-  it("[TC-OR-091] a member whose turn ends with its milestones unreported is blocked, and its lead hears of it", async () => {
+  it("a member whose turn ends with its milestones unreported is blocked, and its lead hears of it", async () => {
     const { run } = setUp();
     const prompt = [
       "Plan the campaign",
@@ -452,8 +450,7 @@ describe("leading a party on a Quest", () => {
 });
 
 describe("a retired party member", () => {
-  // covers OR-002
-  it("[TC-OR-092] a member retired while it works fails its Task with a blocker that says why, and its lead hears of it", async () => {
+  it("a member retired while it works fails its Task with a blocker that says why, and its lead hears of it", async () => {
     const { run } = setUp();
     const prompt = [
       "Plan the campaign",
@@ -588,8 +585,7 @@ const expectStillHeld = async (
 };
 
 describe("a member Task already being worked", () => {
-  // covers IN-003
-  it("[TC-OR-152] a member Task whose Attempt runs elsewhere keeps its work pending, spends no tries and raises no blocker, and the work settles once the Task ends", async () => {
+  it("a member Task whose Attempt runs elsewhere keeps its work pending, spends no tries and raises no blocker, and the work settles once the Task ends", async () => {
     const { run, requests } = setUp();
     const memberTask = await run(heldMemberTask);
     const waiting = await run(itemOn(memberTask.id));
@@ -624,8 +620,7 @@ describe("a member Task already being worked", () => {
     expect(promptsTo(requests, memberTask)).toEqual([]);
   }, 20_000);
 
-  // covers IN-003
-  it("[TC-OR-153] once the Attempt that held a member Task ends without finishing it, the member's own session takes up the work", async () => {
+  it("once the Attempt that held a member Task ends without finishing it, the member's own session takes up the work", async () => {
     const { run, requests } = setUp();
     const memberTask = await run(heldMemberTask);
     const waiting = await run(itemOn(memberTask.id));
@@ -660,8 +655,7 @@ describe("a member Task already being worked", () => {
 });
 
 describe("a party member's authority", () => {
-  // covers PE-004, PE-006
-  it("[TC-PE-160] a member's call that the delegation narrows to Ask asks you in the lead's thread, and runs once you approve", async () => {
+  it("a member's call that the delegation narrows to Ask asks you in the lead's thread, and runs once you approve", async () => {
     const { run } = setUp();
     const file = join(project, "copy.md");
     const prompt = [
@@ -713,7 +707,7 @@ describe("a party member's authority", () => {
     expect(Option.isSome(Option.fromNullishOr(decided.decidedAt))).toBe(true);
   }, 20_000);
 
-  it("[TC-PE-162] a member only reaches the folders its delegation gives it, even where its own policy reaches further", async () => {
+  it("a member only reaches the folders its delegation gives it, even where its own policy reaches further", async () => {
     const { run } = setUp();
     const given = join(project, "copy");
     mkdirSync(given, { recursive: true });
@@ -747,7 +741,7 @@ describe("a party member's authority", () => {
     expect(await run(ApprovalRepository.use((approvals) => approvals.listPending))).toEqual([]);
   }, 20_000);
 
-  it("[TC-PE-163] a step a member plans works under the member's delegation too: its folders and its decisions", async () => {
+  it("a step a member plans works under the member's delegation too: its folders and its decisions", async () => {
     const { run } = setUp();
     const given = join(project, "steps");
     mkdirSync(given, { recursive: true });
@@ -794,8 +788,7 @@ const questionsWhen = (ready: (tree: TaskTree) => boolean) =>
   treeWhen(ready).pipe(Effect.map((tree) => tree.questions));
 
 describe("questions in a party", () => {
-  // covers OR-002, IN-004
-  it("[TC-OR-130] Quill's question reaches Aldric, who answers it himself; it never reaches you and Quill goes on with the answer", async () => {
+  it("Quill's question reaches Aldric, who answers it himself; it never reaches you and Quill goes on with the answer", async () => {
     const { run, requests, answers } = setUp();
     const prompt = [
       "Plan the campaign",
@@ -838,8 +831,7 @@ describe("questions in a party", () => {
     expect(quillPrompts[1]?.sessionId).not.toBeNull();
   }, 20_000);
 
-  // covers OR-002, IN-002, IN-004
-  it("[TC-OR-131] Ada's question that Aldric passes up reaches you, and your answer goes back down to her", async () => {
+  it("Ada's question that Aldric passes up reaches you, and your answer goes back down to her", async () => {
     const { run, requests } = setUp();
     const prompt = [
       "Plan the campaign",
@@ -887,8 +879,7 @@ describe("questions in a party", () => {
 });
 
 describe("what reaches a lead", () => {
-  // covers OR-002, IN-004
-  it("[TC-OR-132] your note on Quill's Task reaches Aldric as a message about that Task, once, however often it is sent", async () => {
+  it("your note on Quill's Task reaches Aldric as a message about that Task, once, however often it is sent", async () => {
     const { run, release } = setUp();
     const prompt = [
       "Plan the campaign",
@@ -925,8 +916,7 @@ describe("what reaches a lead", () => {
     await release();
   }, 20_000);
 
-  // covers OR-003, IN-005
-  it("[TC-OR-133] Quill's finding wakes Aldric with his routine progress folded in; the progress alone never does", async () => {
+  it("Quill's finding wakes Aldric with his routine progress folded in; the progress alone never does", async () => {
     const { run } = setUp();
     const progress = (n: number) => hub("report_checkpoint", { key: `p${n}`, kind: "progress", summary: `Draft ${n}` });
     const prompt = [
@@ -1017,8 +1007,7 @@ const expectNested = (tree: TaskTree) => {
 };
 
 describe("a nested Quest", () => {
-  // covers OR-002, OR-004
-  it("[TC-OR-160] Rook brings in Pip under Aldric's Quest and leads her: her result reaches Rook, and the tree holds all three", async () => {
+  it("Rook brings in Pip under Aldric's Quest and leads her: her result reaches Rook, and the tree holds all three", async () => {
     const { run, requests } = setUp();
     const pipBrief = [
       hub("complete_task", { delivered: true, key: "keywords-done", summary: "Twelve keywords, led by 'doorbuster'" }),
@@ -1052,8 +1041,7 @@ describe("a nested Quest", () => {
     expect(told).not.toContain("Twelve keywords");
   }, 20_000);
 
-  // covers OR-004
-  it("[TC-OR-161] a delegation loop is stopped: Pip cannot bring in a hob past the depth limit, nor anyone above her", async () => {
+  it("a delegation loop is stopped: Pip cannot bring in a hob past the depth limit, nor anyone above her", async () => {
     const { run, answers } = setUp();
     // Pip tries to go one level deeper and to hand the work back up, then does it herself.
     const pipBrief = [
@@ -1084,8 +1072,7 @@ describe("a nested Quest", () => {
     expect(taskOf(done, PIP).result?.summary).toBe("Researched the keywords myself");
   }, 20_000);
 
-  // covers OR-004
-  it("[TC-OR-162] with the depth limit raised, a loop is still stopped: by the cycle check, then by the new limit", async () => {
+  it("with the depth limit raised, a loop is still stopped: by the cycle check, then by the new limit", async () => {
     const { run, answers } = setUp({ ...DEFAULT_TASK_TOOL_LIMITS, maxDepth: 3 });
     // Quill, a level further down, tries every hob above him, then one more level.
     const quillBrief = [
@@ -1125,8 +1112,7 @@ describe("a nested Quest", () => {
     );
   }, 20_000);
 
-  // covers OR-002, IN-002, IN-004
-  it("[TC-OR-163] Pip's question reaches Rook first, climbs to Aldric and then to you, and your answer goes back down to her", async () => {
+  it("Pip's question reaches Rook first, climbs to Aldric and then to you, and your answer goes back down to her", async () => {
     const { run, requests } = setUp();
     const pipBrief = [
       hub("ask", { key: "tone", question: "Playful or formal?" }),
@@ -1166,8 +1152,7 @@ describe("a nested Quest", () => {
     expect(pipPrompts[1]?.prompt).toContain('was answered by the user: "Playful"');
   }, 20_000);
 
-  // covers IN-005, IN-006
-  it("[TC-OR-185] Pip's routine progress waits for Rook without waking him, rides along his next turn as a digest, and nothing is left open", async () => {
+  it("Pip's routine progress waits for Rook without waking him, rides along his next turn as a digest, and nothing is left open", async () => {
     const { run, requests, release } = setUp();
     const pipBrief = [
       HOLD,

@@ -46,8 +46,7 @@ const withThread = () => {
 };
 
 describe("unread threads", () => {
-  // covers UX-006
-  it("[TC-UX-192] shows a thread unread once the lead's reply ends, never for one under way or one already held", () => {
+  it("shows a thread unread once the lead's reply ends, never for one under way or one already held", () => {
     const client = withThread();
     showUnread(client, reply("m1", "streaming"));
     expect(listed(client)).toBe(false);
@@ -67,8 +66,7 @@ describe("unread threads", () => {
     expect(listed(read)).toBe(true);
   });
 
-  // covers UX-006
-  it("[TC-UX-959] a list of unread threads that lands after a reply ended still shows it unread, until a read says otherwise", async () => {
+  it("a list of unread threads that lands after a reply ended still shows it unread, until a read says otherwise", async () => {
     const at = (status: Message["status"], revision: number) => new Message({ ...reply("m1", status), revision });
     const unread = (through: number, ids: ReadonlyArray<ThreadId> = []) =>
       new UnreadThreads({ threadIds: ids, through });
@@ -117,7 +115,7 @@ describe("unread threads", () => {
   });
 
   // covers ADR 039 (Members), STD-REACT-012
-  it("[TC-UX-1454-01] a read of your unread threads taken before you read the thread elsewhere never brings its dot back", async () => {
+  it("a read of your unread threads taken before you read the thread elsewhere never brings its dot back", async () => {
     const client = new QueryClient();
     const answers: Array<(read: UnreadThreads) => void> = [];
     const observer = new QueryObserver(client, {
@@ -149,8 +147,7 @@ describe("unread threads", () => {
     expect(lastRead([])).toBeUndefined();
   });
 
-  // covers UX-006
-  it("[TC-UX-195] reads through the newest revision seen up to that message, not one that came after", () => {
+  it("reads through the newest revision seen up to that message, not one that came after", () => {
     const at = (id: string, status: Message["status"], revision: number) =>
       new Message({ ...reply(id, status), revision });
     // The reply after the one read is still under way, so its newer revision is not seen yet.

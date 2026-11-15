@@ -112,8 +112,7 @@ const catchManifests = async (context: BrowserContext) => {
   return manifests;
 };
 
-// covers PE-002
-test("[TC-GEN-056] gives a hob its own GitHub app from its Charms tab and shows where it is installed", async ({
+test("gives a hob its own GitHub app from its Charms tab and shows where it is installed", async ({
   page,
   context,
 }) => {
@@ -207,8 +206,7 @@ test("[TC-GEN-056] gives a hob its own GitHub app from its Charms tab and shows 
   expect(await page.content()).not.toMatch(/BEGIN [A-Z ]*PRIVATE KEY|gh[ousr]_/);
 });
 
-// covers PE-002
-test("[TC-GEN-057] fixes a hob's app that needs a reconnect in one action", async ({ page, context }) => {
+test("fixes a hob's app that needs a reconnect in one action", async ({ page, context }) => {
   const { current } = await openPipCharms(page);
   hub = current;
   const manifests = await catchManifests(context);
@@ -265,10 +263,7 @@ test("[TC-GEN-057] fixes a hob's app that needs a reconnect in one action", asyn
   await expect(section.getByRole("link", { name: "Delete the app on GitHub" })).toHaveAttribute("href", deleteUrl);
 });
 
-// covers PE-002
-test("[TC-GEN-058] disconnects a hob's app after asking, and shows an old app that was not fully removed", async ({
-  page,
-}) => {
+test("disconnects a hob's app after asking, and shows an old app that was not fully removed", async ({ page }) => {
   const { current } = await openPipCharms(page);
   hub = current;
   const section = page.getByRole("region", { name: "Acts on GitHub as" });
@@ -323,11 +318,7 @@ test("[TC-GEN-058] disconnects a hob's app after asking, and shows an old app th
 const KEY = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEAstandin\n-----END RSA PRIVATE KEY-----";
 const linkedApp = { ...app, appId: 3_141_592, slug: "pips-own-bot", origin: "linked", owner: "the-shire" };
 
-// covers PE-002, #1321
-test("[TC-GEN-408] links a GitHub app the user already has, and unlinking leaves it on GitHub", async ({
-  page,
-  scan,
-}) => {
+test("links a GitHub app the user already has, and unlinking leaves it on GitHub", async ({ page, scan }) => {
   const { current } = await openPipCharms(page);
   hub = current;
   const section = page.getByRole("region", { name: "Acts on GitHub as" });

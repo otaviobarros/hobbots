@@ -78,8 +78,7 @@ const inboxLink = (page: Page) =>
 const chief = (page: Page) =>
   page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^Hobbots/ });
 
-// covers PE-003, UX-001, UX-005
-test("[TC-IN-002] a pending request shows in Needs you, on Home and the rail, and approving it there resumes the turn", async ({
+test("a pending request shows in Needs you, on Home and the rail, and approving it there resumes the turn", async ({
   page,
 }) => {
   const { current } = await pipAsksToPush(page);
@@ -149,8 +148,7 @@ test("[TC-IN-002] a pending request shows in Needs you, on Home and the rail, an
   await expect(chief(page)).toHaveAccessibleName(/^Hobbots home/);
 });
 
-// covers PE-003, UX-004
-test("[TC-IN-003] a request decided in the chat updates the open Inbox, and one decided in the Inbox updates the chat", async ({
+test("a request decided in the chat updates the open Inbox, and one decided in the Inbox updates the chat", async ({
   page,
   context,
 }) => {
@@ -180,8 +178,7 @@ test("[TC-IN-003] a request decided in the chat updates the open Inbox, and one 
   await expect(second.getByRole("status")).toHaveText("✓ Allowed once. Pip carries on.");
 });
 
-// covers PE-007
-test("[TC-IN-004] an expired request shows as expired and cannot be approved", async ({ page }) => {
+test("an expired request shows as expired and cannot be approved", async ({ page }) => {
   const { current } = await pipAsksToPush(page);
   await page.getByRole("button", { name: "■ Stop" }).click();
   await expect(page.getByRole("region", { name: "Pip asks permission" }).getByRole("status")).toHaveText(
@@ -218,10 +215,7 @@ test("[TC-IN-004] an expired request shows as expired and cannot be approved", a
   );
 });
 
-// covers PE-003, UX-005
-test("[TC-IN-011] the open request keeps its place when it cannot be read on its own, and Try again shows it", async ({
-  page,
-}) => {
+test("the open request keeps its place when it cannot be read on its own, and Try again shows it", async ({ page }) => {
   const { current } = await pipAsksToPush(page);
   const [asked] = await api<ReadonlyArray<Approval>>(current, "GET", "/api/approvals");
   if (asked === undefined) throw new Error("No approval request");
@@ -265,8 +259,7 @@ const asDesktop = () => {
   page.openRequest = (requestId: string) => listener?.(requestId);
 };
 
-// covers PE-003, UX-001
-test("[TC-IN-014] the desktop app opens a request in the Inbox when its notification is clicked", async ({ page }) => {
+test("the desktop app opens a request in the Inbox when its notification is clicked", async ({ page }) => {
   await page.addInitScript(asDesktop);
   const { current } = await pipAsksToPush(page);
   const [asked] = await api<ReadonlyArray<Approval>>(current, "GET", "/api/approvals");
@@ -278,8 +271,7 @@ test("[TC-IN-014] the desktop app opens a request in the Inbox when its notifica
   expect(page.url()).toContain("tab=needs");
 });
 
-// covers UX-001
-test("[TC-UX-090] the count chips on Home filter the scene to the hobs in that state", async ({ page }) => {
+test("the count chips on Home filter the scene to the hobs in that state", async ({ page }) => {
   const { current } = await pipAsksToPush(page);
   await api(current, "POST", "/api/agents", {
     name: "Bram",
@@ -315,8 +307,7 @@ test("[TC-UX-090] the count chips on Home filter the scene to the hobs in that s
   await expect(spot(/^Pip, /)).toHaveCSS("opacity", "1");
 });
 
-// covers UX-001, PE-003
-test("[TC-UX-093] Home's tray decides a request where it waits, then says all clear", async ({ page }) => {
+test("Home's tray decides a request where it waits, then says all clear", async ({ page }) => {
   await pipAsksToPush(page);
   await page.getByRole("link", { name: "Home", exact: true }).click();
   const needsYou = page.getByRole("region", { name: "Needs you", exact: true });
@@ -336,8 +327,7 @@ test("[TC-UX-093] Home's tray decides a request where it waits, then says all cl
   await expect(history.locator('[data-state="approved"]')).toContainText("in the Inbox");
 });
 
-// covers IN-001, PE-003, PE-007, UX-005
-test("[TC-IN-492] Needs you works from the keyboard: ↑ ↓ and J K move, A allows once, D denies, and A waits for the high-risk box", async ({
+test("Needs you works from the keyboard: ↑ ↓ and J K move, A allows once, D denies, and A waits for the high-risk box", async ({
   page,
 }) => {
   const { current } = await pipAsksToPush(page);

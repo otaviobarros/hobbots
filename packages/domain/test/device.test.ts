@@ -19,8 +19,7 @@ const inState = (state: PairingState) =>
   });
 
 describe("pairing requests", () => {
-  // covers DP-004
-  it("[TC-DP-087] a pending or allowed request expires at its deadline, and a decided one keeps its state", () => {
+  it("a pending or allowed request expires at its deadline, and a decided one keeps its state", () => {
     const before = "2026-11-02T10:09:59.999Z";
     expect(pairingExpired(inState("pending"), before)).toBe(false);
     expect(pairingExpired(inState("allowed"), before)).toBe(false);

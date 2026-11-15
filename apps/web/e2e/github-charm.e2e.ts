@@ -23,8 +23,7 @@ const api = async <A>(current: Hub, method: string, path: string, body?: unknown
   return (await response.json()) as A;
 };
 
-// covers PE-002
-test("[TC-GEN-024] connects GitHub in Settings and grants it per hob on the Charms tab", async ({ page }) => {
+test("connects GitHub in Settings and grants it per hob on the Charms tab", async ({ page }) => {
   // Stand-ins for GitHub's sign-in and the keychain: the code is entered a second after Connect.
   hub = await startHub(dataDir, { HOBBOTS_FAKE_GITHUB: "on" });
   const current = hub;
@@ -100,11 +99,7 @@ test("[TC-GEN-024] connects GitHub in Settings and grants it per hob on the Char
   await expect(charms.getByText("Reaches every repository @octohob can see.", { exact: false })).toBeVisible();
 });
 
-// covers PE-002
-test("[TC-GEN-040] shows a repository added on GitHub while Hobbots stays open beside the browser", async ({
-  page,
-  context,
-}) => {
+test("shows a repository added on GitHub while Hobbots stays open beside the browser", async ({ page, context }) => {
   hub = await startHub(dataDir, { HOBBOTS_FAKE_GITHUB: "on" });
   const current = hub;
   await api(current, "PATCH", "/api/setup", { completed: true, connectedProviders: ["claude-code"] });

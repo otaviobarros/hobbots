@@ -140,8 +140,7 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
   const toolsOf = (requests: ReturnType<typeof model.requests.slice>) =>
     [...new Set(requests.flatMap((request) => (request.tools ?? []).map((tool) => tool.name ?? "")))].sort();
 
-  // covers RT-001, ADR 029
-  it("[TC-RT-514] a chat-only turn loads only the skills Hobbots mounted, from no home folder", {
+  it("a chat-only turn loads only the skills Hobbots mounted, from no home folder", {
     timeout: 120_000,
   }, async () => {
     const { exit, requests, offered } = await turn({});
@@ -153,8 +152,7 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     expect(toolsOf(requests).filter((tool) => tool !== "DeferredToolPlaceholder")).toEqual(["Read", "Skill"]);
   });
 
-  // covers RT-001, PE-001, ADR 029
-  it("[TC-RT-515] a turn in a repository loads none of its skills, MCP servers, hooks or settings", {
+  it("a turn in a repository loads none of its skills, MCP servers, hooks or settings", {
     timeout: 120_000,
   }, async () => {
     const { exit, requests, offered } = await turn({ tools: access });
@@ -164,8 +162,7 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     expect(readdirSync(join(access.runtimeFolder, "skill-mounts"))).toEqual([]);
   });
 
-  // covers RT-001, ADR 029
-  it("[TC-RT-516] the hob reads a mounted skill with the Skill tool, and no other", { timeout: 120_000 }, async () => {
+  it("the hob reads a mounted skill with the Skill tool, and no other", { timeout: 120_000 }, async () => {
     const { exit, requests } = await turn({}, [
       { tool: "Skill", input: { skill: pluginSkill(LIBRARY_SKILL) } },
       { tool: "Skill", input: { skill: "home-claude-skill" } },
@@ -185,15 +182,13 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     expect(JSON.stringify(requests[2])).toMatch(/Unknown skill/);
   });
 
-  // covers RT-001, ADR 029
-  it("[TC-RT-517] an Only when asked skill still runs when the prompt names it", { timeout: 120_000 }, async () => {
+  it("an Only when asked skill still runs when the prompt names it", { timeout: 120_000 }, async () => {
     const { exit, offered } = await turn({ prompt: `/${pluginSkill(ASKED_SKILL)}` });
     expect(Exit.isSuccess(exit), String(exit)).toBe(true);
     expect(offered).toContain(`Use ${ASKED_SKILL}.`);
   });
 
-  // covers RT-001, ADR 029
-  it("[TC-RT-525] a skill you picked loads with the prompt, as Claude Code's own mention, and counts as used", {
+  it("a skill you picked loads with the prompt, as Claude Code's own mention, and counts as used", {
     timeout: 120_000,
   }, async () => {
     const { exit, offered } = await turn({ prompt: "Release it.", askedSkill: ASKED_SKILL });
@@ -209,8 +204,7 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
   const setSkillFolder = (base: string, name: string) =>
     join(base, SKILL_MOUNTS, skillMountsHash(fixture.mounts), "sets", TEAM_SET, "skills", name);
 
-  // covers RT-001, ADR 029
-  it("[TC-RT-1143-01] a skill of a set follows its links to the set's files, and a chat reads nothing else", {
+  it("a skill of a set follows its links to the set's files, and a chat reads nothing else", {
     timeout: 120_000,
   }, async () => {
     const base = setSkillFolder(join(root, "workspace"), SET_SKILL);
@@ -234,8 +228,7 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     ]);
   });
 
-  // covers RT-001, PE-001, ADR 029
-  it("[TC-RT-1143-02] with tools, a skill of a set reads the set's files under the policy's sandbox", {
+  it("with tools, a skill of a set reads the set's files under the policy's sandbox", {
     timeout: 120_000,
   }, async () => {
     const base = setSkillFolder(access.runtimeFolder, SET_SKILL);
@@ -247,8 +240,7 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     expect(JSON.stringify(requests[1])).toContain(SET_RULES);
   });
 
-  // covers RT-001, ADR 029
-  it("[TC-RT-1143-03] a skill of a set you picked loads by its set's name, and counts as used", {
+  it("a skill of a set you picked loads by its set's name, and counts as used", {
     timeout: 120_000,
   }, async () => {
     const { exit, offered } = await turn({ prompt: "Plan it.", askedSkill: `${TEAM_SET}:${SET_SKILL}` });
@@ -260,8 +252,7 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     ]);
   });
 
-  // covers RT-001, PE-001, ADR 036
-  it("[TC-RT-1266-11] a hob allowed to search is offered WebSearch, a hob set to Never is not, and none WebFetch", {
+  it("a hob allowed to search is offered WebSearch, a hob set to Never is not, and none WebFetch", {
     timeout: 120_000,
   }, async () => {
     const never = {
@@ -284,8 +275,7 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     }
   });
 
-  // covers RT-001, ADR 036 (On every runtime)
-  it("[TC-RT-1272-01] a hob searches with WebSearch, reads two pages from the results and answers with them as sources", {
+  it("a hob searches with WebSearch, reads two pages from the results and answers with them as sources", {
     timeout: 120_000,
   }, async () => {
     const contract = searchAndReadContract();
@@ -329,8 +319,7 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     expect(said).toContain(CONTRACT_ANSWER);
   });
 
-  // covers RT-001, ADR 029
-  it("[TC-RT-518] a turn without skills is offered no skill and no Skill tool", { timeout: 120_000 }, async () => {
+  it("a turn without skills is offered no skill and no Skill tool", { timeout: 120_000 }, async () => {
     const { exit, requests, offered } = await turn({ skills: null });
     expect(Exit.isSuccess(exit), String(exit)).toBe(true);
     for (const marker of [...FOREIGN_MARKERS, `${LIBRARY_SKILL}-offered`, `${AGENTS_SKILL}-offered`]) {
@@ -339,8 +328,7 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     expect(toolsOf(requests)).toEqual([]);
   });
 
-  // covers EX-004, ADR 031
-  it("[TC-PE-471] records a hub tool call's step with the turn's recorder before the hub runs it", {
+  it("records a hub tool call's step with the turn's recorder before the hub runs it", {
     timeout: 120_000,
   }, async () => {
     for (const records of [true, false]) {
@@ -357,8 +345,7 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     }
   });
 
-  // covers PE-008, ADR 031 (#1347)
-  it("[TC-PE-1347-05] a resumed session is offered the turn's hub tools, so a change reaches its next turn", {
+  it("a resumed session is offered the turn's hub tools, so a change reaches its next turn", {
     timeout: 120_000,
   }, async () => {
     const { hubTools } = stepRecordingContract();
@@ -379,8 +366,7 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
     );
   });
 
-  // covers PE-001, ADR 014 (#1356)
-  it("[TC-PE-1356-01] a call to a tool the session was not offered is reported as refused, not offered", {
+  it("a call to a tool the session was not offered is reported as refused, not offered", {
     timeout: 120_000,
   }, async () => {
     const contract = stepRecordingContract();
@@ -408,7 +394,7 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
   });
 
   // covers ADR 039 (The context pack with several hobs), RT-001
-  it("[TC-RT-1464-01] two hobs' sessions in one workspace each resume their own history, never the other's", {
+  it("two hobs' sessions in one workspace each resume their own history, never the other's", {
     timeout: 180_000,
   }, async () => {
     const started = async (prompt: string) => {
@@ -436,7 +422,7 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
   });
 
   // covers ADR 036 (On every runtime)
-  it("[TC-PE-1267-16] records a web_fetch call's step before the hub reads the page", {
+  it("records a web_fetch call's step before the hub reads the page", {
     timeout: 120_000,
   }, async () => {
     for (const records of [true, false]) {
@@ -454,7 +440,7 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
   });
 
   // covers ADR 039 (The context pack with several hobs), RT-001
-  it("[TC-RT-1465-01] the pack with several hobs reaches the model with the turn's prompt, never in its system prompt", {
+  it("the pack with several hobs reaches the model with the turn's prompt, never in its system prompt", {
     timeout: 120_000,
   }, async () => {
     const { exit, requests } = await turn({ briefing: CONTRACT_PACK, prompt: PACK_PROMPT });
@@ -470,7 +456,7 @@ describe.runIf(claude !== undefined)("a clean Claude Code runtime (ADR 029)", ()
   });
 
   // covers ADR 032 (The roster, Every runtime)
-  it("[TC-RT-1235-01] the roster of other hobs reaches the model with the turn's prompt, never in its system prompt", {
+  it("the roster of other hobs reaches the model with the turn's prompt, never in its system prompt", {
     timeout: 120_000,
   }, async () => {
     const { exit, requests } = await turn({ briefing: CONTRACT_ROSTER, prompt: "Who can push to GitHub?" });

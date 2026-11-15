@@ -52,10 +52,7 @@ const chat = async (current: Hub, hobId: string, ...contents: ReadonlyArray<stri
     .toBe(true);
 };
 
-// covers OP-002
-test("[TC-OP-073] the Usage screen shows each plan's potion and each hob's share over 7 and 30 days", async ({
-  page,
-}) => {
+test("the Usage screen shows each plan's potion and each hob's share over 7 and 30 days", async ({ page }) => {
   hub = await startHub(dataDir);
   const current = hub;
   await api(current, "PATCH", "/setup", { completed: true });
@@ -116,8 +113,7 @@ test("[TC-OP-073] the Usage screen shows each plan's potion and each hob's share
   await expect(hobs).toHaveCount(2);
 });
 
-// covers OP-002
-test("[TC-OP-074] a hub where no hob has replied says so", async ({ page }) => {
+test("a hub where no hob has replied says so", async ({ page }) => {
   hub = await startHub(dataDir);
   await api(hub, "PATCH", "/setup", { completed: true });
   await page.goto(`${hub.url}/#/usage?days=30`);
@@ -171,8 +167,7 @@ const boxOf = async (locator: ReturnType<Page["locator"]>) => {
   return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) };
 };
 
-// covers OP-002
-test("[TC-OP-092] Usage and Home keep their places while Claude Code is asked for the plan", async ({ page }) => {
+test("Usage and Home keep their places while Claude Code is asked for the plan", async ({ page }) => {
   hub = await startHub(dataDir);
   await api(hub, "PATCH", "/setup", { completed: true });
 
@@ -208,8 +203,7 @@ test("[TC-OP-092] Usage and Home keep their places while Claude Code is asked fo
   expect(await boxOf(line)).toEqual(waitingLine);
 });
 
-// covers OP-002
-test("[TC-OP-093] switching the period keeps the last numbers until the new ones arrive", async ({ page }) => {
+test("switching the period keeps the last numbers until the new ones arrive", async ({ page }) => {
   hub = await startHub(dataDir);
   const current = hub;
   await api(current, "PATCH", "/setup", { completed: true });
@@ -242,8 +236,7 @@ test("[TC-OP-093] switching the period keeps the last numbers until the new ones
   await expect(hobs).toHaveCount(1);
 });
 
-// covers OP-002
-test("[TC-OP-077] a plan warns when it runs low and says when paused hobs come back", async ({ page }) => {
+test("a plan warns when it runs low and says when paused hobs come back", async ({ page }) => {
   hub = await startHub(dataDir);
   await api(hub, "PATCH", "/setup", { completed: true });
 
@@ -279,8 +272,7 @@ test("[TC-OP-077] a plan warns when it runs low and says when paused hobs come b
   await expect(claude.getByRole("listitem").nth(0).locator("[data-slot=progress]")).toHaveAttribute("data-tone", "out");
 });
 
-// covers OP-002
-test("[TC-OP-091] Who used what splits the period by quest, with the chats outside a quest last", async ({ page }) => {
+test("Who used what splits the period by quest, with the chats outside a quest last", async ({ page }) => {
   hub = await startHub(dataDir);
   await api(hub, "PATCH", "/setup", { completed: true });
   await page.route(isReport, async (route) => {

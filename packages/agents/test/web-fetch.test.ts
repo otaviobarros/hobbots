@@ -55,7 +55,7 @@ describe("web_fetch's found URLs (ADR 036)", () => {
 
 describe("a search's results as found URLs (ADR 036)", () => {
   // covers ADR 036 (Where a URL came from)
-  it("[TC-PE-1289-01] takes only the runtime's structured results, keyed, and leaves out anything not http or https", () => {
+  it("takes only the runtime's structured results, keyed, and leaves out anything not http or https", () => {
     expect(
       searchFound({
         query: "lamp oil https://example.com/from-the-query",
@@ -79,7 +79,7 @@ describe("a search's results as found URLs (ADR 036)", () => {
     ]);
   });
 
-  it("[TC-PE-1289-02] adds nothing for a search that reported no structured results", () => {
+  it("adds nothing for a search that reported no structured results", () => {
     expect(searchFound({ query: "lamp oil", results: null })).toEqual([]);
     expect(searchFound({ query: "lamp oil", results: [] })).toEqual([]);
   });

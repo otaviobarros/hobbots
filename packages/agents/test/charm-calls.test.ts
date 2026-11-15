@@ -24,8 +24,7 @@ const write = (key: string): CharmWrite => ({
 const K1 = "hob reply:m1 k1";
 
 describe("Charm call runner", () => {
-  // covers IN-003, EX-003
-  it("[TC-OR-074] never settles a key's later sending from a read-back that started for an earlier one", async () => {
+  it("never settles a key's later sending from a read-back that started for an earlier one", async () => {
     const rows = new Map<string, CharmCall>();
     const result = await Effect.gen(function* () {
       const lookedUp = yield* Deferred.make<void>();
@@ -77,8 +76,7 @@ describe("Charm call runner", () => {
     expect(Option.getOrThrow(result.final)).toMatchObject({ state: "applied", result: "Pushed again." });
   });
 
-  // covers EX-004, OR-001
-  it("[TC-OR-426] keeps reading an uncertain call back after its reply's calls move to the Task the reply started", async () => {
+  it("keeps reading an uncertain call back after its reply's calls move to the Task the reply started", async () => {
     const rows = new Map<string, CharmCall>();
     const final = await Effect.gen(function* () {
       // GitHub shows the push only after the reply has started its Task.

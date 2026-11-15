@@ -185,8 +185,7 @@ const newHob = async (): Promise<Agent> => {
 const permissions = (agent: Agent) => `/api/agents/${agent.id}/permissions`;
 
 describe("a hob's folders", () => {
-  // covers AG-002, AG-004
-  it("[TC-AG-090] starts with the shared folders and the preset, and stores a folder change as a new version", async () => {
+  it("starts with the shared folders and the preset, and stores a folder change as a new version", async () => {
     const agent = await newHob();
     expect(await request("GET", permissions(agent))).toEqual({
       status: 200,
@@ -230,8 +229,7 @@ describe("a hob's folders", () => {
     expect(renamed.body).toMatchObject({ configVersion: 3, policy: changed.body.policy });
   });
 
-  // covers AG-004, PE-005
-  it("[TC-AG-101] turns commit signing with the user's 1Password key on and off as new versions", async () => {
+  it("turns commit signing with the user's 1Password key on and off as new versions", async () => {
     const agent = await newHob();
     const on = await request("PATCH", permissions(agent), { signCommits: true });
     expect(on).toMatchObject({
@@ -255,8 +253,7 @@ describe("a hob's folders", () => {
     });
   });
 
-  // covers AG-004, PE-002
-  it("[TC-PE-146] grants the GitHub Charm to every hob, and takes it away and back as new versions", async () => {
+  it("grants the GitHub Charm to every hob, and takes it away and back as new versions", async () => {
     const agent = await newHob();
     // A new hob has the Charm: its policy names it among its Charms (ADR 031).
     expect((await request("GET", permissions(agent))).body.policy).toEqual({
@@ -283,8 +280,7 @@ describe("a hob's folders", () => {
     });
   });
 
-  // covers AG-004, PE-002, ADR 031
-  it("[TC-PE-507] grants a hob the Charms it is given by id, and refuses a Charm the hub does not hold", async () => {
+  it("grants a hob the Charms it is given by id, and refuses a Charm the hub does not hold", async () => {
     const agent = await newHob();
     const off = await request("PATCH", permissions(agent), { charms: { granted: [] } });
     expect(off).toMatchObject({ status: 200, body: { configVersion: 2, policy: { charms: { granted: [] } } } });
@@ -305,8 +301,7 @@ describe("a hob's folders", () => {
     });
   });
 
-  // covers AG-004, PE-002, ADR 031
-  it("[TC-PE-511] lets a hob be granted a Charm that is only registered, and rules on the operations it declares", async () => {
+  it("lets a hob be granted a Charm that is only registered, and rules on the operations it declares", async () => {
     await dispose();
     // Rook is registered with the Charm registry and declared nowhere else.
     start(
@@ -332,8 +327,7 @@ describe("a hob's folders", () => {
     expect(github).toMatchObject({ status: 400, body: { _tag: "UnknownCharm", charms: ["github"] } });
   });
 
-  // covers AG-004
-  it("[TC-AG-091] refuses a missing folder, an own folder that is already shared and hiding a folder that is not shared", async () => {
+  it("refuses a missing folder, an own folder that is already shared and hiding a folder that is not shared", async () => {
     const agent = await newHob();
     const missing = await request("PATCH", permissions(agent), { ownFolders: [join(temp, "missing")] });
     expect(missing).toMatchObject({ status: 400, body: { _tag: "InvalidFolder" } });
@@ -350,8 +344,7 @@ describe("a hob's folders", () => {
     });
   });
 
-  // covers AG-002
-  it("[TC-AG-092] finishes a running reply with the configuration it started with when the folders change", async () => {
+  it("finishes a running reply with the configuration it started with when the folders change", async () => {
     const agent = await newHob();
     const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
     const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
@@ -372,8 +365,7 @@ describe("a hob's folders", () => {
 });
 
 describe("a hob's hidden folders", () => {
-  // covers AG-004, PE-001
-  it("[TC-AG-095] keeps a shared folder saved by an earlier version as a symlink hidden after setup is saved again", async () => {
+  it("keeps a shared folder saved by an earlier version as a symlink hidden after setup is saved again", async () => {
     await dispose();
     start([sharedLink, notes]);
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
@@ -400,8 +392,7 @@ describe("a hob's hidden folders", () => {
     });
   });
 
-  // covers AG-004, PE-001
-  it("[TC-AG-096] keeps a shared folder hidden that was away when it was hidden, once it returns and setup is saved again", async () => {
+  it("keeps a shared folder hidden that was away when it was hidden, once it returns and setup is saved again", async () => {
     await dispose();
     start([awayLink, notes]);
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
@@ -435,8 +426,7 @@ describe("a hob's hidden folders", () => {
 });
 
 describe("a hob's overrides", () => {
-  // covers AG-004, PE-001
-  it("[TC-AG-093] narrows the preset, and rejects an override that would widen it and stores nothing", async () => {
+  it("narrows the preset, and rejects an override that would widen it and stores nothing", async () => {
     const agent = await newHob();
 
     const widening = await request("PATCH", permissions(agent), {
@@ -466,8 +456,7 @@ describe("a hob's overrides", () => {
     });
   });
 
-  // covers AG-004, PE-001
-  it("[TC-AG-161] narrows a Charm operation by its id, and refuses one no Charm on the hub declares", async () => {
+  it("narrows a Charm operation by its id, and refuses one no Charm on the hub declares", async () => {
     const agent = await newHob();
 
     const undeclared = await request("PATCH", permissions(agent), { charms: { overrides: { "mail.send": "deny" } } });
@@ -489,8 +478,7 @@ describe("a hob's overrides", () => {
     });
   });
 
-  // covers AG-004, ADR 036
-  it("[TC-AG-1266-01] sets Search the web to Never, and refuses Ask for it, which it does not take", async () => {
+  it("sets Search the web to Never, and refuses Ask for it, which it does not take", async () => {
     const agent = await newHob();
     expect((await request("GET", permissions(agent))).body).toMatchObject({ decisions: { "search-web": "allow" } });
 
@@ -504,8 +492,7 @@ describe("a hob's overrides", () => {
     });
   });
 
-  // covers AG-004, PE-008
-  it("[TC-AG-094] keeps an override narrowing under a stricter preset picked later", async () => {
+  it("keeps an override narrowing under a stricter preset picked later", async () => {
     const agent = await newHob();
     await request("PATCH", permissions(agent), { overrides: { "run-commands": "ask", "use-web": "allow" } });
     await request("PATCH", "/api/setup", { safetyPreset: "careful" });
@@ -527,8 +514,7 @@ describe("a hob's overrides", () => {
 });
 
 describe("unsupported enforcement", () => {
-  // covers PE-005
-  it("[TC-PE-042] reports a sandbox that cannot start in the hob's permissions and in provider health", async () => {
+  it("reports a sandbox that cannot start in the hob's permissions and in provider health", async () => {
     await dispose();
     start(undefined, "unavailable");
     const agent = await newHob();

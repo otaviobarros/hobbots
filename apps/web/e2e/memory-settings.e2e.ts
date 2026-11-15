@@ -40,7 +40,7 @@ const BRAIN = "The hub's brain";
 const stored = () => JSON.parse(readFileSync(join(dataDir, "memory-settings.json"), "utf8")) as Record<string, unknown>;
 
 // covers ADR 028, ADR 037, OP-002
-test("[TC-GEN-222] chooses the hub's brain from one list in Your data, sees shares follow the preset in Safety, and memory's line in Usage", async ({
+test("chooses the hub's brain from one list in Your data, sees shares follow the preset in Safety, and memory's line in Usage", async ({
   page,
 }) => {
   hub = await startHub(dataDir);
@@ -123,7 +123,7 @@ test("[TC-GEN-222] chooses the hub's brain from one list in Your data, sees shar
 });
 
 // covers ADR 037, STD-REACT-015, STD-UI-009
-test("[TC-GEN-229] says when the hub can't tell which AI is signed in, keeps the providers it knows, and checks again", async ({
+test("says when the hub can't tell which AI is signed in, keeps the providers it knows, and checks again", async ({
   page,
 }) => {
   hub = await startHub(dataDir);
@@ -155,7 +155,7 @@ test("[TC-GEN-229] says when the hub can't tell which AI is signed in, keeps the
 });
 
 // covers ADR 028, ADR 037
-test("[TC-GEN-224] keeps a choice the hub could not save, sends it again or goes back, and brings an effort chosen before back to low", async ({
+test("keeps a choice the hub could not save, sends it again or goes back, and brings an effort chosen before back to low", async ({
   page,
 }) => {
   // An effort chosen before the brain ran at low effort only.
@@ -195,7 +195,7 @@ test("[TC-GEN-224] keeps a choice the hub could not save, sends it again or goes
 });
 
 // covers ADR 037, OP-001
-test("[TC-GEN-226] setup shows the hub's brain once a provider connects, on its smallest model, and saves it on Continue", async ({
+test("setup shows the hub's brain once a provider connects, on its smallest model, and saves it on Continue", async ({
   page,
 }) => {
   hub = await startHub(dataDir);
@@ -255,7 +255,7 @@ test("[TC-GEN-226] setup shows the hub's brain once a provider connects, on its 
 });
 
 // covers ADR 037, OP-001
-test("[TC-GEN-227] setup keeps a brain chosen before on a connected provider, says its effort, and brings it back to low", async ({
+test("setup keeps a brain chosen before on a connected provider, says its effort, and brings it back to low", async ({
   page,
 }) => {
   writeFileSync(join(dataDir, "memory-settings.json"), JSON.stringify({ ...DEFAULT_MEMORY_SETTINGS, effort: "high" }));
@@ -280,7 +280,7 @@ test("[TC-GEN-227] setup keeps a brain chosen before on a connected provider, sa
 });
 
 // covers ADR 037, OP-001
-test("[TC-GEN-228] setup waits for the saved brain to be read before Continue, and reads it again after a failure", async ({
+test("setup waits for the saved brain to be read before Continue, and reads it again after a failure", async ({
   page,
 }) => {
   hub = await startHub(dataDir);
@@ -308,7 +308,7 @@ test("[TC-GEN-228] setup waits for the saved brain to be read before Continue, a
 });
 
 // covers ADR 028
-test("[TC-GEN-225] says when the desktop app could not show the memory files, and tries again", async ({ page }) => {
+test("says when the desktop app could not show the memory files, and tries again", async ({ page }) => {
   hub = await startHub(dataDir);
   await finishSetup(hub);
   // The desktop app's bridge: no folder yet the first time, then it opens.

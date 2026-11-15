@@ -58,8 +58,7 @@ const nested = async (hubTools: ReturnType<typeof toolsHub>) => {
 };
 
 describe("a lead reads its subtree and messages its members", () => {
-  // covers OR-002, OR-006, PE-003
-  it("[TC-OR-248] read_tasks returns every Task under the caller's, at any depth, and refuses Tasks outside it", async () => {
+  it("read_tasks returns every Task under the caller's, at any depth, and refuses Tasks outside it", async () => {
     const tools = toolsHub(party, TOP);
     dispose = tools.dispose;
     const { pip, nettle, question } = await nested(tools);
@@ -98,8 +97,7 @@ describe("a lead reads its subtree and messages its members", () => {
     expect((await refused(NETTLE, nettle, "read_tasks", { key: "up", task_id: pip })).reason).toBe("outside-subtree");
   });
 
-  // covers OR-002, IN-001, IN-004
-  it("[TC-OR-249] message_task reaches a member directly under the lead once, however often it is retried, and never skips a level", async () => {
+  it("message_task reaches a member directly under the lead once, however often it is retried, and never skips a level", async () => {
     const tools = toolsHub(party, TOP);
     dispose = tools.dispose;
     const { pip, nettle } = await nested(tools);
@@ -137,8 +135,7 @@ describe("a lead reads its subtree and messages its members", () => {
     expect(await journaledSince(after)).toEqual(["ToolCallRefused", "ToolCallRefused"]);
   });
 
-  // covers OR-002, OR-006, IN-001, IN-004
-  it("[TC-OR-250] once the obstacle clears, Frodo's message reaches Pip, Pip's reaches Nettle, and the nested Quest completes with no cancel", async () => {
+  it("once the obstacle clears, Frodo's message reaches Pip, Pip's reaches Nettle, and the nested Quest completes with no cancel", async () => {
     const hubbed = partyHub();
     dispose = hubbed.dispose;
     const { run, requests, answers, reactions } = hubbed;
@@ -224,8 +221,7 @@ describe("a lead reads its subtree and messages its members", () => {
 });
 
 describe("a message to a member waiting on an approval", () => {
-  // covers OR-002, IN-001, PE-003
-  it("[TC-OR-487] Frodo's message to Quill while Quill's turn waits for your approval says it is held and why, and reaches Quill once you decide", async () => {
+  it("Frodo's message to Quill while Quill's turn waits for your approval says it is held and why, and reaches Quill once you decide", async () => {
     const hubbed = partyHub();
     dispose = hubbed.dispose;
     const { run, requests, answers, reactions } = hubbed;
@@ -279,8 +275,7 @@ describe("a message to a member waiting on an approval", () => {
     expect(requests.filter((each) => each.prompt.includes("Hob frodo sent you a message"))).toHaveLength(1);
   }, 30_000);
 
-  // covers OR-002, IN-001
-  it("[TC-OR-488] a message to a member whose turn runs, with no approval, says it is held until that turn ends", async () => {
+  it("a message to a member whose turn runs, with no approval, says it is held until that turn ends", async () => {
     const tools = toolsHub(party, TOP);
     dispose = tools.dispose;
     const { pip, nettle } = await nested(tools);
@@ -301,8 +296,7 @@ describe("a message to a member waiting on an approval", () => {
 });
 
 describe("a message to a member whose turn runs", () => {
-  // covers OR-007
-  it("[TC-OR-1345-05] a message sent with no delivery to a member whose turn runs reaches it at its next step", async () => {
+  it("a message sent with no delivery to a member whose turn runs reaches it at its next step", async () => {
     const tools = toolsHub(party, TOP);
     dispose = tools.dispose;
     const { pip, nettle } = await nested(tools);
@@ -317,8 +311,7 @@ describe("a message to a member whose turn runs", () => {
     expect((await tree()).notes.map((note) => note.delivery)).toEqual(["steer"]);
   });
 
-  // covers OR-007, RT-002
-  it("[TC-OR-1345-06] a steered message to a member whose runtime cannot take one while a turn runs interrupts that turn, and says why", async () => {
+  it("a steered message to a member whose runtime cannot take one while a turn runs interrupts that turn, and says why", async () => {
     const tools = toolsHub(party, TOP, Layer.succeed(RuntimeAdapter, { ...makeFakeRuntime(), steersTurns: false }));
     dispose = tools.dispose;
     const { pip, nettle } = await nested(tools);
@@ -334,8 +327,7 @@ describe("a message to a member whose turn runs", () => {
 });
 
 describe("a lead reads its Quest after it ends", () => {
-  // covers OR-002, OR-006
-  it("[TC-OR-472] once the request completes, its lead's chat turn still reads the finished tree, and every changing tool is refused", async () => {
+  it("once the request completes, its lead's chat turn still reads the finished tree, and every changing tool is refused", async () => {
     const hubbed = partyHub();
     dispose = hubbed.dispose;
     const { run, answers, reactions } = hubbed;

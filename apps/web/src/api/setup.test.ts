@@ -16,8 +16,7 @@ describe("opening the app", () => {
     expect(opensWelcome(undefined)).toBe(false);
   });
 
-  // covers OP-001
-  it("[TC-OP-009] keeps Welcome and the setup steps open until setup is done, then hands over to Home", () => {
+  it("keeps Welcome and the setup steps open until setup is done, then hands over to Home", () => {
     expect(setupDone(setup(false))).toBe(false);
     expect(setupDone(undefined)).toBe(false);
     expect(setupDone(setup(true))).toBe(true);
@@ -25,8 +24,7 @@ describe("opening the app", () => {
 });
 
 describe("readSetup", () => {
-  // covers OP-001, DP-001
-  it("[TC-OP-008] opens Home once another client has finished setup, despite this client's cached answer", async () => {
+  it("opens Home once another client has finished setup, despite this client's cached answer", async () => {
     // The hub's stored setup, shared by both clients.
     let stored = setup(false);
     const hub = { ...setupQuery, queryFn: async () => stored };
@@ -60,8 +58,7 @@ describe("watchedSetupQuery", () => {
   const providers = (connectedProviders: InstallationSetup["connectedProviders"]) =>
     new InstallationSetup({ completed: false, safetyPreset: "balanced", approvedFolders: [], connectedProviders });
 
-  // covers OP-001, DP-001
-  it("[TC-OP-013] shows a provider another client connected or disconnected once this window is back", async () => {
+  it("shows a provider another client connected or disconnected once this window is back", async () => {
     // The hub's stored setup, changed by another client while this window is in the background.
     let stored = providers(["claude-code"]);
     // The app's defaults: no refetch on focus, data fresh for 30 seconds.

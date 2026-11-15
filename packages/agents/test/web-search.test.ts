@@ -30,8 +30,7 @@ const access = (
 });
 
 describe("Search the web", () => {
-  // covers PE-008, ADR 036
-  it("[TC-PE-1266-02] stops a running turn when Search the web is set to Never, not when it is allowed again", () => {
+  it("stops a running turn when Search the web is set to Never, not when it is allowed again", () => {
     expect(narrows(access(), access({ "search-web": "deny" }))).toBe(true);
     expect(narrows(access({ "search-web": "deny" }), access())).toBe(false);
   });
@@ -45,7 +44,7 @@ describe("Search the web", () => {
   });
 
   // covers ADR 036, STD-SEC-002
-  it("[TC-PE-523] offers a search that can open pages only where Use the web reads any page without asking", () => {
+  it("offers a search that can open pages only where Use the web reads any page without asking", () => {
     const opensPages = { searchOpensPages: true };
     const linksOnly = { searchOpensPages: false };
     // Careful asks before the first page on a new site, and Never refuses every page.
@@ -80,7 +79,7 @@ const requestUnder = (settings: typeof DEFAULT_WEB_SETTINGS, policy: ToolAccess,
 
 describe("a turn's search where the runtime's search opens pages", () => {
   // covers ADR 036, STD-SEC-002
-  it("[TC-PE-524] turns it off under Careful, a blocked site or no pages a turn, and tells the hob why", async () => {
+  it("turns it off under Careful, a blocked site or no pages a turn, and tells the hob why", async () => {
     const careful = await requestUnder(DEFAULT_WEB_SETTINGS, access({}, "careful"), true);
     expect(careful).toMatchObject({ webSearch: false, note: pageSearchReason.useWeb });
 

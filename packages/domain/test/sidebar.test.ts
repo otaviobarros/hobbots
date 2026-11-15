@@ -43,7 +43,7 @@ const entry = (
 ): SidebarThread => ({ thread: t, members, unread, mentions: 0, needsYou: false });
 
 describe("sidebarSectionOf", () => {
-  it("[TC-DM-1469-01] puts a chat in Direct messages, a camp with one hob in its hob's camps, and a camp with more in shared camps", () => {
+  it("puts a chat in Direct messages, a camp with one hob in its hob's camps, and a camp with more in shared camps", () => {
     expect(sidebarSectionOf({ kind: "chat" }, [member(you), member(hob("aldric"))], you)).toBe("direct-message");
     expect(sidebarSectionOf({ kind: "camp" }, [member(you), member(hob("aldric"))], you)).toBe("hob-camp");
     expect(sidebarSectionOf({ kind: "camp" }, [member(you), member(hob("aldric")), member(hob("quill"))], you)).toBe(
@@ -58,7 +58,7 @@ describe("sidebarSectionOf", () => {
 });
 
 describe("sidebarOf", () => {
-  it("[TC-DM-1469-02] lists shared camps first, then the hobs' own camps pinned first, then by last activity", () => {
+  it("lists shared camps first, then the hobs' own camps pinned first, then by last activity", () => {
     const sidebar = sidebarOf({
       you,
       threads: [
@@ -90,7 +90,7 @@ describe("sidebarOf", () => {
     expect(sidebar.directMessages.map((place) => place.threadId)).toEqual(["chat-aldric", "chat-quill"]);
   });
 
-  it("[TC-DM-1469-03] moves a camp between sections as its members change, with nothing on the thread to change", () => {
+  it("moves a camp between sections as its members change, with nothing on the thread to change", () => {
     const camp = thread("camp", "camp");
     const alone = sidebarOf({ you, threads: [entry(camp, [member(you), member(hob("aldric"))], 2)] });
     const shared = sidebarOf({
@@ -105,7 +105,7 @@ describe("sidebarOf", () => {
     expect(Object.keys(ThreadMember.fields)).not.toContain("section");
   });
 
-  it("[TC-DM-1469-04] lists every open thread you are active in exactly once, in the section its members decide", () => {
+  it("lists every open thread you are active in exactly once, in the section its members decide", () => {
     const actor = fc.constantFrom(you, marina, hob("aldric"), hob("quill"), hob("pip"));
     const anEntry = fc.record({
       kind: fc.constantFrom("chat" as const, "camp" as const),
@@ -150,7 +150,7 @@ describe("sidebarOf", () => {
 });
 
 describe("threadsNeedingYou", () => {
-  it("[TC-DM-1469-05] marks the threads where an approval, a question, a blocker or failed work waits on you", () => {
+  it("marks the threads where an approval, a question, a blocker or failed work waits on you", () => {
     const asked = ThreadId.make("asked");
     const questioned = ThreadId.make("questioned");
     const blocked = ThreadId.make("blocked");
@@ -174,7 +174,7 @@ describe("threadsNeedingYou", () => {
     expect([...needing].sort()).toEqual([asked, blocked, failed, questioned].sort());
   });
 
-  it("[TC-DM-1469-07] marks a shared camp only for the person who decides there, not for the members waiting on them", () => {
+  it("marks a shared camp only for the person who decides there, not for the members waiting on them", () => {
     const shared = ThreadId.make("shared");
     const input = {
       approvals: [{ threadId: shared, state: "pending" as const }],
@@ -186,7 +186,7 @@ describe("threadsNeedingYou", () => {
     expect([...threadsNeedingYou({ ...input, decides: () => false })]).toEqual([]);
   });
 
-  it("[TC-DM-1469-06] carries the mark onto the thread's place, and a reply waiting on commands does not set it", () => {
+  it("carries the mark onto the thread's place, and a reply waiting on commands does not set it", () => {
     const camp = thread("camp", "camp");
     const sidebar = sidebarOf({
       you,

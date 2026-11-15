@@ -152,8 +152,7 @@ const openHub = async (page: Page) => {
   return { composer };
 };
 
-// covers DP-001, DP-002
-test("[TC-DP-170] a hub that stops shows the app's reason in the banner, and the page carries on when it starts again", async ({
+test("a hub that stops shows the app's reason in the banner, and the page carries on when it starts again", async ({
   page,
 }) => {
   const { composer } = await openHub(page);
@@ -179,10 +178,7 @@ test("[TC-DP-170] a hub that stops shows the app's reason in the banner, and the
   await expect(page.getByRole("main").getByText("Echo: sent once the hub is back", { exact: true })).toBeVisible();
 });
 
-// covers DP-001
-test("[TC-DP-171] Change address takes the hub's new address in the banner, and says why one is refused", async ({
-  page,
-}) => {
+test("Change address takes the hub's new address in the banner, and says why one is refused", async ({ page }) => {
   await openHub(page);
   await setView(page, VIEWS.unreachable);
   await banner(page).getByRole("button", { name: "Change address" }).click();
@@ -203,10 +199,7 @@ test("[TC-DP-171] Change address takes the hub's new address in the banner, and 
   expect(await bridgeCalls(page)).toEqual(["changeAddress other:4400", "changeAddress studio:4400"]);
 });
 
-// covers DP-001
-test("[TC-DP-171] an address being checked stays locked until the app answers, so no second change starts", async ({
-  page,
-}) => {
+test("an address being checked stays locked until the app answers, so no second change starts", async ({ page }) => {
   await openHub(page);
   await setView(page, VIEWS.unreachable);
   await banner(page).getByRole("button", { name: "Change address" }).click();
@@ -229,8 +222,7 @@ test("[TC-DP-171] an address being checked stays locked until the app answers, s
   expect(await bridgeCalls(page)).toEqual(["changeAddress slow:4400"]);
 });
 
-// covers DP-001
-test("[TC-DP-169] Tailscale off on this Mac offers to open Tailscale", async ({ page }) => {
+test("Tailscale off on this Mac offers to open Tailscale", async ({ page }) => {
   await openHub(page);
   await setView(page, VIEWS.tailscaleOff);
   await expect(banner(page)).toContainText("Tailscale is off on this Mac.");
@@ -240,10 +232,7 @@ test("[TC-DP-169] Tailscale off on this Mac offers to open Tailscale", async ({ 
   await page.screenshot({ path: test.info().outputPath("tailscale-off.png") });
 });
 
-// covers DP-001
-test("[TC-DP-169] a bridge from before the reasons keeps the generic banner instead of breaking the page", async ({
-  page,
-}) => {
+test("a bridge from before the reasons keeps the generic banner instead of breaking the page", async ({ page }) => {
   const { composer } = await openHub(page);
   const errors: Array<string> = [];
   page.on("pageerror", (error) => errors.push(error.message));

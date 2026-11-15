@@ -43,8 +43,7 @@ describe("inboxWindow", () => {
 });
 
 describe("storeApproval on the Inbox", () => {
-  // covers PE-003
-  it("[TC-IN-005] a decision arriving live never grows History past its window", () => {
+  it("a decision arriving live never grows History past its window", () => {
     const client = new QueryClient();
     const pending = request(500, "pending");
     client.setQueryData(inboxQuery.queryKey, [...closed(INBOX_HISTORY), pending]);
@@ -71,8 +70,7 @@ describe("approvalQuery, the request open beside the list", () => {
   const pending = request(500, "pending");
   const approved = new ApprovalRequest({ ...pending, state: "approved", decidedAt: at(600), revision: 2 });
 
-  // covers PE-003
-  it("[TC-IN-006] a fresh snapshot replaces the pending version the client last saw", async () => {
+  it("a fresh snapshot replaces the pending version the client last saw", async () => {
     const client = new QueryClient();
     client.setQueryData(approvalQuery(pending.id).queryKey, pending);
     // The client missed the decision: a fresh Ready drops what it knew and reads the hub again.
@@ -82,8 +80,7 @@ describe("approvalQuery, the request open beside the list", () => {
     expect(client.getQueryData(approvalQuery(pending.id).queryKey)).toBe(approved);
   });
 
-  // covers PE-003
-  it("[TC-IN-007] keeps a decision that arrived while the read was in flight, and reads again after a fresh Ready", async () => {
+  it("keeps a decision that arrived while the read was in flight, and reads again after a fresh Ready", async () => {
     const client = new QueryClient();
     const { fetch, answer, pending: waiting } = pendingFetch();
     const loading = read(client, pending.id, fetch);
@@ -101,8 +98,7 @@ describe("approvalQuery, the request open beside the list", () => {
     expect(await again).toBe(expired);
   });
 
-  // covers PE-003
-  it("[TC-IN-008] a decision arriving live updates the request read on its own", () => {
+  it("a decision arriving live updates the request read on its own", () => {
     const client = new QueryClient();
     client.setQueryData(approvalQuery(pending.id).queryKey, pending);
     storeApproval(client, approved);

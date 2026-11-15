@@ -162,8 +162,7 @@ const breakNextAppend = Effect.gen(function* () {
 });
 
 describe("Make a camp", () => {
-  // covers CH-009
-  it("[TC-CH-1376-01] writes the camp and journals CampMade once, answers the same request again even after a rename, and refuses a reused key", async () => {
+  it("writes the camp and journals CampMade once, answers the same request again even after a rename, and refuses a reused key", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* hobWithChat;
@@ -211,8 +210,7 @@ describe("Make a camp", () => {
 });
 
 describe("Start fresh", () => {
-  // covers CH-009, IN-001
-  it("[TC-CH-1376-02] moves every open thing to the new chat once, records it as carried over, and leaves none on the old chat", async () => {
+  it("moves every open thing to the new chat once, records it as carried over, and leaves none on the old chat", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* hobWithChat;
@@ -280,8 +278,7 @@ describe("Start fresh", () => {
     expect(result.archived.map((thread) => [thread.id, thread.state])).toEqual([[CHAT, "superseded"]]);
   });
 
-  // covers CH-009
-  it("[TC-CH-1376-03] writes nothing when the chat changed since it was read", async () => {
+  it("writes nothing when the chat changed since it was read", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* hobWithChat;
@@ -297,8 +294,7 @@ describe("Start fresh", () => {
     expect(Option.getOrThrow(result.chat).state).toBe("open");
   });
 
-  // covers CH-009, DP-001
-  it("[TC-CH-1376-04] leaves neither half of Make a camp or Start fresh when it fails midway through its writes", async () => {
+  it("leaves neither half of Make a camp or Start fresh when it fails midway through its writes", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* hobWithChat;

@@ -196,7 +196,7 @@ const sessionOf = (id: ThreadId, runtime: RuntimeKind, agentId: AgentId) =>
 describe("the context pack with several hobs", () => {
   // covers ADR 039 (The context pack with several hobs), RT-001
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "[TC-CH-1465-06] on %s, each hob's pack names who is here, why it answers and every speaker, with only its own memory",
+    "on %s, each hob's pack names who is here, why it answers and every speaker, with only its own memory",
     async (runtime) => {
       const id = await start(runtime);
       await say(id, "@Wren our stall is number 12.");
@@ -262,7 +262,7 @@ const keptBy = (agentId: AgentId, id: ThreadId) =>
 describe("memory in a shared thread", () => {
   // covers ADR 039 (Memory in a shared thread), ADR 037 (A camp is a thread with a kind), RT-001
   it.each<RuntimeKind>(["claude-code", "codex"])(
-    "[TC-GEN-1466-05] on %s, each hob's memory keeps its own turns and the messages it took, and a private camp none",
+    "on %s, each hob's memory keeps its own turns and the messages it took, and a private camp none",
     async (runtime) => {
       const id = await start(runtime);
       // Memory is on from the start: the worker holds the journal from its head.

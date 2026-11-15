@@ -104,8 +104,7 @@ const stopEvents = (events: ReadonlyArray<HobbotsEvent>) =>
   );
 
 describe("Stopping a reply", () => {
-  // covers CH-007
-  it("[TC-CH-002] shows stopping until the runtime confirms, then stopped with the partial text kept", async () => {
+  it("shows stopping until the runtime confirms, then stopped with the partial text kept", async () => {
     const result = await run((events, confirm) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -159,8 +158,7 @@ describe("Stopping a reply", () => {
     expect(result.next.status).toBe("streaming");
   });
 
-  // covers CH-007, ADR 039 (One hob speaks at a time)
-  it("[TC-CH-1461-16] a stop meant for one hob's turn leaves another hob's reply running", async () => {
+  it("a stop meant for one hob's turn leaves another hob's reply running", async () => {
     const result = await run((events, confirm) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -182,8 +180,7 @@ describe("Stopping a reply", () => {
     expect(result.events.filter((each) => each === "TurnStopRequested")).toHaveLength(1);
   });
 
-  // covers CH-007
-  it("[TC-CH-003] treats repeated stops, and stops with no reply running, as harmless", async () => {
+  it("treats repeated stops, and stops with no reply running, as harmless", async () => {
     const result = await run((events, confirm) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
@@ -213,8 +210,7 @@ describe("Stopping a reply", () => {
     expect(result.after?.status).toBe("stopped");
   });
 
-  // covers CH-007, DP-003
-  it("[TC-CH-004] on restart, a reply left stopping is stopped and one left streaming is interrupted", async () => {
+  it("on restart, a reply left stopping is stopped and one left streaming is interrupted", async () => {
     const threadId = ThreadId.make("t1");
     const reply = (id: string, status: Message["status"]) =>
       new Message({

@@ -23,7 +23,7 @@ const members = [hobMember("pip"), hobMember("quill")];
 
 describe("campRuntimes", () => {
   // covers ADR 039 (Status and cost), ADR 017, #1467
-  it("[TC-CH-1467-09] names the plan the camp's own brain spends, else each hob's", () => {
+  it("names the plan the camp's own brain spends, else each hob's", () => {
     expect(campRuntimes({ brain: null }, hobs, members)).toEqual(["claude-code", "codex"]);
     expect(campRuntimes({ brain: null }, hobs, [hobMember("pip")])).toEqual(["claude-code"]);
     expect(campRuntimes({ brain: { runtime: "codex", model: null, effort: null } }, hobs, [hobMember("pip")])).toEqual([

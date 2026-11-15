@@ -36,7 +36,7 @@ const watchedSaves = () => {
 
 describe("a thread's memory saves, kept live", () => {
   // covers ADR 028 (The memory tools), #961, STD-REACT-012
-  it("[TC-UX-974] a save that arrives while the first read is on its way still shows when that read answers late", async () => {
+  it("a save that arrives while the first read is on its way still shows when that read answers late", async () => {
     const saves = watchedSaves();
     expect(saves.reads()).toBe(1);
     const applied = applyMemorySave(saves.client, save("s1"));
@@ -51,7 +51,7 @@ describe("a thread's memory saves, kept live", () => {
   });
 
   // covers ADR 028 (Writes), #961, STD-REACT-012
-  it("[TC-UX-975] an Undo that arrives while a later read is on its way is not put back by that read", async () => {
+  it("an Undo that arrives while a later read is on its way is not put back by that read", async () => {
     const saves = watchedSaves();
     saves.answer(0, [save("s1")]);
     await saves.settled();
@@ -70,7 +70,7 @@ describe("a thread's memory saves, kept live", () => {
   });
 
   // covers ADR 028 (The memory tools), #961, STD-REACT-012
-  it("[TC-UX-976] when the stream resumes, a read on its way is dropped and the saves read again", async () => {
+  it("when the stream resumes, a read on its way is dropped and the saves read again", async () => {
     const saves = watchedSaves();
     const refreshed = refreshMemorySaves(saves.client);
     await saves.settled();

@@ -277,9 +277,8 @@ const EVERY_IDENTITY: ReadonlyArray<{ readonly why: string; readonly as: Commits
 ];
 
 describe.each(RUNTIMES)("who $name commits as (#741)", (runtime) => {
-  // covers OR-004
   it.skipIf(runtime.start === null).each(CASES)(
-    "[TC-OR-638] commits as $why, and says so in new and resumed sessions",
+    "commits as $why, and says so in new and resumed sessions",
     async (each) => {
       if (runtime.start === null) throw new Error("skipped");
       writeFileSync(join(home, ".gitconfig"), each.config);
@@ -295,9 +294,8 @@ describe.each(RUNTIMES)("who $name commits as (#741)", (runtime) => {
     },
   );
 
-  // covers OR-004 (#1213)
   it.skipIf(runtime.start === null).each(EVERY_IDENTITY)(
-    "[TC-OR-1213-02] tells the hob up front that Hobbots sets who commits, for $why, in new and resumed sessions",
+    "tells the hob up front that Hobbots sets who commits, for $why, in new and resumed sessions",
     async (each) => {
       if (runtime.start === null) throw new Error("skipped");
       const turn = (sessionId: string | null) => {
@@ -314,8 +312,7 @@ describe.each(RUNTIMES)("who $name commits as (#741)", (runtime) => {
     },
   );
 
-  // covers OR-004
-  it("[TC-OR-639] refuses a command that sets its own identity, naming who the hub says commits", async () => {
+  it("refuses a command that sets its own identity, naming who the hub says commits", async () => {
     const command = "git -c user.email=me@example.com commit -m x";
     expect(await runtime.refusal(access(settleCommitsAs(null, NONE, null)), command)).toContain("none is set yet");
     expect(await runtime.refusal(access(settleCommitsAs(null, NONE, GIVEN)), command)).toContain(
@@ -323,8 +320,7 @@ describe.each(RUNTIMES)("who $name commits as (#741)", (runtime) => {
     );
   });
 
-  // covers OR-004, PE-005 (#742)
-  it("[TC-OR-742-02] refuses a commit the hub holds, as a lead's of a member's open work, with whose work it is", async () => {
+  it("refuses a commit the hub holds, as a lead's of a member's open work, with whose work it is", async () => {
     const held = `${project} holds changes a member has not committed: LEDGER.md of Task build, which Nettle works on.`;
     const asked: Array<string> = [];
     const lead: CallSteering = {
@@ -376,8 +372,7 @@ const acmeSteering = (pushesFrom: ReadonlyArray<string>): Promise<CallSteering> 
 };
 
 describe.each(RUNTIMES)("how $name steers a git push a Charm takes over (ADR 031)", (runtime) => {
-  // covers PE-005, ADR 031
-  it("[TC-PE-513] points a git push to the tool a fake Charm declares, only where its declaration applies", async () => {
+  it("points a git push to the tool a fake Charm declares, only where its declaration applies", async () => {
     const tools = access(settleCommitsAs(null, NONE, null));
     const command = "pnpm test && git push origin feature";
     expect(await runtime.refusal(tools, command, await acmeSteering([project]))).toContain(
@@ -401,8 +396,7 @@ const offering = (names: ReadonlyArray<string>): HubTools => ({
 const GITHUB_CHARM = offering([...GITHUB_TOOLS, ...GITHUB_WRITE_TOOLS].map((tool) => tool.name));
 
 describe.each(RUNTIMES)("how $name steers gh to the GitHub Charm (#1349)", (runtime) => {
-  // covers PE-005, SEC-002, ADR 020
-  it("[TC-PE-1349-01] refuses gh before it runs, naming the Charm tool for what it tried, also inside env, sh -c, if and $(…)", async () => {
+  it("refuses gh before it runs, naming the Charm tool for what it tried, also inside env, sh -c, if and $(…)", async () => {
     const tools = access(settleCommitsAs(null, NONE, null));
     const cases: ReadonlyArray<readonly [string, string]> = [
       ["gh pr create --fill", "Use the github_open_pull_request tool instead of gh pr create"],
@@ -427,7 +421,7 @@ describe.each(RUNTIMES)("how $name steers gh to the GitHub Charm (#1349)", (runt
   });
 
   it.skipIf(runtime.start === null)(
-    "[TC-PE-1349-02] tells a hob holding the GitHub Charm that GitHub goes through it, and a resumed session again",
+    "tells a hob holding the GitHub Charm that GitHub goes through it, and a resumed session again",
     async () => {
       const as = settleCommitsAs(null, NONE, null);
       const start = runtime.start as NonNullable<Runtime["start"]>;

@@ -46,7 +46,7 @@ const view: HobSkills = {
 
 describe("picking a skill with / (ADR 029, Explicit use)", () => {
   // covers ADR 029 (Explicit use)
-  it("[TC-UI-1096-03] opens on / and the start of a name, filters by it, and picks /name", () => {
+  it("opens on / and the start of a name, filters by it, and picks /name", () => {
     const names = ["launch-email", "release-steps"];
     expect(slashQuery("/", names)).toEqual({ query: "", rest: null });
     expect(slashQuery("/re", names)).toEqual({ query: "re", rest: null });
@@ -59,7 +59,7 @@ describe("picking a skill with / (ADR 029, Explicit use)", () => {
   });
 
   // covers ADR 029 (Explicit use)
-  it("[TC-UI-1096-04] keeps what was written when Use a skill starts a / before it", () => {
+  it("keeps what was written when Use a skill starts a / before it", () => {
     const names = ["release-steps"];
     const started = startedDraft("Ship it\nwith notes");
     expect(started).toBe("/ Ship it\nwith notes");
@@ -73,7 +73,7 @@ describe("picking a skill with / (ADR 029, Explicit use)", () => {
     expect(dismissedDraft("/re", { query: "re", rest: null })).toBe("/re");
   });
 
-  it("[TC-UI-1096-05] says whether the hob's skills are loading, failed, or loaded", () => {
+  it("says whether the hob's skills are loading, failed, or loaded", () => {
     const refetch = () => undefined;
     expect(skillPicking({ data: undefined, isError: false, refetch }, "Pip").status).toBe("loading");
     expect(skillPicking({ data: undefined, isError: true, refetch }, "Pip").status).toBe("failed");
@@ -81,7 +81,7 @@ describe("picking a skill with / (ADR 029, Explicit use)", () => {
   });
 
   // covers ADR 029 (Try in a chat), #1099
-  it("[TC-UI-1099-06] offers only the draft in a chat that tries one, whatever the hob has", () => {
+  it("offers only the draft in a chat that tries one, whatever the hob has", () => {
     const refetch = () => undefined;
     const trial = new SkillTrial({
       name: SkillName.make("changelog"),

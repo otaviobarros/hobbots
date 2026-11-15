@@ -30,8 +30,7 @@ describe("accessAfter", () => {
 });
 
 describe("device access", () => {
-  // covers DP-004
-  it("[TC-DP-102] notes a revocation on a read's first failure and never retries a refusal", () => {
+  it("notes a revocation on a read's first failure and never retries a refusal", () => {
     const queryClient = new QueryClient();
     expect(retryUnlessRefused(queryClient, 0, unreachable)).toBe(true);
     expect(retryUnlessRefused(queryClient, 3, unreachable)).toBe(false);
@@ -41,8 +40,7 @@ describe("device access", () => {
     expect(access(queryClient)).toBe("removed");
   });
 
-  // covers DP-004
-  it("[TC-DP-103] keeps a removal whatever later answer arrives, and only the latest probe's other answers", async () => {
+  it("keeps a removal whatever later answer arrives, and only the latest probe's other answers", async () => {
     const queryClient = new QueryClient();
     const first = pending();
     const second = pending();

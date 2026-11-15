@@ -293,8 +293,7 @@ const everyFileText = async (folder: string) => {
 };
 
 describe("backup and restore", () => {
-  // covers OP-003
-  it("[TC-OP-021] brings back threads, Quests and artifacts after the data folder is deleted", async () => {
+  it("brings back threads, Quests and artifacts after the data folder is deleted", async () => {
     await onHub(dataDir, seed);
     await seedFiles(dataDir);
     const folder = join(destination, "one.hobbots-backup");
@@ -349,8 +348,7 @@ describe("backup and restore", () => {
     await expect(lstat(restoreMarkerFile(dataDir))).rejects.toThrow();
   });
 
-  // covers OP-003, ADR 036 (Usage and limits: backups)
-  it("[TC-OP-1269-01] brings back web searches, pages read, Settings › Web and a hob's own limits", async () => {
+  it("brings back web searches, pages read, Settings › Web and a hob's own limits", async () => {
     const where = {
       agentId: FRODO,
       threadId,
@@ -417,8 +415,7 @@ describe("backup and restore", () => {
     expect(restored.limits).toEqual(limits);
   });
 
-  // covers OP-003, #1357
-  it("[TC-OP-1357-01] brings back the history of settings changes, and each hob's History still shows them", async () => {
+  it("brings back the history of settings changes, and each hob's History still shows them", async () => {
     const everyHob = { scope: { summoned: true, self: false, hobs: [] }, overrides: SUMMONING_DEFAULTS };
     const before = await onHub(
       dataDir,
@@ -448,8 +445,7 @@ describe("backup and restore", () => {
     expect(restored.history).toEqual(before);
   });
 
-  // covers OP-003
-  it("[TC-OP-022] leaves every key, token and sign-in out of the backup, and keeps what you pasted into a chat", async () => {
+  it("leaves every key, token and sign-in out of the backup, and keeps what you pasted into a chat", async () => {
     process.env.HOBBOTS_BACKUP_TEST_TOKEN = SECRETS.env;
     await onHub(dataDir, seed);
     await seedFiles(dataDir);
@@ -474,8 +470,7 @@ describe("backup and restore", () => {
     expect((await lstat(folder)).mode & 0o077).toBe(0);
   });
 
-  // covers OP-003
-  it("[TC-OP-023] refuses a folder that is not a whole, unchanged backup, and changes nothing", async () => {
+  it("refuses a folder that is not a whole, unchanged backup, and changes nothing", async () => {
     await onHub(dataDir, seed);
     await seedFiles(dataDir);
     const folder = join(destination, "three.hobbots-backup");
@@ -525,8 +520,7 @@ describe("backup and restore", () => {
     await refused(folder, /holds a link/);
   });
 
-  // covers OP-003
-  it("[TC-OP-024] restores a backup from an older Hobbots and migrates it on the next start", async () => {
+  it("restores a backup from an older Hobbots and migrates it on the next start", async () => {
     const older = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0038")) as typeof migrations;
     await Effect.runPromise(Effect.provide(Effect.void, SqliteLive(databaseOf(dataDir), older)));
     const folder = join(destination, "old.hobbots-backup");
@@ -545,8 +539,7 @@ describe("backup and restore", () => {
     expect(Option.getOrThrow(restore)).toMatchObject({ backupVersion: "0.14.0", resumedAt: null });
   });
 
-  // covers OP-003
-  it("[TC-OP-025] sets the hub's data aside beside the folder and leaves the desktop app's own files", async () => {
+  it("sets the hub's data aside beside the folder and leaves the desktop app's own files", async () => {
     await onHub(dataDir, seed);
     await seedFiles(dataDir);
     const folder = join(destination, "four.hobbots-backup");
@@ -569,8 +562,7 @@ describe("backup and restore", () => {
     expect((await readdir(root)).sort()).toEqual(["backups", "data", "data-runtimes", aside.split("/").at(-1)].sort());
   });
 
-  // covers OP-003
-  it("[TC-OP-026] saves a backup only outside the data folder and every folder hobs work in", async () => {
+  it("saves a backup only outside the data folder and every folder hobs work in", async () => {
     // Hob folders and the answer are canonical, which differs where the temp folder is a symlink.
     const hobFolder = join(await realpath(root), "code");
     await mkdir(join(hobFolder, "site"), { recursive: true });
@@ -602,8 +594,7 @@ describe("backup and restore", () => {
     expect((await readdir(destination)).filter((name) => name.endsWith(".hobbots-backup"))).toEqual([]);
   });
 
-  // covers OP-003
-  it("[TC-OP-027] waits for replies in the default workspace and starts none until it is copied", async () => {
+  it("waits for replies in the default workspace and starts none until it is copied", async () => {
     const result = await Effect.gen(function* () {
       const holds = yield* BackupHolds;
       const log = yield* Ref.make<ReadonlyArray<string>>([]);
@@ -641,8 +632,7 @@ describe("backup and restore", () => {
     ]);
   });
 
-  // covers OP-003
-  it("[TC-OP-028] deletes no Workbench content while a backup holds cleanup, and waits for a deletion under way", async () => {
+  it("deletes no Workbench content while a backup holds cleanup, and waits for a deletion under way", async () => {
     const result = await Effect.gen(function* () {
       const removed = yield* Ref.make<ReadonlyArray<string>>([]);
       const log = yield* Ref.make<ReadonlyArray<string>>([]);
@@ -691,8 +681,7 @@ describe("backup and restore", () => {
     expect(result.held).toBe(false);
   });
 
-  // covers OP-003
-  it("[TC-OP-029] holds work after a restore until you resume it, across a restart", async () => {
+  it("holds work after a restore until you resume it, across a restart", async () => {
     await onHub(dataDir, seed);
     const folder = join(destination, "five.hobbots-backup");
     await backUp(dataDir, folder);
@@ -710,8 +699,7 @@ describe("backup and restore", () => {
     expect(await onHub(join(root, "new"), held)).toBe(false);
   });
 
-  // covers OP-003
-  it("[TC-OP-031] backs up the data folder before an update migrates it, keeping only the latest", async () => {
+  it("backs up the data folder before an update migrates it, keeping only the latest", async () => {
     const older = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0038")) as typeof migrations;
     expect(await Effect.runPromise(backupBeforeMigrations(dataDir, "0.15.0"))).toBeNull();
     await Effect.runPromise(Effect.provide(Effect.void, SqliteLive(databaseOf(dataDir), older)));
@@ -731,8 +719,7 @@ describe("backup and restore", () => {
     expect(await Effect.runPromise(backupBeforeMigrations(dataDir, "0.15.0"))).toBeNull();
   });
 
-  // covers OP-003
-  it("[TC-OP-033] keeps the hub's own data when a restore fails while setting it aside or copying in", async () => {
+  it("keeps the hub's own data when a restore fails while setting it aside or copying in", async () => {
     await onHub(dataDir, seed);
     await seedFiles(dataDir);
     const folder = join(destination, "six.hobbots-backup");
@@ -764,8 +751,7 @@ describe("backup and restore", () => {
     await expect(lstat(`${dataDir}.before-restore-${fileStamp(later).replace(" ", "-")}`)).rejects.toThrow();
   });
 
-  // covers OP-003
-  it("[TC-OP-037] backs up an older data folder before migrating it, from any earlier schema", async () => {
+  it("backs up an older data folder before migrating it, from any earlier schema", async () => {
     for (const before of ["0005", "0030"]) {
       const dir = join(root, `schema-${before}`);
       await mkdir(dir);
@@ -781,8 +767,7 @@ describe("backup and restore", () => {
     }
   });
 
-  // covers OP-003, ADR 028 (Backups)
-  it("[TC-OP-099] keeps memory in the backup with no bearer, restores it with new bearers, and stops when memory cannot be saved", async () => {
+  it("keeps memory in the backup with no bearer, restores it with new bearers, and stops when memory cannot be saved", async () => {
     await onHub(dataDir, seed);
     await seedFiles(dataDir);
     await seedMemory(dataDir);
@@ -845,8 +830,7 @@ describe("backup and restore", () => {
     );
     await expect(lstat(failing)).rejects.toThrow();
   });
-  // covers OP-003, ADR 029 (Backups, exports and Diagnostics), #1064
-  it("[TC-OP-115] brings back every skill revision, assignment, hold and pin, with each revision's files read-only", async () => {
+  it("brings back every skill revision, assignment, hold and pin, with each revision's files read-only", async () => {
     await onHub(dataDir, seed);
     const source = join(root, "release");
     await mkdir(join(source, "scripts"), { recursive: true });
@@ -935,7 +919,7 @@ describe("backup and restore", () => {
   });
 
   // covers ADR 029 (Backups, exports and Diagnostics), ADR 026, #1139
-  it("[TC-OP-125] holds no file from ~/.agents/skills, and a restore reads the folder again for them", async () => {
+  it("holds no file from ~/.agents/skills, and a restore reads the folder again for them", async () => {
     await onHub(dataDir, seed);
     const agents = join(root, "agents-skills");
     const skillFile = (name: string, text: string) =>
@@ -1014,7 +998,7 @@ describe("backup and restore", () => {
   });
 
   // covers ADR 029 (Backups, exports and Diagnostics), ADR 026, #1139
-  it("[TC-OP-126] leaves out an edit made in Hobbots to a folder skill, and a restore finds what the folder holds now", async () => {
+  it("leaves out an edit made in Hobbots to a folder skill, and a restore finds what the folder holds now", async () => {
     await onHub(dataDir, seed);
     const agents = join(root, "agents-skills");
     await mkdir(join(agents, "pdf-forms"), { recursive: true });
@@ -1089,7 +1073,7 @@ describe("backup and restore", () => {
   });
 
   // covers ADR 029 (Backups, exports and Diagnostics), #1139
-  it("[TC-OP-127] copies only the revisions the snapshot names, so one the folder adds after it stays out", async () => {
+  it("copies only the revisions the snapshot names, so one the folder adds after it stays out", async () => {
     const objects = join(root, "objects");
     const named = "a".repeat(64);
     const later = "b".repeat(64);

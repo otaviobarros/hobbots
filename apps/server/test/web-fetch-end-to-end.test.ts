@@ -350,7 +350,7 @@ const webSteps = (reply: Message) => reply.steps.filter((step) => step.label ===
 
 describe("hobs read web pages through the hub, end to end", () => {
   // covers ADR 036 (Reading a page), EX-004
-  it("[TC-PE-1267-10] a hob reads a page's title, final URL, text and links, a redirect, and a long page in parts", async () => {
+  it("a hob reads a page's title, final URL, text and links, a redirect, and a long page in parts", async () => {
     await preset("balanced");
     const pip = await summon("Pip", 1267);
     const thread = (await request<Thread>("POST", `/api/agents/${pip.id}/threads`)).body;
@@ -384,7 +384,7 @@ describe("hobs read web pages through the hub, end to end", () => {
   }, 30_000);
 
   // covers ADR 036 (Decided as Use the web for the page's host)
-  it("[TC-PE-1267-11] under Careful the first page on a new site asks, Always answers the next, and Never refuses it", async () => {
+  it("under Careful the first page on a new site asks, Always answers the next, and Never refuses it", async () => {
     await preset("careful");
     const ada = await summon("Ada", 1268);
     const thread = (await request<Thread>("POST", `/api/agents/${ada.id}/threads`)).body;
@@ -410,7 +410,7 @@ describe("hobs read web pages through the hub, end to end", () => {
   }, 30_000);
 
   // covers ADR 036 (Egress from the hub)
-  it("[TC-PE-1267-12] localhost, loopback, metadata, a name that resolves to loopback and a redirect to it are refused; a private address asks", async () => {
+  it("localhost, loopback, metadata, a name that resolves to loopback and a redirect to it are refused; a private address asks", async () => {
     await preset("trusting");
     const rook = await summon("Rook", 1269);
     const thread = (await request<Thread>("POST", `/api/agents/${rook.id}/threads`)).body;
@@ -450,7 +450,7 @@ describe("hobs read web pages through the hub, end to end", () => {
   }, 30_000);
 
   // covers ADR 036 (Where a URL came from)
-  it("[TC-PE-1267-13] a URL the hob built with data in it asks even under Trusting, while a link from a page it read does not", async () => {
+  it("a URL the hob built with data in it asks even under Trusting, while a link from a page it read does not", async () => {
     await preset("trusting");
     const wren = await summon("Wren", 1270);
     const thread = (await request<Thread>("POST", `/api/agents/${wren.id}/threads`)).body;
@@ -473,7 +473,7 @@ describe("hobs read web pages through the hub, end to end", () => {
   }, 30_000);
 
   // covers ADR 036 (Where a URL came from)
-  it("[TC-PE-1267-14] in a step's session, a URL the parent had found passes on as found, and one the hob put in the brief is held for you", async () => {
+  it("in a step's session, a URL the parent had found passes on as found, and one the hob put in the brief is held for you", async () => {
     await preset("balanced");
     const ember = await summon("Ember", 1271);
     const thread = (await request<Thread>("POST", `/api/agents/${ember.id}/threads`)).body;
@@ -502,7 +502,7 @@ describe("hobs read web pages through the hub, end to end", () => {
   }, 30_000);
 
   // covers ADR 036 (Where a URL came from)
-  it("[TC-PE-1267-20] in a party member's turn, a URL the lead had found passes on as found, and one the lead put in the brief asks", async () => {
+  it("in a party member's turn, a URL the lead had found passes on as found, and one the lead put in the brief asks", async () => {
     await preset("balanced");
     const lead = await summon("Alder", 1272);
     await summon("Moss", 1273);
@@ -533,7 +533,7 @@ describe("hobs read web pages through the hub, end to end", () => {
     await decide(pending, { decision: "deny" });
   }, 30_000);
   // covers ADR 036 (Where a URL came from)
-  it("[TC-PE-1289-03] after a search, a result link follows the site rules, while a URL the hob wrote on the same site asks", async () => {
+  it("after a search, a result link follows the site rules, while a URL the hob wrote on the same site asks", async () => {
     await preset("balanced");
     const fern = await summon("Fern", 1289);
     const thread = (await request<Thread>("POST", `/api/agents/${fern.id}/threads`)).body;
@@ -556,7 +556,7 @@ describe("hobs read web pages through the hub, end to end", () => {
   }, 30_000);
 
   // covers ADR 036 (Where a URL came from)
-  it("[TC-PE-1289-04] a step reads its own search's results and those its parent's chat found, and a result the parent never found is held", async () => {
+  it("a step reads its own search's results and those its parent's chat found, and a result the parent never found is held", async () => {
     await preset("balanced");
     const sage = await summon("Sage", 1290);
     const thread = (await request<Thread>("POST", `/api/agents/${sage.id}/threads`)).body;
@@ -590,7 +590,7 @@ describe("a session that read the web asks before data leaves it, end to end", (
   const REFUSED = "The sandbox refused evil.test: This session read the web";
 
   // covers ADR 036 (The read-the-web mark)
-  it("[TC-PE-1268-05] a search marks its session at once, so a command after it in the same turn waits for you", async () => {
+  it("a search marks its session at once, so a command after it in the same turn waits for you", async () => {
     await preset("trusting");
     const wick = await summon("Wick", 1268_5);
     const thread = (await request<Thread>("POST", `/api/agents/${wick.id}/threads`)).body;
@@ -600,7 +600,7 @@ describe("a session that read the web asks before data leaves it, end to end", (
   }, 30_000);
 
   // covers ADR 036 (The read-the-web mark)
-  it("[TC-PE-1268-03] after a page tells the hob to send data out, a command's new host, a written URL and the next turn's command all wait for you", async () => {
+  it("after a page tells the hob to send data out, a command's new host, a written URL and the next turn's command all wait for you", async () => {
     await preset("balanced");
     const lark = await summon("Lark", 1268_3);
     const thread = (await request<Thread>("POST", `/api/agents/${lark.id}/threads`)).body;
@@ -630,7 +630,7 @@ describe("a session that read the web asks before data leaves it, end to end", (
   }, 30_000);
 
   // covers ADR 036 (The read-the-web mark)
-  it("[TC-PE-1268-04] a hob that searches, opens two results, edits files and runs tests is asked nothing, and another thread is not affected", async () => {
+  it("a hob that searches, opens two results, edits files and runs tests is asked nothing, and another thread is not affected", async () => {
     await preset("balanced");
     const finch = await summon("Finch", 1268_4);
     const thread = (await request<Thread>("POST", `/api/agents/${finch.id}/threads`)).body;
@@ -657,7 +657,7 @@ describe("a session that read the web asks before data leaves it, end to end", (
   }, 30_000);
 
   // covers ADR 036 (The read-the-web mark), ADR 023
-  it("[TC-PE-1268-10] a chat's new Attempt in a session that read the web records the mark before its turn runs", async () => {
+  it("a chat's new Attempt in a session that read the web records the mark before its turn runs", async () => {
     await preset("balanced");
     const sedge = await summon("Sedge", 1268_10);
     const thread = (await request<Thread>("POST", `/api/agents/${sedge.id}/threads`)).body;
@@ -692,7 +692,7 @@ describe("a session that read the web asks before data leaves it, end to end", (
   }, 30_000);
 
   // covers ADR 036 (The read-the-web mark), ADR 023
-  it("[TC-PE-1268-06] a step that reads a page records the mark on its Attempt, for the Workbench, naming the page", async () => {
+  it("a step that reads a page records the mark on its Attempt, for the Workbench, naming the page", async () => {
     await preset("balanced");
     const moth = await summon("Moth", 1268_6);
     const thread = (await request<Thread>("POST", `/api/agents/${moth.id}/threads`)).body;
@@ -720,7 +720,7 @@ describe("the hub records what hobs search and read, and holds them to their lim
     });
 
   // covers ADR 036 (Usage and limits)
-  it("[TC-PE-1269-03] a turn's searches and pages show for the turn and the hob, with no cost on a sign-in not billed per search", async () => {
+  it("a turn's searches and pages show for the turn and the hob, with no cost on a sign-in not billed per search", async () => {
     await preset("balanced");
     const fern = await summon("Fern", 1290);
     const thread = (await request<Thread>("POST", `/api/agents/${fern.id}/threads`)).body;
@@ -756,7 +756,7 @@ describe("the hub records what hobs search and read, and holds them to their lim
   }, 30_000);
 
   // covers ADR 036 (Amendment: the screens), #1271
-  it("[TC-PE-1271-04] each page read keeps its redacted text on its own step, and its record names that step, for a page read twice and a page in parts", async () => {
+  it("each page read keeps its redacted text on its own step, and its record names that step, for a page read twice and a page in parts", async () => {
     await preset("balanced");
     const wren = await summon("Wren", 1294);
     const thread = (await request<Thread>("POST", `/api/agents/${wren.id}/threads`)).body;
@@ -783,7 +783,7 @@ describe("the hub records what hobs search and read, and holds them to their lim
   }, 30_000);
 
   // covers ADR 036 (Usage and limits)
-  it("[TC-PE-1269-04] past a hob's limits a search and a page are refused with words that name the limit, and past its daily limit its next turn has search off", async () => {
+  it("past a hob's limits a search and a page are refused with words that name the limit, and past its daily limit its next turn has search off", async () => {
     await preset("balanced");
     const sorrel = await summon("Sorrel", 1291);
     expect((await limits(sorrel, { searchesPerTurn: 1, pagesPerTurn: 1 })).body).toMatchObject({
@@ -819,7 +819,7 @@ describe("the hub records what hobs search and read, and holds them to their lim
   }, 30_000);
 
   // covers ADR 036 (Usage and limits: Usage's searches and pages)
-  it("[TC-PE-1271-02] Usage lists each hob's searches and pages since a time, its turns at a limit and its busiest turns by chat", async () => {
+  it("Usage lists each hob's searches and pages since a time, its turns at a limit and its busiest turns by chat", async () => {
     await preset("balanced");
     const tansy = await summon("Tansy", 1292);
     await limits(tansy, { searchesPerTurn: 2 });
@@ -864,7 +864,7 @@ describe("the hub records what hobs search and read, and holds them to their lim
   }, 30_000);
 
   // covers ADR 036 (Blocked sites)
-  it("[TC-PE-1269-06] a site on the blocked list is refused, and so is a name under it, with the list kept as hosts", async () => {
+  it("a site on the blocked list is refused, and so is a name under it, with the list kept as hosts", async () => {
     await preset("trusting");
     const saved = await request<WebSettings>("PUT", "/api/web/settings", {
       limits: { searchesPerTurn: 10, pagesPerTurn: 30, searchesPerDay: 200 },
@@ -896,7 +896,7 @@ describe("the hub records what hobs search and read, and holds them to their lim
   }, 30_000);
 
   // covers ADR 036 (Usage and limits: where a record belongs)
-  it("[TC-PE-1269-08] a chat's page names the Task the chat works on, and a step's page names its parent's chat, Task and Attempt", async () => {
+  it("a chat's page names the Task the chat works on, and a step's page names its parent's chat, Task and Attempt", async () => {
     await preset("balanced");
     const briar = await summon("Briar", 1293);
     const thread = (await request<Thread>("POST", `/api/agents/${briar.id}/threads`)).body;
@@ -931,7 +931,7 @@ describe("hobs search and read the web, end to end (#1272)", () => {
   const usage = async (query: string) => (await request<WebUsage>("GET", `/api/web/usage?${query}`)).body;
 
   // covers ADR 036 (Validation), EX-004
-  it("[TC-PE-1272-01] a hob searches, reads two pages from the results and answers with them as sources, asking nothing", async () => {
+  it("a hob searches, reads two pages from the results and answers with them as sources, asking nothing", async () => {
     await preset("balanced");
     const linden = await summon("Linden", 1272_1);
     const thread = (await request<Thread>("POST", `/api/agents/${linden.id}/threads`)).body;
@@ -968,7 +968,7 @@ describe("hobs search and read the web, end to end (#1272)", () => {
   }, 30_000);
 
   // covers ADR 036 (Validation), PE-001
-  it("[TC-PE-1272-02] Never for Search the web and Never for Use the web each close their tool", async () => {
+  it("Never for Search the web and Never for Use the web each close their tool", async () => {
     await preset("balanced");
     const alder = await summon("Alder", 1272_2);
     const thread = (await request<Thread>("POST", `/api/agents/${alder.id}/threads`)).body;
@@ -994,7 +994,7 @@ describe("hobs search and read the web, end to end (#1272)", () => {
   }, 30_000);
 
   // covers ADR 036 (robots.txt)
-  it("[TC-PE-1272-03] a site whose robots.txt disallows Hobbots is refused, and one that disallows only crawlers in general is read", async () => {
+  it("a site whose robots.txt disallows Hobbots is refused, and one that disallows only crawlers in general is read", async () => {
     await preset("trusting");
     const hazel = await summon("Hazel", 1272_3);
     const thread = (await request<Thread>("POST", `/api/agents/${hazel.id}/threads`)).body;

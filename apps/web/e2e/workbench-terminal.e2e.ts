@@ -33,8 +33,7 @@ const openTerminal = async (page: Page, title: string) => {
   return { questTicket, bench, panel: bench.getByRole("tabpanel", { name: /^Terminal/ }) };
 };
 
-// covers UX-002, UX-006, PE-005
-test("[TC-UX-045] a finished Task's Terminal replays its commands in a read-only terminal: prompt lines, colored output, exit codes, redacted and folded", async ({
+test("a finished Task's Terminal replays its commands in a read-only terminal: prompt lines, colored output, exit codes, redacted and folded", async ({
   page,
 }) => {
   const { url, aldric, folder } = await aldricHub();
@@ -103,8 +102,7 @@ test("[TC-UX-045] a finished Task's Terminal replays its commands in a read-only
   await expect(input).not.toBeFocused();
 });
 
-// covers UX-002, UX-006
-test("[TC-UX-046] while a turn runs the Terminal is Live: a running command counts its time, then reads Cut off when the turn is stopped", async ({
+test("while a turn runs the Terminal is Live: a running command counts its time, then reads Cut off when the turn is stopped", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -142,10 +140,7 @@ test("[TC-UX-046] while a turn runs the Terminal is Live: a running command coun
 
 // Issue #1018: a command run in the background stays Running after its call returns, until it
 // really ends, and one still running when the turn ends is Cut off rather than Succeeded.
-// covers UX-002, UX-006
-test("[TC-UX-1018-01] a background command stays Running after its call returns, then ends with its own outcome", async ({
-  page,
-}) => {
+test("a background command stays Running after its call returns, then ends with its own outcome", async ({ page }) => {
   const { url, aldric } = await aldricHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await send(page, ["Start the dev server", script("start_quest", { key: "quest", goal: "Start the dev server" })]);
@@ -179,8 +174,7 @@ test("[TC-UX-1018-01] a background command stays Running after its call returns,
   await expect(screen).toContainText("? Cut off · The turn ended while this ran, so whether it finished is not known.");
 });
 
-// covers UX-002, UX-006
-test("[TC-UX-183] a command whose runtime reports output as it comes shows it live in the terminal while it runs", async ({
+test("a command whose runtime reports output as it comes shows it live in the terminal while it runs", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -210,8 +204,7 @@ test("[TC-UX-183] a command whose runtime reports output as it comes shows it li
   await expect(panel).toContainText("1 command · 1 running");
 });
 
-// covers UX-002, OR-002
-test("[TC-UX-184] a Quest's Terminal has a tab per hob, the Task's own first, and Split shows them side by side", async ({
+test("a Quest's Terminal has a tab per hob, the Task's own first, and Split shows them side by side", async ({
   page,
 }) => {
   const { url, aldric, members, api, folder } = await aldricHub(undefined, ["Quill"]);
@@ -268,8 +261,7 @@ test("[TC-UX-184] a Quest's Terminal has a tab per hob, the Task's own first, an
   await expect(panel.getByRole("button", { name: "◫ Split" })).toHaveAttribute("aria-pressed", "false");
 });
 
-// covers UX-002
-test("[TC-UX-186] a Quest's Terminal says when its Workbench could not be read, and Try again brings every hob's commands", async ({
+test("a Quest's Terminal says when its Workbench could not be read, and Try again brings every hob's commands", async ({
   page,
 }) => {
   const { url, aldric, members, api, folder } = await aldricHub(undefined, ["Quill"]);
@@ -308,8 +300,7 @@ test("[TC-UX-186] a Quest's Terminal says when its Workbench could not be read, 
   await expect(panel).toContainText("2 commands");
 });
 
-// covers UX-006
-test("[TC-UX-185] the terminal stays dark, with its own palette, in the light themes", async ({ page }) => {
+test("the terminal stays dark, with its own palette, in the light themes", async ({ page }) => {
   const { url, aldric } = await aldricHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await send(page, [
@@ -369,8 +360,7 @@ const rowsPast = (terminal: Locator) =>
 
 // Issue #1002: the terminal took xterm.js's default 24 rows whatever the dock's height, ran past the
 // dock and scrolled the panel, the room and the window to show its last row.
-// covers UX-002, UX-006
-test("[TC-UX-998] the Terminal fits the Workbench at any window height, and reading it scrolls nothing around it", async ({
+test("the Terminal fits the Workbench at any window height, and reading it scrolls nothing around it", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();

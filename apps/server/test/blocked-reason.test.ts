@@ -10,8 +10,7 @@ import { ALDRIC, hub, memberTask, ROOK, send, sharedDatabase, startHub, taskOf, 
 // the same Task warns the lead.
 
 describe("blocked says why, and waiting is not blocked", () => {
-  // covers OR-004, OR-005
-  it("[TC-OR-220] Rook, with an unreported milestone and an open question, ends his turn waiting, not blocked", async () => {
+  it("Rook, with an unreported milestone and an open question, ends his turn waiting, not blocked", async () => {
     const { run } = await startHub(await sharedDatabase());
     await run(
       send([
@@ -33,8 +32,7 @@ describe("blocked says why, and waiting is not blocked", () => {
     expect(tree.checkpoints.filter((each) => each.taskId === rook.id && each.kind === "blocker")).toEqual([]);
   }, 30_000);
 
-  // covers OR-004, OR-005
-  it("[TC-OR-221] Rook, with only an unreported milestone, is blocked with a reason that reaches Aldric's next turn", async () => {
+  it("Rook, with only an unreported milestone, is blocked with a reason that reaches Aldric's next turn", async () => {
     const { run, requests } = await startHub(await sharedDatabase());
     await run(
       send([
@@ -61,8 +59,7 @@ describe("blocked says why, and waiting is not blocked", () => {
     expect(briefing).toContain("Latest: blocker, Its member ended a turn without completing it");
   }, 30_000);
 
-  // covers OR-005, IN-004
-  it("[TC-OR-486] Rook's blocked Task gives Aldric one item, which says why (#683)", async () => {
+  it("Rook's blocked Task gives Aldric one item, which says why (#683)", async () => {
     const { run } = await startHub(await sharedDatabase());
     await run(
       send([
@@ -85,8 +82,7 @@ describe("blocked says why, and waiting is not blocked", () => {
     );
   }, 30_000);
 
-  // covers OR-005
-  it("[TC-OR-222] a second Task for Rook under the same Task warns Aldric of the open one", async () => {
+  it("a second Task for Rook under the same Task warns Aldric of the open one", async () => {
     const { run, answers } = await startHub(await sharedDatabase());
     await run(
       send([

@@ -20,8 +20,7 @@ test.afterEach(stopQuestHub);
 const headerQuest = (page: Page, title: string) =>
   page.getByRole("region", { name: "Work in progress" }).getByRole("button", { name: new RegExp(title) });
 
-// covers CH-005, OR-006, UX-001
-test("[TC-CH-190] the Quest room shows every lane live with its controls and keeps a pinned Quest in every thread", async ({
+test("the Quest room shows every lane live with its controls and keeps a pinned Quest in every thread", async ({
   page,
 }) => {
   const { url, headers, aldric } = await questHub();
@@ -114,8 +113,7 @@ test("[TC-CH-190] the Quest room shows every lane live with its controls and kee
   await expect(page.getByText("A pinned quest is no longer on this hub.")).toBeHidden();
 });
 
-// covers CH-005, OR-006, UX-001
-test("[TC-CH-193] a lane says why a Reassign is refused, and the room cancels the Black Friday Quest until every Task confirms", async ({
+test("a lane says why a Reassign is refused, and the room cancels the Black Friday Quest until every Task confirms", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();
@@ -171,10 +169,7 @@ test("[TC-CH-193] a lane says why a Reassign is refused, and the room cancels th
   await expect(dock(page).getByRole("heading", { name: "Build the campaign" })).toBeVisible();
 });
 
-// covers CH-005, OR-006, EX-001, UX-001
-test("[TC-CH-192] a lane cancels a Task, retries a failed one and gives another to a new hob, each live", async ({
-  page,
-}) => {
+test("a lane cancels a Task, retries a failed one and gives another to a new hob, each live", async ({ page }) => {
   const { url, aldric } = await questHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
@@ -241,8 +236,7 @@ test("[TC-CH-192] a lane cancels a Task, retries a failed one and gives another 
   await expect(laneTask(page, "Schedule the sale email", "Quill")).toBeVisible();
 });
 
-// covers CH-005, OR-004
-test("[TC-CH-191] a nested Quest's member gets a lane of its own, and the member that leads it names its party", async ({
+test("a nested Quest's member gets a lane of its own, and the member that leads it names its party", async ({
   page,
 }) => {
   const { url, aldric } = await questHub({ nested: true });
@@ -263,8 +257,7 @@ test("[TC-CH-191] a nested Quest's member gets a lane of its own, and the member
   await showInWorkbench(page, "Research the keywords");
 });
 
-// covers OR-004, UX-001, IN-002
-test("[TC-UX-240] a question answered in the asking hob's lane goes back to it and clears from the chat, the room and the Inbox", async ({
+test("a question answered in the asking hob's lane goes back to it and clears from the chat, the room and the Inbox", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();

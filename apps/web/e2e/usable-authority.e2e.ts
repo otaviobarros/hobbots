@@ -7,8 +7,7 @@ test.afterEach(stopAldricHub);
 // ask, which leaves Nettle no command tool, since a command would write without asking (#1344). The delegation's step in Aldric's reply shows it refused, with
 // the rule and the tools Nettle would have. The hub side is in apps/server/test/usable-authority.test.ts.
 
-// covers OR-002, PE-005, UX-002
-test("[TC-OR-432] a delegation that leaves Nettle no command tool shows in Aldric's reply as refused, with what Nettle would have", async ({
+test("a delegation that leaves Nettle no command tool shows in Aldric's reply as refused, with what Nettle would have", async ({
   page,
 }) => {
   const { url, aldric, members, api, folder } = await aldricHub(undefined, ["Nettle"]);

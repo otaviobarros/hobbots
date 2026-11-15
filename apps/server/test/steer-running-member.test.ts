@@ -57,8 +57,7 @@ const precedes = (events: ReadonlyArray<string>, first: string, second: string) 
 };
 
 describe("a lead steers a member whose turn runs", () => {
-  // covers OR-007, OR-003, IN-001
-  it("[TC-OR-1345-01] a steered message reaches the member between two tool calls in the same turn, and the note records when", async () => {
+  it("a steered message reaches the member between two tool calls in the same turn, and the note records when", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests, answers, gates } = party;
@@ -113,8 +112,7 @@ describe("a lead steers a member whose turn runs", () => {
     expect(requests.filter((each) => each.prompt.includes(CARRIED))).toHaveLength(0);
   }, 30_000);
 
-  // covers OR-007, OR-003, IN-001
-  it("[TC-OR-1345-02] an interrupting message stops the member's turn and restarts it with the message first", async () => {
+  it("an interrupting message stops the member's turn and restarts it with the message first", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests, answers, gates, reactions } = party;
@@ -178,8 +176,7 @@ describe("a lead steers a member whose turn runs", () => {
     expect(precedes(events, "TaskStateChanged:pip:waiting", "NotePickedUp")).toBe(true);
   }, 30_000);
 
-  // covers OR-007, IN-001
-  it("[TC-OR-1345-03] a steered message that reaches a turn after its last tool call goes to the member's next turn", async () => {
+  it("a steered message that reaches a turn after its last tool call goes to the member's next turn", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests, answers, gates, reactions } = party;
@@ -222,8 +219,7 @@ describe("a lead steers a member whose turn runs", () => {
     expect(precedes(events, "CheckpointRecorded:Which theme?", "NotePickedUp")).toBe(true);
   }, 30_000);
 
-  // covers OR-007, PE-003, IN-001
-  it("[TC-OR-1345-04] a turn waiting on your approval keeps its card and gets the steered message at its next step once you decide", async () => {
+  it("a turn waiting on your approval keeps its card and gets the steered message at its next step once you decide", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests, answers } = party;

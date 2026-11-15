@@ -57,11 +57,7 @@ const summon = (current: Hub, name: string) =>
 const charmsOf = async (current: Hub, hob: Hob) =>
   (await api<Permissions>(current, "GET", `/api/agents/${hob.id}/permissions`)).policy.charms;
 
-// covers AG-002, PE-002
-test("[TC-AG-410-01] grants Summoning on a hob's Charms tab and sets its scope and field answers", async ({
-  page,
-  scan,
-}) => {
+test("grants Summoning on a hob's Charms tab and sets its scope and field answers", async ({ page, scan }) => {
   const current = await startHub(dataDir);
   hub = current;
   await api(current, "PATCH", "/api/setup", { completed: true, connectedProviders: ["claude-code"] });
@@ -120,8 +116,7 @@ test("[TC-AG-410-01] grants Summoning on a hob's Charms tab and sets its scope a
   await expect.poll(async () => (await charmsOf(current, chief))?.granted).not.toContain("summoning");
 });
 
-// covers AG-002, PE-002
-test("[TC-AG-410-02] Summoning for every hob reaches the hobs you made, and a hob's own tab can take it away", async ({
+test("Summoning for every hob reaches the hobs you made, and a hob's own tab can take it away", async ({
   page,
   scan,
 }) => {
@@ -164,8 +159,7 @@ test("[TC-AG-410-02] Summoning for every hob reaches the hobs you made, and a ho
   await expect.poll(async () => (await charmsOf(current, pip))?.withheld).toContain("summoning");
 });
 
-// covers AG-002
-test("[TC-AG-410-03] says when your hobs cannot be read for the hobs you pick, and reads them again on Try again", async ({
+test("says when your hobs cannot be read for the hobs you pick, and reads them again on Try again", async ({
   page,
 }) => {
   const current = await startHub(dataDir);
@@ -192,8 +186,7 @@ test("[TC-AG-410-03] says when your hobs cannot be read for the hobs you pick, a
   await expect(page.getByRole("menuitem", { name: "Pip" })).toBeVisible();
 });
 
-// covers AG-002, ADR 034 (Limits for unattended summons)
-test("[TC-AG-410-04] shows the live hobs a hob summoned without asking against its caps, and frees a place when one retires", async ({
+test("shows the live hobs a hob summoned without asking against its caps, and frees a place when one retires", async ({
   page,
 }) => {
   const current = await startHub(dataDir, {
@@ -238,8 +231,7 @@ test("[TC-AG-410-04] shows the live hobs a hob summoned without asking against i
   await expect(caps).toContainText("0 of 2");
 });
 
-// covers AG-002, STD-REACT-015
-test("[TC-AG-410-05] says when the caps cannot be read, at first and on a later read, and reads them again on Try again", async ({
+test("says when the caps cannot be read, at first and on a later read, and reads them again on Try again", async ({
   page,
 }) => {
   const current = await startHub(dataDir, { HOBBOTS_MAX_UNATTENDED_SUMMONS_PER_HOB: "2" });

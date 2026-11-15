@@ -81,8 +81,7 @@ const rows = SqlClient.SqlClient.pipe(
 );
 
 describe("refused Task tool calls", () => {
-  // covers OR-005, OR-007
-  it("[TC-OR-300] a refused call is stored with its code and message, and a retry with its key is the same record", async () => {
+  it("a refused call is stored with its code and message, and a retry with its key is the same record", async () => {
     await run(
       Effect.gen(function* () {
         yield* seed;
@@ -123,8 +122,7 @@ describe("refused Task tool calls", () => {
     );
   });
 
-  // covers OR-007
-  it("[TC-OR-301] a refused key stays free: a retry is decided again and is never replayed as done", async () => {
+  it("a refused key stays free: a retry is decided again and is never replayed as done", async () => {
     await run(
       Effect.gen(function* () {
         yield* seed;
@@ -157,8 +155,7 @@ describe("refused Task tool calls", () => {
     );
   });
 
-  // covers OR-007
-  it("[TC-OR-302] a call with no usable key, or no known Task, is a record of its own, with long input cut", async () => {
+  it("a call with no usable key, or no known Task, is a record of its own, with long input cut", async () => {
     await run(
       Effect.gen(function* () {
         yield* seed;

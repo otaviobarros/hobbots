@@ -116,8 +116,7 @@ const askForTheNotes = async (page: Page) => {
   await composer.press("Enter");
 };
 
-// covers OR-004, OR-006, OP-002, UX-001
-test("[TC-UX-1449-05] takes over a hob's files from the quest's sheet, so its writes there are refused, and shows the quest's cost", async ({
+test("takes over a hob's files from the quest's sheet, so its writes there are refused, and shows the quest's cost", async ({
   page,
 }) => {
   test.setTimeout(90_000);
@@ -150,8 +149,7 @@ test("[TC-UX-1449-05] takes over a hob's files from the quest's sheet, so its wr
   expect(existsSync(join(shared, "docs", "plan.md"))).toBe(false);
 });
 
-// covers OR-006, UX-001, #1538
-test("[TC-UX-1538-05] gives back the files you took over from the quest's sheet, so the hob's write there goes through", async ({
+test("gives back the files you took over from the quest's sheet, so the hob's write there goes through", async ({
   page,
 }) => {
   test.setTimeout(90_000);

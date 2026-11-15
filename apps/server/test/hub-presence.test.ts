@@ -68,8 +68,7 @@ const health = (installationId: string) =>
   JSON.stringify({ app: "hobbots", installationId, version: "test", dataDir: "/elsewhere" });
 
 describe("whether a hub is using a data folder", () => {
-  // covers OP-003 (#999)
-  it("[TC-OP-109] trusts a live record, sees past a stale one, and refuses a port that does not answer", async () => {
+  it("trusts a live record, sees past a stale one, and refuses a port that does not answer", async () => {
     // A hub's record of a live process counts, whatever port it names.
     writeFileSync(hubPresenceFile(dataDir), JSON.stringify({ pid: process.pid, port: 4393 }));
     await closedPort();
@@ -87,7 +86,7 @@ describe("whether a hub is using a data folder", () => {
     expect(await Effect.runPromise(hubUsing(dataDir))).toContain(`A hub is using ${dataDir}`);
   });
 
-  it("[TC-OP-110] counts only another installation's whole answer as no hub, and refuses a slow, partial or unknown one", {
+  it("counts only another installation's whole answer as no hub, and refuses a slow, partial or unknown one", {
     timeout: 30_000,
   }, async () => {
     ensureInstallationId(dataDir);
@@ -126,8 +125,7 @@ describe("whether a hub is using a data folder", () => {
 });
 
 describe("a hub's record of itself", () => {
-  // covers OP-003 (#999)
-  it("[TC-OP-111] a second hub cannot take a live hub's record, and only the hub that holds it updates or removes it", async () => {
+  it("a second hub cannot take a live hub's record, and only the hub that holds it updates or removes it", async () => {
     const other = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"]);
     try {
       writeFileSync(hubPresenceFile(dataDir), JSON.stringify({ pid: other.pid, port: 4393 }));
@@ -161,8 +159,7 @@ describe("a hub's record of itself", () => {
 });
 
 describe("hubs that claim a data folder at once", () => {
-  // covers OP-003 (#999)
-  it("[TC-OP-113] of hubs starting together on a crashed hub's folder, exactly one takes it", {
+  it("of hubs starting together on a crashed hub's folder, exactly one takes it", {
     timeout: 60_000,
   }, async () => {
     const gone = spawnSync(process.execPath, ["-e", "process.pid"]).pid;
@@ -206,7 +203,7 @@ describe("hubs that claim a data folder at once", () => {
     }
   });
 
-  it("[TC-OP-114] a record that cannot be read, or a claim under way, stops both a hub and the commands", {
+  it("a record that cannot be read, or a claim under way, stops both a hub and the commands", {
     timeout: 15_000,
   }, async () => {
     await closedPort();

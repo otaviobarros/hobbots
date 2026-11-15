@@ -49,7 +49,7 @@ const startTimes = (
 
 describe("test people", () => {
   // covers ADR 039 (Users as actors)
-  it("[TC-PE-1457-01] adds Bruna and Leo after the owner, each with an approved browser device whose token the file holds", async () => {
+  it("adds Bruna and Leo after the owner, each with an approved browser device whose token the file holds", async () => {
     const result = await startTimes(1);
     expect(result.users.map((user) => user.id)).toEqual([OWNER_USER_ID, "bruna", "leo"]);
     expect(seats().map((seat) => [seat.userId, seat.deviceName])).toEqual([
@@ -65,7 +65,7 @@ describe("test people", () => {
   });
 
   // covers ADR 039 (Users as actors)
-  it("[TC-PE-1457-02] keeps the same people and devices when the hub starts again on the same data", async () => {
+  it("keeps the same people and devices when the hub starts again on the same data", async () => {
     const result = await startTimes(2);
     expect(result.users).toHaveLength(1 + TEST_PEOPLE.length);
     // The window is added by the device service, which this test does not start: only the two seats.
@@ -74,7 +74,7 @@ describe("test people", () => {
   });
 
   // covers ADR 039 (Users as actors)
-  it("[TC-PE-1457-03] adds no one unless HOBBOTS_TEST_PEOPLE is on", async () => {
+  it("adds no one unless HOBBOTS_TEST_PEOPLE is on", async () => {
     const withEnv = (env: Record<string, string>) =>
       testSeams(dataDir).pipe(Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(env))));
     const off = await startTimes(1, withEnv({}));

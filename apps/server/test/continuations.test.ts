@@ -382,8 +382,7 @@ const continuations = (all: ReadonlyArray<Message>) =>
   all.filter((m, index) => m.role === "assistant" && all[index - 1]?.role !== "user");
 
 describe("continuing a hob when work arrives", () => {
-  // covers IN-004, EX-003
-  it("[TC-OR-080] a step's result that arrives after the turn ended starts a continuation, which completes the Task", async () => {
+  it("a step's result that arrives after the turn ended starts a continuation, which completes the Task", async () => {
     const { run, requests } = setUp();
     // Frodo plans one step, and scripts what his next turn does: return the Task's result.
     const prompt = [
@@ -419,8 +418,7 @@ describe("continuing a hob when work arrives", () => {
     expect(open.filter((item) => item.actionable)).toEqual([]);
   });
 
-  // covers IN-004, CH-008
-  it("[TC-OR-081] your queued message starts first after a busy turn, and the work rides along it as context", async () => {
+  it("your queued message starts first after a busy turn, and the work rides along it as context", async () => {
     const { run, requests, release } = setUp();
     await run(
       ChatService.use((chat) =>
@@ -455,8 +453,7 @@ describe("continuing a hob when work arrives", () => {
     expect(item?.disposition).toEqual({ _tag: "consumed", by: all[3]?.id });
   });
 
-  // covers IN-004, AG-006
-  it("[TC-OR-082] a paused hob keeps what arrived, and the continuation starts once it wakes", async () => {
+  it("a paused hob keeps what arrived, and the continuation starts once it wakes", async () => {
     const { run } = setUp();
     await run(HobLifecycle.use((hobs) => hobs.pause(FRODO)));
     // A step of Frodo's Task fails while he is paused: its Failure is his to read.
@@ -478,8 +475,7 @@ describe("continuing a hob when work arrives", () => {
     expect(settled?.disposition).toEqual({ _tag: "consumed", by: all[0]?.id });
   });
 
-  // covers IN-004, ADR 039 (One hob speaks at a time)
-  it("[TC-CH-1461-09] a member hob's work that arrives in a camp it joined starts its own continuation there once it wakes", async () => {
+  it("a member hob's work that arrives in a camp it joined starts its own continuation there once it wakes", async () => {
     const { run } = setUp(SamsCamp);
     await run(HobLifecycle.use((hobs) => hobs.pause(FRODO)));
     const failure = await run(failedStep);
@@ -498,8 +494,7 @@ describe("continuing a hob when work arrives", () => {
     expect(settled?.disposition).toEqual({ _tag: "consumed", by: all[0]?.id });
   });
 
-  // covers IN-004, ADR 039 (One hob speaks at a time)
-  it("[TC-CH-1461-10] the oldest request is answered before another hob's work, which then starts", async () => {
+  it("the oldest request is answered before another hob's work, which then starts", async () => {
     const { run, release } = setUp(SamsCamp);
     await run(ChatService.use((chat) => chat.sendPrompt(threadId, ["@sam plan the road", HOLD].join("\n"))));
     // While Sam's turn runs, Frodo's step fails and you ask Sam again.
@@ -520,8 +515,7 @@ describe("continuing a hob when work arrives", () => {
     expect(all[4]?.content).toContain("ended as failed.");
   });
 
-  // covers IN-004, ADR 039 (One hob speaks at a time)
-  it("[TC-CH-1461-11] a member hob's work starts while the camp's own hob, with work of its own there, is paused", async () => {
+  it("a member hob's work starts while the camp's own hob, with work of its own there, is paused", async () => {
     const { run } = setUp(SamsCamp);
     await run(HobLifecycle.use((hobs) => hobs.pause(SAM)));
     await run(failedStepOf(SAM, "sam-"));
@@ -535,7 +529,6 @@ describe("continuing a hob when work arrives", () => {
     expect(all[0]?.content).toContain("ended as failed.");
   });
 
-  // covers IN-004, CH-008, ADR 039 (One hob speaks at a time)
   // Starts Frodo's continuation in Sam's camp and stops it before it writes.
   const stopFrodosContinuation = async (
     run: ReturnType<typeof setUp>["run"],
@@ -569,8 +562,7 @@ describe("continuing a hob when work arrives", () => {
     expect((await run(messages())).map((m) => m.status)).toEqual(["stopped"]);
   };
 
-  // covers IN-004, CH-008, ADR 039 (One hob speaks at a time)
-  it("[TC-CH-1461-12] a member hob's continuation you stop in a camp starts again once that hob wakes", async () => {
+  it("a member hob's continuation you stop in a camp starts again once that hob wakes", async () => {
     const { run, release } = setUp(SamsCamp);
     await stopFrodosContinuation(run, release);
 
@@ -586,8 +578,7 @@ describe("continuing a hob when work arrives", () => {
     ]);
   });
 
-  // covers IN-004, CH-008, ADR 039 (One hob speaks at a time)
-  it("[TC-CH-1461-15] another hob's work starts in a camp while the work you stopped stays held", async () => {
+  it("another hob's work starts in a camp while the work you stopped stays held", async () => {
     const { run, release } = setUp(SamsCamp);
     await stopFrodosContinuation(run, release);
 
@@ -603,8 +594,7 @@ describe("continuing a hob when work arrives", () => {
     expect(await run(messages())).toHaveLength(2);
   });
 
-  // covers IN-004, CH-008, ADR 039 (One hob speaks at a time)
-  it("[TC-CH-1461-19] stopping a second hob's continuation keeps the first hob's stopped work held", async () => {
+  it("stopping a second hob's continuation keeps the first hob's stopped work held", async () => {
     const { run, release } = setUp(SamsCamp);
     // Stops the continuation that is the camp's latest message once its turn runs.
     const stopLatest = async (count: number) => {
@@ -645,8 +635,7 @@ describe("continuing a hob when work arrives", () => {
     ]);
   });
 
-  // covers AG-006, ADR 039 (One hob speaks at a time)
-  it("[TC-CH-1461-13] a member hob retiring once its Tasks end still carries the work of its open Task in a camp", async () => {
+  it("a member hob retiring once its Tasks end still carries the work of its open Task in a camp", async () => {
     const { run } = setUp(SamsCamp);
     const failure = await run(failedStep);
     if (failure === undefined) throw new Error("no Failure recorded");
@@ -659,8 +648,7 @@ describe("continuing a hob when work arrives", () => {
     expect(all[0]?.content).toContain("ended as failed.");
   });
 
-  // covers IN-004, ADR 039 (One hob speaks at a time)
-  it("[TC-CH-1461-14] work only a paused member hob can carry waits without dispatching again and again", async () => {
+  it("work only a paused member hob can carry waits without dispatching again and again", async () => {
     const { run } = setUp(SamsCamp);
     await run(HobLifecycle.use((hobs) => hobs.pause(FRODO)));
     await run(failedStep);
@@ -671,8 +659,7 @@ describe("continuing a hob when work arrives", () => {
     expect(await run(messages())).toEqual([]);
   });
 
-  // covers OR-004, IN-004, EX-004
-  it("[TC-OR-646] a Quest whose turn ended just before Hobbots stopped, before its wake was recorded, wakes its lead as the hub starts (#1081)", async () => {
+  it("a Quest whose turn ended just before Hobbots stopped, before its wake was recorded, wakes its lead as the hub starts (#1081)", async () => {
     // The records as that stop left them: Frodo's Task leads an active Quest, his turn's Attempt
     // has ended, and nothing is under it, waits or is in his backpack.
     const crashed: Before = Layer.effectDiscard(
@@ -743,8 +730,7 @@ describe("continuing a hob when work arrives", () => {
     expect(tree.checkpoints.filter((each) => each.summary === IDLE_QUEST)).toHaveLength(1);
   });
 
-  // covers IN-004, PE-007
-  it("[TC-OR-083] a request that expired when Hobbots restarted reaches its hob as a continuation", async () => {
+  it("a request that expired when Hobbots restarted reaches its hob as a continuation", async () => {
     const pending = new ApprovalRequest({
       id: ApprovalId.make("push"),
       agentId: FRODO,
@@ -797,8 +783,7 @@ describe("continuing a hob when work arrives", () => {
     expect(all[1]?.content).toContain("That tool call never ran.");
     expect((await run(ApprovalService.use((approvals) => approvals.get(pending.id)))).state).toBe("expired");
   });
-  // covers IN-004, CH-008
-  it("[TC-OR-084] a continuation you stop does not start again on its own, and its work rides along your next message", async () => {
+  it("a continuation you stop does not start again on its own, and its work rides along your next message", async () => {
     holdContinuations = true;
     const { run, requests, release } = setUp();
     const prompt = ["Carry the ring", hub("plan_steps", { key: "plan", steps: [{ brief: "Walk" }] })].join("\n");
@@ -845,8 +830,7 @@ describe("continuing a hob when work arrives", () => {
     expect(settled?.disposition).toEqual({ _tag: "consumed", by: all[4]?.id });
     expect(requests.filter((request) => request.prompt.startsWith("Hobbots wrote this"))).toHaveLength(1);
   }, 10_000);
-  // covers IN-004
-  it("[TC-OR-085] work that arrives while a dispatch is finishing still starts once the line is free", async () => {
+  it("work that arrives while a dispatch is finishing still starts once the line is free", async () => {
     const reached = Deferred.makeUnsafe<void>();
     const proceed = Deferred.makeUnsafe<void>();
     finishingDispatch = { reached, proceed };
@@ -920,8 +904,7 @@ describe("continuing a hob when work arrives", () => {
     return { held, all: await run(messages()) };
   };
 
-  // covers OR-006, IN-004
-  it("[TC-OR-086] a continuation claimed before you cancel its request never starts: its work resolves as late, and no runtime request goes out", async () => {
+  it("a continuation claimed before you cancel its request never starts: its work resolves as late, and no runtime request goes out", async () => {
     const { held, all } = await cancelWhileHeld("claimed");
     expect(held).toHaveLength(1);
     expect(all.map((m) => [m.role, m.status])).toEqual([
@@ -930,8 +913,7 @@ describe("continuing a hob when work arrives", () => {
     ]);
   });
 
-  // covers OR-006, IN-004
-  it("[TC-OR-087] a continuation you cancel the request of as it starts ends stopped before its runtime is asked, and starts no Task in its place", async () => {
+  it("a continuation you cancel the request of as it starts ends stopped before its runtime is asked, and starts no Task in its place", async () => {
     const { all } = await cancelWhileHeld("checked");
     expect(all.map((m) => [m.role, m.status, m.content])).toEqual([
       ["user", "complete", expect.any(String)],
@@ -1005,8 +987,7 @@ const reportProgress = (count: number) =>
   });
 
 describe("coalescing routine progress", () => {
-  // covers IN-005
-  it("[TC-OR-100] thirty progress updates start no turn, and reach the lead as one digest in the continuation work starts", async () => {
+  it("thirty progress updates start no turn, and reach the lead as one digest in the continuation work starts", async () => {
     const { run, requests } = setUp(FrodoAndSam);
     const cook = await run(samsTask);
     const progress = await run(reportProgress(30));
@@ -1047,8 +1028,7 @@ describe("coalescing routine progress", () => {
     expect(continued().filter((request) => !request.prompt.includes(IDLE_QUEST))).toHaveLength(1);
   }, 10_000);
 
-  // covers IN-005, CH-008
-  it("[TC-OR-101] progress that piled up rides along your next message as one digest, and that turn consumes it", async () => {
+  it("progress that piled up rides along your next message as one digest, and that turn consumes it", async () => {
     const { run, requests } = setUp(FrodoAndSam);
     await run(samsTask);
     const progress = await run(reportProgress(3));
@@ -1066,8 +1046,7 @@ describe("coalescing routine progress", () => {
     expect(settled.map((item) => item.disposition)).toEqual(progress.map(() => ({ _tag: "consumed", by: all[1]?.id })));
   });
 
-  // covers IN-005, CH-008
-  it("[TC-OR-102] a turn that carried only progress and ended early holds nothing back, and the progress never runs out of deliveries", async () => {
+  it("a turn that carried only progress and ended early holds nothing back, and the progress never runs out of deliveries", async () => {
     const { run, requests, release } = setUp(FrodoAndSam);
     const cook = await run(samsTask);
     const progress = await run(reportProgress(2));
@@ -1132,8 +1111,7 @@ describe("blockers", () => {
   const choose = (itemId: BackpackItem["id"], action: "retry" | "dismiss", blocker = 1) =>
     decideBlocker(itemId, blocker, action).pipe(Effect.provide(BlockersHostLive));
 
-  // covers IN-007
-  it("[TC-OR-120] work whose every turn is cut off becomes a blocker instead of disappearing, and Retry starts it again", async () => {
+  it("work whose every turn is cut off becomes a blocker instead of disappearing, and Retry starts it again", async () => {
     cutContinuations = true;
     const { run } = setUp();
     const failure = await run(failedStep);
@@ -1169,8 +1147,7 @@ describe("blockers", () => {
     expect((await run(choose(failure.id, "retry"))).state).toBe("resolved");
   });
 
-  // covers IN-007, OR-006
-  it("[TC-OR-1446-26] work whose turn was cut off waits through a pause put on it during the backoff, spending no delivery", async () => {
+  it("work whose turn was cut off waits through a pause put on it during the backoff, spending no delivery", async () => {
     cutContinuations = true;
     const { run } = setUp(Frodo, { ...LIMITS, firstRetry: "500 millis", maxRetry: "500 millis" });
     const failure = await run(failedStep);
@@ -1187,8 +1164,7 @@ describe("blockers", () => {
     expect((await run(messages())).filter((m) => m.role === "assistant")).toHaveLength(1);
   });
 
-  // covers IN-007
-  it("[TC-OR-121] work you stopped until it ran out of deliveries becomes a blocker, and Retry starts it without a message", async () => {
+  it("work you stopped until it ran out of deliveries becomes a blocker, and Retry starts it without a message", async () => {
     holdContinuations = true;
     const { run, requests, release } = setUp(Frodo, { ...LIMITS, maxDeliveries: 1 });
     const failure = await run(failedStep);
@@ -1222,8 +1198,7 @@ describe("blockers", () => {
     ]);
   }, 10_000);
 
-  // covers IN-007, AG-006
-  it("[TC-OR-122] a retired hob's waiting work becomes a blocker to dismiss, and cannot be retried", async () => {
+  it("a retired hob's waiting work becomes a blocker to dismiss, and cannot be retried", async () => {
     const { run } = setUp();
     await run(HobLifecycle.use((hobs) => hobs.pause(FRODO)));
     const failure = await run(failedStep);
@@ -1246,8 +1221,7 @@ describe("blockers", () => {
 });
 
 describe("turn limits", () => {
-  // covers OR-005
-  it("[TC-OR-1448-02] answers every one of many chats sent at once to one hob that may run four turns at a time", async () => {
+  it("answers every one of many chats sent at once to one hob that may run four turns at a time", async () => {
     const ids = Array.from({ length: 13 }, (_, n) => ThreadId.make(`chat-${n + 1}`));
     const ManyChats: Before = Layer.effectDiscard(
       Effect.gen(function* () {

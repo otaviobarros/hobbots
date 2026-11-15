@@ -65,7 +65,7 @@ const imported = (source: { readonly _tag: "Git"; readonly url: string; readonly
 
 describe("skill updates from Git", () => {
   // covers ADR 029 (Updates from a source), #1097
-  it("[TC-AG-1097-01] shows a new upstream commit as an update with its diff, and changes nothing until you accept it", async () => {
+  it("shows a new upstream commit as an update with its diff, and changes nothing until you accept it", async () => {
     const upstream = await upstreamOf({
       "skills/release/SKILL.md": skillMd("release"),
       "skills/release/notes.md": "Tag, then push.",
@@ -140,7 +140,7 @@ describe("skill updates from Git", () => {
   });
 
   // covers ADR 029 (Updates from a source), #1097
-  it("[TC-AG-1097-02] with Update automatically on, rolls out a clean update by its source, and keeps one that adds a script waiting", async () => {
+  it("with Update automatically on, rolls out a clean update by its source, and keeps one that adds a script waiting", async () => {
     const upstream = await upstreamOf({ "SKILL.md": skillMd("writing") });
     await run(await updatesLayer())(
       Effect.gen(function* () {
@@ -183,7 +183,7 @@ describe("skill updates from Git", () => {
   });
 
   // covers ADR 029 (Updates from a source), #1097
-  it("[TC-AG-1097-03] flags only what an update changes, and Not now keeps it out until the source changes again", async () => {
+  it("flags only what an update changes, and Not now keeps it out until the source changes again", async () => {
     const upstream = await upstreamOf({
       "SKILL.md": skillMd("audit", "Audits pages.", "").replace("Steps for audit.", "See https://example.com/a."),
       "scripts/run.sh": { text: "#!/bin/sh\necho run\n", executable: true },
@@ -226,7 +226,7 @@ describe("skill updates from Git", () => {
   });
 
   // covers ADR 029 (Updates from a source), #1097
-  it("[TC-AG-1097-04] refuses an update the source moved on from, and names a source it cannot read", async () => {
+  it("refuses an update the source moved on from, and names a source it cannot read", async () => {
     const upstream = await upstreamOf({ "SKILL.md": skillMd("deploy") });
     await run(await updatesLayer())(
       Effect.gen(function* () {
@@ -255,7 +255,7 @@ describe("skill updates from Git", () => {
   });
 
   // covers ADR 029 (Updates from a source), #1097
-  it("[TC-AG-1097-06] reviews a waiting update again after you edit the skill, and refuses the older review", async () => {
+  it("reviews a waiting update again after you edit the skill, and refuses the older review", async () => {
     const upstream = await upstreamOf({ "SKILL.md": skillMd("triage") });
     await run(await updatesLayer())(
       Effect.gen(function* () {
@@ -293,7 +293,7 @@ describe("skill updates from Git", () => {
   });
 
   // covers ADR 029 (Updates from a source), #1097
-  it("[TC-AG-1097-07] finishes the rollout of an Update that stopped after adding its revision, even after upstream moves on", async () => {
+  it("finishes the rollout of an Update that stopped after adding its revision, even after upstream moves on", async () => {
     const upstream = await upstreamOf({ "SKILL.md": skillMd("deploy") });
     await run(await updatesLayer())(
       Effect.gen(function* () {
@@ -338,7 +338,7 @@ describe("skill updates from Git", () => {
   });
 
   // covers ADR 029 (Updates from a source), #1097
-  it("[TC-AG-1097-08] says when a review cuts a SKILL.md too long to keep whole", () => {
+  it("says when a review cuts a SKILL.md too long to keep whole", () => {
     expect(keptInstructions("Short.")).toEqual({ text: "Short.", cut: false });
     const long = keptInstructions("x".repeat(200_001));
     expect(long.cut).toBe(true);

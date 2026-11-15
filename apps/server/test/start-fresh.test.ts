@@ -183,8 +183,7 @@ const refusal = (exit: Exit.Exit<unknown, unknown>) =>
 const ended = (all: ReadonlyArray<Message>) => all.every((m) => m.status !== "streaming" && m.status !== "stopping");
 
 describe("Start fresh", () => {
-  // covers CH-009, IN-001, IN-005
-  it("[TC-CH-1376-05] delivers what waited in the old chat once, in the new chat, whose first turn hears what was carried over", async () => {
+  it("delivers what waited in the old chat once, in the new chat, whose first turn hears what was carried over", async () => {
     const { run, requests } = setUp();
     const result = await run(
       Effect.gen(function* () {
@@ -229,8 +228,7 @@ describe("Start fresh", () => {
     expect(turn?.briefing).toContain("Still to deal with: failure about Brief for pass");
   });
 
-  // covers CH-009 (#1378: the Start fresh sheet lists what comes along before you choose it)
-  it("[TC-CH-1378-01] lists what Start fresh would carry over, as it then carries it, and changes nothing", async () => {
+  it("lists what Start fresh would carry over, as it then carries it, and changes nothing", async () => {
     const { run } = setUp();
     const result = await run(
       Effect.gen(function* () {
@@ -254,8 +252,7 @@ describe("Start fresh", () => {
     expect(result.fresh).toEqual(listed);
   });
 
-  // covers CH-009
-  it("[TC-CH-1376-06] refuses a camp, a chat no longer open, a reused key, and a chat whose reply is running", async () => {
+  it("refuses a camp, a chat no longer open, a reused key, and a chat whose reply is running", async () => {
     const { run } = setUp();
     const result = await run(
       Effect.gen(function* () {

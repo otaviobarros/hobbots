@@ -43,7 +43,7 @@ const textOf = (html: string) =>
     .trim();
 
 describe("the quest's Pause and Resume", () => {
-  it("[TC-OR-1446-09] offers a quiet Pause while the work runs, and a Paused banner with Resume once it is paused", () => {
+  it("offers a quiet Pause while the work runs, and a Paused banner with Resume once it is paused", () => {
     const running = render("waiting");
     expect(textOf(running)).toBe("Pause");
     expect(running).toContain('data-variant="quiet"');

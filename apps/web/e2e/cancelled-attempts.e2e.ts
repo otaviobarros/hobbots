@@ -51,10 +51,7 @@ const summon = (current: Hub, name: string, lookSeed: number) =>
 /** A prompt line that makes the fake call a Task tool. */
 const hubCall = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-// covers EX-001, OR-006, UX-002
-test("[TC-OR-459] a member's Task and a step cancelled mid-turn say in their lane that the attempt stopped", async ({
-  page,
-}) => {
+test("a member's Task and a step cancelled mid-turn say in their lane that the attempt stopped", async ({ page }) => {
   test.setTimeout(120_000);
   const current = await startHub(dataDir);
   hub = current;

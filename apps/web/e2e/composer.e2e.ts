@@ -62,11 +62,7 @@ const LONG = `Please ${Array.from({ length: 80 }, (_, i) => `word${i}`).join(" "
 
 const PASTED = "Steps:\n\tfirst, indented with a tab\n    second, indented with spaces\n\nThe end";
 
-// covers CH-001
-test("[TC-CH-131] the composer sends plain text exactly as typed or pasted and keeps focus", async ({
-  page,
-  context,
-}) => {
+test("the composer sends plain text exactly as typed or pasted and keeps focus", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const { composer } = await openMoss(page);
   await composer.click();
@@ -113,8 +109,7 @@ test("[TC-CH-131] the composer sends plain text exactly as typed or pasted and k
   await expect(composer).toHaveValue(LONG);
 });
 
-// covers CH-001
-test("[TC-CH-133] a send the hub refuses puts its text back in the composer", async ({ page }) => {
+test("a send the hub refuses puts its text back in the composer", async ({ page }) => {
   const { composer } = await openMoss(page);
   await composer.fill("Start a thread");
   await composer.press("Enter");
@@ -129,8 +124,7 @@ test("[TC-CH-133] a send the hub refuses puts its text back in the composer", as
   await expect(composer).toHaveValue("Line one\n  line two");
 });
 
-// covers CH-001, CH-003
-test("[TC-CH-132] each thread keeps its unsent draft, and a long draft grows, then scrolls", async ({ page }) => {
+test("each thread keeps its unsent draft, and a long draft grows, then scrolls", async ({ page }) => {
   const { hobUrl, hobId, composer } = await openMoss(page);
   // A camp, so the hob's chat is still the empty one its first message would open.
   const threadUrl = (await campAt(hub as Hub, hobId, "Start a thread")).url;

@@ -43,8 +43,7 @@ const tabsOf = (page: Page, title: string) => {
   return { bench, tabs, open };
 };
 
-// covers UX-002, UX-006, PE-005
-test("[TC-UX-062] a Task that edits files and runs commands is followed through every tab while it runs, and read again as history once it ends", async ({
+test("a Task that edits files and runs commands is followed through every tab while it runs, and read again as history once it ends", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -163,8 +162,7 @@ test("[TC-UX-062] a Task that edits files and runs commands is followed through 
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden();
 });
 
-// covers UX-002, UX-006
-test("[TC-UX-063] a Task that changed no file and ran no command greys out Changes, Files and Terminal, each saying so, and Browser reads Soon", async ({
+test("a Task that changed no file and ran no command greys out Changes, Files and Terminal, each saying so, and Browser reads Soon", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();

@@ -17,7 +17,7 @@ const place = (threadId: string, section: SidebarPlace["section"], others: Sideb
   });
 
 describe("namedPeople", () => {
-  it("[TC-UX-1563-05] names every row's members and each camp's last-line author, never a hob", () => {
+  it("names every row's members and each camp's last-line author, never a hob", () => {
     const sidebar = new Sidebar({
       camps: [
         place("team", "shared-camp", [

@@ -66,8 +66,7 @@ const box = async (locator: Locator) => {
   return found;
 };
 
-// covers UX-001
-test("[TC-UX-092] a hob's page holds its header still while its chats are read", async ({ page }) => {
+test("a hob's page holds its header still while its chats are read", async ({ page }) => {
   const { current, pip } = await hubWithPipAndAChat();
   hub = current;
   const release = await holdReads(page, `${current.url}/api/agents/${pip.id}/threads*`);
@@ -87,8 +86,7 @@ test("[TC-UX-092] a hob's page holds its header still while its chats are read",
   expect(await box(hero)).toEqual(before);
 });
 
-// covers UX-001
-test("[TC-UX-092] the Inbox holds its header still while its rows are read", async ({ page }) => {
+test("the Inbox holds its header still while its rows are read", async ({ page }) => {
   const { current } = await hubWithPipAndAChat();
   hub = current;
   const release = await holdReads(page, `${current.url}/api/approvals`);
@@ -106,8 +104,7 @@ test("[TC-UX-092] the Inbox holds its header still while its rows are read", asy
   expect(await box(title)).toEqual(before);
 });
 
-// covers UX-001
-test("[TC-UX-183] the window paints its frame in this device's theme before the app's code loads, and the app takes its place", async ({
+test("the window paints its frame in this device's theme before the app's code loads, and the app takes its place", async ({
   page,
 }) => {
   const { current } = await hubWithPipAndAChat();

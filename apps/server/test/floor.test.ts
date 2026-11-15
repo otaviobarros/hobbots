@@ -128,7 +128,7 @@ const replies = (messages: ReadonlyArray<Message>) =>
 
 describe("one hob speaks at a time", () => {
   // covers ADR 039 (One hob speaks at a time)
-  it("[TC-CH-1461-01] gives the floor to each mentioned hob in turn, saying who speaks and who is next", async () => {
+  it("gives the floor to each mentioned hob in turn, saying who speaks and who is next", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const bus = yield* EventBus;
@@ -165,7 +165,7 @@ describe("one hob speaks at a time", () => {
   }, 30_000);
 
   // covers ADR 039 (One hob speaks at a time, Restart)
-  it("[TC-CH-1461-02] starts the requests an earlier life of the hub left waiting, in their order", async () => {
+  it("starts the requests an earlier life of the hub left waiting, in their order", async () => {
     const left = Effect.gen(function* () {
       yield* campOfThree;
       yield* mention("first", [ROOK]);
@@ -188,7 +188,7 @@ describe("one hob speaks at a time", () => {
   }, 30_000);
 
   // covers ADR 039 (One hob speaks at a time, Stop all)
-  it("[TC-CH-1461-03] Stop all stops the hob speaking and drops what is still owed, recording who stopped it", async () => {
+  it("Stop all stops the hob speaking and drops what is still owed, recording who stopped it", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
@@ -220,7 +220,7 @@ describe("one hob speaks at a time", () => {
   }, 30_000);
 
   // covers ADR 039 (Who answers, One hob speaks at a time)
-  it("[TC-CH-1461-04] starts the hob you @mention in a camp, not the camp's own hob", async () => {
+  it("starts the hob you @mention in a camp, not the camp's own hob", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const sent = yield* chat.sendPrompt(CAMP, "@rook what do you think?");
@@ -233,7 +233,7 @@ describe("one hob speaks at a time", () => {
   }, 30_000);
 
   // covers ADR 039 (One hob speaks at a time)
-  it("[TC-CH-1461-05] gives an idle floor to the next hob that can take it, past a paused hob's request", async () => {
+  it("gives an idle floor to the next hob that can take it, past a paused hob's request", async () => {
     const left = Effect.gen(function* () {
       yield* campOfThree;
       const repo = yield* HobbotsRepository;

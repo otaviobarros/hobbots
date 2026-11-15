@@ -126,7 +126,7 @@ const records = fc
   .map(({ state, required, evidence: given }) => criterion(state, required, given));
 
 describe("CriterionMachine", () => {
-  it("[TC-OR-1445-01] agrees with a model of a criterion's checks over random runs of events", () => {
+  it("agrees with a model of a criterion's checks over random runs of events", () => {
     agreesWithModel({
       machine: CriterionMachine,
       records,
@@ -136,7 +136,7 @@ describe("CriterionMachine", () => {
     });
   });
 
-  it("[TC-OR-1445-02] voids evidence a newer version replaced, and only that, reopening the criterion", () => {
+  it("voids evidence a newer version replaced, and only that, reopening the criterion", () => {
     const accepted = Criteria.transition(criterion("open", true, []), {
       _tag: "Accept",
       by: LEAD,
@@ -156,7 +156,7 @@ describe("CriterionMachine", () => {
     expect(unmetCriteriaText("task-1", [voided])).toContain("its evidence was voided by a newer version");
   });
 
-  it("[TC-OR-1445-03] lets only you waive a required criterion, and a lead waive an optional one", () => {
+  it("lets only you waive a required criterion, and a lead waive an optional one", () => {
     const waive = (by: Actor) => ({ _tag: "Waive" as const, by, reason: "Not needed", at: at(1) });
     expect(Criteria.transition(criterion("open", true, []), waive(LEAD))).toBeInstanceOf(IllegalCriterionTransition);
     expect(Criteria.transition(criterion("open", true, []), waive(OWNER_ACTOR))).toMatchObject({ state: "waived" });

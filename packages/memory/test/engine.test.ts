@@ -181,7 +181,7 @@ describe("the engine's config file", () => {
 
 describe("the supervised engine", () => {
   // covers ADR 028
-  it("[TC-GEN-178] starts the engine with only its bearers and basics in its environment, and stops it with the hub", async () => {
+  it("starts the engine with only its bearers and basics in its environment, and stops it with the hub", async () => {
     const before = { ...process.env };
     process.env.HOBBOTS_TEST_SECRET = "hub-only";
     let pid = 0;
@@ -232,7 +232,7 @@ describe("the supervised engine", () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-179] starts a crashed engine again with a growing, capped backoff and reports it", async () => {
+  it("starts a crashed engine again with a growing, capped backoff and reports it", async () => {
     await withEngine({}, (engine, data) =>
       Effect.gen(function* () {
         yield* until(engine, (each) => each.state === "running");
@@ -255,7 +255,7 @@ describe("the supervised engine", () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-180] starts an engine that stopped answering again", async () => {
+  it("starts an engine that stopped answering again", async () => {
     await withEngine({}, (engine, data) =>
       Effect.gen(function* () {
         yield* until(engine, (each) => each.state === "running");
@@ -272,7 +272,7 @@ describe("the supervised engine", () => {
   }, 20_000);
 
   // covers ADR 028
-  it("[TC-GEN-1530-01] counts as started only an engine whose own process says it holds the port, not whatever answers there", async () => {
+  it("counts as started only an engine whose own process says it holds the port, not whatever answers there", async () => {
     const dataDir = tempFolder("hobbots-data-");
     mkdirSync(join(dataDir, "memory"), { recursive: true });
     // Each start answers `/healthz` but never says it bound the port, as when another engine holds it.
@@ -300,7 +300,7 @@ describe("the supervised engine", () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-181] restarts only the engine's process when its settings change", async () => {
+  it("restarts only the engine's process when its settings change", async () => {
     await withEngine({}, (engine, data) =>
       Effect.gen(function* () {
         yield* until(engine, (each) => each.state === "running");
@@ -323,7 +323,7 @@ describe("the supervised engine", () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-182] turns memory off, not the hub, when the binary fails its checksum or is missing", async () => {
+  it("turns memory off, not the hub, when the binary fails its checksum or is missing", async () => {
     const folder = await standInEngine();
     folders.push(folder);
     writeFileSync(join(folder, ENGINE_CHECKSUM), `${"0".repeat(64)}  ai-memory\n`);
@@ -341,7 +341,7 @@ describe("the supervised engine", () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-190] checks the binary again before a restart and turns memory off when it was replaced", async () => {
+  it("checks the binary again before a restart and turns memory off when it was replaced", async () => {
     const folder = await standInEngine();
     folders.push(folder);
     await withEngine({ folder }, (engine, data) =>
@@ -362,7 +362,7 @@ describe("the supervised engine", () => {
   });
 
   // covers ADR 028, STD-EFFECT-002
-  it("[TC-GEN-191] tries a start that could not launch again with the backoff, and recovers", async () => {
+  it("tries a start that could not launch again with the backoff, and recovers", async () => {
     await withEngine({}, (engine, data) =>
       Effect.gen(function* () {
         yield* until(engine, (each) => each.state === "running");
@@ -386,7 +386,7 @@ describe("the supervised engine", () => {
   });
 
   // covers ADR 028 (Backups), OP-003
-  it("[TC-OP-097] backs up through the engine with the root bearer, refuses an archive holding a bearer, and packs memory while off", async () => {
+  it("backs up through the engine with the root bearer, refuses an archive holding a bearer, and packs memory while off", async () => {
     /** A memory archive whose config is `config`, served by the stand-in as its backup. */
     const serve = async (data: string, config: string) => {
       const source = tempFolder("hobbots-source-");

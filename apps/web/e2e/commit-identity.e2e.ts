@@ -27,8 +27,7 @@ const ask = async (page: Page, lines: ReadonlyArray<string>) => {
 
 const COMMIT = `fake:run ${JSON.stringify({ command: 'git commit -am "Save the notes"', output: "", exitCode: 0 })}`;
 
-// covers OR-004, IN-004, UX-001
-test("[TC-OR-1241-05] with no Git identity the chat asks in plain words whether the hob will write code, leads to its GitHub section, and Not for this hob is shown and undone in Settings", async ({
+test("with no Git identity the chat asks in plain words whether the hob will write code, leads to its GitHub section, and Not for this hob is shown and undone in Settings", async ({
   page,
   scan,
 }) => {

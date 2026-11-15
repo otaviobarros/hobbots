@@ -56,8 +56,7 @@ const asConnectedDesktop = (deviceId: string) => {
   };
 };
 
-// covers DP-001
-test("[TC-DP-217] a connected desktop's Settings › Devices shows its hub in place of remote access, and Disconnect asks first", async ({
+test("a connected desktop's Settings › Devices shows its hub in place of remote access, and Disconnect asks first", async ({
   page,
 }) => {
   hub = await startHub(dataDir);
@@ -121,8 +120,7 @@ const asPreviousDesktop = () => {
   };
 };
 
-// covers DP-001
-test("[TC-DP-220] an older desktop app without Disconnect sees its hub, no Disconnect, and how to leave from the hub", async ({
+test("an older desktop app without Disconnect sees its hub, no Disconnect, and how to leave from the hub", async ({
   page,
 }) => {
   hub = await startHub(dataDir);

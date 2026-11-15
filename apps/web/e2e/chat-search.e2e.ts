@@ -7,8 +7,7 @@ import { aldricHub, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
-// covers CH-001, UX-001
-test("[TC-CH-261] Find lists the messages of this chat that match, opens the one you pick, and clears then closes on Escape", async ({
+test("Find lists the messages of this chat that match, opens the one you pick, and clears then closes on Escape", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();

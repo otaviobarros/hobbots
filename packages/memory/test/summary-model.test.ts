@@ -29,7 +29,7 @@ beforeEach(resetStandIns);
 
 describe.runIf(engineEnabled)("a finished chat's summary", () => {
   // covers ADR 028
-  it("[TC-GEN-319] is written by the chosen Claude model through its adapter, as a turn of no hob's", async () => {
+  it("is written by the chosen Claude model through its adapter, as a turn of no hob's", async () => {
     const { dataDir, keys } = engineDataDir();
     const scope = await Effect.runPromise(Scope.make());
     scopes.push(scope);

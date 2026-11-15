@@ -255,8 +255,7 @@ const _textOf = (attemptId: AttemptId, contentId: string | null | undefined) =>
   });
 
 describe("an Attempt that several turns work in", () => {
-  // covers UX-002, EX-001
-  it("[TC-OR-316] keeps each turn's commands, even when the runtime numbers its steps from one again", async () => {
+  it("keeps each turn's commands, even when the runtime numbers its steps from one again", async () => {
     const { run: inHub } = setUp({ "notes.md": "# Notes\n" });
     await inHub(say(["Tidy the notes", hub("start_quest", { key: "quest", goal: "Tidy the notes" })].join("\n")));
     // Two turns, each the fake runtime's first tool step of its session: the same step id twice.
@@ -270,8 +269,7 @@ describe("an Attempt that several turns work in", () => {
     expect(activity.commands.map((each) => each.command)).toEqual(["npm run format", "npm run lint"]);
   }, 30_000);
 
-  // covers UX-002, PE-005
-  it("[TC-OR-317] counts what earlier turns kept against the Attempt's content and log budgets", async () => {
+  it("counts what earlier turns kept against the Attempt's content and log budgets", async () => {
     const text = (mark: string) => `${mark.repeat(999)}\n`;
     // Longer than a command's preview, so the hub keeps it as a log.
     const long = Array.from({ length: 3_000 }, (_, i) => `line ${i + 1}`).join("\n");
@@ -302,8 +300,7 @@ describe("an Attempt that several turns work in", () => {
     ]);
   }, 30_000);
 
-  // covers UX-002, PE-005
-  it("[TC-OR-318] a later turn that edits a file an earlier turn kept keeps its before-version, counted once", async () => {
+  it("a later turn that edits a file an earlier turn kept keeps its before-version, counted once", async () => {
     // Room for one 1,000-byte content in the Attempt, not two.
     const { run: inHub } = setUp({}, { limits: { ...limits, contentsPerAttempt: 1_500 } });
     await inHub(say(["Draft the notes", hub("start_quest", { key: "quest", goal: "Draft the notes" })].join("\n")));
@@ -326,8 +323,7 @@ describe("an Attempt that several turns work in", () => {
     ]);
   }, 30_000);
 
-  // covers UX-002, PE-005
-  it("[TC-OR-319] counts an earlier turn's text at its redacted size, so a later turn cannot pass the budget", async () => {
+  it("counts an earlier turn's text at its redacted size, so a later turn cannot pass the budget", async () => {
     // 1,000 bytes as written, 2,700 once each secret in it reads as its marker.
     const secrets = `${SHORT_SECRET}\n`.repeat(100);
     const { run: inHub } = setUp({}, { limits: { ...limits, contentsPerAttempt: 4_000 } });

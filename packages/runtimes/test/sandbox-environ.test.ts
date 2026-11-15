@@ -56,9 +56,8 @@ const reads = (pid: number) => [
 ];
 
 describe("the process sandbox and other processes' environments", () => {
-  // covers PE-005, ADR 028
   it.runIf(enabled)(
-    "[TC-PE-455] a sandboxed command cannot read the environment of another process of the same user",
+    "a sandboxed command cannot read the environment of another process of the same user",
     async () => {
       const pid = holder?.pid ?? 0;
       expect(pid).toBeGreaterThan(0);

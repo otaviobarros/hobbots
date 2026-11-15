@@ -42,8 +42,7 @@ const ASSISTANT_CHORES =
   "Help me with everyday questions and small chores. Keep answers short and ask when something is unclear.";
 const RESEARCHER_CHORES = "Look things up for me and answer with a short summary. Link every source you used.";
 
-// covers AG-001
-test("[TC-AG-1232-04] Summon fills good at from the chores until you write your own, and the hob is summoned with it", async ({
+test("Summon fills good at from the chores until you write your own, and the hob is summoned with it", async ({
   page,
   scan,
 }) => {
@@ -87,8 +86,7 @@ test("[TC-AG-1232-04] Summon fills good at from the chores until you write your 
   });
 });
 
-// covers AG-002
-test("[TC-AG-1232-05] editing good at in the profile saves a new version that the header shows, apart from the instructions", async ({
+test("editing good at in the profile saves a new version that the header shows, apart from the instructions", async ({
   page,
   scan,
 }) => {

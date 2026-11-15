@@ -345,10 +345,7 @@ const startHub = async (
 };
 
 describe("remote access over a fake Tailscale", () => {
-  // covers DP-004
-  it("[TC-DP-060] listens on loopback and the hub's tailnet address only, and serves tailnet peers", async ({
-    skip,
-  }) => {
+  it("listens on loopback and the hub's tailnet address only, and serves tailnet peers", async ({ skip }) => {
     if (!spareLoopback) skip();
     const hub = await startHub();
     const status = await hub.status();
@@ -362,8 +359,7 @@ describe("remote access over a fake Tailscale", () => {
     expect(await refusal("127.0.0.3", hub.port())).toBe("ECONNREFUSED");
   });
 
-  // covers DP-004
-  it("[TC-DP-061] closes a connection from outside the tailnet's addresses at once", async ({ skip }) => {
+  it("closes a connection from outside the tailnet's addresses at once", async ({ skip }) => {
     if (!spareLoopback) skip();
     // Only 127.0.0.1 and 127.0.0.2 count as tailnet addresses here, as 100.64.0.0/10 does on a real tailnet.
     const hub = await startHub({ ranges: ["127.0.0.1", "127.0.0.2"] });
@@ -371,8 +367,7 @@ describe("remote access over a fake Tailscale", () => {
     expect(await ask("127.0.0.2", hub.port(), { from: "127.0.0.1" })).toEqual({ status: 200, body: "nFAKEHUB" });
   });
 
-  // covers DP-004
-  it("[TC-DP-062] answers 403 to a peer Tailscale does not know, before any route runs", async ({ skip }) => {
+  it("answers 403 to a peer Tailscale does not know, before any route runs", async ({ skip }) => {
     if (!spareLoopback) skip();
     const hub = await startHub();
     expect(await ask("127.0.0.2", hub.port(), { from: "127.0.0.3" })).toEqual({
@@ -381,8 +376,7 @@ describe("remote access over a fake Tailscale", () => {
     });
   });
 
-  // covers DP-004
-  it("[TC-DP-063] stops listening on the tailnet and closes its connections when Tailscale stops, and says why", async ({
+  it("stops listening on the tailnet and closes its connections when Tailscale stops, and says why", async ({
     skip,
   }) => {
     if (!spareLoopback) skip();
@@ -407,10 +401,7 @@ describe("remote access over a fake Tailscale", () => {
     expect(await ask("127.0.0.2", hub.port(), { from: "127.0.0.1" })).toEqual({ status: 200, body: "nFAKEHUB" });
   });
 
-  // covers DP-004
-  it("[TC-DP-064] is off by default; turning it on listens, turning it off stops listening and is kept", async ({
-    skip,
-  }) => {
+  it("is off by default; turning it on listens, turning it off stops listening and is kept", async ({ skip }) => {
     if (!spareLoopback) skip();
     const hub = await startHub({ enabled: false });
     // Off, it still says what Tailscale would give it, so Settings can show it.
@@ -427,8 +418,7 @@ describe("remote access over a fake Tailscale", () => {
     expect(await refusal("127.0.0.2", hub.port(), "127.0.0.1")).toBe("ECONNREFUSED");
   });
 
-  // covers DP-004
-  it("[TC-DP-095] Pause closes the tailnet listener and its connections, keeps loopback, survives a restart, and Resume restores it", async ({
+  it("Pause closes the tailnet listener and its connections, keeps loopback, survives a restart, and Resume restores it", async ({
     skip,
   }) => {
     if (!spareLoopback) skip();
@@ -458,8 +448,7 @@ describe("remote access over a fake Tailscale", () => {
     expect(await ask("127.0.0.2", hub.port(), { from: "127.0.0.1" })).toEqual({ status: 200, body: "nFAKEHUB" });
   });
 
-  // covers DP-004
-  it("[TC-DP-096] a hub that starts paused stays off the tailnet until Resume, and turning remote access on resumes it", async ({
+  it("a hub that starts paused stays off the tailnet until Resume, and turning remote access on resumes it", async ({
     skip,
   }) => {
     if (!spareLoopback) skip();
@@ -473,10 +462,7 @@ describe("remote access over a fake Tailscale", () => {
     expect(readNetworkSettings(hub.dataDir)).toEqual({ remoteAccess: true, remoteAccessPaused: false });
   });
 
-  // covers DP-004
-  it("[TC-DP-065] says why it is not on the tailnet: signed out, no address, or a port it cannot open", async ({
-    skip,
-  }) => {
+  it("says why it is not on the tailnet: signed out, no address, or a port it cannot open", async ({ skip }) => {
     if (!spareLoopback) skip();
     const hub = await startHub();
     const set = (fake: Partial<FakeTailnet>) =>
@@ -502,10 +488,7 @@ describe("remote access over a fake Tailscale", () => {
     }
   });
 
-  // covers DP-004
-  it("[TC-DP-066] moves loopback and the tailnet to a changed port, tells every client, and keeps it", async ({
-    skip,
-  }) => {
+  it("moves loopback and the tailnet to a changed port, tells every client, and keeps it", async ({ skip }) => {
     if (!spareLoopback) skip();
     const hub = await startHub();
     const before = hub.port();
@@ -533,8 +516,7 @@ describe("remote access over a fake Tailscale", () => {
     expect(await underWay).toEqual({ status: 200, body: "held" });
   });
 
-  // covers DP-004
-  it("[TC-DP-086] the device check sees tailnet requests as the tailnet's, so the window key works only on loopback", async ({
+  it("the device check sees tailnet requests as the tailnet's, so the window key works only on loopback", async ({
     skip,
   }) => {
     if (!spareLoopback) skip();
@@ -551,8 +533,7 @@ describe("remote access over a fake Tailscale", () => {
     });
   });
 
-  // covers DP-004
-  it("[TC-DP-067] refuses a port another program holds and changes nothing", async ({ skip }) => {
+  it("refuses a port another program holds and changes nothing", async ({ skip }) => {
     if (!spareLoopback) skip();
     const hub = await startHub();
     const taken = createNetServer();
@@ -573,10 +554,7 @@ describe("remote access over a fake Tailscale", () => {
     }
   });
 
-  // covers DP-004
-  it("[TC-DP-068] answers only on its own host names: loopback, its MagicDNS name and its tailnet addresses", async ({
-    skip,
-  }) => {
+  it("answers only on its own host names: loopback, its MagicDNS name and its tailnet addresses", async ({ skip }) => {
     if (!spareLoopback) skip();
     const hub = await startHub();
     const port = hub.port();
@@ -587,8 +565,7 @@ describe("remote access over a fake Tailscale", () => {
     expect((await ask("127.0.0.1", port, { hostHeader: `attacker.example:${port}` })).status).toBe(421);
   });
 
-  // covers DP-004
-  it("[TC-DP-069] forgets who a peer is once Tailscale no longer lists it", async ({ skip }) => {
+  it("forgets who a peer is once Tailscale no longer lists it", async ({ skip }) => {
     if (!spareLoopback) skip();
     const hub = await startHub();
     expect((await ask("127.0.0.2", hub.port(), { from: "127.0.0.1" })).body).toBe("nFAKEHUB");
@@ -612,10 +589,7 @@ describe("remote access over a fake Tailscale", () => {
     expect((await ask("127.0.0.2", hub.port(), { from: "127.0.0.1" })).body).toBe("nOTHER");
   });
 
-  // covers DP-004, PE-001
-  it("[TC-DP-070] names the hub's tailnet addresses and MagicDNS name as hosts a hob never reaches", async ({
-    skip,
-  }) => {
+  it("names the hub's tailnet addresses and MagicDNS name as hosts a hob never reaches", async ({ skip }) => {
     if (!spareLoopback) skip();
     const hub = await startHub();
     expect(await hub.hosts()).toEqual(["127.0.0.2", "hub.example.ts.net"]);
@@ -658,8 +632,7 @@ const viaServe = (
   });
 
 describe("HTTPS through tailscale serve", () => {
-  // covers DP-004
-  it("[TC-DP-130] opens the serve listener on loopback only while HTTPS and remote access are on and not paused", async ({
+  it("opens the serve listener on loopback only while HTTPS and remote access are on and not paused", async ({
     skip,
   }) => {
     if (!spareLoopback) skip();
@@ -693,10 +666,7 @@ describe("HTTPS through tailscale serve", () => {
     expect(await refusal("127.0.0.1", hub.servePort)).toBe("ECONNREFUSED");
   });
 
-  // covers DP-004
-  it("[TC-DP-131] reads the forwarded identity only on the serve listener: one address, named by whois", async ({
-    skip,
-  }) => {
+  it("reads the forwarded identity only on the serve listener: one address, named by whois", async ({ skip }) => {
     if (!spareLoopback) skip();
     const hub = await startHub({ tailnet: WITH_PHONE, https: true });
     expect(await viaServe(hub, { from: "127.0.0.5" })).toEqual({ status: 200, body: "nPHONE" });
@@ -732,8 +702,7 @@ describe("HTTPS through tailscale serve", () => {
     });
   });
 
-  // covers DP-004
-  it("[TC-DP-132] refuses a request that came through Tailscale Funnel, on every listener", async ({ skip }) => {
+  it("refuses a request that came through Tailscale Funnel, on every listener", async ({ skip }) => {
     if (!spareLoopback) skip();
     const hub = await startHub({ tailnet: WITH_PHONE, https: true });
     const funnel = { "tailscale-funnel-request": "?1" };
@@ -743,10 +712,7 @@ describe("HTTPS through tailscale serve", () => {
     expect(await ask("127.0.0.2", hub.port(), { from: "127.0.0.1", headers: funnel })).toEqual(refused);
   });
 
-  // covers DP-004
-  it("[TC-DP-133] a device approved over HTTP keeps working over HTTPS and moves to the secure cookie", async ({
-    skip,
-  }) => {
+  it("a device approved over HTTP keeps working over HTTPS and moves to the secure cookie", async ({ skip }) => {
     if (!spareLoopback) skip();
     const hub = await startHub({ tailnet: WITH_PHONE, https: true });
     const token = await hub.approve(PHONE);
@@ -786,10 +752,7 @@ describe("HTTPS through tailscale serve", () => {
     ).toEqual({ status: 401, body: "DeviceRequired" });
   });
 
-  // covers DP-004
-  it("[TC-DP-134] runs tailscale serve after consent, and then sends page loads on HTTP to the HTTPS address", async ({
-    skip,
-  }) => {
+  it("runs tailscale serve after consent, and then sends page loads on HTTP to the HTTPS address", async ({ skip }) => {
     if (!spareLoopback) skip();
     const hub = await startHub({ tailnet: WITH_PHONE, https: true });
     expect((await hub.status()).https.forwarding).toBe(false);
@@ -820,10 +783,7 @@ describe("HTTPS through tailscale serve", () => {
     expect((await Effect.runPromise(Ref.get(hub.tailnet))).serve).toBeUndefined();
   });
 
-  // covers DP-004
-  it("[TC-DP-135] says what Tailscale answered when tailscale serve refuses, and when remote access is off", async ({
-    skip,
-  }) => {
+  it("says what Tailscale answered when tailscale serve refuses, and when remote access is off", async ({ skip }) => {
     if (!spareLoopback) skip();
     const refuses = "Serve is not enabled on your tailnet.";
     const hub = await startHub({ tailnet: { ...WITH_PHONE, serveRefuses: refuses }, https: true });
@@ -836,8 +796,7 @@ describe("HTTPS through tailscale serve", () => {
     expect((await hub.status()).https).toMatchObject({ listening: false, forwarding: true });
   });
 
-  // covers DP-004
-  it("[TC-DP-143] turning HTTPS off through tailscale serve answers that request, then closes the serve listener", async ({
+  it("turning HTTPS off through tailscale serve answers that request, then closes the serve listener", async ({
     skip,
   }) => {
     if (!spareLoopback) skip();
@@ -869,7 +828,7 @@ describe("HTTPS through tailscale serve", () => {
     expect(await ask("127.0.0.2", hub.port(), { from: "127.0.0.5" })).toEqual({ status: 200, body: "nPHONE" });
   });
 
-  it("[TC-DP-144] turning HTTPS off through tailscale serve is answered however long Tailscale takes to say what it serves", async ({
+  it("turning HTTPS off through tailscale serve is answered however long Tailscale takes to say what it serves", async ({
     skip,
   }) => {
     if (!spareLoopback) skip();

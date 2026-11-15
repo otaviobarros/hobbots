@@ -183,8 +183,7 @@ const LESSON = {
 };
 
 describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled ai-memory", () => {
-  // covers CH-001, CH-002, ADR 028 (The memory tools, The memory brief)
-  it("[TC-CH-289] a lesson a hob learns in one thread is in its next thread's brief and search, and never another hob's", async () => {
+  it("a lesson a hob learns in one thread is in its next thread's brief and search, and never another hob's", async () => {
     const { project, dataDir } = prepare();
     hub = await start(dataDir);
     await engineRunning();
@@ -211,7 +210,7 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
   });
 
   // covers ADR 028 (The memory tools, Writes), #961
-  it("[TC-GEN-389] a chat lists its own saves, Undo puts back what a save replaced or removes the page it made, and the hob's page counts what it reads", async () => {
+  it("a chat lists its own saves, Undo puts back what a save replaced or removes the page it made, and the hob's page counts what it reads", async () => {
     const { project, dataDir } = prepare();
     hub = await start(dataDir);
     await engineRunning();
@@ -284,7 +283,7 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
   });
 
   // covers ADR 028 (Sharing), IN-001
-  it("[TC-GEN-387] a page a hob shares reaches another hob only once you share it from the Inbox", async () => {
+  it("a page a hob shares reaches another hob only once you share it from the Inbox", async () => {
     const { project, dataDir } = prepare();
     hub = await start(dataDir);
     await engineRunning();
@@ -335,7 +334,7 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
   });
 
   // covers ADR 028 (When memory is down, Capture and summaries)
-  it("[TC-GEN-388] stopping ai-memory mid-chat loses nothing: the hob keeps working, and every capture and save arrives once it is back", async () => {
+  it("stopping ai-memory mid-chat loses nothing: the hob keeps working, and every capture and save arrives once it is back", async () => {
     const { project, dataDir } = prepare();
     const engine = engineCopy();
     hub = await start(dataDir, engine);
@@ -391,7 +390,7 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
   });
 
   // covers ADR 028 (Backups), OP-003, OP-004
-  it("[TC-OP-107] an export holds memory, and a restored backup keeps it: the page, its history and the next thread's brief, with new keys", async () => {
+  it("an export holds memory, and a restored backup keeps it: the page, its history and the next thread's brief, with new keys", async () => {
     const { project, dataDir } = prepare();
     const backups = join(root, "backups");
     mkdirSync(backups);

@@ -83,7 +83,7 @@ describe("questTicket", () => {
     );
   });
 
-  it("[TC-UX-1346-06] says a Quest its lead stopped at your request was stopped, never finished or cancelled", () => {
+  it("says a Quest its lead stopped at your request was stopped, never finished or cancelled", () => {
     const top = ended(task(CAMPAIGN, { brief: "Plan a Black Friday campaign" }), "cancelled", 6);
     const base = withTasks(top, task(COPY, { ownerId: QUILL, state: "cancelled" }));
     const [record] = base.quests;

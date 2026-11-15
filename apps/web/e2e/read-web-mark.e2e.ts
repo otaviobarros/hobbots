@@ -19,7 +19,7 @@ const send = async (page: Page, lines: ReadonlyArray<string>) => {
 const settled = (page: Page) => expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 
 // covers ADR 036 (The read-the-web mark), UX-006
-test("[TC-UX-1268-01] a Workbench left open shows Read the web as soon as the running turn searches, before the turn ends", async ({
+test("a Workbench left open shows Read the web as soon as the running turn searches, before the turn ends", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();

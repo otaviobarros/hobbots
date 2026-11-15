@@ -45,7 +45,7 @@ const hubWithWick = async () => {
 const AGENTS = /\/api\/agents(\?|$)/;
 
 // covers STD-REACT-002
-test("[TC-UX-152] an address with params the page does not know opens the page on its defaults", async ({ page }) => {
+test("an address with params the page does not know opens the page on its defaults", async ({ page }) => {
   const { url } = await hubWithWick();
   const failed = page.getByRole("heading", { name: "This page could not open" });
 
@@ -63,9 +63,7 @@ test("[TC-UX-152] an address with params the page does not know opens the page o
 });
 
 // covers STD-REACT-014, STD-UI-009
-test("[TC-UX-153] a page that cannot load says why in plain words, keeps the sidebar and opens on Try again", async ({
-  page,
-}) => {
+test("a page that cannot load says why in plain words, keeps the sidebar and opens on Try again", async ({ page }) => {
   const { url, wickId } = await hubWithWick();
   await page.route(AGENTS, (route) => route.abort("connectionrefused"));
   await page.goto(`${url}/#/hobs/${wickId}/arrived`);

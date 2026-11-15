@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`buildPack > [TC-CH-1380-01] is the same for the same records, part by part 1`] = `
+exports[`buildPack > is the same for the same records, part by part 1`] = `
 "## Who is here
 You are Wren.
 Why you are answering now: You are the only hob here.
@@ -45,7 +45,7 @@ You are picking up this chapter of the thread from Claude Code. Hobbots kept thi
 > Tomatoes, in pots."
 `;
 
-exports[`buildPack > [TC-CH-1380-01] is the same for the same records, part by part 2`] = `
+exports[`buildPack > is the same for the same records, part by part 2`] = `
 {
   "budget": 12000,
   "parts": [

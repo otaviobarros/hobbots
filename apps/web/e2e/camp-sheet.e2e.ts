@@ -29,8 +29,7 @@ const say = async (page: Page, composerName: RegExp, lines: ReadonlyArray<string
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
 };
 
-// covers CH-001, ADR 037 (Records, Mine)
-test("[TC-CH-1387-10] records and changes a decision, opens an artifact, writes a note, pins a reply and makes the camp private", async ({
+test("records and changes a decision, opens an artifact, writes a note, pins a reply and makes the camp private", async ({
   page,
 }) => {
   const { url, aldric, hub } = await aldricHub();
@@ -110,8 +109,7 @@ test("[TC-CH-1387-10] records and changes a decision, opens an artifact, writes 
     .toBe(true);
 });
 
-// covers CH-001, ADR 037 (CampSuggestion, Moving a chapter into a camp moves it)
-test("[TC-CH-1387-11] offers a grown chat chapter as a camp and moves it into the new camp", async ({ page }) => {
+test("offers a grown chat chapter as a camp and moves it into the new camp", async ({ page }) => {
   const { url, aldric, api, hub } = await aldricHub();
   const main = page.getByRole("main", { name: "Chat" });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
@@ -141,8 +139,7 @@ test("[TC-CH-1387-11] offers a grown chat chapter as a camp and moves it into th
   expect(left).toEqual([]);
 });
 
-// covers CH-001, ADR 037 (Records). Issue #1551: a chat's chapter stays put while a reply runs there.
-test("[TC-CH-1551-01] a camp suggestion waits while a reply runs, and Make a camp holds the chapter until it ends", async ({
+test("a camp suggestion waits while a reply runs, and Make a camp holds the chapter until it ends", async ({
   page,
 }) => {
   const { url, aldric, api, hub } = await aldricHub();
@@ -194,8 +191,7 @@ test("[TC-CH-1551-01] a camp suggestion waits while a reply runs, and Make a cam
   await expect(main.getByText("Echo: Let us plan the launch.")).toBeVisible();
 });
 
-// covers CH-001, ADR 037 (Catch-up)
-test("[TC-CH-1387-12] catches you up on a chat you left, then folds it", async ({ page }) => {
+test("catches you up on a chat you left, then folds it", async ({ page }) => {
   const { url, aldric, api, hub } = await aldricHub();
   const main = page.getByRole("main", { name: "Chat" });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
@@ -225,8 +221,7 @@ test("[TC-CH-1387-12] catches you up on a chat you left, then folds it", async (
   await expect(main.getByText("Caught up · 2 updates while you were away")).toBeVisible();
 });
 
-// covers CH-001, ADR 039 (For you: mentions of you)
-test("[TC-CH-1456-02] a reply that mentions you while you are away shows in the catch-up, and its row jumps to it", async ({
+test("a reply that mentions you while you are away shows in the catch-up, and its row jumps to it", async ({
   page,
 }) => {
   const { url, aldric, api, hub } = await aldricHub();
@@ -252,8 +247,7 @@ test("[TC-CH-1456-02] a reply that mentions you while you are away shows in the 
   await expect.poll(() => new URL(page.url().replace("#/", "")).searchParams.get("message")).toBeTruthy();
 });
 
-// covers CH-001, ADR 037 (Catch-up: each visit reads its own)
-test("[TC-CH-1387-13] a second visit to a chat you left again catches you up on what is new since, not the first visit's news", async ({
+test("a second visit to a chat you left again catches you up on what is new since, not the first visit's news", async ({
   page,
 }) => {
   const { url, aldric, api, hub } = await aldricHub();
@@ -284,10 +278,7 @@ test("[TC-CH-1387-13] a second visit to a chat you left again catches you up on 
   await expect(card).not.toContainText("Ship on Fridays.");
 });
 
-// covers CH-001, ADR 037 (Catch-up), STD-REACT-015
-test("[TC-CH-1387-14] a catch-up that cannot be read keeps the chat unread until Try again reads it", async ({
-  page,
-}) => {
+test("a catch-up that cannot be read keeps the chat unread until Try again reads it", async ({ page }) => {
   const { url, aldric, api, hub } = await aldricHub();
   const main = page.getByRole("main", { name: "Chat" });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
@@ -335,7 +326,6 @@ const boxOf = async (locator: Locator) => {
   return box;
 };
 
-// covers UX-001, ADR 037 (camp sheet, Find)
 /** Answers a camp's list with its first row repeated `times` over, each with its own id. */
 const repeated = (times: number) => async (route: Route) => {
   const response = await route.fetch();
@@ -352,7 +342,7 @@ const repeated = (times: number) => async (route: Route) => {
 };
 
 // covers ADR 037 (the sheet), STD-UI-005
-test("[TC-UX-1431-02] the camp sheet's tabs fit it without a sideways scroll, however large their counts, and Find's close sits inside its box", async ({
+test("the camp sheet's tabs fit it without a sideways scroll, however large their counts, and Find's close sits inside its box", async ({
   page,
 }) => {
   const { aldric, hub } = await aldricHub();
@@ -402,9 +392,8 @@ test("[TC-UX-1431-02] the camp sheet's tabs fit it without a sideways scroll, ho
   expect(close.y).toBeGreaterThanOrEqual(field.y + 2);
 });
 
-// covers CH-001, ADR 037 (Records: CampSuggestion). Issue #1557: a suggestion takes one topic's
 // chapter, and Make a camp prefills the name the hub suggests, never "Chapter N".
-test("[TC-CH-1557-12] makes a camp from the suggested chapter alone, named as the hub suggests", async ({ page }) => {
+test("makes a camp from the suggested chapter alone, named as the hub suggests", async ({ page }) => {
   const { url, aldric, api, hub } = await aldricHub();
   const main = page.getByRole("main", { name: "Chat" });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);

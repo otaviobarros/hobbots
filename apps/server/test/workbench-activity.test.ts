@@ -258,8 +258,7 @@ const textOf = (attemptId: AttemptId, contentId: string | null | undefined) =>
   });
 
 describe("a Task's activity", () => {
-  // covers UX-002, PE-005
-  it("[TC-GEN-082] a Task that edits two files and runs a command has both changes and the command's output recorded, redacted", async () => {
+  it("a Task that edits two files and runs a command has both changes and the command's output recorded, redacted", async () => {
     const { run: inHub } = setUp({
       "notes.md": "# Notes\n",
       "src/app.ts": "export const app = 1;\n",
@@ -363,8 +362,7 @@ describe("a Task's activity", () => {
     expect(types).toEqual(expect.arrayContaining(["CommandRecorded", "FileChangesRecorded", "FolderScanned"]));
   }, 30_000);
 
-  // covers UX-002, UX-006, PE-005 (#902)
-  it("[TC-GEN-157] a colored command keeps its colors in the Workbench, redacted where a color splits a secret, and its reply step reads plain", async () => {
+  it("a colored command keeps its colors in the Workbench, redacted where a color splits a secret, and its reply step reads plain", async () => {
     const { run: inHub } = setUp({ "notes.md": "# Notes\n" });
     const green = "\u001b[32m";
     const bold = "\u001b[1m";
@@ -398,8 +396,7 @@ describe("a Task's activity", () => {
     expect(JSON.stringify({ activity, steps })).not.toContain(TOKEN.slice(12));
   });
 
-  // covers UX-002
-  it("[TC-GEN-083] a step records on its own Attempt, keeps a long output as a log, and labels changes made beside another step", async () => {
+  it("a step records on its own Attempt, keeps a long output as a log, and labels changes made beside another step", async () => {
     const { run: inHub, release, live } = setUp({ "README.md": "# Site\n" });
     const long = Array.from({ length: 4_000 }, (_, i) => `line ${i + 1}`).join("\n");
     const short = `built\nGH_TOKEN=${TOKEN}\n`;
@@ -466,8 +463,7 @@ describe("a Task's activity", () => {
     expect(live.every((each) => each.attemptId === styles.id && each.commandId === shown?.id)).toBe(true);
   }, 30_000);
 
-  // covers UX-002, PE-005
-  it("[TC-PE-279] clears the details of a Task past the retention window and never touches the hob's files", async () => {
+  it("clears the details of a Task past the retention window and never touches the hob's files", async () => {
     const { run: inHub } = setUp({ "notes.md": "# Notes\n" });
     await inHub(
       say(
@@ -494,8 +490,7 @@ describe("a Task's activity", () => {
     expect(existsSync(join(dataFolder, "activity", kept ?? ""))).toBe(false);
     expect(readFileSync(join(project, "notes.md"), "utf8")).toBe("# Notes\n\nDone.\n");
   }, 30_000);
-  // covers UX-002, PE-005
-  it("[TC-PE-282] keeps one content budget for the whole Attempt, across its folders, and frees a version a rewrite replaced", async () => {
+  it("keeps one content budget for the whole Attempt, across its folders, and frees a version a rewrite replaced", async () => {
     const second = join(temp, "second");
     mkdirSync(second, { recursive: true });
     const text = (mark: string) => `${mark.repeat(999)}\n`;
@@ -543,8 +538,7 @@ describe("a Task's activity", () => {
     expect(tight.filter((each) => each.notKept === "attempt-limit")).toHaveLength(1);
     expect(tight.filter((each) => each.notKept === null)).toHaveLength(2);
   }, 30_000);
-  // covers UX-002, EX-004
-  it("[TC-PE-283] after a restart, a command left running from before it is recorded as uncertain, with its journal entry", async () => {
+  it("after a restart, a command left running from before it is recorded as uncertain, with its journal entry", async () => {
     const { run: inHub } = setUp({ "notes.md": "# Notes\n" });
     await inHub(say(["Check the notes", hub("start_quest", { key: "quest", goal: "Check" })].join("\n")));
     const tree = await inHub(treeWhen((each) => each.attempts.length > 0));
@@ -586,8 +580,7 @@ describe("a Task's activity", () => {
       { _tag: "CommandRecorded", command: { id: "left-running", state: "uncertain" } },
     ]);
   }, 30_000);
-  // covers UX-002, EX-004
-  it("[TC-PE-453] after a restart, an Attempt's steps left under way are ended and journaled before they are served (#892)", async () => {
+  it("after a restart, an Attempt's steps left under way are ended and journaled before they are served (#892)", async () => {
     const { run: inHub } = setUp({ "notes.md": "# Notes\n" });
     await inHub(say(["Check the notes", hub("start_quest", { key: "quest", goal: "Check" })].join("\n")));
     const tree = await inHub(treeWhen((each) => each.attempts.length > 0));
@@ -628,8 +621,7 @@ describe("a Task's activity", () => {
     const again = await inHub(EventJournal.use((journal) => journal.readAfter(settled.at(-1)?.sequence ?? 0, 10_000)));
     expect(again.filter((entry) => entry.type === "AttemptStepsRecorded")).toHaveLength(0);
   }, 30_000);
-  // covers PE-005
-  it("[TC-PE-286] counts a text's redacted size against the Attempt's budget, so redaction never takes it past", async () => {
+  it("counts a text's redacted size against the Attempt's budget, so redaction never takes it past", async () => {
     // 1,000 bytes as written, and longer once each secret in it reads as its marker.
     const secrets = `${SHORT_SECRET}\n`.repeat(100);
     const { run: inHub } = setUp({}, { limits: { ...limits, contentsPerAttempt: 1_000 } });

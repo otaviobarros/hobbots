@@ -64,7 +64,7 @@ const artifact = (id: string, title: string, latestVersion = 1) =>
 const entry = (sequence: number, payload: unknown) => ({ sequence, payload }) as unknown as EventEnvelope;
 
 describe("the plain brief", () => {
-  it("[TC-CH-1384-01] says the goal, the decisions that hold and what was made, newest first, and nothing without records", () => {
+  it("says the goal, the decisions that hold and what was made, newest first, and nothing without records", () => {
     const text = plainBrief(
       camp(),
       [decision("d2", "Emails go out on Wednesdays."), decision("d1", "Emails go out on Tuesdays.", "superseded")],
@@ -81,7 +81,7 @@ describe("the plain brief", () => {
     expect(plainBrief(camp(), [decision("d1", "Old.", "superseded")], [])).toBeNull();
   });
 
-  it("[TC-CH-1384-02] on random records, always fits its share of the pack, which then carries it whole", () => {
+  it("on random records, always fits its share of the pack, which then carries it whole", () => {
     const words = fc.string({ minLength: 1, maxLength: 400 });
     fc.assert(
       fc.property(
@@ -119,7 +119,7 @@ describe("the plain brief", () => {
     );
   });
 
-  it("[TC-CH-1384-03] counts what does not fit instead of dropping it", () => {
+  it("counts what does not fit instead of dropping it", () => {
     const many = Array.from({ length: 60 }, (_, i) => decision(`d${i}`, `Decision number ${i} about the launch plan.`));
     const text = plainBrief(camp(null), many, [artifact("a1", "launch.md")]) ?? "";
     expect(text).toMatch(/- and \d+ more\n\nMade:\n- launch\.md/);
@@ -128,7 +128,7 @@ describe("the plain brief", () => {
 });
 
 describe("what asks for a brief", () => {
-  it("[TC-CH-1384-04] a chapter end, a split or merge, and a Quest's steps; nothing else", () => {
+  it("a chapter end, a split or merge, and a Quest's steps; nothing else", () => {
     const task = new Task({
       id: TaskId.make("t1"),
       ownerId: WREN,
@@ -179,7 +179,7 @@ describe("what asks for a brief", () => {
 });
 
 describe("what the brain reads", () => {
-  it("[TC-CH-1384-05] the thread's name, goal and records, never more than its limit", () => {
+  it("the thread's name, goal and records, never more than its limit", () => {
     const input = briefInput({
       thread: camp(),
       decisions: [decision("d1", "Emails go out on Wednesdays.")],

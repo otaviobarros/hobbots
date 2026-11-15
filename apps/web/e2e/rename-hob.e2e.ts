@@ -45,8 +45,7 @@ const hobPayload = (name: string) => ({
   instructions: "Write short answers.",
 });
 
-// covers AG-002
-test("[TC-AG-405-05] renaming a hob from its profile saves a new version, says you summoned it, and follows a rename made elsewhere", async ({
+test("renaming a hob from its profile saves a new version, says you summoned it, and follows a rename made elsewhere", async ({
   page,
   scan,
 }) => {
@@ -94,8 +93,7 @@ test("[TC-AG-405-05] renaming a hob from its profile saves a new version, says y
   expect(saved).toMatchObject({ name: "Quill", configVersion: 3, summonedBy: null });
 });
 
-// covers AG-002
-test("[TC-AG-405-06] the profile names a retired hob that summoned it, and says so with Try again when it cannot read it", async ({
+test("the profile names a retired hob that summoned it, and says so with Try again when it cannot read it", async ({
   page,
   scan,
 }) => {

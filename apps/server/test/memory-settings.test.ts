@@ -154,7 +154,7 @@ const request = async (method: "GET" | "PUT", path: string, body?: unknown) => {
 
 describe("the memory model in Settings", () => {
   // covers ADR 028
-  it("[TC-GEN-219] starts from the runtime's smallest model at low effort, and shows the engine, its pages and its use", async () => {
+  it("starts from the runtime's smallest model at low effort, and shows the engine, its pages and its use", async () => {
     mkdirSync(join(dataDir, "memory", "wiki"), { recursive: true });
     writeFileSync(join(dataDir, "memory", "wiki", "notes.md"), "# Notes\n");
     const { status, body } = await request("GET", "/api/memory");
@@ -175,7 +175,7 @@ describe("the memory model in Settings", () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-220] stores a changed model in the data folder and restarts only the memory engine", async () => {
+  it("stores a changed model in the data folder and restarts only the memory engine", async () => {
     const chosen: MemorySettings = {
       ...DEFAULT_MEMORY_SETTINGS,
       provider: "chatgpt",
@@ -206,7 +206,7 @@ describe("the memory model in Settings", () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-221] refuses a model id that is not a plain name, and reads a damaged file as the default", async () => {
+  it("refuses a model id that is not a plain name, and reads a damaged file as the default", async () => {
     const refused = await request("PUT", "/api/memory/settings", { ...DEFAULT_MEMORY_SETTINGS, model: 'x"\n[auth]' });
     expect(refused.status).toBe(400);
     expect(reconfigured).toEqual([]);
@@ -217,7 +217,7 @@ describe("the memory model in Settings", () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-320] says when the chosen runtime is signed out or limited, and runs the smallest model in place of one it stopped offering", async () => {
+  it("says when the chosen runtime is signed out or limited, and runs the smallest model in place of one it stopped offering", async () => {
     // A model the runtime no longer lists falls back to its smallest, and says which.
     await request("PUT", "/api/memory/settings", { ...DEFAULT_MEMORY_SETTINGS, model: "gone-1" });
     expect(decode((await request("GET", "/api/memory")).body).state).toEqual({
@@ -262,7 +262,7 @@ describe("the memory model in Settings", () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-223] measures the memory folder without blocking, once for requests that come together", async () => {
+  it("measures the memory folder without blocking, once for requests that come together", async () => {
     const memory = join(dataDir, "memory");
     mkdirSync(join(memory, "wiki", "projects", "deep"), { recursive: true });
     writeFileSync(join(memory, "wiki", "a.md"), "12345");

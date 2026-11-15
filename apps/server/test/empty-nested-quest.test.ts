@@ -15,8 +15,7 @@ afterEach(async () => {
 const EMPTY = "Started a Quest but has not brought anyone in";
 
 describe("an empty nested Quest", () => {
-  // covers OR-004, OR-005, IN-004
-  it("[TC-OR-246] a member whose turn leaves its own Quest empty reports one finding, and its lead hears of it", async () => {
+  it("a member whose turn leaves its own Quest empty reports one finding, and its lead hears of it", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests } = party;

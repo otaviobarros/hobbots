@@ -59,7 +59,7 @@ const hubWithHobs = async () => {
 };
 
 // covers ADR 029 (the Skills page, editing and rollout), #1062
-test("[TC-UX-1062] Skills: write one, give it out, edit and roll out with one hob held back, roll back, and import a folder", async ({
+test("Skills: write one, give it out, edit and roll out with one hob held back, roll back, and import a folder", async ({
   page,
 }) => {
   const { url, folder } = await hubWithHobs();
@@ -133,9 +133,7 @@ test("[TC-UX-1062] Skills: write one, give it out, edit and roll out with one ho
 });
 
 // covers ADR 029 (Editing), #1062
-test("[TC-UX-1062-02] a save from another device while you edit keeps your text and says it cannot be saved over", async ({
-  page,
-}) => {
+test("a save from another device while you edit keeps your text and says it cannot be saved over", async ({ page }) => {
   const { url, folder, api } = await hubWithHobs();
   const imported = (await api("POST", "/skills", { source: { _tag: "Folder", path: folder } })) as unknown as {
     imported: ReadonlyArray<{ skill: { id: string }; revision: { hash: string } }>;
@@ -161,9 +159,7 @@ test("[TC-UX-1062-02] a save from another device while you edit keeps your text 
 });
 
 // covers ADR 029 (Editing), #1062
-test("[TC-UX-1062-03] a save whose answer is lost is finished from the editor, not read as someone else's", async ({
-  page,
-}) => {
+test("a save whose answer is lost is finished from the editor, not read as someone else's", async ({ page }) => {
   const { url, folder, api } = await hubWithHobs();
   const imported = (await api("POST", "/skills", { source: { _tag: "Folder", path: folder } })) as unknown as {
     imported: ReadonlyArray<{ skill: { id: string } }>;
@@ -194,7 +190,7 @@ test("[TC-UX-1062-03] a save whose answer is lost is finished from the editor, n
 });
 
 // covers ADR 029 (Editing), #1062
-test("[TC-UX-1062-04] rollout switches alone, or with text that saves the same, save nothing, and text that is an older revision again moves no place", async ({
+test("rollout switches alone, or with text that saves the same, save nothing, and text that is an older revision again moves no place", async ({
   page,
 }) => {
   const { url, folder, api } = await hubWithHobs();
@@ -239,7 +235,7 @@ test("[TC-UX-1062-04] rollout switches alone, or with text that saves the same, 
 });
 
 // covers ADR 029 (Backups, exports and Diagnostics), #1064
-test("[TC-UX-1064] Skills: export a set with skills.lock.json, import it on a fresh hub, and see it in Diagnostics", async ({
+test("Skills: export a set with skills.lock.json, import it on a fresh hub, and see it in Diagnostics", async ({
   page,
 }) => {
   const { api } = await hubWithHobs();
@@ -314,9 +310,7 @@ test("[TC-UX-1064] Skills: export a set with skills.lock.json, import it on a fr
   }
 });
 
-test("[TC-UX-1139] a skill from ~/.agents/skills is read-only with Make a copy, and Export leaves it out", async ({
-  page,
-}) => {
+test("a skill from ~/.agents/skills is read-only with Make a copy, and Export leaves it out", async ({ page }) => {
   await hubWithHobs();
   // The hub reads a ~/.agents/skills of its own, with one skill in it.
   await hub?.stop();
@@ -380,7 +374,7 @@ test("[TC-UX-1139] a skill from ~/.agents/skills is read-only with Make a copy, 
 });
 
 // covers ADR 029 (Skill sets), #1143
-test("[TC-UX-1143] a plugin comes in as one set, opens on its own page, and a skill of it opens read-only with Make a copy", async ({
+test("a plugin comes in as one set, opens on its own page, and a skill of it opens read-only with Make a copy", async ({
   page,
 }) => {
   const { url } = await hubWithHobs();
@@ -463,7 +457,7 @@ test("[TC-UX-1143] a plugin comes in as one set, opens on its own page, and a sk
 });
 
 // covers ADR 029 (Try in a chat, Health checks), #1099
-test("[TC-UX-1099] the Overview shows every finding and what each hob carries, and Try in a chat opens a chat with only the draft and leads back to it", async ({
+test("the Overview shows every finding and what each hob carries, and Try in a chat opens a chat with only the draft and leads back to it", async ({
   page,
 }) => {
   const { url, folder, api } = await hubWithHobs();

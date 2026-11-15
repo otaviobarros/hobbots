@@ -116,8 +116,7 @@ const ALL: ReadonlyArray<Work> = [
 ];
 
 describe("TurnSlots", () => {
-  // covers OR-005
-  it("[TC-AG-1448-01] keeps every limit and leaves no turn waiting that fits, over random asks and ends", async () => {
+  it("keeps every limit and leaves no turn waiting that fits, over random asks and ends", async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.record({
@@ -151,8 +150,7 @@ describe("TurnSlots", () => {
     );
   });
 
-  // covers OR-005
-  it("[TC-AG-1448-02] gives a freed slot to the Quest that has had none, though a busy Quest asked first", async () => {
+  it("gives a freed slot to the Quest that has had none, though a busy Quest asked first", async () => {
     const limits = { ...DEFAULT_TURN_LIMITS, perRuntime: { "claude-code": 1, codex: 1 } };
     const busy = [1, 2, 3].map((n) => work(`step:busy-${n}`, `hob-${n}`, "claude-code", "busy"));
     const quiet = work("step:quiet", "hob-9", "claude-code", "quiet");
@@ -180,8 +178,7 @@ describe("TurnSlots", () => {
     );
   });
 
-  // covers OR-005
-  it("[TC-AG-1448-03] passes a slot on when a woken turn no longer needs it, and frees a slot once", async () => {
+  it("passes a slot on when a woken turn no longer needs it, and frees a slot once", async () => {
     const limits = { ...DEFAULT_TURN_LIMITS, perHob: 1 };
     await run(limits, (slots) =>
       Effect.gen(function* () {
@@ -216,8 +213,7 @@ describe("TurnSlots", () => {
     );
   });
 
-  // covers OR-005
-  it("[TC-AG-1448-04] keeps new limits and starts the turns that fit under them", async () => {
+  it("keeps new limits and starts the turns that fit under them", async () => {
     const kept: Array<TurnLimits> = [];
     const store = Layer.succeed(TurnLimitsStore, {
       get: Effect.succeed({ ...DEFAULT_TURN_LIMITS, perHob: 1 }),
@@ -245,8 +241,7 @@ describe("TurnSlots", () => {
     );
   });
 
-  // covers OR-005
-  it("[TC-AG-1448-05] weighs a waiting turn as it asks now, when its chat moved to another runtime", async () => {
+  it("weighs a waiting turn as it asks now, when its chat moved to another runtime", async () => {
     const limits = { ...DEFAULT_TURN_LIMITS, perRuntime: { "claude-code": 1, codex: 1 } };
     await run(limits, (slots) =>
       Effect.gen(function* () {

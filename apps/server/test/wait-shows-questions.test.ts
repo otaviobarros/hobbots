@@ -101,8 +101,7 @@ const toolsOnly = () => {
 };
 
 describe("waiting on a Task that asks", () => {
-  // covers OR-002, OR-003, IN-004
-  it("[TC-OR-243] wait_for lists the questions and blockers the awaited Tasks have open, and says to answer first", async () => {
+  it("wait_for lists the questions and blockers the awaited Tasks have open, and says to answer first", async () => {
     const { run, call, seed } = toolsOnly();
     await run(seed);
     const nettle = TaskIdSchema.make(
@@ -151,8 +150,7 @@ describe("waiting on a Task that asks", () => {
     expect(clear.details.blockers).toBeUndefined();
   });
 
-  // covers OR-002, OR-003, IN-004
-  it("[TC-OR-244] a question from an awaited Task reaches the waiting lead in the next turn after the one that waited, and is answered once", async () => {
+  it("a question from an awaited Task reaches the waiting lead in the next turn after the one that waited, and is answered once", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, answers } = party;

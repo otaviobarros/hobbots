@@ -67,8 +67,7 @@ const openSettings = async (page: Page) => {
   await page.goto(`${hub.url}/#/settings/app`);
 };
 
-// covers UX-003
-test("[TC-UX-087] switching data-theme restyles the open screen without a reload, and Reduce motion still works", async ({
+test("switching data-theme restyles the open screen without a reload, and Reduce motion still works", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -102,8 +101,7 @@ test("[TC-UX-087] switching data-theme restyles the open screen without a reload
   expect((await looks(page)).animation).toBe("none");
 });
 
-// covers UX-003
-test("[TC-UX-088] the first run opens in Workshop Night, and a saved theme survives a restart", async ({ page }) => {
+test("the first run opens in Workshop Night, and a saved theme survives a restart", async ({ page }) => {
   await openSettings(page);
   await expect(page.getByRole("region", { name: "This app" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "workshop-night");
@@ -122,8 +120,7 @@ test("[TC-UX-088] the first run opens in Workshop Night, and a saved theme survi
   await expect(page.locator("html")).toHaveAttribute("data-theme", "workshop-night");
 });
 
-// covers UX-003
-test("[TC-UX-124] This app picks the look, Light, Dark or Automatic and the text size, and keeps them on this device", async ({
+test("This app picks the look, Light, Dark or Automatic and the text size, and keeps them on this device", async ({
   page,
 }) => {
   await openSettings(page);

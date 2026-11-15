@@ -186,8 +186,7 @@ const journaled = <A>(committed: Committed<A>) =>
 const tags = (entries: ReadonlyArray<EventEnvelope>) => entries.map((entry) => entry.type);
 
 describe("Task records", () => {
-  // covers OR-002, EX-001
-  it("[TC-OR-001] keeps each Task's owner, parent and root, adds a Quest to the same Task, and nests a member's Quest one deeper", async () => {
+  it("keeps each Task's owner, parent and root, adds a Quest to the same Task, and nests a member's Quest one deeper", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -261,8 +260,7 @@ describe("Task records", () => {
     expect(result.nested.entries[0]?.correlation).toEqual({ agentId: ADA, threadId, messageId: null });
   });
 
-  // covers OR-002, EX-002
-  it("[TC-OR-002] refuses a Task without an owner, an orphan, a step under another owner, and a dependency outside its tree, writing nothing", async () => {
+  it("refuses a Task without an owner, an orphan, a step under another owner, and a dependency outside its tree, writing nothing", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -306,8 +304,7 @@ describe("Task records", () => {
     expect(result.after).toEqual(result.head);
   });
 
-  // covers EX-001, EX-002
-  it("[TC-EX-016] adds an Attempt for each retry, refuses a stale or illegal change without writing, and journals each change in its transaction", async () => {
+  it("adds an Attempt for each retry, refuses a stale or illegal change without writing, and journals each change in its transaction", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -382,8 +379,7 @@ describe("Task records", () => {
     expect(result.journal.stored).toEqual(result.journal.returned);
   });
 
-  // covers OR-006, IN-007
-  it("[TC-OR-560] lists a member's failed Task with the lead you talk to while its work goes on, until it is retried or the work ends", async () => {
+  it("lists a member's failed Task with the lead you talk to while its work goes on, until it is retried or the work ends", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -423,8 +419,7 @@ describe("Task records", () => {
     expect(result.ended).toEqual([]);
   });
 
-  // covers EX-001, OR-006
-  it("[TC-OR-004] completes a Task only with its own Attempt and a settled ledger, and its Quest with it", async () => {
+  it("completes a Task only with its own Attempt and a settled ledger, and its Quest with it", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -553,8 +548,7 @@ describe("Task records", () => {
     ]);
   });
 
-  // covers OR-003
-  it("[TC-OR-003] sends a question to the nearest lead, climbs one lead at a time to the user, and lets only its recipient answer", async () => {
+  it("sends a question to the nearest lead, climbs one lead at a time to the user, and lets only its recipient answer", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -631,8 +625,7 @@ describe("Task records", () => {
     expect(result.topAsk.value.recipientId).toBeNull();
   });
 
-  // covers OR-003, DP-003
-  it("[TC-DP-253] keeps a question's choices and whether its answer picked one or was written in words (#740)", async () => {
+  it("keeps a question's choices and whether its answer picked one or was written in words (#740)", async () => {
     const options = [
       { label: "Light", consequence: "Matches the brand guide." },
       { label: "Dark", consequence: "Stands out more." },
@@ -703,8 +696,7 @@ describe("Task records", () => {
     expect(result.questions.find((each) => each.id === "q-picked")?.options).toEqual(options);
   });
 
-  // covers OR-002, OR-004
-  it("[TC-OR-135] gives your note to the Task's nearest lead once, keeps it on the tree, and lists only the questions that wait for you", async () => {
+  it("gives your note to the Task's nearest lead once, keeps it on the tree, and lists only the questions that wait for you", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -771,8 +763,7 @@ describe("Task records", () => {
     expect(result.waiting.map(({ question, task }) => [question.id, task.id])).toEqual([["q-yours", "keywords"]]);
   });
 
-  // covers OR-004
-  it("[TC-OR-136] refuses a note once the work it is about has ended, and takes one on a member's ended Task while it goes on", async () => {
+  it("refuses a note once the work it is about has ended, and takes one on a member's ended Task while it goes on", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -797,8 +788,7 @@ describe("Task records", () => {
     expect(result.afterTop).toMatchObject({ _tag: "TaskRefused", reason: "task-ended" });
   });
 
-  // covers OR-002, OR-004
-  it("[TC-OR-137] passes a note over a lead whose Task ended, and drops a question about ended work from what waits for you", async () => {
+  it("passes a note over a lead whose Task ended, and drops a question about ended work from what waits for you", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -847,8 +837,7 @@ describe("Task records", () => {
     expect(result.answer).toMatchObject({ _tag: "TaskRefused", reason: "task-ended" });
   });
 
-  // covers OR-004, OR-006, IN-006
-  it("[TC-OR-167] withdraws a question that waits for you when its Task is cancelled, so the lead can still complete", async () => {
+  it("withdraws a question that waits for you when its Task is cancelled, so the lead can still complete", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -902,8 +891,7 @@ describe("Task records", () => {
     expect(result.done.value.state).toBe("completed");
   });
 
-  // covers OR-004, IN-006
-  it("[TC-OR-168] withdraws a question still with its lead when its Task fails, resolving the lead's copy as late", async () => {
+  it("withdraws a question still with its lead when its Task fails, resolving the lead's copy as late", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -956,8 +944,7 @@ describe("Task records", () => {
     expect(JSON.parse(result.items[1]?.disposition ?? "null")).toMatchObject({ _tag: "answered" });
   });
 
-  // covers OR-003, OR-004
-  it("[TC-OR-005] records milestones and reports by their source, and hands an artifact to a Task in the same tree once", async () => {
+  it("records milestones and reports by their source, and hands an artifact to a Task in the same tree once", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -1025,8 +1012,7 @@ describe("Task records", () => {
     expect(result.tree.milestones[0]?.reachedAt).toBe(later);
   });
 
-  // covers EX-001, EX-002, OR-002, OR-006
-  it("[TC-OR-008] keeps a Task's result, retries, ends and dependencies consistent with the rest of its tree", async () => {
+  it("keeps a Task's result, retries, ends and dependencies consistent with the rest of its tree", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -1119,8 +1105,7 @@ describe("Task records", () => {
     expect(result.stepQuest.value).toMatchObject({ parentQuestId: "q1", depth: 1 });
   });
 
-  // covers EX-001, OR-006
-  it("[TC-OR-009] refuses a retry under an ended Task, and reopens a failed Quest with its retried Task", async () => {
+  it("refuses a retry under an ended Task, and reopens a failed Quest with its retried Task", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -1159,8 +1144,7 @@ describe("Task records", () => {
       quest: { id: "q-top", state: "active", endedAt: null },
     });
   });
-  // covers OR-001, UX-001, CH-005
-  it("[TC-OR-021] lists a hob's Tasks on other hobs' Quests with their Quest until the Quest ends", async () => {
+  it("lists a hob's Tasks on other hobs' Quests with their Quest until the Quest ends", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -1197,8 +1181,7 @@ describe("Task records", () => {
     ]);
     expect(result.afterQuest).toEqual([]);
   });
-  // covers OR-001, UX-001
-  it("[TC-OR-023] gives a member's work on a nested Quest the hob whose thread the request came from", async () => {
+  it("gives a member's work on a nested Quest the hob whose thread the request came from", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -1253,8 +1236,7 @@ const approval = (id: string, agentId: AgentId, taskId: string | null, rootId = 
   });
 
 describe("a hob's History", () => {
-  // covers OR-001, UX-001
-  it("[TC-OR-491] reads a hob's own work and its party's, leaving out steps, other hobs and questions a lead kept", async () => {
+  it("reads a hob's own work and its party's, leaving out steps, other hobs and questions a lead kept", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -1324,8 +1306,7 @@ describe("a hob's History", () => {
 });
 
 describe("waits and Task tool calls", () => {
-  // covers OR-003, EX-002
-  it("[TC-OR-019] a wait records what the owner waits for and shows the Task waiting", async () => {
+  it("a wait records what the owner waits for and shows the Task waiting", async () => {
     await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -1363,8 +1344,7 @@ describe("waits and Task tool calls", () => {
     );
   });
 
-  // covers OR-001, EX-001
-  it("[TC-OR-020] a call runs once per hob and key, and a refused one leaves nothing behind", async () => {
+  it("a call runs once per hob and key, and a refused one leaves nothing behind", async () => {
     await run(
       Effect.gen(function* () {
         yield* seed;
@@ -1423,8 +1403,7 @@ describe("waits and Task tool calls", () => {
     );
   });
 
-  // covers EX-001, OR-006
-  it("[TC-OR-140] a retry queues a failed member's Task for a new Attempt of the same Task, never under a cancel", async () => {
+  it("a retry queues a failed member's Task for a new Attempt of the same Task, never under a cancel", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -1463,8 +1442,7 @@ describe("waits and Task tool calls", () => {
     ]);
   });
 
-  // covers OR-006
-  it("[TC-OR-141] nothing new starts under a Task being cancelled, and it reports and asks nothing more", async () => {
+  it("nothing new starts under a Task being cancelled, and it reports and asks nothing more", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -1515,8 +1493,7 @@ describe("waits and Task tool calls", () => {
     expect(result.cancelling.map((each) => each.id)).toEqual(["campaign"]);
   });
 
-  // covers OR-006
-  it("[TC-OR-142] a reassignment gives a member's Task to another hob and keeps its id and Attempts", async () => {
+  it("a reassignment gives a member's Task to another hob and keeps its id and Attempts", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -1566,8 +1543,7 @@ describe("waits and Task tool calls", () => {
     expect(result.quillWork).toEqual([]);
   });
 
-  // covers IN-007, OR-006
-  it("[TC-IN-1087-01] closes the stuck work about a Task once its earlier owner hands it on, and once it ends (#1087)", async () => {
+  it("closes the stuck work about a Task once its earlier owner hands it on, and once it ends (#1087)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -1621,8 +1597,7 @@ describe("waits and Task tool calls", () => {
 
 // Issue #702: what the third run's records left out or got wrong.
 describe("Task records the third run found gaps in", () => {
-  // covers EX-001, PE-008
-  it("[TC-DP-240] an Attempt started with no policy version takes the first one its session reports, and keeps it", async () => {
+  it("an Attempt started with no policy version takes the first one its session reports, and keeps it", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -1651,7 +1626,7 @@ describe("Task records the third run found gaps in", () => {
   });
 
   // covers ADR 036 (The read-the-web mark), ADR 013
-  it("[TC-DP-1268-01] an Attempt's read-the-web mark is journaled as it changes: since its first read, naming its last", async () => {
+  it("an Attempt's read-the-web mark is journaled as it changes: since its first read, naming its last", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -1685,8 +1660,7 @@ describe("Task records the third run found gaps in", () => {
     expect(result.stored?.readWeb).toEqual({ since: now, source: "https://b.test/page" });
   });
 
-  // covers OR-003
-  it("[TC-OR-520] a Task that ends drops its wait, whether it completes or fails", async () => {
+  it("a Task that ends drops its wait, whether it completes or fails", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -1734,8 +1708,7 @@ describe("Task records the third run found gaps in", () => {
     expect(result.failed).toEqual([]);
   });
 
-  // covers OR-004, OR-005
-  it("[TC-OR-521] the reason the hub records with a move is the hub's own blocker, which no report can claim", async () => {
+  it("the reason the hub records with a move is the hub's own blocker, which no report can claim", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -1773,8 +1746,7 @@ describe("Task records the third run found gaps in", () => {
 });
 
 describe("Task records the Quest room run found gaps in", () => {
-  // covers EX-001, OR-006
-  it("[TC-OR-594] a Task that completed keeps the time it ended when its turn ends after it (#1007)", async () => {
+  it("a Task that completed keeps the time it ended when its turn ends after it (#1007)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;

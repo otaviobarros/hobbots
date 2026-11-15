@@ -39,8 +39,7 @@ const file = (value: string) => ({ kind: "file", label: "skills-feature-explaine
 const RUNTIMES: ReadonlyArray<RuntimeKind> = ["claude-code", "codex"];
 
 describe.each(RUNTIMES)("a Task that returns a file, on %s", (runtime) => {
-  // covers OR-004, EX-002 (#1219)
-  it("[TC-OR-657] is refused while the file is outside its folders, and completes once the file is saved inside them", async () => {
+  it("is refused while the file is outside its folders, and completes once the file is saved inside them", async () => {
     const party = partyHub({ members: runtime, files: true });
     dispose = party.dispose;
     const { run, answers, project, temp } = party;
@@ -84,8 +83,7 @@ describe.each(RUNTIMES)("a Task that returns a file, on %s", (runtime) => {
     ]);
   }, 30_000);
 
-  // covers OR-004, EX-002
-  it("[TC-OR-658] is refused when the file it names inside its folders does not exist", async () => {
+  it("is refused when the file it names inside its folders does not exist", async () => {
     const party = partyHub({ members: runtime, files: true });
     dispose = party.dispose;
     const { run, answers, project } = party;
@@ -107,8 +105,7 @@ describe.each(RUNTIMES)("a Task that returns a file, on %s", (runtime) => {
     expect(done.artifacts.filter((each) => each.taskId === pip?.id)).toEqual([]);
   }, 30_000);
 
-  // covers OR-004
-  it("[TC-OR-659] completes with links and text as before, which name no file", async () => {
+  it("completes with links and text as before, which name no file", async () => {
     const party = partyHub({ members: runtime, files: true });
     dispose = party.dispose;
     const { run, answers } = party;

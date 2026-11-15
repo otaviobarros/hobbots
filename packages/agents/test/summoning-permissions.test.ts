@@ -20,7 +20,7 @@ const change = (fields: Omit<Parameters<typeof summoningPermissions>[0], "hob">)
 });
 
 describe("summoningPermissions", () => {
-  it("[TC-AG-1352-01] a change that sets one Charm answer keeps every other built-in and Charm answer", () => {
+  it("a change that sets one Charm answer keeps every other built-in and Charm answer", () => {
     const payload = summoningPermissions(change({ answers: { "github.comment": "ask" } }), thorn);
     expect(payload).not.toBeNull();
     const after = changedPolicy(thorn, payload ?? {});
@@ -33,14 +33,14 @@ describe("summoningPermissions", () => {
     expect(after.charms?.granted).toEqual(["github", "summoning"]);
   });
 
-  it("[TC-AG-1352-02] a change that sets one built-in answer keeps the others and every Charm answer", () => {
+  it("a change that sets one built-in answer keeps the others and every Charm answer", () => {
     const payload = summoningPermissions(change({ answers: { "run-commands": "deny" } }), thorn);
     const after = changedPolicy(thorn, payload ?? {});
     expect(after.overrides).toEqual({ ...thorn.overrides, "run-commands": "deny" });
     expect(after.charms?.overrides).toEqual(thorn.charms?.overrides);
   });
 
-  it("[TC-AG-1352-03] Charms alone, or an empty answer map, leave every answer as it was", () => {
+  it("Charms alone, or an empty answer map, leave every answer as it was", () => {
     for (const fields of [{ charms: ["github"] }, { answers: {} }]) {
       const after = changedPolicy(thorn, summoningPermissions(change(fields), thorn) ?? {});
       expect(after.overrides).toEqual(thorn.overrides);
@@ -51,7 +51,7 @@ describe("summoningPermissions", () => {
 });
 
 describe("changedFieldWords", () => {
-  it("[TC-AG-1352-04] names each answer a change sets, and says Charms only when it gives Charms", () => {
+  it("names each answer a change sets, and says Charms only when it gives Charms", () => {
     expect(changedFieldWords(change({ answers: { "github.comment": "ask", push: "deny" } }))).toBe(
       "answers (github.comment Ask, push Never)",
     );

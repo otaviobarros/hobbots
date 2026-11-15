@@ -7,8 +7,7 @@ test.afterEach(stopQuestHub);
 // Issue #582: Aldric keeps Quill to the shop's web folder and lets Ada review the whole shop. Each
 // Task's drawer lists the folders its member works in, and the Workbench header names them.
 
-// covers PE-002
-test("[TC-PE-303] the Task drawer and the Workbench header show the folders each member works in", async ({ page }) => {
+test("the Task drawer and the Workbench header show the folders each member works in", async ({ page }) => {
   const { url, aldric } = await questHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });

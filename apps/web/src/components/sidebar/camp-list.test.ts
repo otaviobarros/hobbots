@@ -25,7 +25,7 @@ describe("campList", () => {
 describe("foldedNews", () => {
   const camp = (unread: number, mentions: number) => ({ unread, place: { mentions } });
 
-  it("[TC-UX-1469-16] counts the unread replies and the mentions of you in the folded camps", () => {
+  it("counts the unread replies and the mentions of you in the folded camps", () => {
     expect(foldedNews([])).toEqual({ unread: 0, mentions: 0 });
     expect(foldedNews([camp(2, 0), camp(1, 0)])).toEqual({ unread: 3, mentions: 0 });
     // A person's message that mentions you leaves no unread reply, and still counts.

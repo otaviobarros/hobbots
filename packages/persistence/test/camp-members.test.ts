@@ -122,7 +122,7 @@ const refusal = (error: MemberRefused | ThreadArchived) => (error._tag === "Memb
 
 describe("a camp's hobs", () => {
   // covers ADR 039 (Members)
-  it("[TC-PE-1467-01] makes a camp with the hobs picked, each journaled after its first two, the lead once, refuses a hob that takes no new work and its key asked again with other hobs", async () => {
+  it("makes a camp with the hobs picked, each journaled after its first two, the lead once, refuses a hob that takes no new work and its key asked again with other hobs", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -160,7 +160,7 @@ describe("a camp's hobs", () => {
   });
 
   // covers ADR 039 (Members, One hob speaks at a time)
-  it("[TC-PE-1467-02] takes a hob out and drops the answers it still owed there, leaving the others' and dequeuing a message nobody owes", async () => {
+  it("takes a hob out and drops the answers it still owed there, leaving the others' and dequeuing a message nobody owes", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -198,7 +198,7 @@ describe("a camp's hobs", () => {
   });
 
   // covers ADR 039 (Members)
-  it("[TC-PE-1467-03] drops a removed hob's requests in the same transaction: a failed write leaves both as they were", async () => {
+  it("drops a removed hob's requests in the same transaction: a failed write leaves both as they were", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -216,7 +216,7 @@ describe("a camp's hobs", () => {
   });
 
   // covers ADR 039 (Members)
-  it("[TC-PE-1467-04] refuses to take out a direct message's two, a camp's owner and lead, or someone not in it, or any change once the camp is archived, and brings a removed hob back", async () => {
+  it("refuses to take out a direct message's two, a camp's owner and lead, or someone not in it, or any change once the camp is archived, and brings a removed hob back", async () => {
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -282,7 +282,7 @@ describe("a camp's hobs", () => {
   });
 
   // covers ADR 039 (Cards every thread shares: Status and cost)
-  it("[TC-PE-1467-05] counts each hob's own settled replies, passed turns and tokens in the camp for the period, and when it last answered there", async () => {
+  it("counts each hob's own settled replies, passed turns and tokens in the camp for the period, and when it last answered there", async () => {
     const usage = (input: number, output: number): ReplyUsage => ({
       timeToRequestMs: 5,
       timeToFirstStreamMs: 15,

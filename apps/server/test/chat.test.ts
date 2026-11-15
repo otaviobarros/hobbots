@@ -50,8 +50,7 @@ const testLayer = (runtime = FakeRuntimeLayer(), tools = HobTools.chatOnly) =>
 const TestLayer = testLayer();
 
 describe("ChatService", () => {
-  // covers CH-002, CH-004, DP-003
-  it("[TC-CH-001] streams a turn, completes it, stores the session id and resumes it on the next prompt", async () => {
+  it("streams a turn, completes it, stores the session id and resumes it on the next prompt", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
@@ -97,8 +96,7 @@ describe("ChatService", () => {
     expect(secondSession?.sessions[0]?.sessionId).toBe(firstSession?.sessions[0]?.sessionId);
   });
 
-  // covers EX-005
-  it("[TC-EX-001] lists a thread as active while its turn runs and drops it once the turn ends", async () => {
+  it("lists a thread as active while its turn runs and drops it once the turn ends", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
@@ -147,8 +145,7 @@ describe("a reply that ends early", () => {
       return yield* (yield* ChatService).continueReply(threadId, messageId);
     }).pipe(Effect.retry({ schedule: Schedule.spaced("5 millis"), times: 100 }));
 
-  // covers CH-004, CH-007
-  it("[TC-CH-098] keeps a cut-off reply with its reason, and Continue resumes it in the same message", async () => {
+  it("keeps a cut-off reply with its reason, and Continue resumes it in the same message", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const thread = yield* chat.createThread(HOB_ID);
@@ -168,8 +165,7 @@ describe("a reply that ends early", () => {
     expect(result.again._tag).toBe("ReplyNotResumable");
   });
 
-  // covers CH-004 and ADR 017; regression for #398
-  it("[TC-RT-050] keeps each reply's latency and token usage next to its runtime and model", async () => {
+  it("keeps each reply's latency and token usage next to its runtime and model", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
@@ -201,8 +197,7 @@ describe("a reply that ends early", () => {
     expect(result.stored.find((m) => m.role === "user")?.usage).toBeNull();
   });
 
-  // covers CH-004, AG-004
-  it("[TC-CH-101] stores the configuration a continued reply runs on, after the hob was edited", async () => {
+  it("stores the configuration a continued reply runs on, after the hob was edited", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
@@ -223,8 +218,7 @@ describe("a reply that ends early", () => {
     expect(result.stored?.configVersion).toBe(2);
   });
 
-  // covers CH-004
-  it("[TC-CH-099] marks a reply the provider limit ended with when the allowance refills", async () => {
+  it("marks a reply the provider limit ended with when the allowance refills", async () => {
     const limited = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const thread = yield* chat.createThread(HOB_ID);
@@ -236,8 +230,7 @@ describe("a reply that ends early", () => {
     expect(limited.content.length).toBeGreaterThan(0);
   });
 
-  // covers CH-004
-  it("[TC-CH-100] continues only the thread's latest reply", async () => {
+  it("continues only the thread's latest reply", async () => {
     const error = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const thread = yield* chat.createThread(HOB_ID);
@@ -248,8 +241,7 @@ describe("a reply that ends early", () => {
     expect(error._tag).toBe("ReplyNotResumable");
   });
 
-  // covers CH-004, ADR 039 (A member hob works as itself)
-  it("[TC-CH-1461-18] refuses to continue a reply by a hob that is not in the camp, as one moved here from another camp", async () => {
+  it("refuses to continue a reply by a hob that is not in the camp, as one moved here from another camp", async () => {
     const error = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
@@ -296,8 +288,7 @@ describe("tool calls in a reply", () => {
     }),
   );
 
-  // covers CH-004, PE-002
-  it("[TC-CH-109] saves each tool call as a step of the reply, a refused one with its reason, and journals every change", async () => {
+  it("saves each tool call as a step of the reply, a refused one with its reason, and journals every change", async () => {
     const { stored, journaled } = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const bus = yield* EventBus;
@@ -363,8 +354,7 @@ describe("tool calls in a reply", () => {
     expect(journaled.at(-1)).toEqual(["thinking-1:done", "fake-tool-1:done", "fake-tool-2:done", "fake-tool-3:denied"]);
   });
 
-  // covers PE-002, PE-008
-  it("[TC-PE-134] offers the hub's Charm tools beside the Task tools, with the hob's access read at each call", async () => {
+  it("offers the hub's Charm tools beside the Task tools, with the hob's access read at each call", async () => {
     const seen: Array<ReadonlyArray<string> | null> = [];
     const charms = Layer.succeed(
       Charms,
@@ -421,8 +411,7 @@ describe("tool calls in a reply", () => {
     expect(seen).toEqual([[folder]]);
   });
 
-  // covers PE-008
-  it("[TC-PE-021] stops a running turn once its hob's policy narrows, and keeps it when the policy widens", async () => {
+  it("stops a running turn once its hob's policy narrows, and keeps it when the policy widens", async () => {
     // The policy as saved right now; each case changes it while the turn runs.
     let restrictions: ToolAccess["policy"]["restrictions"] = [{ "edit-files": "ask" }];
     let folders = [folder];
@@ -489,8 +478,7 @@ describe("tool calls in a reply", () => {
     expect(await statusAfter(() => (hob = EMPTY_HOB_POLICY))).toBe("streaming");
   });
 
-  // covers PE-008, ADR 031
-  it("[TC-PE-508] stops a running turn once its hob loses a Charm, and keeps it when the hob gains one", async () => {
+  it("stops a running turn once its hob loses a Charm, and keeps it when the hob gains one", async () => {
     let hob: ToolAccess["policy"]["hob"] = { ...EMPTY_HOB_POLICY, charms: { granted: ["github"] } };
     const changing = Layer.succeed(
       HobTools,
@@ -535,8 +523,7 @@ describe("tool calls in a reply", () => {
     expect(await statusAfter(["github", "pip"])).toBe("streaming");
   });
 
-  // covers PE-008
-  it("[TC-PE-022] stops a turn whose grant was still being read when the policy narrowed", async () => {
+  it("stops a turn whose grant was still being read when the policy narrowed", async () => {
     let restrictions: ToolAccess["policy"]["restrictions"] = [];
     const status = await Effect.gen(function* () {
       const reading = yield* Deferred.make<void>();
@@ -583,8 +570,7 @@ describe("tool calls in a reply", () => {
     expect(status).toBe("interrupted");
   });
 
-  // covers OR-006, PE-008, #1537
-  it("[TC-OR-1537-04] stops a running turn once you take over what its command may write, and keeps it when you give it back", async () => {
+  it("stops a running turn once you take over what its command may write, and keeps it when you give it back", async () => {
     const docs = join(folder, "docs");
     let taken: ReadonlyArray<string> = [];
     const changing = Layer.succeed(

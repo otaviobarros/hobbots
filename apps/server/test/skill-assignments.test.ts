@@ -244,8 +244,7 @@ const importSkill = async (name: string, extra?: string) => {
 };
 
 describe("skill assignments", () => {
-  // covers RT-001, ADR 029 (Scopes, Delivery per runtime)
-  it("[TC-AG-142] a turn gets Everyone's skills, the hob's own and Only when asked ones, never another hob's or one it opted out of", async () => {
+  it("a turn gets Everyone's skills, the hob's own and Only when asked ones, never another hob's or one it opted out of", async () => {
     const pip = await summon("Pip", 961);
     const quill = await summon("Quill", 962);
     const releaseSkill = await importSkill("release");
@@ -296,7 +295,7 @@ describe("skill assignments", () => {
   });
 
   // covers ADR 029 (Scopes), ADR 039 (One hob speaks at a time)
-  it("[TC-CH-1461-08] a member hob mentioned in a camp answers with its own skills, never the camp's hob's", async () => {
+  it("a member hob mentioned in a camp answers with its own skills, never the camp's hob's", async () => {
     const pip = await summon("Pip", 963);
     const quill = await summon("Quill", 964);
     const releaseSkill = await importSkill("release");
@@ -316,7 +315,7 @@ describe("skill assignments", () => {
   });
 
   // covers ADR 029 (Scopes), ADR 039 (Hobs talking to hobs)
-  it("[TC-CH-1463-07] the camp's hob answers a member hob's relay with its own skills, never the member's", async () => {
+  it("the camp's hob answers a member hob's relay with its own skills, never the member's", async () => {
     const pip = await summon("Pip", 965);
     const quill = await summon("Quill", 966);
     const releaseSkill = await importSkill("release");
@@ -340,8 +339,7 @@ describe("skill assignments", () => {
     expect(relayed?.skills?.map((skill) => skill.name)).toEqual(["release", "shared"]);
   });
 
-  // covers RT-001, ADR 029 (Pins and rollout)
-  it("[TC-AG-143] saving a revision rolls it out to every assignment but a held one, running and queued turns keep their revision, and Roll back moves one back", async () => {
+  it("saving a revision rolls it out to every assignment but a held one, running and queued turns keep their revision, and Roll back moves one back", async () => {
     const pip = await summon("Pip", 963);
     const quill = await summon("Quill", 964);
     const first = await importSkill("release");
@@ -403,7 +401,7 @@ describe("skill assignments", () => {
   });
 
   // covers ADR 029 (Scopes, Skills and Charms)
-  it("[TC-AG-144] a hob's skills show what replaced what, a name two of its projects define, and a Charm it lacks", async () => {
+  it("a hob's skills show what replaced what, a name two of its projects define, and a Charm it lacks", async () => {
     const alpha = join(root, "alpha");
     const beta = join(root, "beta");
     await mkdir(alpha);
@@ -448,7 +446,7 @@ describe("skill assignments", () => {
 // #1064: an exported skill's assignments on another hub (ADR 029, Backups, exports and Diagnostics).
 describe("skill exports", () => {
   // covers ADR 029 (Backups, exports and Diagnostics), #1064
-  it("[TC-OP-122] an export's project assignment is given only for a project this hub's hobs work in", async () => {
+  it("an export's project assignment is given only for a project this hub's hobs work in", async () => {
     const alpha = join(root, "alpha");
     await mkdir(alpha);
     await request("PATCH", "/api/setup", { completed: true, safetyPreset: "balanced", approvedFolders: [alpha] });
@@ -505,8 +503,7 @@ describe("skill exports", () => {
 
 // #1096: which skills a reply used, mapped to the revision its turn mounted, and how often (ADR 029, The use line).
 describe("skill uses", () => {
-  // covers RT-001, ADR 029 (The use line)
-  it("[TC-AG-144] a reply records each skill it used at the revision its turn had, and never one it was not given", async () => {
+  it("a reply records each skill it used at the revision its turn had, and never one it was not given", async () => {
     const pip = await summon("Pip", 965);
     const first = await importSkill("release-steps");
     await request("POST", `/api/skills/${first.skill.id}/assignments`, { scope: { _tag: "Hob", agentId: pip.id } });
@@ -534,8 +531,7 @@ describe("skill uses", () => {
     expect((await replies(thread, 2)).skillsUsed).toEqual([]);
   });
 
-  // covers RT-001, ADR 029 (Explicit use, The use line)
-  it("[TC-AG-145] a skill you pick is handed to the turn and shown as yours, and its uses are counted per hob and thread", async () => {
+  it("a skill you pick is handed to the turn and shown as yours, and its uses are counted per hob and thread", async () => {
     const pip = await summon("Pip", 966);
     const quill = await summon("Quill", 967);
     const skill = await importSkill("release-steps");
@@ -586,7 +582,7 @@ describe("skill uses", () => {
   });
 
   // covers ADR 029 (The use line), STD-DATA-001
-  it("[TC-AG-149] a reply stopped right after its skill was used keeps its line, and the use is counted once", async () => {
+  it("a reply stopped right after its skill was used keeps its line, and the use is counted once", async () => {
     const pip = await summon("Pip", 968);
     const skill = await importSkill("release-steps");
     await request("POST", `/api/skills/${skill.skill.id}/assignments`, { scope: { _tag: "Everyone" } });
@@ -605,7 +601,7 @@ describe("skill uses", () => {
   });
 
   // covers ADR 029 (Uses), #1096
-  it("[TC-AG-150] a reply cut off while its skill use is being saved keeps both the line and the use, never one alone", async () => {
+  it("a reply cut off while its skill use is being saved keeps both the line and the use, never one alone", async () => {
     const pip = await summon("Pip", 969);
     const skill = await importSkill("release-steps");
     await request("POST", `/api/skills/${skill.skill.id}/assignments`, { scope: { _tag: "Everyone" } });
@@ -629,7 +625,7 @@ describe("skill uses", () => {
   });
 
   // covers ADR 029 (Skill sets), #1143
-  it("[TC-AG-1143-07] a set's new version is one update for all its skills, a held hob stays on the old one, and both mention forms pick a skill", async () => {
+  it("a set's new version is one update for all its skills, a held hob stays on the old one, and both mention forms pick a skill", async () => {
     const pip = await summon("Pip", 970);
     const quill = await summon("Quill", 971);
     const plugin = join(root, "agent-engineering");
@@ -758,7 +754,7 @@ describe("skill uses", () => {
   });
 
   // covers ADR 029 (Skill sets), #1143
-  it("[TC-AG-1143-16] the Skills page reads a set: its skills in the library, the files they share, each skill's uses, and a copy of one", async () => {
+  it("the Skills page reads a set: its skills in the library, the files they share, each skill's uses, and a copy of one", async () => {
     const pip = await summon("Pip", 973);
     const plugin = join(root, "agent-engineering-page");
     await mkdir(join(plugin, ".claude-plugin"), { recursive: true });

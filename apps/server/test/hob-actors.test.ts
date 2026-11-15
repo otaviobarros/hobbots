@@ -129,8 +129,7 @@ const versionActors = (id: AgentId, versions: ReadonlyArray<number>) =>
   );
 
 describe("who changed a hob", () => {
-  // covers AG-002
-  it("[TC-AG-405-03] makes a rename from the profile a new version made by you, refused as a name on create is", async () => {
+  it("makes a rename from the profile a new version made by you, refused as a name on create is", async () => {
     const created = (await request("POST", "/api/agents", hob)).body as Agent;
     expect(created).toMatchObject({ summonedBy: null, summonedFor: null, summonedUnattended: false });
 
@@ -156,8 +155,7 @@ describe("who changed a hob", () => {
     ]);
   });
 
-  // covers AG-002, AG-006
-  it("[TC-AG-405-04] records the hob that summoned a hob, and the hob or proposal behind each change, version and event", async () => {
+  it("records the hob that summoned a hob, and the hob or proposal behind each change, version and event", async () => {
     const chief = AgentId.make("chief");
     const call = { scope: "task:hire", key: "hire-engineers" };
     const byChief: ChangeActor = { _tag: "Hob", hobId: chief, call };

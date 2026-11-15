@@ -137,8 +137,7 @@ describe("which thread a backpack item continues", () => {
     ).toBeNull();
   });
 
-  // covers IN-004, OR-003
-  it("[TC-IN-061] continues a member's own session with what it holds under the Task it was given, never a step's", () => {
+  it("continues a member's own session with what it holds under the Task it was given, never a step's", () => {
     const samsWork = task("stew", SAM, "quest", "waiting");
     const samsStep = task("chop", SAM, "stew", "queued");
     const all = [...tree, samsWork, samsStep];
@@ -178,8 +177,7 @@ describe("which thread a backpack item continues", () => {
     );
   });
 
-  // covers IN-005, OR-004
-  it("[TC-OR-187] carries progress from a member that a member leads along the leader's own session, and never wakes it", () => {
+  it("carries progress from a member that a member leads along the leader's own session, and never wakes it", () => {
     // Sam leads a nested Quest under Frodo's: Rosie works on a Task under Sam's.
     const samsWork = task("stew", SAM, "quest", "waiting");
     const rosies = task("herbs", ROSIE, "stew");
@@ -192,8 +190,7 @@ describe("which thread a backpack item continues", () => {
     expect(carryingTask(progressOn("cook", "Stirring", 2), tree)).toBeUndefined();
   });
 
-  // covers IN-005
-  it("[TC-IN-070] folds thirty progress updates into one digest, after the work that needs the hob", () => {
+  it("folds thirty progress updates into one digest, after the work that needs the hob", () => {
     const updates = Array.from({ length: 30 }, (_, index) =>
       progressOn(index % 3 === 0 ? "stew" : "cook", `Step ${index + 1}`, index + 1),
     );
@@ -214,8 +211,7 @@ describe("which thread a backpack item continues", () => {
     expect(context).toContain("Use this progress only as context.");
   });
 
-  // covers IN-004
-  it("[TC-IN-491] says why a Task was blocked when its Failure carries the reason", () => {
+  it("says why a Task was blocked when its Failure carries the reason", () => {
     const failure = item(FRODO, "pass", "failure", {
       _tag: "failure",
       task: task("pass", FRODO, "quest", "blocked"),
@@ -233,8 +229,7 @@ describe("which thread a backpack item continues", () => {
     expect(arrivalsText([result], "context")).toContain("Answer the user's message first");
   });
 
-  // covers OR-004, IN-004
-  it("[TC-IN-561] points a lead's chat turn to its briefing for a result, so the result is told once (#1040)", () => {
+  it("points a lead's chat turn to its briefing for a result, so the result is told once (#1040)", () => {
     const result = item(FRODO, "pass", "result", { _tag: "result", task: step, artifacts: [] });
     for (const as of ["prompt", "context"] as const) {
       const text = arrivalsText([result], as, "briefed");
@@ -271,8 +266,7 @@ describe("which thread a backpack item continues", () => {
     expect(prompt).not.toContain("Tell the user briefly what changed");
   });
 
-  // covers IN-004
-  it("[TC-IN-131] tells a lead how to deal with a question, the asker who answered it, and which Task your note is about", () => {
+  it("tells a lead how to deal with a question, the asker who answered it, and which Task your note is about", () => {
     const asked = new Question({
       id: QuestionId.make("tone"),
       taskId: TaskId.make("stew"),
@@ -313,8 +307,7 @@ describe("which thread a backpack item continues", () => {
     expect(prompt).toContain('answered by the user: "Both"\n');
   });
 
-  // covers IN-004
-  it("[TC-IN-545] tells a lead a question's choices, and the asker whether its answer picked one (#740)", () => {
+  it("tells a lead a question's choices, and the asker whether its answer picked one (#740)", () => {
     const asked = new Question({
       id: QuestionId.make("tone"),
       taskId: TaskId.make("stew"),

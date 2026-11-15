@@ -71,13 +71,13 @@ describe("A Quest's folders", () => {
   const folders = (requested: ReadonlyArray<string>) =>
     Effect.runPromise(Effect.result(requestedFolders(hub, lead, requested, "/")));
 
-  it("[TC-OR-482] are the lead's own or inside one, and any other is refused", async () => {
+  it("are the lead's own or inside one, and any other is refused", async () => {
     expect(await folders(["/work/test/site"])).toMatchObject({ _tag: "Success", success: ["/work/test/site"] });
     expect(await folders(["/elsewhere"])).toMatchObject({ _tag: "Failure", failure: { reason: "authority-wider" } });
     expect(await folders(["/work/missing"])).toMatchObject({ _tag: "Failure", failure: { reason: "invalid-input" } });
   });
 
-  it("[TC-OR-483] are those the text names inside the lead's when it names none, and none leaves the limits as they are", async () => {
+  it("are those the text names inside the lead's when it names none, and none leaves the limits as they are", async () => {
     expect(
       await Effect.runPromise(namedFolders(hub, lead, "Build it in /work/test/site, not /elsewhere.", "/")),
     ).toEqual(["/work/test/site"]);

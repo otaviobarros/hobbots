@@ -89,7 +89,7 @@ const byYou: MemoryChange["author"] = { _tag: "You" };
 
 describe("the Memory page's address", () => {
   // covers ADR 028 (Browse), #958
-  it("[TC-UX-940] reads every view from its address and writes it back the same", () => {
+  it("reads every view from its address and writes it back the same", () => {
     const views: ReadonlyArray<MemoryView> = [
       { _tag: "Overview" },
       { _tag: "Changes", show: "all" },
@@ -119,7 +119,7 @@ describe("the Memory page's address", () => {
 
 describe("the scope list and the line under the title", () => {
   // covers ADR 028 (Browse), #958
-  it("[TC-UX-941] lists About you, each project by name, each hob, and a former hob only while it holds pages", () => {
+  it("lists About you, each project by name, each hob, and a former hob only while it holds pages", () => {
     const overview: MemoryScopes = {
       scopes: [
         { scope: everyone, pages: 2 },
@@ -156,7 +156,7 @@ describe("the scope list and the line under the title", () => {
   });
 
   // covers ADR 028 (Browse), #958
-  it("[TC-UX-942] says loading, nothing yet, what memory holds, or that it is not answering", () => {
+  it("says loading, nothing yet, what memory holds, or that it is not answering", () => {
     expect(headLine(2, undefined, { offline: false })).toBe(copy.head.loading({ hobs: 2 }));
     expect(headLine(2, { scopes: [] }, { offline: false })).toBe(copy.head.empty({ hobs: 2 }));
     const full: MemoryScopes = {
@@ -171,7 +171,7 @@ describe("the scope list and the line under the title", () => {
   });
 
   // covers ADR 028 (Browse), #958
-  it("[TC-UX-943] shows memory down or a page gone at once, and retries anything else", () => {
+  it("shows memory down or a page gone at once, and retries anything else", () => {
     const queryClient = new QueryClient();
     expect(retryUnlessRefused(queryClient, 0, new ApiError("down", "MemoryNotAnswering"))).toBe(false);
     expect(retryUnlessRefused(queryClient, 0, new ApiError("gone", "MemoryPageNotFound"))).toBe(false);
@@ -181,7 +181,7 @@ describe("the scope list and the line under the title", () => {
 
 describe("a scope's pages", () => {
   // covers ADR 028 (Browse), #958
-  it("[TC-UX-944] groups pages by the kind their folder names, and counts each kind for the chips", () => {
+  it("groups pages by the kind their folder names, and counts each kind for the chips", () => {
     const pages = [
       summary("howtos/a.md"),
       summary("rules/b.md"),
@@ -214,7 +214,7 @@ describe("what changed", () => {
   const at = (day: number, hour: number) => new Date(2026, 10, day, hour, 0).toISOString();
 
   // covers ADR 028 (What changed), #958
-  it("[TC-UX-945] keeps the hobs' saves of the last week for Recently learned, and filters by who saved", () => {
+  it("keeps the hobs' saves of the last week for Recently learned, and filters by who saved", () => {
     const changes = [
       change(at(5, 11), byPip),
       change(at(5, 10), byYou),
@@ -230,7 +230,7 @@ describe("what changed", () => {
   });
 
   // covers ADR 028 (What changed), #958
-  it("[TC-UX-946] groups changes by local day, newest first, naming today and yesterday", () => {
+  it("groups changes by local day, newest first, naming today and yesterday", () => {
     const changes = [
       change(at(4, 9), byPip),
       change(at(5, 8), byYou),
@@ -244,7 +244,7 @@ describe("what changed", () => {
   });
 
   // covers ADR 028 (What changed), #958
-  it("[TC-UX-947] adds what the stream brings once each, newest first", () => {
+  it("adds what the stream brings once each, newest first", () => {
     const known = [change(at(5, 9), byPip)];
     const fresh = change(at(5, 11), byYou, "rules/new.md");
     const merged = withChanges(known, [fresh, known[0] as MemoryChange]);
@@ -252,7 +252,7 @@ describe("what changed", () => {
   });
 
   // covers ADR 028 (What changed), STD-REACT-012, #958
-  it("[TC-UX-955] keeps a save the stream brings while What changed is still being read", async () => {
+  it("keeps a save the stream brings while What changed is still being read", async () => {
     const queryClient = new QueryClient();
     const before = [change(at(5, 9), byPip)];
     const fresh = change(at(5, 11), byYou, "rules/new.md");
@@ -279,7 +279,7 @@ describe("what changed", () => {
   });
 
   // covers ADR 028 (Browse), #958
-  it("[TC-UX-957] keeps a save made while the stream was away when it reconnects before the first read answers", async () => {
+  it("keeps a save made while the stream was away when it reconnects before the first read answers", async () => {
     const queryClient = new QueryClient();
     const before = [change(at(5, 9), byPip)];
     const missed = change(at(5, 11), byYou, "rules/new.md");
@@ -308,7 +308,7 @@ describe("what changed", () => {
 
 describe("a page", () => {
   // covers ADR 028 (Read), #958
-  it("[TC-UX-948] tells each version's story, newest first: who learned it, then who changed it", () => {
+  it("tells each version's story, newest first: who learned it, then who changed it", () => {
     const rows = historyRows(
       [
         {
@@ -348,7 +348,7 @@ describe("a page", () => {
   });
 
   // covers ADR 028 (Read), #1317
-  it("[TC-UX-1317-01] names nobody for a version memory does not say who wrote", () => {
+  it("names nobody for a version memory does not say who wrote", () => {
     const rows = historyRows(
       [
         { version: version("v3"), supersedes: version("v2"), author: byPip, writtenAt: "c", latest: true },
@@ -366,7 +366,7 @@ describe("a page", () => {
   });
 
   // covers ADR 028 (Read), #958
-  it("[TC-UX-949] shows a version's changed lines without the blank ones, so paragraphs read as lines", () => {
+  it("shows a version's changed lines without the blank ones, so paragraphs read as lines", () => {
     expect(
       shownLines([
         { op: "same", text: "# Title" },
@@ -385,7 +385,7 @@ describe("a page", () => {
 
 describe("search", () => {
   // covers ADR 028 (Search), #958
-  it("[TC-UX-950] marks the words of a hit that match the search", () => {
+  it("marks the words of a hit that match the search", () => {
     expect(hitParts("Publishing a preview link", "preview")).toEqual([
       { text: "Publishing a ", match: false },
       { text: "preview", match: true },

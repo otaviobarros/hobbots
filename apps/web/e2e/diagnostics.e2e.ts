@@ -4,8 +4,7 @@ import { laneHead, openQuest } from "./quest-sheet.ts";
 
 test.afterEach(stopQuestHub);
 
-// covers OP-002, OR-002, OR-007
-test("[TC-OP-053] follows a Quest that delegated to two hobs from Settings › Diagnostics and copies a report without its text", async ({
+test("follows a Quest that delegated to two hobs from Settings › Diagnostics and copies a report without its text", async ({
   page,
   context,
 }) => {

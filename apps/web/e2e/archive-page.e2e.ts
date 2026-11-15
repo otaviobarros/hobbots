@@ -54,8 +54,7 @@ const summon = (current: Hub, name: string, roleTitle: string, lookSeed: number)
     instructions: "",
   });
 
-// covers CH-006, CH-009
-test("[TC-CH-215] the Archive lists every hob's archived chats, narrows to one hob and searches their messages", async ({
+test("the Archive lists every hob's archived chats, narrows to one hob and searches their messages", async ({
   page,
 }) => {
   hub = await startHub(dataDir);
@@ -123,8 +122,7 @@ const archivedChats = async (current: Hub, hobId: string, titles: ReadonlyArray<
 const overflows = (page: import("@playwright/test").Page) =>
   page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
 
-// covers CH-009
-test("[TC-CH-240] the Archive holds 46 chats across eight hobs, one with a very long name", async ({ page }) => {
+test("the Archive holds 46 chats across eight hobs, one with a very long name", async ({ page }) => {
   test.setTimeout(180_000);
   hub = await startHub(dataDir);
   const current = hub;
@@ -183,10 +181,7 @@ test("[TC-CH-240] the Archive holds 46 chats across eight hobs, one with a very 
   expect(await overflows(page)).toBe(false);
 });
 
-// covers CH-009, AG-006
-test("[TC-CH-241] an empty Archive says how to archive, and a long retired hob's name holds on its card", async ({
-  page,
-}) => {
+test("an empty Archive says how to archive, and a long retired hob's name holds on its card", async ({ page }) => {
   hub = await startHub(dataDir);
   const current = hub;
   await api(current, "PATCH", "/setup", { completed: true });

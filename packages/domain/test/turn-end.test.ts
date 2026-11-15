@@ -177,8 +177,7 @@ const waitEntry: LedgerEntry = {
 };
 
 describe("turnEnded", () => {
-  // covers EX-001, OR-006
-  it("[TC-OR-455] decides the Attempt's end and the Task's move for every ending, Task state and runner", () => {
+  it("decides the Attempt's end and the Task's move for every ending, Task state and runner", () => {
     for (const runner of ["step", "member", "root"] as const) {
       for (const state of STATES) {
         const decided = (["replied", "failed", "stopped"] as const).map((name) => decide(runner, state, ENDINGS[name]));
@@ -216,8 +215,7 @@ describe("turnEnded", () => {
     ]);
   });
 
-  // covers EX-001, OR-006
-  it("[TC-OR-456] says why an Attempt ended: a cancel names it, a failure and a stop keep their reason", () => {
+  it("says why an Attempt ended: a cancel names it, a failure and a stop keep their reason", () => {
     expect(decide("member", "cancelling", ENDINGS.replied).attempt).toEqual({
       state: "cancelled",
       outcome: CANCELLED_ATTEMPT,
@@ -252,8 +250,7 @@ describe("turnEnded", () => {
     expect(empty).toMatchObject({ _tag: "Complete", summary: "The step finished without a reply." });
   });
 
-  // covers OR-004, IN-004
-  it("[TC-OR-457] holds a member's Task open on what its ledger still has, and gives the root's waits back", () => {
+  it("holds a member's Task open on what its ledger still has, and gives the root's waits back", () => {
     // Only its own milestones left: blocked, with a reason its lead can act on (#571).
     const short = decide("member", "active", ENDINGS.replied, [milestone("Reviewed")]);
     expect(shown(short.task)).toBe("→blocked");
@@ -287,8 +284,7 @@ describe("turnEnded", () => {
     expect([was("waiting"), was("blocked"), was("active")]).toEqual(["→waiting", "→blocked", "stay"]);
   });
 
-  // covers OR-004, EX-002
-  it("[TC-OR-640] keeps the root it was blocked on a stalled Quest active once a Task under it is open", () => {
+  it("keeps the root it was blocked on a stalled Quest active once a Task under it is open", () => {
     const child: LedgerEntry = { _tag: "Child", task: task("active") };
     const moved = (ledger: ReadonlyArray<LedgerEntry>) =>
       shown(
@@ -308,8 +304,7 @@ describe("turnEnded", () => {
     expect(moved([])).toBe("→blocked");
   });
 
-  // covers OR-004, EX-002
-  it("[TC-OR-648] never shows a member's Task done on its reply alone: it sends the member back once, then blocks it", () => {
+  it("never shows a member's Task done on its reply alone: it sends the member back once, then blocks it", () => {
     const again = (state: TaskState, ending: TurnEnding, ledger: ReadonlyArray<LedgerEntry> = []) =>
       turnEnded({ runner: "member", task: task(state), ending, ledger, carried: new Set(), sentBack: true });
     const unfinished: TurnEnding = { _tag: "Replied", text: "  The Task is blocked and not complete.  " };

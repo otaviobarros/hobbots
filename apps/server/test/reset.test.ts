@@ -154,7 +154,7 @@ const failingSignIn = (error: KeychainError) =>
 
 describe("start over", () => {
   // covers #948
-  it("[TC-OP-094] deletes everything the hub keeps and leaves the desktop app's own files", async () => {
+  it("deletes everything the hub keeps and leaves the desktop app's own files", async () => {
     await seedHub();
     await wipeHubData(dataDir);
     expect((await readdir(dataDir)).sort()).toEqual(["Local Storage", "desktop-settings.json"]);
@@ -163,7 +163,7 @@ describe("start over", () => {
   });
 
   // covers #948
-  it("[TC-OP-095] finishes a reset that stopped halfway on the next start, and leaves a data folder without one", async () => {
+  it("finishes a reset that stopped halfway on the next start, and leaves a data folder without one", async () => {
     await seedHub();
     expect(await finishReset(dataDir)).toBe(false);
     expect(await exists(join(dataDir, "hobbots.sqlite"))).toBe(true);
@@ -177,14 +177,14 @@ describe("start over", () => {
   });
 
   // covers #948
-  it("[TC-OP-096] forgets the GitHub sign-in and every hob's own app, then asks the hub to restart empty", async () => {
+  it("forgets the GitHub sign-in and every hob's own app, then asks the hub to restart empty", async () => {
     const { calls, exit } = await startOver();
     expect(Exit.isSuccess(exit)).toBe(true);
     expect(calls).toEqual(["move shared", "app frodo", "app sam", "github", "restart"]);
   });
 
   // covers #948, #1214
-  it("[TC-OP-1214-07] deletes nothing while a sign-in may still be in the keychain items every hub shared", async () => {
+  it("deletes nothing while a sign-in may still be in the keychain items every hub shared", async () => {
     const left =
       "The GitHub sign-in may still be in the keychain item every hub shared: The keychain refused the delete (161).";
     const { calls, exit } = await startOver({}, [left]);
@@ -195,7 +195,7 @@ describe("start over", () => {
   });
 
   // covers #948
-  it("[TC-OP-099] deletes nothing and says why when the keychain keeps a sign-in", async () => {
+  it("deletes nothing and says why when the keychain keeps a sign-in", async () => {
     const { calls, exit } = await startOver({ sam: "The hub's keychain did not delete the app's key: locked." });
     expect(calls).toEqual(["move shared", "app frodo", "app sam", "github"]);
     expect(Exit.isFailure(exit)).toBe(true);
@@ -203,7 +203,7 @@ describe("start over", () => {
   });
 
   // covers #948
-  it("[TC-OP-097] refuses to start over on a hub that cannot restart itself, and changes nothing", async () => {
+  it("refuses to start over on a hub that cannot restart itself, and changes nothing", async () => {
     const exit = await Effect.flatMap(HubReset, (reset) => reset.start).pipe(
       Effect.provide(
         HubReset.layer.pipe(
@@ -217,7 +217,7 @@ describe("start over", () => {
     expect(JSON.stringify(exit)).toContain("ResetRefused");
   });
   // covers #948
-  it("[TC-OP-100] the reset command's keychain step deletes every hob's key and the sign-in, and says what a locked keychain kept", async () => {
+  it("the reset command's keychain step deletes every hob's key and the sign-in, and says what a locked keychain kept", async () => {
     const pem = Redacted.make("-----BEGIN PRIVATE KEY-----");
     const erased = await Effect.gen(function* () {
       const keys = yield* HobAppKeys;
@@ -245,7 +245,7 @@ describe("start over", () => {
   });
 
   // covers #948
-  it("[TC-OP-104] the reset command counts a delete the keychain never answered as kept when the hub recorded the item", async () => {
+  it("the reset command counts a delete the keychain never answered as kept when the hub recorded the item", async () => {
     const timedOut = new KeychainError({ reason: "unavailable", message: "The keychain did not answer in time." });
     const stalledKeys = Layer.succeed(HobAppKeys, {
       usable: Effect.succeed(true),

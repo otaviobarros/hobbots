@@ -210,7 +210,7 @@ describe("ThreadRunMachine", () => {
     expect(ThreadRunMachine.can(run, { _tag: "TurnEnded", reply: first })).toBe(false);
   });
 
-  it("[TC-CH-1549-04] goes back to dispatching when a carried turn ends, naming the dispatch's hob until it is delivered", () => {
+  it("goes back to dispatching when a carried turn ends, naming the dispatch's hob until it is delivered", () => {
     const r = replies[0] as Reply;
     const pip = hobs[1] as AgentId;
     const dispatching = apply(idleRun, { _tag: "Dispatch", hobId: pip });
@@ -238,7 +238,7 @@ describe("ThreadRunMachine", () => {
     expect(isAtRest(apply(ended, { _tag: "Lined", next: [], paused: [] }))).toBe(true);
   });
 
-  it("[TC-CH-1463-04] keeps a line whose relay waits for a person, and publishes whose it is", () => {
+  it("keeps a line whose relay waits for a person, and publishes whose it is", () => {
     const [quill, pip] = hobs as [AgentId, AgentId];
     const paused = apply(idleRun, { _tag: "Lined", next: [], paused: [pip, quill] });
     // Nothing runs or waits there, but the line still says the hobs wait for a person.

@@ -41,8 +41,7 @@ const leadBriefings = (all: ReadonlyArray<PromptRequest>) =>
   all.map((each) => each.briefing ?? "").filter((briefing) => briefing.includes("for this conversation:"));
 
 describe("a lead's briefing over a Quest", () => {
-  // covers OR-004, OR-005
-  it("[TC-OR-603] a lead woken as each member finishes is told each result once, and all of it when you write", async () => {
+  it("a lead woken as each member finishes is told each result once, and all of it when you write", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests } = party;
@@ -84,8 +83,7 @@ describe("a lead's briefing over a Quest", () => {
     for (const hob of MEMBERS) expect(answering?.briefing).toContain(`${hob} finished its part`);
   }, 30_000);
 
-  // covers OR-004
-  it("[TC-OR-604] a lead whose session was compacted is told the whole Quest on its next wake", async () => {
+  it("a lead whose session was compacted is told the whole Quest on its next wake", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests } = party;

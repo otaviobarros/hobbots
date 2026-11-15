@@ -21,8 +21,7 @@ const insertAndCount = () =>
   }).pipe(Effect.provide(TestDatabase), Effect.runPromise);
 
 describe("TestDatabase", () => {
-  // covers DP-003
-  it("[TC-DP-001] gives every build a fresh database with every migration applied", async () => {
+  it("gives every build a fresh database with every migration applied", async () => {
     const first = await insertAndCount();
     const second = await insertAndCount();
     expect(first).toEqual({ before: 0, applied: Object.keys(migrations).length });

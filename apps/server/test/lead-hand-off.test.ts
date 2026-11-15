@@ -28,8 +28,7 @@ const DUTY = "never hand a Task what the Tasks it comes after returned";
 // told: a lead that follows it hands a running member what it asks for, and the Quest finishes.
 
 describe("a lead that follows the hand-off rule", () => {
-  // covers OR-003, OR-005
-  it("[TC-OR-218] Aldric, told the rule by Quill's result, hands core.py to Rook, who asked for it while running, and Rook completes from it", async () => {
+  it("Aldric, told the rule by Quill's result, hands core.py to Rook, who asked for it while running, and Rook completes from it", async () => {
     const { run, requests, release } = await startHub(await sharedDatabase(), [
       {
         on: "(Write the backend) finished",
@@ -106,8 +105,7 @@ describe("a lead that follows the hand-off rule", () => {
     await run(nothingOpen);
   }, 30_000);
 
-  // covers OR-003, OR-004, OR-005
-  it("[TC-OR-227] Rook, who leads a nested Quest under Aldric's, is told the rule and his duty in the turn Pip's result reaches him", async () => {
+  it("Rook, who leads a nested Quest under Aldric's, is told the rule and his duty in the turn Pip's result reaches him", async () => {
     const { run, requests } = await startHub(await sharedDatabase());
     await run(
       send([

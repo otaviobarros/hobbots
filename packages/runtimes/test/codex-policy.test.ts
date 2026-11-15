@@ -101,8 +101,7 @@ const decide = async (
 };
 
 describe("Codex's tool calls under the hob's policy", () => {
-  // covers EX-004, ADR 024
-  it("[TC-RT-061] records an allowed command before it runs, then streams its output to the Workbench", async () => {
+  it("records an allowed command before it runs, then streams its output to the Workbench", async () => {
     const recorded: Array<RuntimeEvent> = [];
     const { answer, events, mapper } = await decide(command("c1", "/bin/bash -lc 'ls -la'"), {
       request: { recordToolStart: (event) => Effect.sync(() => recorded.push(event) > 0) },
@@ -130,8 +129,7 @@ describe("Codex's tool calls under the hob's policy", () => {
     ).toEqual([{ _tag: "ToolOutput", id: "c1", text: "total 0\n" }]);
   });
 
-  // covers EX-004
-  it("[TC-RT-062] declines a call Hobbots could not record, with the reason", async () => {
+  it("declines a call Hobbots could not record, with the reason", async () => {
     const { answer, events } = await decide(command("c1", "/bin/bash -lc 'ls'"), {
       request: { recordToolStart: () => Effect.succeed(false) },
     });
@@ -139,8 +137,7 @@ describe("Codex's tool calls under the hob's policy", () => {
     expect(events).toEqual([expect.objectContaining({ _tag: "ToolDenied", id: "c1", reason: UNRECORDED_TOOL_CALL })]);
   });
 
-  // covers PE-003, PE-008
-  it("[TC-RT-063] holds a command the policy asks about until the user allows it, then runs it", async () => {
+  it("holds a command the policy asks about until the user allows it, then runs it", async () => {
     const { asked, approvals } = approvalsAnswering(approve);
     const { answer, events } = await decide(command("c1", "/bin/bash -lc 'pnpm test'"), {
       preset: "careful",
@@ -174,7 +171,7 @@ describe("Codex's tool calls under the hob's policy", () => {
   });
 
   // covers ADR 036 (The read-the-web mark)
-  it("[TC-RT-1268-02] asks before a push once the session has read the web, where the policy would allow it", async () => {
+  it("asks before a push once the session has read the web, where the policy would allow it", async () => {
     const push = () => command("c1", "/bin/bash -lc 'git push origin feature'");
     const unmarked = approvalsAnswering(approve);
     const before = await decide(push(), { preset: "trusting", request: { approvals: unmarked.approvals } });
@@ -197,8 +194,7 @@ describe("Codex's tool calls under the hob's policy", () => {
     expect(tests.asked).toEqual([]);
   });
 
-  // covers PE-001, PE-005
-  it("[TC-RT-064] declines what the policy never allows, and every command without the sandbox", async () => {
+  it("declines what the policy never allows, and every command without the sandbox", async () => {
     const outsideFolder = await decide(command("c1", `/bin/bash -lc 'rm -rf ${outside}/x'`));
     expect(outsideFolder.answer).toEqual({ decision: "decline" });
     expect(outsideFolder.events).toEqual([
@@ -214,7 +210,7 @@ describe("Codex's tool calls under the hob's policy", () => {
   });
 
   // regression for #1082
-  it("[TC-RT-1082-01] tells the hob why Hobbots refused its command, and that the user did not refuse it", async () => {
+  it("tells the hob why Hobbots refused its command, and that the user did not refuse it", async () => {
     const outsideFolder = await decide(command("c1", `/bin/bash -lc 'rm -rf ${outside}/x'`));
     expect(outsideFolder.answer).toEqual({ decision: "decline" });
     const reason = outsideFolder.events.find((event) => event._tag === "ToolDenied")?.reason ?? "";
@@ -235,7 +231,7 @@ describe("Codex's tool calls under the hob's policy", () => {
   });
 
   // regression for #1082
-  it("[TC-RT-1082-02] tells the hob the user refused its command with their reason, and an expired approval as not refused by them", async () => {
+  it("tells the hob the user refused its command with their reason, and an expired approval as not refused by them", async () => {
     const denied = approvalsAnswering(() => Effect.succeed({ _tag: "Denied", reason: "Not today" }));
     const refused = await decide(command("c1", "/bin/bash -lc 'pnpm test'"), {
       preset: "careful",
@@ -266,8 +262,7 @@ describe("Codex's tool calls under the hob's policy", () => {
     expect(lapsed.told[0]).not.toContain("not asked");
   });
 
-  // covers PE-001, PE-003, ADR 024
-  it("[TC-RT-065] decides a file change on every file it touches, and shows the user its diff", async () => {
+  it("decides a file change on every file it touches, and shows the user its diff", async () => {
     const inside = [{ path: join(project, "a.txt"), kind: { type: "add" }, diff: "hello\n" }];
     const allowed = await decide(fileChange("f1"), { before: [patchStarted("f1", inside)] });
     expect(allowed.answer).toEqual({ decision: "accept" });
@@ -304,8 +299,7 @@ describe("Codex's tool calls under the hob's policy", () => {
     expect(unknown.events).toEqual([expect.objectContaining({ _tag: "ToolDenied", reason: UNKNOWN_PATCH })]);
   });
 
-  // covers PE-001, PE-003, STD-SEC-002
-  it("[TC-RT-070] decides a file change that deletes a file as a deletion, alone or with edits", async () => {
+  it("decides a file change that deletes a file as a deletion, alone or with edits", async () => {
     const removed = { path: join(project, "old.txt"), kind: { type: "delete" }, diff: "" };
     const added = { path: join(project, "new.txt"), kind: { type: "add" }, diff: "hi\n" };
 
@@ -343,7 +337,7 @@ describe("Codex's tool calls under the hob's policy", () => {
   });
 
   // covers ADR 024
-  it("[TC-RT-066] decides the script inside Codex's shell wrapper, and any other line as it is", () => {
+  it("decides the script inside Codex's shell wrapper, and any other line as it is", () => {
     expect(shellScript("/bin/bash -lc 'git status && ls'")).toBe("git status && ls");
     expect(shellScript(`/bin/zsh -c 'echo '"'"'hi'"'"''`)).toBe("echo 'hi'");
     expect(shellScript("/bin/bash -lc ls")).toBe("ls");

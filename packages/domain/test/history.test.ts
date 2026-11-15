@@ -163,8 +163,7 @@ const records: HistoryRecords = {
 const line = (event: HistoryEvent) => [event._tag, event.id, historyKind(event), event.quest?.goal ?? null];
 
 describe("a hob's History", () => {
-  // covers OR-001, UX-001
-  it("[TC-OR-492] turns a lead's records into its events and its party's, newest first, each under its filter", () => {
+  it("turns a lead's records into its events and its party's, newest first, each under its filter", () => {
     const events = historyEvents(ALDRIC, records);
 
     expect(events.map(line)).toEqual([
@@ -211,8 +210,7 @@ describe("a hob's History", () => {
     ]);
   });
 
-  // covers UX-001
-  it("[TC-OR-493] pages whole days in the reader's time zone, newest first, and counts the days left", () => {
+  it("pages whole days in the reader's time zone, newest first, and counts the days left", () => {
     const events = historyEvents(ALDRIC, records);
     const page = (timeZone: string, before: number | null = null, filter: "all" | "you" = "all") =>
       historyPage(events, { timeZone: DateTime.zoneMakeNamedUnsafe(timeZone), filter, before, days: 2 });

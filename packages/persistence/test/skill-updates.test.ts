@@ -58,7 +58,7 @@ const seeded = Effect.gen(function* () {
 
 describe("skill updates", () => {
   // covers ADR 029 (Updates from a source), #1097
-  it("[TC-DP-1097-01] keeps one update per skill, journals what changes, and keeps a dismissed one dismissed", () =>
+  it("keeps one update per skill, journals what changes, and keeps a dismissed one dismissed", () =>
     run(
       Effect.gen(function* () {
         const { skill, updateTo } = yield* seeded;
@@ -97,7 +97,7 @@ describe("skill updates", () => {
     ));
 
   // covers ADR 029 (Updates from a source), #1097
-  it("[TC-DP-1097-02] keeps Update automatically per skill and the last check, journaling only a change", () =>
+  it("keeps Update automatically per skill and the last check, journaling only a change", () =>
     run(
       Effect.gen(function* () {
         const { skill } = yield* seeded;

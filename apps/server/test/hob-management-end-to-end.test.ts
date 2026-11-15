@@ -322,7 +322,7 @@ describe("hob management, end to end", () => {
   });
 
   // covers ADR 034 (Finding who can summon), ADR 032 (The roster), #412
-  it("[TC-AG-412-01] a hob without the Charm is told who holds it, hands the summon to that hob, and the hob is summoned for that Task", async () => {
+  it("a hob without the Charm is told who holds it, hands the summon to that hob, and the hob is summoned for that Task", async () => {
     const thread = await send(plain, [
       "Hire Mo for the launch",
       hub("delegate_task", {
@@ -361,7 +361,7 @@ describe("hob management, end to end", () => {
   });
 
   // covers ADR 034 (Finding who can summon: several hold it), OR-002, #412
-  it("[TC-AG-412-02] when two hobs hold the Charm, a hob asks who should be responsible, you pick one, and that hob summons", async () => {
+  it("when two hobs hold the Charm, a hob asks who should be responsible, you pick one, and that hob summons", async () => {
     const bram = await create("Bram", 5003);
     await manages(bram, { "summoning.summon": "allow" });
     const thread = await send(plain, [
@@ -400,7 +400,7 @@ describe("hob management, end to end", () => {
   });
 
   // covers ADR 034 (The check tool finds the gaps first; Questions go through ask; Asking is a proposal), #412
-  it("[TC-AG-412-03] a manager checks three drafts, asks its lead about the unclear one, and summons the three from one card after you edit one", async () => {
+  it("a manager checks three drafts, asks its lead about the unclear one, and summons the three from one card after you edit one", async () => {
     const lead = await create("Lead", 5004);
     const brief = [
       "Hire Pia, Quinn and a third engineer",
@@ -461,7 +461,7 @@ describe("hob management, end to end", () => {
     expect(decided.body.proposal.rows[1]?.outcome).toContain("Summoned Quincy (Writer)");
   });
   // covers ADR 034 (Never twice), ADR 031 (keyed calls), #660, #412
-  it("[TC-AG-412-04] a summon retried after its call moved into the Task the reply started returns the same hob, and the same key from another manager summons its own", async () => {
+  it("a summon retried after its call moved into the Task the reply started returns the same hob, and the same key from another manager summons its own", async () => {
     await manages(chief, { "summoning.summon": "allow" });
     const thread = await send(chief, [
       "Hire Uma",
@@ -518,7 +518,7 @@ describe("hob management, end to end", () => {
   };
 
   // covers ADR 034 (Retiring; Retire is high risk), AG-006, #412
-  it("[TC-AG-412-05] retiring through the Charm asks once only with the check box, and its replies finish or stop as the manager chose", async () => {
+  it("retiring through the Charm asks once only with the check box, and its replies finish or stop as the manager chose", async () => {
     const rex = await busy("Rex");
     const finish = await retiring("Rex", "finish");
     expect(finish.card.proposal).toMatchObject({ kind: "retire", highRisk: true, asks: [] });
@@ -564,7 +564,7 @@ describe("hob management, end to end", () => {
     hobs.runPromise(HobService.use((service) => service.change(hob.id, { profile: { instructions } }, actor)));
 
   // covers ADR 034 (Never twice), ADR 031 (A Charm's writes), #412
-  it("[TC-AG-412-09] reading a change call back finds only the versions that call made, never another Task's call with the same key", async () => {
+  it("reading a change call back finds only the versions that call made, never another Task's call with the same key", async () => {
     await manages(chief, { "summoning.summon": "allow", "summoning.instructions": "allow" });
     // A change the chief made in a chat to hobs it summoned reads back from the versions it made.
     const thread = await send(chief, [

@@ -54,8 +54,7 @@ const hobNamed = (current: Hub, name: string, lookSeed: number) =>
 /** A prompt line that makes the fake call a Task tool. */
 const script = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-// covers OR-003, UX-002
-test("[TC-OR-215] Rook's Task drawer shows Quill's result and core.py under Handed to it once Quill's Task is done", async ({
+test("Rook's Task drawer shows Quill's result and core.py under Handed to it once Quill's Task is done", async ({
   page,
 }) => {
   const current = await startHub(dataDir);

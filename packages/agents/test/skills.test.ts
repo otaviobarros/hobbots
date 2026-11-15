@@ -121,7 +121,7 @@ const setOf = (
 
 describe("resolveSkills with sets (ADR 029, Skill sets)", () => {
   // covers ADR 029 (Skill sets), #1143
-  it("[TC-AG-1143-08] gives each skill of a set on the set's pin, named with its set", () => {
+  it("gives each skill of a set on the set's pin, named with its set", () => {
     const set = setOf("agent-engineering", ["deliver-change", "plan-change"], { _tag: "Everyone" }, { pin: R2 });
     const resolved = resolveSkills([set], turn());
     expect(resolved.skills.map((one) => [one.name, one.set, one.pin, one.skillId])).toEqual([
@@ -131,7 +131,7 @@ describe("resolveSkills with sets (ADR 029, Skill sets)", () => {
   });
 
   // covers ADR 029 (Skill sets), #1143
-  it("[TC-AG-1143-09] loads two skills of one name in one scope, from two sets or a set and a skill", () => {
+  it("loads two skills of one name in one scope, from two sets or a set and a skill", () => {
     const one = setOf("agent-engineering", ["plan-change"], { _tag: "Everyone" });
     const other = setOf("other-set", ["plan-change"], { _tag: "Everyone" });
     const loose = pinned("plan-change", { _tag: "Everyone" });
@@ -145,7 +145,7 @@ describe("resolveSkills with sets (ADR 029, Skill sets)", () => {
   });
 
   // covers ADR 029 (Skill sets), #1143
-  it("[TC-AG-1143-10] a narrower skill replaces the set's of its name only; two projects' still load neither", () => {
+  it("a narrower skill replaces the set's of its name only; two projects' still load neither", () => {
     const set = setOf("agent-engineering", ["deliver-change", "plan-change"], { _tag: "Everyone" });
     const own = pinned("plan-change", { _tag: "Hob", agentId: PIP });
     const replacedBy = resolveSkills([set, own], turn());
@@ -162,7 +162,7 @@ describe("resolveSkills with sets (ADR 029, Skill sets)", () => {
   });
 
   // covers ADR 029 (Skill sets, Pins and rollout), #1143
-  it("[TC-AG-1143-13] takes a set whole from its narrowest assignment, so a held revision never mixes with a newer one", () => {
+  it("takes a set whole from its narrowest assignment, so a held revision never mixes with a newer one", () => {
     const own = setOf("agent-engineering", ["plan-change"], { _tag: "Hob", agentId: PIP }, { held: true });
     const skillId = own.assignment.skillId;
     const everyone = setOf(
@@ -209,7 +209,7 @@ describe("resolveSkills with sets (ADR 029, Skill sets)", () => {
   });
 
   // covers ADR 029 (Skill sets), #1143
-  it("[TC-AG-1143-11] leaves out a skill of a set the hob opted out of, but never one of its own set", () => {
+  it("leaves out a skill of a set the hob opted out of, but never one of its own set", () => {
     const everyone = setOf("agent-engineering", ["deliver-change", "plan-change"], { _tag: "Everyone" });
     const own = setOf("pip-set", ["pip-notes", "pip-plan"], { _tag: "Hob", agentId: PIP });
     const optedOutOfSets = [
@@ -251,7 +251,7 @@ describe("skill mentions", () => {
   ];
 
   // covers ADR 029 (Skill sets), #1143
-  it("[TC-AG-1143-12] takes a set's skill by its set and name, or by its name while no other skill has it", () => {
+  it("takes a set's skill by its set and name, or by its name while no other skill has it", () => {
     expect(mentionedSkill("/agent-engineering:deliver-change go", given)).toBe("agent-engineering:deliver-change");
     expect(mentionedSkill("/deliver-change go", given)).toBe("agent-engineering:deliver-change");
     expect(mentionedSkill("/other-set:plan-change", given)).toBe("other-set:plan-change");

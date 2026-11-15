@@ -232,7 +232,7 @@ const startTrial = (agentId: string, draft: unknown) => request("POST", "/api/sk
 
 describe("trying a skill in a chat, and the health checks", () => {
   // covers ADR 029 (Try in a chat, Health checks), #1099
-  it("[TC-AG-1099-08] tries a new skill, an unsaved edit and a proposal on a Claude Code hob and a Codex hob, each turn loading only the draft, and nothing reaches the library", async () => {
+  it("tries a new skill, an unsaved edit and a proposal on a Claude Code hob and a Codex hob, each turn loading only the draft, and nothing reaches the library", async () => {
     await request("PATCH", "/api/setup", { completed: true, safetyPreset: "balanced", approvedFolders: [] });
     const pip = await summon("Pip", "claude-code", 1099);
     const quill = await summon("Quill", "codex", 1100);
@@ -343,7 +343,7 @@ describe("trying a skill in a chat, and the health checks", () => {
     expect(mounted(after.skills)).toEqual([["release", r1, false]]);
   });
 
-  it("[TC-AG-1099-09] shows each health check with what acting on it needs, and what each hob carries on both runtimes", async () => {
+  it("shows each health check with what acting on it needs, and what each hob carries on both runtimes", async () => {
     const list = (await request("GET", "/api/skills")).body;
     const release = list.skills.find((skill: { name: string }) => skill.name === "release");
     const agents: ReadonlyArray<Agent> = (await request("GET", "/api/agents")).body;
@@ -392,7 +392,7 @@ describe("trying a skill in a chat, and the health checks", () => {
     );
   });
 
-  it("[TC-AG-1099-10] reads back the draft a chat tries, and once the hub lost it, as after a restore, says so and runs nothing", async () => {
+  it("reads back the draft a chat tries, and once the hub lost it, as after a restore, says so and runs nothing", async () => {
     const agents: ReadonlyArray<Agent> = (await request("GET", "/api/agents")).body;
     const pip = agents.find((agent) => agent.name === "Pip");
     if (pip === undefined) throw new Error("No Pip");

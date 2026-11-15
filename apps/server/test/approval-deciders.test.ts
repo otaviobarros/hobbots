@@ -201,8 +201,7 @@ const decide = (caller: Caller, approval: ApprovalRequest, payload: Record<strin
   });
 
 describe("approval deciders", () => {
-  // covers PE-003, PE-006
-  it("[TC-IN-203] attributes a decision from a second approved device to that device, with where it was made", async () => {
+  it("attributes a decision from a second approved device to that device, with where it was made", async () => {
     await setupDone();
     const phone = await pairedBrowser();
     const iphone = await deviceNamed("Safari on iPhone");
@@ -216,8 +215,7 @@ describe("approval deciders", () => {
     expect(stored).toMatchObject({ decidedByDeviceId: iphone?.id, decidedVia: "inbox" });
   });
 
-  // covers PE-003
-  it("[TC-IN-204] attributes a decision from the hub's window to the window, and keeps the first decider when decided again", async () => {
+  it("attributes a decision from the hub's window to the window, and keeps the first decider when decided again", async () => {
     await setupDone();
     const phone = await pairedBrowser();
     const { thread, pending } = await pendingPush();
@@ -232,8 +230,7 @@ describe("approval deciders", () => {
     expect(stored).toMatchObject({ decidedByDeviceId: WINDOW_DEVICE_ID, decidedVia: "chat" });
   });
 
-  // covers PE-003
-  it("[TC-IN-205] records an expired request as expired, with no decider", async () => {
+  it("records an expired request as expired, with no decider", async () => {
     await setupDone();
     const { thread } = await pendingPush();
 
@@ -246,8 +243,7 @@ describe("approval deciders", () => {
     expect(stored).toMatchObject({ state: "expired", decidedByDeviceId: null, decidedVia: "expired" });
   });
 
-  // covers PE-003
-  it("[TC-IN-206] records no surface for a decision from a client that does not say where it was made", async () => {
+  it("records no surface for a decision from a client that does not say where it was made", async () => {
     await setupDone();
     const { pending } = await pendingPush();
 

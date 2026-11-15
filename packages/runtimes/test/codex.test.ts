@@ -137,9 +137,8 @@ describe("Codex's models", () => {
   });
 });
 
-// covers RT-001
 describe("the App Server client", () => {
-  it("[TC-RT-013] answers Codex's requests by method, refuses the rest, and ends with the process", async () => {
+  it("answers Codex's requests by method, refuses the rest, and ends with the process", async () => {
     const dir = folder();
     const binary = fakeCodex(dir, { behavior: "ask" });
     const answered = await run(
@@ -179,7 +178,7 @@ describe("the App Server client", () => {
   }, 30_000);
 
   // covers ADR 036
-  it("[TC-RT-1289-03] handles a request Codex sent after a notification only once the work on that notification ended", async () => {
+  it("handles a request Codex sent after a notification only once the work on that notification ended", async () => {
     const dir = folder();
     const binary = fakeCodex(dir, { behavior: "search" });
     const order: Array<string> = [];
@@ -213,7 +212,7 @@ describe("the App Server client", () => {
     expect(order).toEqual(["item/completed", "item/tool/call"]);
   }, 30_000);
 
-  it("[TC-RT-014] fails what is waiting and ends notifications when Codex exits", async () => {
+  it("fails what is waiting and ends notifications when Codex exits", async () => {
     const binary = fakeCodex(folder(), { behavior: "exit" });
     const result = await run(
       Effect.scoped(
@@ -236,7 +235,7 @@ describe("the App Server client", () => {
     expect(result.read).toHaveLength(0);
   });
 
-  it("[TC-RT-015] fails a start whose binary cannot run", async () => {
+  it("fails a start whose binary cannot run", async () => {
     const exit = await run(
       Effect.exit(
         Effect.scoped(
@@ -249,10 +248,9 @@ describe("the App Server client", () => {
   });
 });
 
-// covers AG-005, RT-001
 describe("Codex's provider health", () => {
-  // TC-RT-001 is retired: Codex turns run now (#438), so a ChatGPT sign-in is ready (TC-RT-034).
-  it("[TC-RT-034] reports a ChatGPT sign-in as ready, read without a token or a refresh", async () => {
+  // Codex turns run now (#438), so a ChatGPT sign-in is ready.
+  it("reports a ChatGPT sign-in as ready, read without a token or a refresh", async () => {
     const { dir, adapter } = codexWith({
       account: { type: "chatgpt", email: "me@example.com", planType: "pro", workspaceName: null },
     });
@@ -269,17 +267,17 @@ describe("Codex's provider health", () => {
     expect(methods.some((message) => message.method === "getAuthStatus")).toBe(false);
   });
 
-  it("[TC-RT-002] reports a Codex with no sign-in as signed out", async () => {
+  it("reports a Codex with no sign-in as signed out", async () => {
     const health = await Effect.runPromise((await codexWith({ account: null }).adapter).health);
     expect(health).toMatchObject({ availability: "signedOut", billing: null, version: "0.166.0" });
   });
 
-  it("[TC-RT-003] reports an API-key sign-in as needing ChatGPT", async () => {
+  it("reports an API-key sign-in as needing ChatGPT", async () => {
     const health = await Effect.runPromise((await codexWith({ account: { type: "apiKey" } }).adapter).health);
     expect(health).toMatchObject({ availability: "signedOut", billing: "api-key" });
   });
 
-  it("[TC-RT-004] reports a Codex older than 0.166.0 as outdated without starting it", async () => {
+  it("reports a Codex older than 0.166.0 as outdated without starting it", async () => {
     const { dir, adapter } = codexWith({ version: "codex-cli 0.165.9" });
     const health = await Effect.runPromise((await adapter).health);
     expect(health).toMatchObject({ availability: "outdated", version: "0.165.9" });
@@ -287,7 +285,7 @@ describe("Codex's provider health", () => {
     expect(fakeCodexLog(dir)).toHaveLength(0);
   });
 
-  it("[TC-RT-005] reports a missing or broken Codex as unavailable, with no version", async () => {
+  it("reports a missing or broken Codex as unavailable, with no version", async () => {
     const missing = await run(
       makeCodex({ executable: join(folder(), "codex"), clientVersion: "test", workspaceDir: folder() }),
     );
@@ -296,15 +294,13 @@ describe("Codex's provider health", () => {
     expect(broken).toMatchObject({ availability: "unavailable", version: null });
   });
 
-  it("[TC-RT-006] reports a Codex that does not answer as not started, with its version", async () => {
+  it("reports a Codex that does not answer as not started, with its version", async () => {
     const health = await Effect.runPromise((await codexWith({ behavior: "silent" }, "300 millis").adapter).health);
     expect(health).toMatchObject({ availability: "unavailable", version: "0.166.0" });
   });
 
-  // TC-RT-007 is retired: Codex turns run now (#438). TC-RT-032 is retired: the policy decides Codex's
-  // tool calls now (#439), and TC-RT-060 checks what it enforces.
-  // covers PE-005, ADR 024
-  it("[TC-RT-060] declares the policy, events and interruption enforced, and the sandbox only where it started", async () => {
+  // Codex turns run now (#438), and the policy decides Codex's tool calls (#439).
+  it("declares the policy, events and interruption enforced, and the sandbox only where it started", async () => {
     const codex = await codexWith({}).adapter;
     const off = await Effect.runPromise(codex.enforcement);
     expect(off).toMatchObject({
@@ -321,7 +317,7 @@ describe("Codex's provider health", () => {
   });
 
   // covers ADR 036 (Search the web on Codex)
-  it("[TC-RT-1266-01] offers Codex's cached search only on a release the contract test held, and reports it with health", async () => {
+  it("offers Codex's cached search only on a release the contract test held, and reports it with health", async () => {
     const codex = await codexWith({}).adapter;
     // The fake Codex is 0.166.0, a release the contract test held to the cached index.
     expect((await Effect.runPromise(codex.enforcement)).webSearch.status).toBe("verified");
@@ -333,9 +329,8 @@ describe("Codex's provider health", () => {
   });
 });
 
-// covers AG-005, RT-001
 describe("Codex's models for the brain picker", () => {
-  it("[TC-RT-008] lists every page Codex returns, without hidden models or ultra", async () => {
+  it("lists every page Codex returns, without hidden models or ultra", async () => {
     const dir = folder();
     const binary = fakeCodex(dir, {
       pages: [
@@ -363,8 +358,8 @@ describe("Codex's models for the brain picker", () => {
     expect(fakeCodexLog(dir).filter((message) => message.method === "model/list")).toHaveLength(2);
   });
 
-  // TC-RT-016 is retired: Codex turns run now (#438), so a signed-in Codex offers its models (TC-RT-035).
-  it("[TC-RT-035] offers a signed-in Codex's models to pick", async () => {
+  // Codex turns run now (#438), so a signed-in Codex offers its models.
+  it("offers a signed-in Codex's models to pick", async () => {
     const { dir, adapter } = codexWith({
       account: { type: "chatgpt", email: null, planType: "plus", workspaceName: null },
       pages: [[{ model: "gpt-6", supportedReasoningEfforts: efforts("low") }]],
@@ -375,13 +370,12 @@ describe("Codex's models for the brain picker", () => {
     expect(fakeCodexLog(dir).some((message) => message.method === "model/list")).toBe(true);
   });
 
-  it("[TC-RT-009] offers no models while Codex is missing or outdated", async () => {
+  it("offers no models while Codex is missing or outdated", async () => {
     const outdated = await Effect.runPromise((await codexWith({ version: "codex-cli 0.100.0" }).adapter).models);
     expect(outdated).toMatchObject({ runtime: "codex", source: "fallback", models: [] });
   });
 });
 
-// covers RT-001
 describe("signing a turn in", () => {
   const tokensFrom = (options: FakeCodexOptions) =>
     run(
@@ -395,7 +389,7 @@ describe("signing a turn in", () => {
       ),
     );
 
-  it("[TC-RT-010] gets a fresh access token and the ChatGPT workspace from the hub's App Server", async () => {
+  it("gets a fresh access token and the ChatGPT workspace from the hub's App Server", async () => {
     const exit = await tokensFrom({
       account: { type: "chatgpt", email: null, planType: "plus", workspaceName: null },
       workspace: "workspace-1",
@@ -406,16 +400,15 @@ describe("signing a turn in", () => {
     );
   });
 
-  it("[TC-RT-011] refuses to sign a turn in without a ChatGPT sign-in", async () => {
+  it("refuses to sign a turn in without a ChatGPT sign-in", async () => {
     const exit = await tokensFrom({ account: { type: "apiKey" }, token: "key" });
     expect(Exit.isFailure(exit)).toBe(true);
     if (Exit.isFailure(exit)) expect(String(exit.cause)).toContain("not signed in with ChatGPT");
   });
 });
 
-// covers AG-005
 describe("noticing an update", () => {
-  it("[TC-RT-017] asks a binary configured by bare name for its version again once it is updated", async () => {
+  it("asks a binary configured by bare name for its version again once it is updated", async () => {
     const dir = folder();
     fakeCodex(dir, { version: "codex-cli 0.166.0" });
     const locate = binaryLocator({

@@ -231,8 +231,7 @@ const callPip = (input: unknown, scenario: Scenario = {}) => {
 const LABEL = outsideDataLine("Pip");
 
 describe("the hub action pipeline (ADR 031)", () => {
-  // covers PE-008, ADR 031
-  it("[TC-PE-463] answers a bad input, a plan refusal, a turn without tools and a Charm taken away, sending nothing", async () => {
+  it("answers a bad input, a plan refusal, a turn without tools and a Charm taken away, sending nothing", async () => {
     const bad = await callPip({ shelf: 3 });
     expect(bad.answer.refused).toBe(true);
     expect(bad.answer.text).toContain("shelf");
@@ -264,8 +263,7 @@ describe("the hub action pipeline (ADR 031)", () => {
     expect(unknown).toEqual({ text: "Hobbots has no pip_delete tool.", refused: true });
   });
 
-  // covers PE-003, EX-004, ADR 031
-  it("[TC-PE-464] records an allowed read's step before sending it, and labels and redacts what it returns", async () => {
+  it("records an allowed read's step before sending it, and labels and redacts what it returns", async () => {
     const { answer, happened, offered } = await callPip({ shelf: "top" });
     expect(offered).toEqual(["pip_read"]);
     expect(happened).toEqual(["planned top for hob", "decided", "recorded pip_read pip.read true", "sent"]);
@@ -278,8 +276,7 @@ describe("the hub action pipeline (ADR 031)", () => {
     expect(never.happened).toEqual(["planned top for hob", "decided"]);
   });
 
-  // covers PE-003, PE-008, ADR 015, ADR 031
-  it("[TC-PE-465] asks on the call's step with the plan's card, and runs only what was approved", async () => {
+  it("asks on the call's step with the plan's card, and runs only what was approved", async () => {
     const approved = await callPip({ shelf: "top" }, { decisions: ["ask", "ask"] });
     expect(approved.asked).toEqual([
       expect.objectContaining({
@@ -337,8 +334,7 @@ describe("the hub action pipeline (ADR 031)", () => {
     expect([...nobody.happened, ...noStep.happened]).not.toContain("sent");
   });
 
-  // covers EX-004, ADR 031
-  it("[TC-PE-466] sends nothing for a call whose step is missing or cannot be recorded", async () => {
+  it("sends nothing for a call whose step is missing or cannot be recorded", async () => {
     for (const records of [null, Effect.succeed(false), Effect.die("the journal is gone")]) {
       const { answer, happened } = await callPip({ shelf: "top" }, { records });
       expect(answer).toEqual({ text: UNRECORDED_TOOL_CALL, refused: true });
@@ -347,7 +343,7 @@ describe("the hub action pipeline (ADR 031)", () => {
   });
 
   // covers ADR 031
-  it("[TC-PE-467] turns a defect into an answer naming the tool, and refuses a request its owner does not declare", async () => {
+  it("turns a defect into an answer naming the tool, and refuses a request its owner does not declare", async () => {
     const broken = await callPip({ shelf: "top" }, { send: Effect.die("GitHub fell over") });
     expect(broken.answer).toEqual({ text: "Hobbots could not finish pip_read this time. Try again.", refused: true });
 
@@ -382,8 +378,7 @@ describe("the hub action pipeline (ADR 031)", () => {
     expect(() => callPip({ shelf: "top" }, { effect: "write" })).toThrow("gave no runner");
   });
 
-  // covers PE-008, ADR 031
-  it("[TC-PE-474] stops a call whose Charm was taken away while you decided, and plans with the turn's ids alone", async () => {
+  it("stops a call whose Charm was taken away while you decided, and plans with the turn's ids alone", async () => {
     const off = await callPip({ shelf: "top" }, { decisions: ["ask", "ask"], offWhileAsking: true });
     expect(off.answer).toEqual({ text: "The Pip Charm is off for you now, so Pip cannot be read.", refused: true });
     expect(off.happened).toEqual(["planned top for hob", "decided", "asked", "decided"]);
@@ -399,7 +394,7 @@ describe("the hub action pipeline (ADR 031)", () => {
   });
 
   // covers ADR 036 (Amendment: the screens), #1271
-  it("[TC-PE-1271-05] ends the step of an action that keeps its answer with the redacted answer, whichever runtime called it, and a refusal with nothing", async () => {
+  it("ends the step of an action that keeps its answer with the redacted answer, whichever runtime called it, and a refusal with nothing", async () => {
     const kept = await callPip({ shelf: "top" }, { keepsAnswer: true });
     expect(kept.answer.refused).toBe(false);
     const finished = kept.events.filter((event) => event._tag === "ToolFinished");
@@ -585,8 +580,7 @@ const pipWrites = (scenario: WriteScenario = {}, rows = new Map<string, CharmCal
 const states = (rows: Map<string, CharmCall>) => [...rows.values()].map((row) => [row.key, row.state, row.result]);
 
 describe("Charm writes in the hub action pipeline (ADR 031)", () => {
-  // covers IN-003, ADR 020, ADR 031
-  it("[TC-PE-481] adds a required key to a Charm write's input, and refuses a call without one", async () => {
+  it("adds a required key to a Charm write's input, and refuses a call without one", async () => {
     const hub = pipWrites();
     const missing = await hub.call({ shelf: "top" });
     expect(missing.answer.refused).toBe(true);
@@ -608,7 +602,7 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
   });
 
   // covers ADR 036 (The read-the-web mark)
-  it("[TC-PE-1268-07] decides every Charm write as one that sends, whatever its Charm planned", async () => {
+  it("decides every Charm write as one that sends, whatever its Charm planned", async () => {
     const hub = pipWrites();
     await hub.call({ shelf: "top", key: "s-1" });
     // Decided as it asks, then again once approved, each time as one that sends.
@@ -618,8 +612,7 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
     }
   });
 
-  // covers OR-006, #1449
-  it("[TC-OR-1449-06] refuses a Charm's push to a branch you took over, before it asks and again just before it sends", async () => {
+  it("refuses a Charm's push to a branch you took over, before it asks and again just before it sends", async () => {
     const TAKEN =
       "The user took over branch feat/shop in github.com/me/app from Task build, so Hobbots refuses your writes to it.";
     const yours = pipWrites({ push: true, taken: () => TAKEN });
@@ -649,8 +642,7 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
     expect(own.askedTaken).toEqual([]);
   });
 
-  // covers IN-003, EX-003, ADR 020
-  it("[TC-PE-482] sends a key used twice once, answering the second call as the first ended, without asking again", async () => {
+  it("sends a key used twice once, answering the second call as the first ended, without asking again", async () => {
     const hub = pipWrites();
     const first = await hub.call({ shelf: "top", key: "s-1" });
     const second = await hub.call({ shelf: "top", key: "s-1" });
@@ -666,8 +658,7 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
     expect(hub.happened.filter((each) => each === "sent")).toHaveLength(1);
   });
 
-  // covers EX-003, EX-004, ADR 020
-  it("[TC-PE-483] reads an uncertain write back and answers it as applied when the change is there", async () => {
+  it("reads an uncertain write back and answers it as applied when the change is there", async () => {
     const hub = pipWrites({ outcomes: [{ _tag: "Uncertain", text: "Pip did not answer." }], readBack: () => true });
     const { answer, events } = await hub.call({ shelf: "top", key: "s-1" });
     expect(answer).toMatchObject({
@@ -680,8 +671,7 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
     expect(events.map((event) => event._tag)).toEqual(["ToolAwaitingApproval"]);
   });
 
-  // covers EX-003, PE-006, ADR 020, ADR 031
-  it("[TC-PE-484] keeps an uncertain write without a read-back waiting until the user settles it from its step", async () => {
+  it("keeps an uncertain write without a read-back waiting until the user settles it from its step", async () => {
     const rows = new Map<string, CharmCall>();
     const hub = pipWrites({ outcomes: [{ _tag: "Uncertain", text: "Pip did not answer." }] }, rows);
     const { answer, events } = await hub.call({ shelf: "top", key: "s-1" });
@@ -722,8 +712,7 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
     expect(retried.asked).toHaveLength(1);
   });
 
-  // covers PE-003, ADR 031
-  it("[TC-PE-485] plans and stores a Charm write's input redacted, and says which fields were", async () => {
+  it("plans and stores a Charm write's input redacted, and says which fields were", async () => {
     const hub = pipWrites();
     const { answer, asked } = await hub.call({ shelf: "top", note: `Use ${SECRET}`, key: "s-1" });
     expect(answer.refused).toBe(false);
@@ -737,8 +726,7 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
     expect(JSON.parse(row?.plan ?? "{}")).toEqual({ shelf: "top" });
   });
 
-  // covers EX-004, ADR 031
-  it("[TC-PE-486] records the call's step before its never-twice record, and records neither when the step cannot be", async () => {
+  it("records the call's step before its never-twice record, and records neither when the step cannot be", async () => {
     const hub = pipWrites();
     await hub.call({ shelf: "top", key: "s-1" });
     expect(hub.happened).toEqual(["planned top", "asked", "recorded pip_shelve Shelving on top", "began s-1", "sent"]);
@@ -864,8 +852,7 @@ const offerNotes = (scenario: NotesScenario = {}, now: ToolAccess | null = acces
 };
 
 describe("a built-in set on the hub action pipeline (#1135)", () => {
-  // covers PE-008, ADR 014, ADR 031
-  it("[TC-PE-490] offers only the tools whose operation the hob's policy does not answer Never for", async () => {
+  it("offers only the tools whose operation the hob's policy does not answer Never for", async () => {
     const all = await offerNotes().call("notes_search", { shelf: "top" });
     expect(all.offered).toEqual(["notes_search", "notes_save"]);
 
@@ -883,8 +870,7 @@ describe("a built-in set on the hub action pipeline (#1135)", () => {
     expect(await offerNotes({}, null).call("notes_search", { shelf: "top" })).toEqual({ offered: null, answer: null });
   });
 
-  // covers EX-004, ADR 031
-  it("[TC-PE-491] answers a call that changes nothing unrecorded, and keeps a set's own words and answers", async () => {
+  it("answers a call that changes nothing unrecorded, and keeps a set's own words and answers", async () => {
     const kept = offerNotes();
     expect((await kept.call("notes_save", { shelf: "kept" })).answer).toEqual({
       text: "That note is already kept, so nothing changed.",

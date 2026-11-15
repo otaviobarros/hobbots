@@ -156,8 +156,7 @@ describe("entryRow", () => {
     expect(entryRow(stuckEntry(stuck(THREAD, true)), names, undefined, now).when).toBe("Quill retired");
   });
 
-  // covers IN-004, OR-006
-  it("[TC-IN-543] shows a member's failed Task in rose under its lead, by the Task's first line", () => {
+  it("shows a member's failed Task in rose under its lead, by the Task's first line", () => {
     const row = entryRow(failedEntry(failedCopy), names, ALDRIC, now);
     expect(row).toEqual({
       chain: ["Aldric", "Quill"],
@@ -173,8 +172,7 @@ describe("entryRow", () => {
     ]);
   });
 
-  // covers EX-003, EX-004, IN-007
-  it("[TC-IN-1343-01] lists a Task's write whose answer was lost from its hob, under the Task's quest", () => {
+  it("lists a Task's write whose answer was lost from its hob, under the Task's quest", () => {
     const entry = charmCallEntry(lostComment);
     expect(entry.key).toBe(`charm-call:${COPY}:attempt-1`);
     expect(namesRequest(entry.key)).toBe(false);
@@ -325,7 +323,7 @@ describe("hob proposals", () => {
       revision: Revision.make(1),
     });
 
-  it("[TC-AG-409-06] lists a manager's open proposal under its Task's quest, and keeps a settled one only while it is open", () => {
+  it("lists a manager's open proposal under its Task's quest, and keeps a settled one only while it is open", () => {
     const base = { devices: [], questions: [], blockers: [], failed: [], requests: [] };
     const open = { proposal: proposal("open"), changedSince: [] };
     const settled = { proposal: proposal("settled"), changedSince: [] };

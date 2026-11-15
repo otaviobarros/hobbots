@@ -29,8 +29,7 @@ afterEach(async () => {
 });
 
 describe("hub shutdown", () => {
-  // covers DP-001
-  it("[TC-DP-032] stops at once while a browser holds connections open", { timeout: 60_000 }, async () => {
+  it("stops at once while a browser holds connections open", { timeout: 60_000 }, async () => {
     const { port, url, child, asWindow } = await startHub();
 
     // A browser window's subscription: the hub holds the request open until it ends the stream.
@@ -72,11 +71,10 @@ describe("hub shutdown", () => {
     expect(performance.now() - stopping).toBeLessThan(2000);
   });
 
-  // covers DP-001
   it.each([
     ["a request whose body is still arriving", {}],
     ["one sent with Expect: 100-continue", { expect: "100-continue" }],
-  ])("[TC-DP-033] lets %s finish while the hub stops", { timeout: 60_000 }, async (_, headers) => {
+  ])("lets %s finish while the hub stops", { timeout: 60_000 }, async (_, headers) => {
     const { url, child, logged, asWindow } = await startHub();
     const body = JSON.stringify({ completed: true });
     const half = Math.floor(body.length / 2);
@@ -125,8 +123,7 @@ const command = (script: string, folder: string, args: ReadonlyArray<string> = [
   });
 
 describe("the command-line tools and a running hub", () => {
-  // covers OP-003 (#999)
-  it("[TC-OP-108] reset and restore refuse a hub on a port only it knows, and go ahead once it stops", {
+  it("reset and restore refuse a hub on a port only it knows, and go ahead once it stops", {
     timeout: 90_000,
   }, async () => {
     const { port, child } = await startHub();
@@ -156,8 +153,7 @@ describe("the command-line tools and a running hub", () => {
     expect(after.output).toContain("Run again with --yes to delete everything.");
   });
 
-  // covers OP-003 (#999)
-  it("[TC-OP-112] a second hub on the same data folder does not start, and leaves the first one's record", {
+  it("a second hub on the same data folder does not start, and leaves the first one's record", {
     timeout: 90_000,
   }, async () => {
     const { port } = await startHub();

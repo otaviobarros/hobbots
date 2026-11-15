@@ -42,7 +42,7 @@ const askToPush = async (page: Page, current: Hub, pipId: string) => {
   return card;
 };
 
-test("[TC-IN-209] History shows who decided each request: Allowed once from the device in the Inbox, Denied from it in the chat", async ({
+test("History shows who decided each request: Allowed once from the device in the Inbox, Denied from it in the chat", async ({
   page,
 }) => {
   const current = await startHub(dataDir);

@@ -32,8 +32,7 @@ const playTurn = async (page: Page, lines: ReadonlyArray<string>) => {
   await expect(page.getByRole("button", { name: "■ Stop" })).toBeHidden({ timeout: 30_000 });
 };
 
-// covers CH-001, UX-002, ADR 037 (Records: Artifact)
-test("[TC-CH-1434-07] previews each artifact once, and opens a document, code and an image drawn by kind with their versions", async ({
+test("previews each artifact once, and opens a document, code and an image drawn by kind with their versions", async ({
   page,
 }) => {
   const { aldric, hub, folder } = await aldricHub({ "hero.png": PIXEL });

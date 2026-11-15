@@ -21,7 +21,7 @@ const version = (number: number, content: ArtifactVersion["content"] = "kept") =
   });
 
 describe("reading the camp's artifacts", () => {
-  it("[TC-CH-1434-05] opens one at its latest version, picks another, moves to the full view and back to the list", () => {
+  it("opens one at its latest version, picks another, moves to the full view and back to the list", () => {
     const steps: Array<ArtifactReading> = [ARTIFACT_LIST];
     const play = (...events: Array<Parameters<typeof readArtifacts>[1]>) => {
       for (const event of events) steps.push(readArtifacts(steps.at(-1) ?? ARTIFACT_LIST, event));

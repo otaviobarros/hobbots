@@ -52,8 +52,7 @@ const asDesktop = () => {
   (window as unknown as Record<string, unknown>).hobbots = { onOpenRequest: () => () => undefined };
 };
 
-// covers DP-004, PE-006
-test("[TC-DP-155] turns on remote access, allows a tailnet browser on the hub, and Remove refuses it at once", async ({
+test("turns on remote access, allows a tailnet browser on the hub, and Remove refuses it at once", async ({
   page,
   browser,
 }) => {

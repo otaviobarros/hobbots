@@ -37,8 +37,7 @@ const onTailnet = (port: number) =>
 /** A tailnet device that has not paired is refused like any other (ADR 021). */
 const notPaired = { status: 401, tag: "DeviceRequired" };
 
-// covers DP-004
-test("[TC-DP-072] turns remote access on in Settings, and says why once Tailscale turns off", async ({ page }) => {
+test("turns remote access on in Settings, and says why once Tailscale turns off", async ({ page }) => {
   test.skip(!(await spareLoopback()), "needs 127.0.0.2 on loopback");
   hub = await startHub(dataDir, { HOBBOTS_FAKE_TAILSCALE: "on" });
   const current = hub;
@@ -83,10 +82,7 @@ const finishSetup = (current: Hub) =>
     body: JSON.stringify({ completed: true, connectedProviders: ["claude-code"] }),
   });
 
-// covers DP-002, DP-004
-test("[TC-DP-125] Settings shows the address with its QR code, and the port moves the hub and the page", async ({
-  page,
-}) => {
+test("Settings shows the address with its QR code, and the port moves the hub and the page", async ({ page }) => {
   test.skip(!(await spareLoopback()), "needs 127.0.0.2 on loopback");
   hub = await startHub(dataDir, { HOBBOTS_FAKE_TAILSCALE: "on" });
   const current = hub;
@@ -133,8 +129,7 @@ const allowAnotherDevice = async (current: Hub, name: string) => {
   expect(allowed.ok).toBe(true);
 };
 
-// covers DP-004
-test("[TC-DP-126] Settings lists the allowed devices, and Remove asks first and signs one out", async ({ page }) => {
+test("Settings lists the allowed devices, and Remove asks first and signs one out", async ({ page }) => {
   hub = await startHub(dataDir);
   const current = hub;
   await finishSetup(current);
@@ -182,10 +177,7 @@ const servedTarget = (dir: string): string | undefined => {
   }
 };
 
-// covers DP-004
-test("[TC-DP-139] turns HTTPS on in Settings, runs tailscale serve after consent, and removes it again", async ({
-  page,
-}) => {
+test("turns HTTPS on in Settings, runs tailscale serve after consent, and removes it again", async ({ page }) => {
   test.skip(!(await spareLoopback()), "needs 127.0.0.2 on loopback");
   hub = await startHub(dataDir, { HOBBOTS_FAKE_TAILSCALE: "on" });
   const current = hub;

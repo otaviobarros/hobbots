@@ -45,7 +45,7 @@ const app = (overrides: Partial<HobGitHubApp> = {}): HobGitHubApp => ({
 
 describe("HobGitHubApps", () => {
   // covers ADR 022
-  it("[TC-GEN-050] keeps one app per hob, by hob, with 64-bit IDs, keeps one left over, and forgets it", async () => {
+  it("keeps one app per hob, by hob, with 64-bit IDs, keeps one left over, and forgets it", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed("frodo");
@@ -87,7 +87,7 @@ describe("HobGitHubApps", () => {
 
 describe("HobGitHubApps for a linked app", () => {
   // covers #1321, ADR 022
-  it("[TC-GEN-407] keeps whether the hub made a hob's app or the user linked it, and finds the hob that has an app", async () => {
+  it("keeps whether the hub made a hob's app or the user linked it, and finds the hob that has an app", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed("frodo");

@@ -35,8 +35,7 @@ const hubThatAsks = async (page: Page) => {
 const row = (list: ReturnType<Page["getByRole"]>, text: RegExp) => list.getByRole("link", { name: text });
 const detail = (page: Page) => page.getByRole("article", { name: "Question from Your hub" });
 
-// covers UX-001
-test("[TC-UX-911] the hub asks you itself in the Inbox: a choice's key answers, typed words answer, a failed send keeps them, and the hub applies each", async ({
+test("the hub asks you itself in the Inbox: a choice's key answers, typed words answer, a failed send keeps them, and the hub applies each", async ({
   page,
   scan,
 }) => {
@@ -91,8 +90,7 @@ test("[TC-UX-911] the hub asks you itself in the Inbox: a choice's key answers, 
   await expect(row(list, /The hub applied: Kitchen Mac/)).toBeVisible({ timeout: 15_000 });
 });
 
-// covers UX-001
-test("[TC-UX-912] Home's Needs you shows the hub's question with its choices, and picking one there answers it", async ({
+test("Home's Needs you shows the hub's question with its choices, and picking one there answers it", async ({
   page,
   scan,
 }) => {
@@ -110,8 +108,7 @@ test("[TC-UX-912] Home's Needs you shows the hub's question with its choices, an
   await expect(needsYou).not.toContainText("How often should the hub back up your data?");
 });
 
-// covers UX-001, ADR 039 (For you)
-test("[TC-UX-1456] the hub's own questions are on its owner's For you list", async ({ page }) => {
+test("the hub's own questions are on its owner's For you list", async ({ page }) => {
   await hubThatAsks(page);
   const current = hub;
   if (current === undefined) throw new Error("The hub did not start");

@@ -99,7 +99,7 @@ const events: fc.Arbitrary<CampSuggestionEvent> = fc.oneof(
 );
 
 describe("CampSuggestionStateMachine", () => {
-  it("[TC-CH-1385-07] agrees with a model of offering, keeping, accepting and expiring over random runs of events", () => {
+  it("agrees with a model of offering, keeping, accepting and expiring over random runs of events", () => {
     agreesWithModel({
       machine: CampSuggestionStateMachine,
       records: fc.constantFrom<SuggestionState>("pending", "open", "kept", "accepted", "expired").map(suggestion),
@@ -147,7 +147,7 @@ const counts = (fields: Partial<Parameters<typeof campSuggestionReasons>[0]> = {
 });
 
 describe("the suggestion rule", () => {
-  it("[TC-CH-1385-08] reaches each named threshold at its value and not one below", () => {
+  it("reaches each named threshold at its value and not one below", () => {
     const cases = [
       ["decisions", "decisions", CAMP_SUGGESTION_DECISIONS],
       ["artifacts", "artifacts", CAMP_SUGGESTION_ARTIFACTS],
@@ -166,7 +166,7 @@ describe("the suggestion rule", () => {
     ]);
   });
 
-  it("[TC-CH-1385-09] raises a suggestion only in an open chat, for a chapter still in it, once", () => {
+  it("raises a suggestion only in an open chat, for a chapter still in it, once", () => {
     const chapter = new Chapter({
       id: CHAPTER,
       threadId: CHAT,
@@ -205,7 +205,7 @@ describe("the suggestion rule", () => {
 
 describe("a suggested camp's name and goal", () => {
   // covers ADR 037 (Records: CampSuggestion), #1557
-  it("[TC-CH-1557-01] keeps them to one line, within a thread title's and a camp goal's length, and none without text", () => {
+  it("keeps them to one line, within a thread title's and a camp goal's length, and none without text", () => {
     expect(suggestedCampTitle("  The\n launch  ")).toBe("The launch");
     expect(suggestedCampTitle("x".repeat(80))).toHaveLength(60);
     expect(suggestedCampTitle(" \n ")).toBeNull();

@@ -17,7 +17,7 @@ const foldersIn = (checkout: string) =>
 
 describe("a clone's own skill folders", () => {
   // covers STD-SEC-005, ADR 029 (Scopes), #1098
-  it("[TC-AG-1098-04] lists .claude/skills and .agents/skills, and follows no link on the way", async () => {
+  it("lists .claude/skills and .agents/skills, and follows no link on the way", async () => {
     const elsewhere = await folderOf({ "skills/outside/SKILL.md": skillMd("outside") });
     const checkout = await folderOf({
       ".claude/skills/triage/SKILL.md": skillMd("triage"),

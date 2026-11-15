@@ -15,7 +15,7 @@ afterEach(async () => {
 
 describe("the read-the-web mark of a member's session", () => {
   // covers ADR 036 (The read-the-web mark)
-  it("[TC-PE-1268-08] a member's new Attempt that resumes a session which read the web records the mark from its start", async () => {
+  it("a member's new Attempt that resumes a session which read the web records the mark from its start", async () => {
     const party = partyHub({ directory: true });
     dispose = party.dispose;
     const { run, requests, gates } = party;

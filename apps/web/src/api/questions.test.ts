@@ -30,8 +30,7 @@ const watchedList = () => {
 };
 
 describe("questionChanged", () => {
-  // covers OR-002, IN-004
-  it("[TC-IN-133] drops a first read taken before a question reached you, so the question shows", async () => {
+  it("drops a first read taken before a question reached you, so the question shows", async () => {
     const list = watchedList();
     const changed = questionChanged(list.client, question("q1"));
     await list.settled();
@@ -72,8 +71,7 @@ describe("questionChanged", () => {
 });
 
 describe("workEnded", () => {
-  // covers OR-002, IN-004
-  it("[TC-IN-134] keeps a question about ended work out, even when a read taken before the end answers late", async () => {
+  it("keeps a question about ended work out, even when a read taken before the end answers late", async () => {
     const list = watchedList();
     list.answer(0, [waiting("q1"), waiting("q2", "copy", "other")]);
     await list.settled();

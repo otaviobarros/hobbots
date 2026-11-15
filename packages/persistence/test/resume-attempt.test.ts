@@ -84,8 +84,7 @@ const attemptsOf = Effect.map(
 );
 
 describe("resuming a Task's Attempt", () => {
-  // covers EX-001, OR-006
-  it("[TC-OR-310] a later turn resumes the Task's ended Attempt, which keeps its number and session, and ends again with the turn", async () => {
+  it("a later turn resumes the Task's ended Attempt, which keeps its number and session, and ends again with the turn", async () => {
     const result = await run(
       Effect.gen(function* () {
         const tasks = yield* TaskRepository;
@@ -113,8 +112,7 @@ describe("resuming a Task's Attempt", () => {
     expect(result.after).toEqual([{ id: "a1", number: 1, state: "starting", endedAt: null }]);
   });
 
-  // covers EX-001, EX-002, OR-006
-  it("[TC-OR-311] refuses to resume a live, cancelled or unconfirmed Attempt, one on another brain, or a Task that ended or is cancelling, and writes nothing", async () => {
+  it("refuses to resume a live, cancelled or unconfirmed Attempt, one on another brain, or a Task that ended or is cancelling, and writes nothing", async () => {
     const refusal = (ended: "completed" | "unresolved", change: Partial<typeof resume> = {}) =>
       run(
         Effect.gen(function* () {
@@ -166,8 +164,7 @@ describe("resuming a Task's Attempt", () => {
     // About 3 seconds on PostgreSQL alone, so the 5 second default runs out on a loaded runner.
   }, 20_000);
 
-  // covers EX-001, OR-006
-  it("[TC-OR-453] refuses to resume the failed Attempt of a retried Task, which waits for a new one (#668)", async () => {
+  it("refuses to resume the failed Attempt of a retried Task, which waits for a new one (#668)", async () => {
     const step = TaskId.make("step");
     const result = await run(
       Effect.gen(function* () {

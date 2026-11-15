@@ -14,8 +14,7 @@ afterEach(async () => {
 const MESSAGE = "The staging database is back; use it.";
 
 describe("a lead's message before the member starts", () => {
-  // covers OR-002, IN-001, IN-004
-  it("[TC-OR-259] reaches the member in the prompt of its first turn on the Task", async () => {
+  it("reaches the member in the prompt of its first turn on the Task", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests, answers, gates, reactions } = party;

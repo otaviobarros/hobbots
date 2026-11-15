@@ -195,7 +195,7 @@ describe("Take over and Give back (#1449, #1538)", () => {
       revision: 1 as Claim["revision"],
     });
 
-  it("[TC-UX-1538-06] offers Give back while the Task holds something you took over, and Take over while it holds something you did not", () => {
+  it("offers Give back while the Task holds something you took over, and Take over while it holds something you did not", () => {
     const copy = find(blackFriday(), COPY);
     expect([canTakeOver(copy, undefined), canGiveBack(copy, undefined)]).toEqual([false, false]);
     expect([canTakeOver(copy, []), canGiveBack(copy, [])]).toEqual([false, false]);

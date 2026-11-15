@@ -9,8 +9,7 @@ afterAll(() => rmSync(temp, { recursive: true, force: true }));
 const keyFile = join(temp, "window-key");
 
 describe("the window key", () => {
-  // covers DP-004
-  it("[TC-DP-085] sends the key the hub wrote, and after a 401 reads it again, sets the cookie again and retries once", async () => {
+  it("sends the key the hub wrote, and after a 401 reads it again, sets the cookie again and retries once", async () => {
     writeFileSync(keyFile, "hbw_first\n");
     const key = makeWindowKey(temp);
     expect(key.headers()).toEqual({});

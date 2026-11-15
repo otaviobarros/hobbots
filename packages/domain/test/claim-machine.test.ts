@@ -175,7 +175,7 @@ describe("taking a claim over (#1449)", () => {
     expect(Claims.can(taken, { _tag: "Release", at })).toBe(true);
   });
 
-  it("[TC-OR-1538-01] gives a taken claim back to its Task's hob, never by a hob, contested only when it clashes", () => {
+  it("gives a taken claim back to its Task's hob, never by a hob, contested only when it clashes", () => {
     const you: Actor = { kind: "user", id: "owner" };
     const hob: Actor = { kind: "hob", id: "hob-3" };
     const back = (state: ClaimState, clashes: boolean, scope: ClaimScope = "path") =>
@@ -288,7 +288,7 @@ describe("Heads-up clashes (#1390)", () => {
     )
     .map((fields) => fields.map((each, index) => claim({ ...each, id: `claim-${index}` })));
 
-  it("[TC-OR-1390-01] puts each clash touching the thread's claims in one group, once, and nothing else", () => {
+  it("puts each clash touching the thread's claims in one group, once, and nothing else", () => {
     fc.assert(
       fc.property(claims, fc.integer({ min: 0, max: 8 }), (open, cut) => {
         const ours = open.slice(0, cut);
@@ -310,7 +310,7 @@ describe("Heads-up clashes (#1390)", () => {
     );
   });
 
-  it("[TC-OR-1390-02] makes one clash of two Tasks on one file, and one of a folder and the files inside it", () => {
+  it("makes one clash of two Tasks on one file, and one of a folder and the files inside it", () => {
     const badge = claim({ id: "a", taskId: "task-1", key: "web/badge.png", state: "contested" });
     const review = claim({ id: "b", taskId: "task-2", key: "web", state: "contested" });
     const css = claim({ id: "c", taskId: "task-3", key: "web/shop.css", state: "contested" });

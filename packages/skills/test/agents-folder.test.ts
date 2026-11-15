@@ -18,7 +18,7 @@ const layerFor = async (path: string) =>
 
 describe("~/.agents/skills", () => {
   // covers ADR 029 (The clean-runtime rule: ~/.agents/skills stays, through Hobbots), #1060
-  it("[TC-AG-132] lists each skill under Everyone, from that folder, and rolls a change out as a new revision", async () => {
+  it("lists each skill under Everyone, from that folder, and rolls a change out as a new revision", async () => {
     const folder = await folderOf({
       "release/SKILL.md": skillMd("release"),
       "review/SKILL.md": skillMd("review"),
@@ -71,7 +71,7 @@ describe("~/.agents/skills", () => {
   });
 
   // covers ADR 029 (Pins and rollout), #1061
-  it("[TC-AG-141] a rollback stays while the folder still holds the revision it rolled back from", async () => {
+  it("a rollback stays while the folder still holds the revision it rolled back from", async () => {
     const folder = await folderOf({ "release/SKILL.md": skillMd("release") });
     await Effect.gen(function* () {
       const library = yield* SkillLibrary;
@@ -90,7 +90,7 @@ describe("~/.agents/skills", () => {
     }).pipe(Effect.provide(await layerFor(folder)), Effect.runPromise);
   });
 
-  it("[TC-AG-139] keeps every assignment, and says why, while the folder cannot be read", async () => {
+  it("keeps every assignment, and says why, while the folder cannot be read", async () => {
     const folder = await folderOf({ "release/SKILL.md": skillMd("release") });
     await Effect.gen(function* () {
       const library = yield* SkillLibrary;
@@ -124,7 +124,7 @@ describe("~/.agents/skills", () => {
   });
 
   // covers ADR 029 (The clean-runtime rule: ~/.agents/skills stays, through Hobbots), #1060
-  it("[TC-AG-146] notices a change on its own, and outlives the folder being replaced by a file", async () => {
+  it("notices a change on its own, and outlives the folder being replaced by a file", async () => {
     const folder = await folderOf({ "release/SKILL.md": skillMd("release"), "release/notes/a.md": "a" });
     await Effect.gen(function* () {
       const library = yield* SkillLibrary;
@@ -160,7 +160,7 @@ describe("~/.agents/skills", () => {
     }).pipe(Effect.provide(await layerFor(folder)), Effect.runPromise);
   }, 20_000);
 
-  it("[TC-AG-133] reads nothing, and fails nothing, while the folder is not there", async () => {
+  it("reads nothing, and fails nothing, while the folder is not there", async () => {
     const layer = await layerFor(join(await temp("home"), ".agents", "skills"));
     await Effect.gen(function* () {
       const library = yield* SkillLibrary;

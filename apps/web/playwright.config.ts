@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { defineConfig, devices } from "@playwright/test";
-import { type Durations, parseShard, shardFilter, tagsInSource } from "./e2e/shards.ts";
+import { type Durations, parseShard, shardFilter } from "./e2e/shards.ts";
 
 // Browser checks of the served web client against a real hub. Each test starts its own hub with
 // an empty data folder on its worker's port (see e2e/hub.ts), so tests run in parallel.
@@ -17,11 +17,10 @@ const recorded = new URL("durations.json", testDir);
 const shardOf = (value: string) => {
   const { current, total } = parseShard(value);
   const durations = existsSync(recorded) ? (JSON.parse(readFileSync(recorded, "utf8")) as Durations) : undefined;
-  const tags = readdirSync(testDir)
+  const files = readdirSync(testDir)
     .filter((file) => file.endsWith(".e2e.ts"))
-    .sort((a, b) => a.localeCompare(b))
-    .flatMap((file) => tagsInSource(readFileSync(new URL(file, testDir), "utf8")));
-  return shardFilter(durations, current, total, tags, plannedWorkers);
+    .sort((a, b) => a.localeCompare(b));
+  return shardFilter(durations, current, total, files, plannedWorkers);
 };
 const shard = process.env.HOBBOTS_E2E_SHARD;
 const ci = Boolean(process.env.CI);

@@ -6,8 +6,7 @@ import { aldricHub, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
-// covers UX-001
-test("[TC-CH-263] an empty thread shows the hob on its stage asking what we are making, and a starter fills the composer", async ({
+test("an empty thread shows the hob on its stage asking what we are making, and a starter fills the composer", async ({
   page,
 }) => {
   const { url, aldric, hub } = await aldricHub();

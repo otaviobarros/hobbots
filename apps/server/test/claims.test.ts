@@ -408,8 +408,7 @@ const C = TaskIds.make("task-merry");
 const MEMBER = TaskIds.make("task-frodo-member");
 
 describe("the claims register", () => {
-  // covers OR-004
-  it("[TC-OR-1388-01] gives two quests in different camps different migration numbers, past what main has", async () => {
+  it("gives two quests in different camps different migration numbers, past what main has", async () => {
     const h = hub();
     try {
       await h.seed;
@@ -440,8 +439,7 @@ describe("the claims register", () => {
     }
   });
 
-  // covers OR-004
-  it("[TC-OR-1388-02] tells each lead of a path clash through its backpack and stops neither Task", async () => {
+  it("tells each lead of a path clash through its backpack and stops neither Task", async () => {
     const h = hub();
     try {
       await h.seed;
@@ -472,8 +470,7 @@ describe("the claims register", () => {
     }
   });
 
-  // covers OR-004
-  it("[TC-OR-1390-03] shows a path clash in each camp it touches, once, until a Task that holds it ends", async () => {
+  it("shows a path clash in each camp it touches, once, until a Task that holds it ends", async () => {
     const h = hub();
     try {
       await h.seed;
@@ -499,8 +496,7 @@ describe("the claims register", () => {
     }
   });
 
-  // covers OR-004, OR-006
-  it("[TC-OR-1388-03] releases a Task's claims when it ends, clears the claims it contested and never hands out its number again", async () => {
+  it("releases a Task's claims when it ends, clears the claims it contested and never hands out its number again", async () => {
     const h = hub();
     try {
       await h.seed;
@@ -522,8 +518,7 @@ describe("the claims register", () => {
     }
   });
 
-  // covers OR-004, OR-007
-  it("[TC-OR-1388-05] lets a retried Task claim again the path and branch its failure released", async () => {
+  it("lets a retried Task claim again the path and branch its failure released", async () => {
     const h = hub();
     try {
       await h.seed;
@@ -549,8 +544,7 @@ describe("the claims register", () => {
     }
   });
 
-  // covers OR-006, PE-006, #1449
-  it("[TC-OR-1449-03] moves a Task's claims to you when you take it over, tells its hob, and refuses every hob's writes to them", async () => {
+  it("moves a Task's claims to you when you take it over, tells its hob, and refuses every hob's writes to them", async () => {
     const h = hub();
     try {
       await h.seed;
@@ -648,8 +642,7 @@ describe("the claims register", () => {
     }
   });
 
-  // covers OR-006, PE-005, #1537
-  it("[TC-OR-1537-03] closes what you took over in every turn's sandbox, in each clone, until you give it back or the Task ends", async () => {
+  it("closes what you took over in every turn's sandbox, in each clone, until you give it back or the Task ends", async () => {
     const h = hub();
     try {
       await h.seed;
@@ -699,8 +692,7 @@ describe("the claims register", () => {
     }
   });
 
-  // covers OR-004, OR-006, PE-006, #1538
-  it("[TC-OR-1538-02] gives a Task's taken claims back to its hob, tells it once, and lets its writes run again", async () => {
+  it("gives a Task's taken claims back to its hob, tells it once, and lets its writes run again", async () => {
     const h = hub();
     try {
       await h.seed;
@@ -762,8 +754,7 @@ describe("the claims register", () => {
     }
   });
 
-  // covers OR-004, OR-006, #1538
-  it("[TC-OR-1538-03] hands given-back files over with a reassigned Task, so the new hob may write to them", async () => {
+  it("hands given-back files over with a reassigned Task, so the new hob may write to them", async () => {
     const h = hub();
     try {
       await h.seed;
@@ -798,8 +789,7 @@ describe("the claims register", () => {
     }
   });
 
-  // covers PE-002, PE-004
-  it("[TC-OR-1388-06] claims nothing outside the hob's folders, whatever the folder's spelling", async () => {
+  it("claims nothing outside the hob's folders, whatever the folder's spelling", async () => {
     const h = hub();
     try {
       await h.seed;
@@ -921,8 +911,7 @@ const moveInModel = (model: Model, move: "TakeOver" | "GiveBack", task: number) 
 };
 
 describe("ClaimRegister", () => {
-  // covers OR-004
-  it("[TC-OR-1388-04] agrees with a model of claims, clashes, takeovers, give-backs and releases over random runs, claims at once included", async () => {
+  it("agrees with a model of claims, clashes, takeovers, give-backs and releases over random runs, claims at once included", async () => {
     const taskIds = Array.from({ length: TASKS }, (_, index) => TaskIds.make(`model-${index}`));
     await fc.assert(
       fc.asyncProperty(fc.array(steps, { minLength: 1, maxLength: 10 }), async (run) => {

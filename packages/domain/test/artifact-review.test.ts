@@ -86,7 +86,7 @@ const events: fc.Arbitrary<ArtifactReviewEvent> = fc.oneof(
 
 describe("ArtifactReviewMachine", () => {
   // covers ADR 037 (Records), STD-ARCH-013
-  it("[TC-OR-1422-01] agrees with a model of reviewing, dismissing and pull requests ending over random runs of events", () => {
+  it("agrees with a model of reviewing, dismissing and pull requests ending over random runs of events", () => {
     agreesWithModel({
       machine: ArtifactReviewMachine,
       records: fc
@@ -106,7 +106,7 @@ describe("ArtifactReviewMachine", () => {
     ]);
   });
 
-  it("[TC-OR-1422-02] answers the same review again as it is, and refuses one settled the other way or missing", () => {
+  it("answers the same review again as it is, and refuses one settled the other way or missing", () => {
     const reviewed = planReview({ id: ID, artifact: artifact("doc"), outcome: "reviewed", by: OWNER_ACTOR, at: at(2) });
     expect(reviewed).toMatchObject({
       changed: true,
@@ -149,7 +149,7 @@ describe("ArtifactReviewMachine", () => {
     expect([decoded.review, decoded.reviewedAt, decoded.reviewedBy]).toEqual(["waiting", null, null]);
   });
 
-  it("[TC-OR-1422-09] carries a moved duplicate's settled review over to one still waiting, and never over a settled one", () => {
+  it("carries a moved duplicate's settled review over to one still waiting, and never over a settled one", () => {
     const moved = (review: ArtifactReview, by: Actor = OWNER_ACTOR) =>
       new Artifact({ ...artifact("pr", review), reviewedBy: review === "waiting" ? null : by });
     expect(carriedReview(artifact("pr"), moved("dismissed"))).toMatchObject({

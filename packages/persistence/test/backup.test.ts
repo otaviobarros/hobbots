@@ -82,8 +82,7 @@ const restore = (id: string) => ({
 });
 
 describe("backup and restore in the database", () => {
-  // covers OP-003
-  it("[TC-OP-017] takes every device token and pairing secret out of a backup's copy", async () => {
+  it("takes every device token and pairing secret out of a backup's copy", async () => {
     const { before, after } = await run(
       Effect.gen(function* () {
         yield* seedDevices;
@@ -97,8 +96,7 @@ describe("backup and restore in the database", () => {
     expect(after).toEqual({ tokens: [null, null, null], requests: 0 });
   });
 
-  // covers OP-003
-  it("[TC-OP-018] starts a restored hub on a new epoch with every device but the window revoked, only once", async () => {
+  it("starts a restored hub on a new epoch with every device but the window revoked, only once", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seedDevices;
@@ -130,8 +128,7 @@ describe("backup and restore in the database", () => {
     expect(result.secrets).toEqual({ tokens: [null, null, null], requests: 0 });
   });
 
-  // covers OP-003
-  it("[TC-OP-019] holds work until you resume it, and forgets the folder set aside once it is deleted", async () => {
+  it("holds work until you resume it, and forgets the folder set aside once it is deleted", async () => {
     const result = await run(
       Effect.gen(function* () {
         const restores = yield* RestoreRepository;
@@ -160,7 +157,7 @@ describe("backup and restore in the database", () => {
   });
 
   // covers ADR 029 (Backups, exports and Diagnostics), #1139
-  it("[TC-OP-124] notes on the latest restore what reading ~/.agents/skills again moved, and nothing without one", async () => {
+  it("notes on the latest restore what reading ~/.agents/skills again moved, and nothing without one", async () => {
     const result = await run(
       Effect.gen(function* () {
         const restores = yield* RestoreRepository;
@@ -185,8 +182,7 @@ describe("backup and restore in the database", () => {
     ]);
   });
 
-  // covers OP-003
-  it("[TC-OP-020] knows the schema version it applied and the highest one it can open", async () => {
+  it("knows the schema version it applied and the highest one it can open", async () => {
     const applied = await run(schemaVersion);
     expect(knownSchemaVersion()).toBeGreaterThanOrEqual(114);
     expect(applied).toBe(knownSchemaVersion(migrations));

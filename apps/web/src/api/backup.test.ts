@@ -26,8 +26,7 @@ const hubAnswering = (answers: ReadonlyArray<object | null>) => {
 const wait = { timeoutMs: 10_000, everyMs: 1000 };
 
 describe("waiting for the restored hub", () => {
-  // covers OP-003
-  it("[TC-OP-034] reloads once the hub answers with a new installation, or answers again after it stopped", async () => {
+  it("reloads once the hub answers with a new installation, or answers again after it stopped", async () => {
     const renamed = hubAnswering([
       { installationId: "old" },
       null,
@@ -50,8 +49,7 @@ describe("waiting for the restored hub", () => {
     }
   });
 
-  // covers OP-003
-  it("[TC-OP-035] gives up when the hub does not start again, and reads backup and restore states", async () => {
+  it("gives up when the hub does not start again, and reads backup and restore states", async () => {
     const gone = hubAnswering([null]);
     try {
       await expect(waitForRestoredHub("old", gone.health, wait, gone.sleep)).rejects.toThrow(

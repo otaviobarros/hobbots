@@ -44,8 +44,7 @@ const hubWithPip = async () => {
   return { current, pip };
 };
 
-// covers UX-001, UX-005
-test("[TC-UX-092] a hob opens on its own page, with New chat, its chats and a History tab", async ({ page }) => {
+test("a hob opens on its own page, with New chat, its chats and a History tab", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
@@ -86,8 +85,7 @@ test("[TC-UX-092] a hob opens on its own page, with New chat, its chats and a Hi
   await expect(page.getByRole("main").getByText("Echo: first")).toBeVisible();
 });
 
-// covers CH-001, CH-002, CH-006, CH-009
-test("[TC-UX-130] a hob's chats are grouped, searched inside messages, renamed, pinned and archived with Undo", async ({
+test("a hob's chats are grouped, searched inside messages, renamed, pinned and archived with Undo", async ({
   page,
 }) => {
   const { current, pip } = await hubWithPip();
@@ -143,8 +141,7 @@ test("[TC-UX-130] a hob's chats are grouped, searched inside messages, renamed, 
   await expect(main.getByRole("link", { name: /^Archived chats/ })).toHaveCount(0);
 });
 
-// covers UX-001, UX-005
-test("[TC-UX-147] a link with q opens a hob's Chats already searching for it", async ({ page }) => {
+test("a link with q opens a hob's Chats already searching for it", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   for (const prompt of ["Fix the kettle", "Weekly report on the discount codes"]) {
@@ -168,8 +165,7 @@ test("[TC-UX-147] a link with q opens a hob's Chats already searching for it", a
   await expect(main.getByRole("region", { name: "Today" }).getByRole("link", { name: /^Open / })).toHaveCount(2);
 });
 
-// covers UX-001, UX-005
-test("[TC-UX-151] a new hob's page says hello and offers three starters, and one opens a new chat with its words", async ({
+test("a new hob's page says hello and offers three starters, and one opens a new chat with its words", async ({
   page,
 }) => {
   const { current, pip } = await hubWithPip();
@@ -197,10 +193,7 @@ test("[TC-UX-151] a new hob's page says hello and offers three starters, and one
   );
 });
 
-// covers UX-001, UX-005
-test("[TC-UX-144] Your hobs and a hob's page hold at a 1024px window, with nothing cut off or overlapping", async ({
-  page,
-}) => {
+test("Your hobs and a hob's page hold at a 1024px window, with nothing cut off or overlapping", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   hub = current;
   await page.setViewportSize({ width: 1024, height: 768 });

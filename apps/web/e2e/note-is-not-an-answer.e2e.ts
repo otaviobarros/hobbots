@@ -94,8 +94,7 @@ const escalatedToYou = async (page: Page) => {
   return { current, rook: first.task.id, questionId: first.question.id };
 };
 
-// covers OR-002, IN-004, UX-002
-test("[TC-OR-254] after your note on a Task whose question waits for you, the question still waits in the Inbox, once", async ({
+test("after your note on a Task whose question waits for you, the question still waits in the Inbox, once", async ({
   page,
 }) => {
   // The lead's briefing is echoed word by word, so the line about the note arrives late in its turn.
@@ -115,8 +114,7 @@ test("[TC-OR-254] after your note on a Task whose question waits for you, the qu
   await expect(page.getByRole("list", { name: "Requests" }).getByText("Light or dark theme?")).toHaveCount(1);
 });
 
-// covers OR-002, IN-004
-test("[TC-OR-471] after you answer a question the lead passed up, the lead's next turn is told it is answered", async ({
+test("after you answer a question the lead passed up, the lead's next turn is told it is answered", async ({
   page,
 }) => {
   test.setTimeout(120_000);

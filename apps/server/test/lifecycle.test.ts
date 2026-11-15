@@ -120,8 +120,7 @@ const settled = (threadId: string) =>
   );
 
 describe("pausing and waking hobs", () => {
-  // covers AG-006
-  it("[TC-AG-030] queues messages while paused, refuses new threads, keeps the threads readable and runs the queue once woken", async () => {
+  it("queues messages while paused, refuses new threads, keeps the threads readable and runs the queue once woken", async () => {
     const { agent, thread } = await summon();
 
     const paused = await request("POST", `/api/agents/${agent.id}/pause`);
@@ -148,8 +147,7 @@ describe("pausing and waking hobs", () => {
     ]);
   });
 
-  // covers AG-006
-  it("[TC-AG-031] reports a missing hob and lets a running reply finish when its hob is paused", async () => {
+  it("reports a missing hob and lets a running reply finish when its hob is paused", async () => {
     const missing = await request("POST", `/api/agents/${crypto.randomUUID()}/pause`);
     expect(missing).toMatchObject({ status: 404, body: { _tag: "AgentNotFound" } });
 
@@ -162,8 +160,7 @@ describe("pausing and waking hobs", () => {
 });
 
 describe("retiring hobs", () => {
-  // covers AG-006
-  it("[TC-AG-032] refuses new work for a retired hob, keeps its threads readable and lists it under archived hobs", async () => {
+  it("refuses new work for a retired hob, keeps its threads readable and lists it under archived hobs", async () => {
     const { agent, thread } = await summon();
     await request("POST", `/api/threads/${thread.id}/messages`, { content: "hello" });
     await settled(thread.id);
@@ -192,8 +189,7 @@ describe("retiring hobs", () => {
     expect((await request("GET", "/api/agents?status=active")).body).toEqual([]);
   });
 
-  // covers AG-006
-  it("[TC-AG-115] brings a retired hob back active with its threads, and takes new work again", async () => {
+  it("brings a retired hob back active with its threads, and takes new work again", async () => {
     const { agent, thread } = await summon();
     await request("POST", `/api/threads/${thread.id}/messages`, { content: "hello" });
     await settled(thread.id);
@@ -218,8 +214,7 @@ describe("retiring hobs", () => {
     expect((await request("POST", "/api/agents/hob_nobody/bring-back")).status).toBe(404);
   });
 
-  // covers AG-006, CH-004
-  it("[TC-AG-033] stops a running reply and records it as interrupted when retiring with stop", async () => {
+  it("stops a running reply and records it as interrupted when retiring with stop", async () => {
     const { agent, thread } = await summon();
     await request("POST", `/api/threads/${thread.id}/messages`, { content: "a long question" });
 
@@ -229,8 +224,7 @@ describe("retiring hobs", () => {
     expect((await request("GET", "/api/activity")).body).toEqual({ working: [] });
   });
 
-  // covers AG-006
-  it("[TC-AG-1244] lists a hob's open work, retires one with none open at once when asked to finish first, and refuses a hand-over to itself", async () => {
+  it("lists a hob's open work, retires one with none open at once when asked to finish first, and refuses a hand-over to itself", async () => {
     const { agent } = await summon();
     expect(await request("GET", `/api/agents/${agent.id}/open-work?handOverTo=${agent.id}`)).toMatchObject({
       status: 200,
@@ -253,8 +247,7 @@ describe("retiring hobs", () => {
     });
   });
 
-  // covers AG-006
-  it("[TC-AG-034] lets a running reply finish when retiring with finish, and asks which", async () => {
+  it("lets a running reply finish when retiring with finish, and asks which", async () => {
     const { agent, thread } = await summon();
     await request("POST", `/api/threads/${thread.id}/messages`, { content: "hello" });
 

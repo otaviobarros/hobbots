@@ -45,8 +45,7 @@ const send = async (page: Page, lines: ReadonlyArray<string>) => {
     .toBe(true);
 };
 
-// covers EX-001, OR-003, UX-002
-test("[TC-OR-315] the lead's later turns on its Task stay in Attempt 1, and its Workbench keeps what each turn changed", async ({
+test("the lead's later turns on its Task stay in Attempt 1, and its Workbench keeps what each turn changed", async ({
   page,
 }) => {
   // Three sends, each of which may wait for one turn ahead of its own.

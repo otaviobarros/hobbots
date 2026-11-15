@@ -138,7 +138,6 @@ describe("a turn's skill folder (ADR 029)", () => {
     expect(readdirSync(join(base, SKILL_MOUNTS))).toEqual([]);
   });
 
-  // covers RT-001, ADR 029
   /** A set's revision, as the library keeps it: skills under `skills/`, and the rules they share. */
   const setRevision = () => {
     const folder = mkdtempSync(join(temp, "set-"));
@@ -159,7 +158,7 @@ describe("a turn's skill folder (ADR 029)", () => {
   });
 
   // covers ADR 029
-  it("[TC-RT-1143-06] holds a set whole, as its own plugin, with only its mounted skills listed", () => {
+  it("holds a set whole, as its own plugin, with only its mounted skills listed", () => {
     const base = mkdtempSync(join(temp, "base-"));
     const stored = setRevision();
     const mounts = [member("plan", stored), member("ship", stored, false), mount("alpha", revision("alpha"))];
@@ -188,7 +187,7 @@ describe("a turn's skill folder (ADR 029)", () => {
   });
 
   // covers ADR 029
-  it("[TC-RT-1143-07] refuses a set with Hobbots' own name, two revisions of one set, or a path outside it", () => {
+  it("refuses a set with Hobbots' own name, two revisions of one set, or a path outside it", () => {
     const base = mkdtempSync(join(temp, "base-"));
     const stored = setRevision();
     expect(() => writeSkillFolder(base, [member("plan", stored, true, "hobbots-skills")])).toThrow(/not a set name/);
@@ -202,7 +201,7 @@ describe("a turn's skill folder (ADR 029)", () => {
   });
 
   // covers ADR 029
-  it("[TC-RT-1143-08] counts a read inside the turn's folder as a skill's file, and a Codex read of a set's SKILL.md as its use", () => {
+  it("counts a read inside the turn's folder as a skill's file, and a Codex read of a set's SKILL.md as its use", () => {
     const base = mkdtempSync(join(temp, "base-"));
     const stored = setRevision();
     const mounts = [member("plan", stored), member("ship", stored)];
@@ -232,7 +231,7 @@ describe("a turn's skill folder (ADR 029)", () => {
     expect(read(join(plan, "..", "..", "references", "rules.md"))).toEqual([]);
   });
 
-  it("[TC-RT-524] marks a read-only revision Only when asked, and its scripts still run from the folder", () => {
+  it("marks a read-only revision Only when asked, and its scripts still run from the folder", () => {
     const base = mkdtempSync(join(temp, "base-"));
     const stored = revision("release", "Release steps.", {
       "scripts/run.sh": "#!/bin/sh\necho released\n",
@@ -255,8 +254,7 @@ describe("a turn's skill folder (ADR 029)", () => {
     );
   });
 
-  // covers RT-001, ADR 029
-  it("[TC-RT-520] is shared by overlapping turns with the same mounts, kept apart from another revision's, and removed after the last", async () => {
+  it("is shared by overlapping turns with the same mounts, kept apart from another revision's, and removed after the last", async () => {
     const base = mkdtempSync(join(temp, "base-"));
     const r4 = [mount("release", revision("release", "Release r4."), true, "r4")];
     const r5 = [mount("release", revision("release", "Release r5."), true, "r5")];
@@ -295,8 +293,7 @@ describe("a turn's skill folder (ADR 029)", () => {
 });
 
 describe("a turn's skill folder in the sandbox (ADR 029)", () => {
-  // covers PE-001, ADR 029
-  it("[TC-RT-523] is readable, and nothing under the runtime folder's skill folders is writable", () => {
+  it("is readable, and nothing under the runtime folder's skill folders is writable", () => {
     const runtimeFolder = "/hub/runtimes/hob-1";
     const skillFolder = join(runtimeFolder, SKILL_MOUNTS, "abc");
     const filesystem = sandboxFilesystem({

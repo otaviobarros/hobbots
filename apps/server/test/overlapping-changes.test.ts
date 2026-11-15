@@ -205,8 +205,7 @@ const findingsWhen = (count: number) =>
 const settle = Effect.sleep("200 millis");
 
 describe("Two Tasks of a Quest changing the same file", () => {
-  // covers OR-004
-  it("[TC-OR-410] is no finding for files the lead changed before it delegated, but one for a change while both were at work", async () => {
+  it("is no finding for files the lead changed before it delegated, but one for a change while both were at work", async () => {
     // Issue #658: Frodo's root Attempt stays open until the Quest ends. Before he delegated, it
     // cleared the last run's files; then Rook and Pip rebuilt them at the same paths.
     const FRODO_ATTEMPT = AttemptId.make("frodo-1");
@@ -245,8 +244,7 @@ describe("Two Tasks of a Quest changing the same file", () => {
     expect(result.concurrent.map((each) => [each.taskId, each.aboutTaskId])).toEqual([[LEAD, PIP_TASK]]);
   });
 
-  // covers OR-004
-  it("[TC-OR-280] is one finding for the lead, on the Task that changed it and about the other, however often it is recorded", async () => {
+  it("is one finding for the lead, on the Task that changed it and about the other, however often it is recorded", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -287,8 +285,7 @@ describe("Two Tasks of a Quest changing the same file", () => {
     expect(checkpoints.map((item) => item.taskId)).toEqual([PIP_TASK]);
   });
 
-  // covers OR-004
-  it("[TC-OR-281] compares full paths, so a member working in a folder inside its lead's is seen too", async () => {
+  it("compares full paths, so a member working in a folder inside its lead's is seen too", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -300,8 +297,7 @@ describe("Two Tasks of a Quest changing the same file", () => {
     expect(result.map((each) => [each.taskId, each.aboutTaskId])).toEqual([[PIP_TASK, ROOK_TASK]]);
   });
 
-  // covers OR-004
-  it("[TC-OR-282] is no finding for different files, or once the other Task has ended", async () => {
+  it("is no finding for different files, or once the other Task has ended", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;

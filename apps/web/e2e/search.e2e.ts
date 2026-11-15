@@ -68,8 +68,7 @@ const hubWithHistory = async () => {
   return { current, hob, old, recent };
 };
 
-// covers CH-006
-test("[TC-CH-065] a word from an old message finds its thread with ⌘K and opens it at the match", async ({ page }) => {
+test("a word from an old message finds its thread with ⌘K and opens it at the match", async ({ page }) => {
   const { current, hob, old, recent } = await hubWithHistory();
   await page.goto(`${current.url}/#/hobs/${hob.id}/threads/${recent.id}`);
   // ⌘K listens once the page is up.
@@ -89,8 +88,7 @@ test("[TC-CH-065] a word from an old message finds its thread with ⌘K and open
   await expect(chatView.getByText("Echo: Where did I put the lanterns?", { exact: true })).toBeInViewport();
 });
 
-// covers CH-006
-test("[TC-CH-066] ⌘K finds a thread by a word from its messages", async ({ page }) => {
+test("⌘K finds a thread by a word from its messages", async ({ page }) => {
   const { current, hob, old } = await hubWithHistory();
   await page.goto(`${current.url}/#/usage`);
   await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
@@ -106,8 +104,7 @@ test("[TC-CH-066] ⌘K finds a thread by a word from its messages", async ({ pag
   await expect(page).toHaveURL(new RegExp(`#/hobs/${hob.id}/threads/${old.id}\\?message=`));
 });
 
-// covers CH-006
-test("[TC-CH-069] a reply streaming into the thread keeps the search match in view", async ({ page }) => {
+test("a reply streaming into the thread keeps the search match in view", async ({ page }) => {
   const { current, hob, old, recent } = await hubWithHistory();
   await page.goto(`${current.url}/#/hobs/${hob.id}/threads/${recent.id}`);
   // A long reply starts streaming into the old thread, a word every 40 ms, for several seconds.

@@ -151,7 +151,7 @@ const hobReplies = (messages: ReadonlyArray<Message>) =>
 
 describe("the relay budget", () => {
   // covers ADR 039 (Hobs talking to hobs)
-  it("[TC-CH-1463-01] stops two hobs that mention each other after 3 turns, and says they wait for a person", async () => {
+  it("stops two hobs that mention each other after 3 turns, and says they wait for a person", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       yield* chat.sendPrompt(CAMP, "@quill @pip work out the launch checklist between you");
@@ -184,7 +184,7 @@ describe("the relay budget", () => {
   }, 30_000);
 
   // covers ADR 039 (Hobs talking to hobs)
-  it("[TC-CH-1463-02] Let them go on gives the paused hobs 3 more turns, the resumed one first, journaled once", async () => {
+  it("Let them go on gives the paused hobs 3 more turns, the resumed one first, journaled once", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const bus = yield* EventBus;
@@ -212,7 +212,7 @@ describe("the relay budget", () => {
   }, 30_000);
 
   // covers ADR 039 (Hobs talking to hobs)
-  it("[TC-CH-1463-03] drops the paused relays when a person writes, and the line stops saying they wait", async () => {
+  it("drops the paused relays when a person writes, and the line stops saying they wait", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       yield* chat.sendPrompt(CAMP, "@quill @pip work out the launch checklist between you");
@@ -236,7 +236,7 @@ describe("the relay budget", () => {
   }, 30_000);
 
   // covers ADR 039 (Hobs talking to hobs, Stop all)
-  it("[TC-CH-1463-08] Stop all drops the relays of a turn that ended after it read what was owed", async () => {
+  it("Stop all drops the relays of a turn that ended after it read what was owed", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;

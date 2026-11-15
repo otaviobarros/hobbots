@@ -225,8 +225,7 @@ const get = async (
   );
 
 describe("a Task's files", () => {
-  // covers UX-002
-  it("[TC-GEN-140] lists what the Task made, then what it changed, each with its preview and how it is now", async () => {
+  it("lists what the Task made, then what it changed, each with its preview and how it is now", async () => {
     const listed = await list();
     expect(
       listed.files.map(({ path, label, origin, preview, now }) => ({ path, label, origin, preview, now })),
@@ -256,8 +255,7 @@ describe("a Task's files", () => {
     expect(listed.files.some((file) => file.path === "removed.txt")).toBe(false);
   });
 
-  // covers UX-002, PE-005
-  it("[TC-GEN-141] previews images, PDF and text, redacted, and downloads the file as it is", async () => {
+  it("previews images, PDF and text, redacted, and downloads the file as it is", async () => {
     const image = await get("chart.png");
     expect(image.status).toBe(200);
     expect(image.headers.get("content-type")).toBe("image/png");
@@ -286,8 +284,7 @@ describe("a Task's files", () => {
     expect(await download.text()).toBe(`# Report\n\nUsed ${HUB_SECRET}.\n`);
   });
 
-  // covers PE-005
-  it("[TC-GEN-142] never serves a page a hob wrote as a page, a file with no preview, or a secret file's contents", async () => {
+  it("never serves a page a hob wrote as a page, a file with no preview, or a secret file's contents", async () => {
     // HTML is shown as its text, never run on the hub's origin.
     const page = await get("page.html");
     expect(page.headers.get("content-type")).toBe("text/plain; charset=utf-8");
@@ -304,8 +301,7 @@ describe("a Task's files", () => {
     expect((await get("later.txt", { download: true })).status).toBe(404);
   });
 
-  // covers PE-005
-  it("[TC-GEN-143] lists and serves only files inside the hob's folders", async () => {
+  it("lists and serves only files inside the hob's folders", async () => {
     const paths = (await list()).files.map((file) => file.location);
     // A result named outside every folder, and a change in a folder the hob no longer works in.
     expect(paths).not.toContain(join(outside, "secret.txt"));
@@ -323,8 +319,7 @@ describe("a Task's files", () => {
     }
   });
 
-  // covers PE-005
-  it("[TC-GEN-144] serves a file only to an approved device", async () => {
+  it("serves a file only to an approved device", async () => {
     const refused = await get("report.md", { headers: {} });
     expect(refused.status).toBe(401);
     expect(await refused.text()).not.toContain("Report");

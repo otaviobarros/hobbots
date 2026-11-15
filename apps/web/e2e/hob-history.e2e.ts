@@ -52,8 +52,7 @@ const hobPayload = (name: string) => ({
   instructions: "Write short answers.",
 });
 
-// covers AG-002, AG-006
-test("[TC-AG-411-04] History and the Changes log show who changed a hob and what, live, and Revert undoes the latest change as yours", async ({
+test("History and the Changes log show who changed a hob and what, live, and Revert undoes the latest change as yours", async ({
   page,
   scan,
 }) => {
@@ -147,7 +146,7 @@ test("[TC-AG-411-04] History and the Changes log show who changed a hob and what
 });
 
 // covers #1352 (answers an earlier Summoning change dropped are shown to restore, never restored silently)
-test("[TC-UX-1352-03] History offers to restore the answers a Summoning change dropped, shows it working and failing, and restores them as yours", async ({
+test("History offers to restore the answers a Summoning change dropped, shows it working and failing, and restores them as yours", async ({
   page,
   scan,
 }) => {
@@ -219,8 +218,7 @@ test("[TC-UX-1352-03] History offers to restore the answers a Summoning change d
   expect(saved?.policy.overrides).toEqual({ push: "deny", "delete-files": "deny", "use-web": "ask" });
 });
 
-// covers AG-002, PE-001, #1357
-test("[TC-AG-1357-01] a hob's History and Settings › Changes show who turned Summoning for every hob on, live", async ({
+test("a hob's History and Settings › Changes show who turned Summoning for every hob on, live", async ({
   page,
   scan,
 }) => {

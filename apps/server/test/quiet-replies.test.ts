@@ -30,8 +30,7 @@ const stuck = (key: string, hob: string, brief: string) =>
   });
 
 describe("a lead's routine progress", () => {
-  // covers UX-006, OR-004, IN-004
-  it("[TC-OR-595] a lead's reply to work that arrived while its Quest runs is kept quiet, and a reply to your message is not", async () => {
+  it("a lead's reply to work that arrived while its Quest runs is kept quiet, and a reply to your message is not", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run } = party;
@@ -71,8 +70,7 @@ describe("a lead's routine progress", () => {
     expect(all.find((m) => m.promptId === asked?.id)?.quiet).toBe(false);
   }, 30_000);
 
-  // covers UX-006, OR-004, IN-004
-  it("[TC-OR-596] a lead's reply that passes a question up to you, or finishes the work, still shows", async () => {
+  it("a lead's reply that passes a question up to you, or finishes the work, still shows", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run } = party;
@@ -101,8 +99,7 @@ describe("a lead's routine progress", () => {
     expect(escalated?.quiet).toBe(false);
   }, 30_000);
 
-  // covers UX-006, OR-004
-  it("[TC-OR-597] a lead's finish shows, though it answers work that arrived", async () => {
+  it("a lead's finish shows, though it answers work that arrived", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run } = party;
@@ -125,8 +122,7 @@ describe("a lead's routine progress", () => {
     expect(finish?.quiet).toBe(false);
   }, 30_000);
 
-  // covers UX-006, OR-004, EX-004
-  it("[TC-OR-599] a lead's reply to work that arrived with a tool call that failed still shows", async () => {
+  it("a lead's reply to work that arrived with a tool call that failed still shows", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run } = party;

@@ -2,15 +2,6 @@
 
 Rules for tests and verification. The [project workflow guide](../agent-engineering.md#checks) lists the test commands and tools.
 
-### STD-TEST-001 Integration and end-to-end tests carry a case ID
-
-Start the title of every integration, end-to-end and regression test with a case ID shaped `[TC-<AREA>-NNN]`. The area is a requirement area from the [MVP requirements](../product/mvp-requirements.md) (`CH`, `OR`, `IN` and so on), or `GEN` when none fits. A comment names the requirements the case covers. Case IDs are never reused or renumbered. A removed case is retired. Pure unit tests need no ID. An existing test gets an ID when it next changes.
-
-- ✅ `it("[TC-CH-001] streams a turn and resumes the session", …) // covers CH-001, CH-004`
-- **Why:** a requirement, a bug report and a review can point to the exact case that proves it.
-- **Enforced by:** review.
-- **Applies to:** integration, end-to-end and regression tests.
-
 ### STD-TEST-002 Fakes first, then the real runtime
 
 Verify state transitions, duplicate delivery, restart recovery, permission enforcement and proactive closure with deterministic fake adapters first. Then verify the relevant cases against a real runtime. Report what you could not verify.
@@ -29,7 +20,7 @@ Test pure functions with Vitest unit tests, beside the source as `*.test.ts` or 
 
 ### STD-TEST-004 Each user flow has an end-to-end test
 
-Cover each user flow with a Playwright test in `apps/web/e2e`, with a case ID (STD-TEST-001), against the fake runtime. A UI change to a flow adds or updates its end-to-end test in the same pull request. Select elements by role and accessible name.
+Cover each user flow with a Playwright test in `apps/web/e2e`, against the fake runtime. A UI change to a flow adds or updates its end-to-end test in the same pull request. Select elements by role and accessible name.
 
 - **Why:** an end-to-end test proves the flow the user sees, across the server and the client.
 - **Enforced by:** the end-to-end CI job and review.
@@ -84,5 +75,15 @@ Each panel scrolls inside the window; the window itself never does. A shared fix
 - ✅ A scroll panel is the box its absolutely placed contents, such as an `sr-only` label, are placed in, so they scroll with it.
 - ❌ An `sr-only` label inside a transcript whose panel has no position of its own: the label escapes the panel and stretches the window to the transcript's height (#1026).
 - **Why:** a window that scrolls moves the whole frame, sidebar and composer included, and leaves an empty screen under them.
-- **Enforced by:** the shared Playwright fixture, its own checks `[TC-GEN-1026-02]` and `[TC-GEN-1026-03]`, `[TC-UX-1026-01]`, which tries to scroll the window on every screen, and the end-to-end CI job.
+- **Enforced by:** the shared Playwright fixture and its own checks, a test that tries to scroll the window on every screen, and the end-to-end CI job.
 - **Applies to:** `apps/web`.
+
+### STD-TEST-011 A regression test names its issue, and tags group browser tests
+
+A test that guards against a reported bug ends its title with the issue it fixes, such as `(#1026)`. Test titles carry no other ID. To mark a group of browser tests, such as the smoke set, give each a Playwright tag in its details, never in its title: `test("chat streams a reply", { tag: "@smoke" }, …)`, run with `--grep @smoke`.
+
+- ✅ `it("never serves a log for a step that has none (#153)", …)`
+- ❌ `it("[TC-CH-001] streams a turn", …)`
+- **Why:** a test is found by its file and its name; the issue says why it exists, and a tag is how Playwright selects a group.
+- **Enforced by:** review.
+- **Applies to:** every test.

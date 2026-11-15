@@ -14,15 +14,15 @@ describe("how a Task's file is now", () => {
   const big = SERVED_FILE_BYTES + 1;
 
   // A file too large to hash is never taken as the same as what the Task left.
-  it("[#388] says a file too large to read was not checked when its size is what the Task left", () => {
+  it("says a file too large to read was not checked when its size is what the Task left (#388)", () => {
     expect(taskFile(candidate(big), { size: big, hash: null }).now).toBe("unchecked");
   });
 
-  it("[#388] says a file too large to read changed when its size did", () => {
+  it("says a file too large to read changed when its size did (#388)", () => {
     expect(taskFile(candidate(big), { size: big + 1, hash: null }).now).toBe("changed");
   });
 
-  it("[#388] compares a file it could read by its hash", () => {
+  it("compares a file it could read by its hash (#388)", () => {
     expect(taskFile(candidate(6), { size: 6, hash: "left" }).now).toBe("same");
     expect(taskFile(candidate(6), { size: 6, hash: "other" }).now).toBe("changed");
     expect(taskFile(candidate(6), null).now).toBe("gone");

@@ -42,16 +42,14 @@ const CHROME_MAC =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 
 describe("pairing in the web client", () => {
-  // covers DP-004
-  it("[TC-DP-112] suggests a name from the browser, and shows the code in two groups of three", () => {
+  it("suggests a name from the browser, and shows the code in two groups of three", () => {
     expect(messages.suggestedName(describeBrowser(IPHONE))).toBe("Safari on iPhone");
     expect(messages.suggestedName(describeBrowser(CHROME_MAC))).toBe("Chrome on Mac");
     expect(messages.suggestedName(describeBrowser(""))).toBe("Browser");
     expect(groupedCode("482913")).toBe("482 913");
   });
 
-  // covers DP-004
-  it("[TC-DP-113] the waiting screen follows the request, and explains a refusal over a limit or from another account", () => {
+  it("the waiting screen follows the request, and explains a refusal over a limit or from another account", () => {
     const status = { id: "p1", code: "482913", expiresAt: "2026-11-02T10:10:00.000Z" };
     expect(waitingState({ ...status, state: "pending" })).toMatchObject({ _tag: "Waiting" });
     expect(waitingState({ ...status, state: "claimed" })).toEqual({ _tag: "Allowed" });
@@ -65,8 +63,7 @@ describe("pairing in the web client", () => {
     expect(refusedState(new Error("offline"))).toBeUndefined();
   });
 
-  // covers DP-004
-  it("[TC-DP-114] prompts only for devices not put off, and says where each asked from", () => {
+  it("prompts only for devices not put off, and says where each asked from", () => {
     const deferred = asking({ id: "p2", expiresAt: "2026-11-03T10:00:00.000Z" });
     expect(promptedDevices([waiting(asking()), waiting(deferred)]).map((device) => device.request.id)).toEqual(["p1"]);
     expect(askedFrom(waiting(asking()))).toBe("phone · you@example.com");
@@ -78,8 +75,7 @@ describe("pairing in the web client", () => {
     ).toBe("ci · tagged tag:ci");
     expect(usingText(waiting(asking()))).toBe("A browser · iPhone");
   });
-  // covers DP-004
-  it("[TC-DP-120] a check the hub turns away keeps the request waiting and checks again once the hub allows it", async () => {
+  it("a check the hub turns away keeps the request waiting and checks again once the hub allows it", async () => {
     const status = { id: "p1", code: "482913", expiresAt: "2026-11-02T10:10:00.000Z", state: "pending" as const };
     const throttled = () => Promise.reject(new ApiError("", "PairingThrottled", { retryAfterSeconds: 5 }));
     const waitingOn = await readPairing(undefined, () => Promise.resolve(status));
@@ -101,8 +97,7 @@ describe("pairing in the web client", () => {
     expect(nextCheckMs({ _tag: "Throttled", seconds: 5 })).toBe(false);
   });
 
-  // covers DP-004
-  it("[TC-DP-121] approved clients read the waiting list again just after a request in it runs out", () => {
+  it("approved clients read the waiting list again just after a request in it runs out", () => {
     const now = Date.parse("2026-11-02T10:05:00.000Z");
     const soon = waiting(asking({ id: "soon", expiresAt: "2026-11-02T10:06:00.000Z" }));
     const later = waiting(asking({ id: "later", expiresAt: "2026-11-03T10:00:00.000Z" }));

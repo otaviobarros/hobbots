@@ -61,10 +61,7 @@ const tellFrodo = async (page: Page, lines: ReadonlyArray<string>) => {
   await composer.press("Enter");
 };
 
-// covers EX-001, OR-004, UX-002
-test("[TC-OR-454] a nested lead woken several times on its Task shows Attempt 1 only in its Workbench", async ({
-  page,
-}) => {
+test("a nested lead woken several times on its Task shows Attempt 1 only in its Workbench", async ({ page }) => {
   // Every lead turn's briefing is echoed word by word, so its turns take longer than a member's.
   test.setTimeout(150_000);
   const current = await startHub(dataDir);

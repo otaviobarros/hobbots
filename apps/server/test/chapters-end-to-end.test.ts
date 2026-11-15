@@ -161,8 +161,7 @@ const chaptersOf = async (thread: Thread) =>
   ]);
 
 describe("chapters over the API", () => {
-  // covers CH-001, ADR 037 (Chapters)
-  it("[TC-CH-1382-03] splits once per key and merges back, and names why a split or a merge is refused", async () => {
+  it("splits once per key and merges back, and names why a split or a merge is refused", async () => {
     const { thread } = await pipWithThread();
     await exchange(thread, "My cat is called Miso");
     await exchange(thread, "Now the garden");
@@ -223,7 +222,7 @@ describe("chapters over the API", () => {
   });
 
   // covers ADR 037 (The context pack, Focus chip)
-  it("[TC-CH-1382-04] the Focus read is the report of the pack the last new session read, else the next one's", async () => {
+  it("the Focus read is the report of the pack the last new session read, else the next one's", async () => {
     const { thread } = await pipWithThread();
     const before = await request<FocusRead>("GET", `/api/threads/${thread.id}/focus`);
     expect(before.status).toBe(200);

@@ -12,7 +12,7 @@ const outside = () => folderOf({ "steps.md": "secret", "SKILL.md": "secret" });
 
 describe("folder source", () => {
   // covers ADR 029 (Import: no links, nothing outside the skill), #1060
-  it("[TC-AG-137] refuses a file swapped for a link, or for another file, after the listing", async () => {
+  it("refuses a file swapped for a link, or for another file, after the listing", async () => {
     const root = await listed();
     const elsewhere = await outside();
     const tree = await folderTree(root);
@@ -27,7 +27,7 @@ describe("folder source", () => {
     await expect(tree.read("notes/steps.md")).rejects.toThrow("changed while it was read");
   });
 
-  it("[TC-AG-138] refuses a file whose folder was swapped for a link outside the skill after the listing", async () => {
+  it("refuses a file whose folder was swapped for a link outside the skill after the listing", async () => {
     const root = await listed();
     const elsewhere = await outside();
     const tree = await folderTree(root);
@@ -42,7 +42,7 @@ describe("folder source", () => {
     await expect(tree.read("notes/steps.md")).rejects.toThrow("changed while it was read");
   });
 
-  it("[TC-AG-140] never reads outside the skill while a folder in it is swapped for a link and back, during listing and reading", async () => {
+  it("never reads outside the skill while a folder in it is swapped for a link and back, during listing and reading", async () => {
     const root = await listed();
     const elsewhere = await outside();
     // A separate process swaps notes for a link to the outside folder and back, as fast as it can.

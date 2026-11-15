@@ -23,13 +23,13 @@ const message = (role: "user" | "assistant" | "note", actor: Actor | null) =>
 
 describe("who wrote a message", () => {
   // covers ADR 039 (A member hob works as itself)
-  it("[TC-CH-1549-01] names a member's reply as the member's, never the hob the camp belongs to", () => {
+  it("names a member's reply as the member's, never the hob the camp belongs to", () => {
     expect(authorOf(message("assistant", QUILL), CAMP)).toEqual(QUILL);
     expect(replyHobOf(message("assistant", QUILL), CAMP)).toBe("quill");
     expect(authorOf(message("user", LEO), CAMP)).toEqual(LEO);
   });
 
-  it("[TC-CH-1549-02] gives a reply with no author the camp's hob, a person's message none, and a person no reply hob", () => {
+  it("gives a reply with no author the camp's hob, a person's message none, and a person no reply hob", () => {
     expect(authorOf(message("assistant", null), CAMP)).toEqual({ kind: "hob", id: "wren" });
     expect(replyHobOf(message("assistant", null), CAMP)).toBe("wren");
     expect(authorOf(message("user", null), CAMP)).toBeNull();

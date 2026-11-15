@@ -41,8 +41,7 @@ const ask = async (page: Page, lines: ReadonlyArray<string>) => {
 /** Waits until Aldric's turn, if one runs, has ended. */
 const idle = (page: Page) => expect(page.getByRole("button", { name: /Stop/ })).toBeHidden({ timeout: 90_000 });
 
-// covers OR-001, OR-004, UX-001, UX-002, IN-002
-test("[TC-UX-290] the nested Black Friday Quest is followed from the room alone, with Ada's question answered in her lane, until Aldric reports it done", async ({
+test("the nested Black Friday Quest is followed from the room alone, with Ada's question answered in her lane, until Aldric reports it done", async ({
   page,
   scan,
 }) => {
@@ -81,8 +80,7 @@ test("[TC-UX-290] the nested Black Friday Quest is followed from the room alone,
   await expect(room).toBeVisible();
 });
 
-// covers OR-006, EX-001, UX-001
-test("[TC-UX-291] from the room, one failed Task is retried and the other is given to another hob, and nothing is left waiting on you", async ({
+test("from the room, one failed Task is retried and the other is given to another hob, and nothing is left waiting on you", async ({
   page,
   scan,
 }) => {
@@ -124,8 +122,7 @@ test("[TC-UX-291] from the room, one failed Task is retried and the other is giv
 /** A prompt line that makes the fake run a command, with what it prints and how it exits. */
 const run = (input: object) => `fake:run ${JSON.stringify(input)}`;
 
-// covers OR-001, OR-002, OR-007, UX-002, UX-006
-test("[TC-UX-292] a party's Black Friday Quest is steered from the chat with its receipt, and its Workbench is filtered by lane and by try with the Terminal split by hob", async ({
+test("a party's Black Friday Quest is steered from the chat with its receipt, and its Workbench is filtered by lane and by try with the Terminal split by hob", async ({
   page,
   scan,
 }) => {
@@ -273,8 +270,7 @@ const themeIds: readonly string[] = (
   }
 ).themes.map((theme) => theme.id);
 
-// covers UX-002, UX-006
-test("[TC-UX-293] the quest's sheet holds up in all four themes at 1280, 1024 and 960 px, with no sideways scroll", async ({
+test("the quest's sheet holds up in all four themes at 1280, 1024 and 960 px, with no sideways scroll", async ({
   page,
   scan,
 }) => {

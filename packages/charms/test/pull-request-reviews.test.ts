@@ -117,7 +117,7 @@ const hub = (waiting: Array<ArtifactRecord>) => {
 
 describe("pull request reviews", () => {
   // covers ADR 037 (Records)
-  it("[TC-OR-1422-05] reviews each waiting pull request GitHub reports merged or closed, asking once per pull request", async () => {
+  it("reviews each waiting pull request GitHub reports merged or closed, asking once per pull request", async () => {
     const waiting = [
       pr("merged", "https://github.com/acme/shop/pull/1"),
       // The same pull request in another camp, as its files tab: asked about once, reviewed in both.
@@ -152,7 +152,7 @@ describe("pull request reviews", () => {
   });
 
   // covers ADR 037 (Records)
-  it("[TC-OR-1422-06] asks about a few pull requests a round, going on from where the last round stopped", async () => {
+  it("asks about a few pull requests a round, going on from where the last round stopped", async () => {
     const waiting = [3, 7, 8].map((number) => pr(`open-${number}`, `https://github.com/acme/shop/pull/${number}`));
     const { layer, asked } = hub(waiting);
     let start = 0;

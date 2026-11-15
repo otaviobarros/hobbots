@@ -3,10 +3,7 @@ import { expect, test } from "@playwright/test";
 const content = (page: import("@playwright/test").Page, selector: string) =>
   page.locator(selector).getAttribute("content");
 
-test("[TC-GEN-014] shows the share card and icons, and serves every file they and the page name", async ({
-  page,
-  request,
-}) => {
+test("shows the share card and icons, and serves every file they and the page name", async ({ page, request }) => {
   // covers #186 and #1224
   await page.goto("/");
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://hobbots.app/");
@@ -33,16 +30,13 @@ test("[TC-GEN-014] shows the share card and icons, and serves every file they an
   expect(await (await request.get("/robots.txt")).text()).toContain("Sitemap: https://hobbots.app/sitemap.xml");
 });
 
-test("[TC-GEN-015] keeps a build that is not for production out of search results", async ({ page }) => {
+test("keeps a build that is not for production out of search results", async ({ page }) => {
   // covers #186. The local build has no CLOUDFLARE_ENV, like a pull request preview.
   await page.goto("/");
   expect(await content(page, 'meta[name="robots"]')).toBe("noindex, nofollow");
 });
 
-test("[TC-GEN-1224-08] describes the app and its questions to search engines and language models", async ({
-  page,
-  request,
-}) => {
+test("describes the app and its questions to search engines and language models", async ({ page, request }) => {
   // covers #1224
   await page.goto("/");
   const data = await page
@@ -62,7 +56,7 @@ test("[TC-GEN-1224-08] describes the app and its questions to search engines and
   expect(await llms.text()).toContain(`Current version: ${app.softwareVersion} beta`);
 });
 
-test("[TC-GEN-1224-09] serves every picture from a hashed name, so it can be cached for good", async ({ page }) => {
+test("serves every picture from a hashed name, so it can be cached for good", async ({ page }) => {
   // covers #1224: a changed picture gets a new URL, so no cache purge is needed
   await page.goto("/");
   const sources = await page

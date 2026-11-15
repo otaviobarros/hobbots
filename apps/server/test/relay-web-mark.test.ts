@@ -55,7 +55,7 @@ const frodosTurns = (requests: ReadonlyArray<PromptRequest>, count: number) =>
 
 describe("a relay from a hob that read the web", () => {
   // covers ADR 039 (Hobs talking to hobs), ADR 036 (The read-the-web mark)
-  it("[TC-CH-1463-09] wakes the hob it mentions marked as having read the web, and keeps the mark on its session", async () => {
+  it("wakes the hob it mentions marked as having read the web, and keeps the mark on its session", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests, reactions } = party;
@@ -90,7 +90,7 @@ describe("a relay from a hob that read the web", () => {
   }, 30_000);
 
   // covers ADR 039 (Hobs talking to hobs), ADR 036 (The read-the-web mark)
-  it("[TC-CH-1463-10] marks a turn whose live chapter holds a marked hob reply, and a relay that goes on in a new chapter", async () => {
+  it("marks a turn whose live chapter holds a marked hob reply, and a relay that goes on in a new chapter", async () => {
     const party = partyHub();
     dispose = party.dispose;
     const { run, requests } = party;

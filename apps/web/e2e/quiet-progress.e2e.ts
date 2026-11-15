@@ -54,8 +54,7 @@ const hubCall = (tool: string, input: object) => `fake:hub ${tool} ${JSON.string
 /** How a continuation's prompt starts, which the fake echoes in its reply. */
 const CONTINUATION = "Hobbots wrote this, not the user.";
 
-// covers UX-006, OR-004
-test("[TC-UX-225] the chat keeps the lead's plan and leaves out its routine progress while the Quest runs (#1006)", async ({
+test("the chat keeps the lead's plan and leaves out its routine progress while the Quest runs (#1006)", async ({
   page,
 }) => {
   test.setTimeout(120_000);

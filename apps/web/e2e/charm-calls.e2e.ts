@@ -61,8 +61,7 @@ const recordUncertainPush = (agentId: string, threadId: string, messageId: strin
   database.close();
 };
 
-// covers EX-003, PE-006
-test("[TC-OR-075] an uncertain GitHub push is settled from its step, once, and the step says how", async ({ page }) => {
+test("an uncertain GitHub push is settled from its step, once, and the step says how", async ({ page }) => {
   const work = realpathSync(mkdtempSync(`${dataDir}-work-`));
   try {
     const current = await startHub(dataDir);

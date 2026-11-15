@@ -17,7 +17,7 @@ test.afterEach(async () => {
 const fileOf = (dataDir: string, name: string) => readFileSync(join(dataDir, name), "utf8").trim();
 
 // covers #948
-test("[TC-OP-098] starts over from Settings › Your data, and the hub comes back empty at Welcome", async ({
+test("starts over from Settings › Your data, and the hub comes back empty at Welcome", async ({
   page,
   context,
   browser,
@@ -158,7 +158,7 @@ const expectPairing = async (page: Page, url: string) => {
 };
 
 // covers #1220
-test("[TC-OP-1220-01] closing All clear with Escape starts fresh, as its button does", async ({ page }) => {
+test("closing All clear with Escape starts fresh, as its button does", async ({ page }) => {
   test.setTimeout(60_000);
   const { url } = await setUpHub();
   await deleteEverything(page, url);
@@ -169,7 +169,7 @@ test("[TC-OP-1220-01] closing All clear with Escape starts fresh, as its button 
 });
 
 // covers #1220
-test("[TC-OP-1220-02] closing All clear by clicking outside it starts fresh too", async ({ page }) => {
+test("closing All clear by clicking outside it starts fresh too", async ({ page }) => {
   test.setTimeout(60_000);
   const { url } = await setUpHub();
   await deleteEverything(page, url);
@@ -180,9 +180,7 @@ test("[TC-OP-1220-02] closing All clear by clicking outside it starts fresh too"
 });
 
 // covers #1220
-test("[TC-OP-1220-03] a Start over whose dialog the window lost on the way still ends at Welcome", async ({
-  browser,
-}) => {
+test("a Start over whose dialog the window lost on the way still ends at Welcome", async ({ browser }) => {
   test.setTimeout(60_000);
   const { dataDir, url } = await setUpHub();
   // The hub's own window: it signs every request with the window key of the hub answering now, as the

@@ -160,8 +160,7 @@ const quillOn = (done: TaskToolDone) =>
   });
 
 describe("A member its lead names no folders for", () => {
-  // covers PE-002
-  it("[TC-PE-300] works only in the folder its lead's Task works in, and is refused anywhere else with the place named", async () => {
+  it("works only in the folder its lead's Task works in, and is refused anywhere else with the place named", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -188,8 +187,7 @@ describe("A member its lead names no folders for", () => {
     }
   });
 
-  // covers PE-002
-  it("[TC-PE-301] works in the folders its brief names inside the lead's, and in no other", async () => {
+  it("works in the folders its brief names inside the lead's, and in no other", async () => {
     const site = join(test, "site");
     const result = await run(
       Effect.gen(function* () {
@@ -202,8 +200,7 @@ describe("A member its lead names no folders for", () => {
     expect(result.beside).toMatchObject({ decision: "deny", reason: { code: "outside-folders" } });
   });
 
-  // covers PE-002
-  it("[TC-PE-304] works in a quoted folder its brief names with a space in it, not the folder its first word names", async () => {
+  it("works in a quoted folder its brief names with a space in it, not the folder its first word names", async () => {
     const spaced = join(test, "my site");
     for (const folder of [spaced, join(test, "my")]) mkdirSync(folder, { recursive: true });
     const result = await run(
@@ -215,8 +212,7 @@ describe("A member its lead names no folders for", () => {
     expect(result.folders).toEqual([spaced]);
   });
 
-  // covers PE-002
-  it("[TC-PE-302] gets all of its lead's folders only when the lead asks for all, and never one the lead does not have", async () => {
+  it("gets all of its lead's folders only when the lead asks for all, and never one the lead does not have", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -235,8 +231,7 @@ describe("A member its lead names no folders for", () => {
 // that folder, so its write was refused and the page never got there. The folder a named file sits
 // in now goes with the brief, and a lead whose member cannot reach it hears so when it delegates.
 describe("A member briefed to write a file into a folder of its lead's", () => {
-  // covers PE-002, OR-003
-  it("[TC-PE-475] works in the folder the file sits in, beside the folders its brief names", async () => {
+  it("works in the folder the file sits in, beside the folders its brief names", async () => {
     const site = join(test, "site");
     const docs = join(other, "docs");
     mkdirSync(docs, { recursive: true });
@@ -254,8 +249,7 @@ describe("A member briefed to write a file into a folder of its lead's", () => {
     expect(result.done.message).not.toContain("Warning: the brief names");
   });
 
-  // covers PE-002, OR-003
-  it("[TC-PE-476] tells the lead when the member's own folders leave that folder out, naming it", async () => {
+  it("tells the lead when the member's own folders leave that folder out, naming it", async () => {
     const docs = join(other, "docs");
     mkdirSync(docs, { recursive: true });
     quillFolders = [test, hobbots];
@@ -275,8 +269,7 @@ describe("A member briefed to write a file into a folder of its lead's", () => {
     );
   });
 
-  // covers PE-002
-  it("[TC-PE-477] does not widen to a folder far above a file whose own folder does not exist", async () => {
+  it("does not widen to a folder far above a file whose own folder does not exist", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;

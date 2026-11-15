@@ -29,8 +29,7 @@ const storedHob = (id: string, githubCharm: 0 | 1) =>
   });
 
 describe("0076_charm_grants", () => {
-  // covers DP-003, PE-002, ADR 031
-  it("[TC-DP-290] turns each hob's GitHub Charm flag into its set of Charm ids, on the hob and every version", async () => {
+  it("turns each hob's GitHub Charm flag into its set of Charm ids, on the hob and every version", async () => {
     const result = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* storedHob("pip", 1);

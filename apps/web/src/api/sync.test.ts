@@ -37,8 +37,7 @@ const load = (client: QueryClient, fetch: () => Promise<ReadonlyArray<Message>>)
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("reply chunks", () => {
-  // covers CH-004
-  it("[TC-CH-075] applies a repeated chunk once and fetches the thread again after a missed one", async () => {
+  it("applies a repeated chunk once and fetches the thread again after a missed one", async () => {
     const client = new QueryClient();
     client.setQueryData(queryKeys.messages(threadId), [message("m1", "streaming", "Hel", 4)]);
     const delta = (offset: number, text: string) =>
@@ -58,8 +57,7 @@ describe("reply chunks", () => {
 });
 
 describe("query responses during a sync generation", () => {
-  // covers CH-004
-  it("[TC-CH-076] a response read before newer events does not revive a removed message or undo a finished reply", async () => {
+  it("a response read before newer events does not revive a removed message or undo a finished reply", async () => {
     const client = new QueryClient();
     const { fetch, answer } = pendingFetch();
     const loading = load(client, fetch);
@@ -77,16 +75,14 @@ describe("query responses during a sync generation", () => {
     ]);
   });
 
-  // covers CH-004
-  it("[TC-CH-077] keeps text a chunk already delivered when the response read an older checkpoint", async () => {
+  it("keeps text a chunk already delivered when the response read an older checkpoint", async () => {
     const client = new QueryClient();
     client.setQueryData(queryKeys.messages(threadId), [message("m1", "streaming", "Hello wor", 5)]);
     await load(client, () => Promise.resolve([message("m1", "streaming", "Hel", 5)]));
     expect(messages(client)?.[0]?.content).toBe("Hello wor");
   });
 
-  // covers CH-004
-  it("[TC-CH-079] keeps the streamed text of a reply that started after the response was read", async () => {
+  it("keeps the streamed text of a reply that started after the response was read", async () => {
     const client = new QueryClient();
     client.setQueryData(queryKeys.messages(threadId), [message("u1", "complete", "hi", 6)]);
     const { fetch, answer } = pendingFetch();
@@ -103,8 +99,7 @@ describe("query responses during a sync generation", () => {
     ]);
   });
 
-  // covers CH-004, CH-008
-  it("[TC-CH-080] a queued message that started after the response was read moves after the reply before it", async () => {
+  it("a queued message that started after the response was read moves after the reply before it", async () => {
     const client = new QueryClient();
     const user = (id: string, status: Message["status"], revision: number) =>
       new Message({ ...message(id, status, id, revision), role: "user", configVersion: null });
@@ -124,8 +119,7 @@ describe("query responses during a sync generation", () => {
     ]);
   });
 
-  // covers CH-004
-  it("[TC-CH-078] a fresh Ready discards a response from the previous generation and fetches again", async () => {
+  it("a fresh Ready discards a response from the previous generation and fetches again", async () => {
     const client = new QueryClient();
     const { fetch, answer, pending } = pendingFetch();
     const loading = load(client, fetch);
@@ -141,8 +135,7 @@ describe("query responses during a sync generation", () => {
     expect(messages(client)?.map((m) => m.id)).toEqual(["m3"]);
   });
 
-  // covers CH-004
-  it("[TC-CH-105] a fresh Ready leaves what only this client knows, such as the connection", async () => {
+  it("a fresh Ready leaves what only this client knows, such as the connection", async () => {
     const client = new QueryClient();
     // A screen showing the connection keeps its query active, so a resync would refetch it.
     const watching = new QueryObserver(client, connectionQuery).subscribe(() => undefined);
@@ -159,7 +152,7 @@ describe("query responses during a sync generation", () => {
 
 describe("a chapter moved into a camp", () => {
   // covers ADR 037 (Moving a chapter into a camp moves it), CH-009, STD-REACT-028
-  it("[TC-CH-1385-21] shows a message an event brought in the camp it moved to, and never again in the chat", async () => {
+  it("shows a message an event brought in the camp it moved to, and never again in the chat", async () => {
     const client = new QueryClient();
     const campId = ThreadId.make("camp-1");
     const chapter = (id: string, thread: ThreadId, state: "moved" | "live", revision: number) =>
@@ -203,7 +196,7 @@ describe("a chapter moved into a camp", () => {
   });
 
   // covers ADR 037 (Moving a chapter into a camp moves it), STD-REACT-012
-  it("[TC-CH-1385-22] drops a first transcript read that began before the move, which no event told about the message", async () => {
+  it("drops a first transcript read that began before the move, which no event told about the message", async () => {
     const client = new QueryClient();
     const campId = ThreadId.make("camp-1");
     const chapter = (id: string, thread: ThreadId, state: "moved" | "live") =>

@@ -119,7 +119,7 @@ const quote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
 /**
  * Stands in for the hob's sandbox, which this hub's CI cannot start: it runs the program as it is,
  * after writing the environment the program gets to `sandboxRecords`, so the last case can look
- * for a credential there. The Charm's own fence is proven against the real sandbox in TC-PE-152.
+ * for a credential there. The Charm's own fence is proven against the real sandbox in @hobbots/charms git-push.test.ts.
  */
 const RecordingSandbox = Layer.succeed(
   FolderSandbox,
@@ -354,8 +354,7 @@ const touched = (slug: string) =>
   );
 
 describe("the GitHub Charm, end to end against a fake GitHub", () => {
-  // covers PE-002, PE-008
-  it("[TC-PE-240] connects through the device flow, shows the account and its repositories, and only then offers the Charm", async () => {
+  it("connects through the device flow, shows the account and its repositories, and only then offers the Charm", async () => {
     const before = await turn(call("github_repository", {}));
     expect(before.reply?.content).not.toContain("octo/workshop");
     expect(github.requests).toEqual([]);
@@ -388,8 +387,7 @@ describe("the GitHub Charm, end to end against a fake GitHub", () => {
     expect(after.reply?.content).toContain("octo/workshop (private), default branch main");
   }, 30_000);
 
-  // covers PE-002, PE-008
-  it("[TC-PE-241] reads the repository's counts of issues and pull requests without asking", async () => {
+  it("reads the repository's counts of issues and pull requests without asking", async () => {
     await connected();
     const read = await turn(
       call("github_repository", {}),
@@ -413,8 +411,7 @@ describe("the GitHub Charm, end to end against a fake GitHub", () => {
     );
   });
 
-  // covers PE-003, PE-007
-  it("[TC-PE-242] pushes a branch under Balanced once the user approves the commit the card showed", async () => {
+  it("pushes a branch under Balanced once the user approves the commit the card showed", async () => {
     await connected();
     git(project, "checkout", "--quiet", "-b", "feat/x");
     const pushed = commit(project, "b.txt", "Add b");
@@ -434,8 +431,7 @@ describe("the GitHub Charm, end to end against a fake GitHub", () => {
     expect(github.headOf("octo/workshop", "feat/x")).toBe(pushed);
   }, 30_000);
 
-  // covers PE-003, PE-007
-  it("[TC-PE-243] asks once only for a force push, never saves it as a rule, and asks again the next time", async () => {
+  it("asks once only for a force push, never saves it as a rule, and asks again the next time", async () => {
     await connected();
     git(project, "checkout", "--quiet", "feat/x");
     const before = github.headOf("octo/workshop", "feat/x");
@@ -475,8 +471,7 @@ describe("the GitHub Charm, end to end against a fake GitHub", () => {
     expect(github.headOf("octo/workshop", "feat/x")).toBe(rewritten);
   }, 30_000);
 
-  // covers PE-003, PE-007
-  it("[TC-PE-244] opens a draft pull request from the pushed branch after the user approves the text", async () => {
+  it("opens a draft pull request from the pushed branch after the user approves the text", async () => {
     await connected();
     const asked = await turn(
       call("github_open_pull_request", {
@@ -505,8 +500,7 @@ describe("the GitHub Charm, end to end against a fake GitHub", () => {
     );
   }, 30_000);
 
-  // covers PE-003, PE-007
-  it("[TC-PE-245] comments on an issue after the user approves it, and reads it back without the hub's marker", async () => {
+  it("comments on an issue after the user approves it, and reads it back without the hub's marker", async () => {
     await connected();
     const asked = await turn(
       call("github_comment", { number: 1, body: "I can reproduce this on main.", key: "comment-1" }),
@@ -523,8 +517,7 @@ describe("the GitHub Charm, end to end against a fake GitHub", () => {
     expect(read.reply?.content).not.toContain("hobbots-call");
   }, 30_000);
 
-  // covers PE-002, PE-004
-  it("[TC-PE-246] refuses a repository outside the hob's folders, and one the app is not installed on, before asking or reaching it", async () => {
+  it("refuses a repository outside the hob's folders, and one the app is not installed on, before asking or reaching it", async () => {
     await connected();
     git(elsewhere, "checkout", "--quiet", "-b", "steal");
     commit(elsewhere, "c.txt", "Elsewhere");
@@ -555,8 +548,7 @@ describe("the GitHub Charm, end to end against a fake GitHub", () => {
     expect(github.headOf("octo/uninstalled", "feat/y")).toBeNull();
   }, 30_000);
 
-  // covers PE-005, PE-006
-  it("[TC-PE-247] keeps every credential out of the sandbox's environment, the files a hob can read, the database and tool output", async () => {
+  it("keeps every credential out of the sandbox's environment, the files a hob can read, the database and tool output", async () => {
     const secrets = github.secrets();
     // The device flow's pair, at least: the cases above signed in.
     expect(secrets.length).toBeGreaterThanOrEqual(2);

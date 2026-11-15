@@ -164,8 +164,7 @@ const gitIn = (folder: string, ...args: Array<string>) =>
   }).trim();
 
 describe("creating a repository for a hob", () => {
-  // covers PE-005
-  it("[TC-PE-324] creates a repository with Git's defaults and no hooks in a hob's folder, or a new folder inside it", async () => {
+  it("creates a repository with Git's defaults and no hooks in a hob's folder, or a new folder inside it", async () => {
     const created = await callInit(accessFor(project), { folder: project });
     expect(created.names).toEqual([GIT_INIT_TOOL]);
     expect(created.answer).toMatchObject({ refused: false });
@@ -191,8 +190,7 @@ describe("creating a repository for a hob", () => {
     expect(gitIn(nested, "rev-parse", "--show-toplevel")).toBe(nested);
   });
 
-  // covers PE-005, PE-001
-  it("[TC-PE-325] refuses a folder outside the hob's, in a Git directory, already a repository, or given relative, and creates nothing", async () => {
+  it("refuses a folder outside the hob's, in a Git directory, already a repository, or given relative, and creates nothing", async () => {
     const access = accessFor(project);
     const outsideAnswer = (await callInit(access, { folder: outside })).answer;
     expect(outsideAnswer).toMatchObject({ refused: true });
@@ -221,8 +219,7 @@ describe("creating a repository for a hob", () => {
     expect((await callInit(null, { folder: project })).offered).toBe(false);
   });
 
-  // covers PE-001, PE-003
-  it("[TC-PE-326] decides the call as Local Git under the hob's policy: Never refuses, and Careful asks first", async () => {
+  it("decides the call as Local Git under the hob's policy: Never refuses, and Careful asks first", async () => {
     // Never: not offered, and a call after the policy narrowed mid-turn is refused.
     const gitDenied = accessFor(project, "balanced", { "local-git": "deny" });
     expect(await callInit(gitDenied, { folder: project })).toMatchObject({ offered: false });
@@ -243,8 +240,7 @@ describe("creating a repository for a hob", () => {
     expect(fs.existsSync(path.join(project, ".git", "HEAD"))).toBe(true);
   });
 
-  // covers PE-001, PE-003
-  it("[TC-PE-328] decides Edit files on the new .git too: Never refuses though Local Git allows, and Ask asks", async () => {
+  it("decides Edit files on the new .git too: Never refuses though Local Git allows, and Ask asks", async () => {
     // Balanced allows Local Git; Edit files set to Never still refuses, and writes nothing.
     // Neither is offered; each is refused when the policy narrowed after the turn started.
     const editDenied = accessFor(project, "balanced", { "edit-files": "deny" });
@@ -276,8 +272,7 @@ describe("creating a repository for a hob", () => {
     expect(fs.existsSync(path.join(project, ".git", "HEAD"))).toBe(true);
   });
 
-  // covers PE-001, PE-005
-  it("[TC-PE-329] makes the repository where no hob's command reaches, then copies it to the decided folder without following links, below the hub's own folder too", async () => {
+  it("makes the repository where no hob's command reaches, then copies it to the decided folder without following links, below the hub's own folder too", async () => {
     // Below the hub's working folder, where sandbox-runtime keeps every .git/config read-only for a sandbox.
     const beneathHub = fs.realpathSync(fs.mkdtempSync(path.join(import.meta.dirname, ".local-git-")));
     try {
@@ -310,7 +305,7 @@ describe("creating a repository for a hob", () => {
   });
 });
 
-/** What a turn's sandbox leaves of a repository a hob deletes: its config and hooks (#663, TC-PE-443). */
+/** What a turn's sandbox leaves of a repository a hob deletes: its config and hooks (#663, sandbox-git-init.test.ts in @hobbots/runtimes). */
 const leaveStub = (folder: string) => {
   gitIn(folder, "init", "--quiet");
   gitIn(folder, "remote", "add", "origin", "https://example.com/earlier.git");
@@ -321,8 +316,7 @@ const leaveStub = (folder: string) => {
 };
 
 describe("replacing what a deleted repository leaves", () => {
-  // covers PE-005, PE-001
-  it("[TC-PE-440] replaces a .git that holds only a config and hooks, and refuses any other .git, saying what to do", async () => {
+  it("replaces a .git that holds only a config and hooks, and refuses any other .git, saying what to do", async () => {
     leaveStub(project);
     const replaced = await callInit(accessFor(project), { folder: project });
     expect(replaced.answer).toMatchObject({ refused: false });
@@ -361,8 +355,7 @@ describe("replacing what a deleted repository leaves", () => {
     expect(fs.existsSync(path.join(project, ".git", "config"))).toBe(true);
   });
 
-  // covers PE-001, PE-005
-  it("[TC-PE-441] removes a stub by name, never through a link, and stops at any file a stub does not hold", async () => {
+  it("removes a stub by name, never through a link, and stops at any file a stub does not hold", async () => {
     const made = path.join(root, `made-${count}`);
     execFileSync("git", ["init", "--quiet", "--template=", made]);
     const publish = () => runPublish([project, [], path.join(made, ".git"), KEPT.source]);
@@ -389,8 +382,7 @@ describe("replacing what a deleted repository leaves", () => {
     expect(fs.readdirSync(outside)).toEqual(["kept.txt"]);
   });
 
-  // covers EX-004, ADR 031
-  it("[TC-PE-487] records its step before it creates anything, and creates nothing when the step cannot be recorded", async () => {
+  it("records its step before it creates anything, and creates nothing when the step cannot be recorded", async () => {
     const refused = await callInitIn(accessFor(project), accessFor(project), { folder: project }, undefined, false);
     expect(refused.answer).toEqual({ text: UNRECORDED_TOOL_CALL, refused: true });
     expect(fs.existsSync(path.join(project, ".git"))).toBe(false);

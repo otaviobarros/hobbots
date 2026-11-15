@@ -82,8 +82,7 @@ const stored = (tool: string, charm: string, key: string) =>
   });
 
 describe("joined hub tools", () => {
-  // covers PE-002, ADR 031
-  it("[TC-PE-500] offers every set's tools in order, sends each call to its set, and refuses a name two sets offer", async () => {
+  it("offers every set's tools in order, sends each call to its set, and refuses a name two sets offer", async () => {
     expect(joinHubTools([])).toBeNull();
     expect(joinHubTools([{ owner: "Memory", tools: null }])).toBeNull();
     const tasks = set("tasks", ["plan_steps"]);
@@ -110,8 +109,7 @@ describe("joined hub tools", () => {
 });
 
 describe("the Charm registry (ADR 031)", () => {
-  // covers PE-002, PE-005, ADR 031
-  it("[TC-PE-501] serves a hob each Charm it holds that is connected, each as its own list", async () => {
+  it("serves a hob each Charm it holds that is connected, each as its own list", async () => {
     const offered = (granted: ReadonlyArray<string> | null, writes?: boolean) =>
       Effect.gen(function* () {
         const sets = yield* (yield* Charms).forTurn(turn(granted), writes === undefined ? undefined : { writes });
@@ -164,8 +162,7 @@ describe("the Charm registry (ADR 031)", () => {
     expect(answers[0]?.text).toContain("rook_read");
   });
 
-  // covers PE-005, ADR 038
-  it("[TC-PE-1343-01] offers a session outside any chat the writes of a Charm that offers them there, and steers a push only to a write it offers", async () => {
+  it("offers a session outside any chat the writes of a Charm that offers them there, and steers a push only to a write it offers", async () => {
     const pushing = (outside: boolean) =>
       Effect.map(
         fakeCharm({ id: "rook", name: "Rook", pushesFrom: ["/work/site"] }),
@@ -225,8 +222,7 @@ describe("the Charm registry (ADR 031)", () => {
     expect(never).toEqual([[["rook_read"], 0]]);
   });
 
-  // covers PE-002, ADR 031
-  it("[TC-PE-502] stops the hub on a tool name two owners share, naming both, or a name over 64 characters, naming it", async () => {
+  it("stops the hub on a tool name two owners share, naming both, or a name over 64 characters, naming it", async () => {
     expect(await registering([PIP, ROOK])).toBeNull();
 
     const twice = await registering([
@@ -263,8 +259,7 @@ describe("the Charm registry (ADR 031)", () => {
     expect(long).toContain(`The hub tool name ${over}, from the Pip Charm, is longer than 64 characters.`);
   });
 
-  // covers PE-005, ADR 031
-  it("[TC-PE-512] steers the built-in requests a held Charm takes over, from its declaration alone", async () => {
+  it("steers the built-in requests a held Charm takes over, from its declaration alone", async () => {
     const pushing = fakeCharm({ id: "rook", name: "Rook", pushesFrom: ["/work/site"] });
     const takeovers = (granted: ReadonlyArray<string> | null, connected = true) =>
       Effect.gen(function* () {
@@ -318,8 +313,7 @@ describe("the Charm registry (ADR 031)", () => {
     );
   });
 
-  // covers EX-003, EX-004, ADR 031
-  it("[TC-PE-503] runs every Charm's writes and reads back every Charm's unsettled calls with one never-twice runner", async () => {
+  it("runs every Charm's writes and reads back every Charm's unsettled calls with one never-twice runner", async () => {
     const rows = new Map<string, CharmCall>();
     // Calls the hub left in flight when it last stopped, one of each Charm's.
     rows.set("hob reply:m0 left-pip", stored("pip_write", "Pip", "left-pip"));

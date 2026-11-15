@@ -222,8 +222,7 @@ const cancelCopy = Effect.gen(function* () {
 });
 
 describe("The dispatcher", () => {
-  // covers IN-003
-  it("[TC-IN-027] delivers an item once however often it is dispatched, and a redelivered item applies its effect once", async () => {
+  it("delivers an item once however often it is dispatched, and a redelivered item applies its effect once", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -311,8 +310,7 @@ describe("The dispatcher", () => {
     expect(result.checkpoints).toBe(2);
   });
 
-  // covers IN-002, IN-003
-  it("[TC-IN-031] commits nothing of an effect whose claim expired just before it", async () => {
+  it("commits nothing of an effect whose claim expired just before it", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -348,8 +346,7 @@ describe("The dispatcher", () => {
     expect(result.stored).toMatchObject({ state: "pending", claim: null, disposition: null, fencingToken: 2 });
   });
 
-  // covers IN-002, IN-003
-  it("[TC-IN-030] expires at start every claim an earlier process held, so its worker is refused", async () => {
+  it("expires at start every claim an earlier process held, so its worker is refused", async () => {
     const result = await runStores(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -371,8 +368,7 @@ describe("The dispatcher", () => {
     expect(result.stale).toMatchObject({ _tag: "StaleBackpackClaim" });
   });
 
-  // covers IN-003, IN-007
-  it("[TC-IN-028] records each delivery apart from its acknowledgement, retries a turn that ended early, and fails the item once retries run out", async () => {
+  it("records each delivery apart from its acknowledgement, retries a turn that ended early, and fails the item once retries run out", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -435,8 +431,7 @@ describe("The dispatcher", () => {
     ]);
   });
 
-  // covers IN-002, IN-003
-  it("[TC-IN-029] stops a turn whose claim expired and drops its outcome, so only the next delivery applies the item", async () => {
+  it("stops a turn whose claim expired and drops its outcome, so only the next delivery applies the item", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -482,8 +477,7 @@ describe("The dispatcher", () => {
     expect(result.applied).toBe(1);
   });
 
-  // covers IN-003, OR-006
-  it("[TC-OR-040] resolves a result for a cancelled Task as late and starts nothing", async () => {
+  it("resolves a result for a cancelled Task as late and starts nothing", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { root, copy } = yield* campaign;
@@ -537,8 +531,7 @@ describe("The dispatcher", () => {
     ]);
     expect(tree.attempts.map((each) => each.id)).toEqual(["a1"]);
   });
-  // covers IN-003, OR-006
-  it("[TC-OR-181] resolves as late the items of a turn stopped by its Task's cancel, instead of sending them back to pending", async () => {
+  it("resolves as late the items of a turn stopped by its Task's cancel, instead of sending them back to pending", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -578,8 +571,7 @@ describe("The dispatcher", () => {
     expect(result.runs).toBe(1);
   });
 
-  // covers IN-003, OR-006
-  it("[TC-OR-182] resolves as late the items of an interrupted turn whose Task was cancelled meanwhile", async () => {
+  it("resolves as late the items of an interrupted turn whose Task was cancelled meanwhile", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -606,8 +598,7 @@ describe("The dispatcher", () => {
     expect(result).toMatchObject({ state: "resolved", claim: null, disposition: { _tag: "late" } });
   });
 
-  // covers IN-003, OR-006
-  it("[TC-OR-183] resolves a late item even when no turn can start, and plans no turn for it", async () => {
+  it("resolves a late item even when no turn can start, and plans no turn for it", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -628,8 +619,7 @@ describe("The dispatcher", () => {
     expect(result.planned).toBe(0);
   });
 
-  // covers IN-003, IN-004
-  it("[TC-IN-060] puts every waiting item into one turn, plans it again after an early end, and leaves items alone when no turn can start", async () => {
+  it("puts every waiting item into one turn, plans it again after an early end, and leaves items alone when no turn can start", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item: first } = yield* campaign;
@@ -694,8 +684,7 @@ describe("The dispatcher", () => {
     ]);
   });
 
-  // covers IN-005
-  it("[TC-IN-071] progress rides along the retry that work needing the hob plans, and alone plans none", async () => {
+  it("progress rides along the retry that work needing the hob plans, and alone plans none", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { copy } = yield* campaign;
@@ -765,8 +754,7 @@ describe("The dispatcher", () => {
 describe("Handing items to a running turn", () => {
   const turn = { target: "task:copy", turnId: "a1" };
 
-  // covers IN-003, OR-007
-  it("[TC-IN-1345-01] claims and delivers an item into a running turn, settles it once the runtime took it, and sends it back when it never did", async () => {
+  it("claims and delivers an item into a running turn, settles it once the runtime took it, and sends it back when it never did", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -801,8 +789,7 @@ describe("Handing items to a running turn", () => {
     ]);
   });
 
-  // covers IN-003, OR-006
-  it("[TC-IN-1345-02] hands a running turn nothing that another turn holds or that is late", async () => {
+  it("hands a running turn nothing that another turn holds or that is late", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -827,8 +814,7 @@ describe("Handing items to a running turn", () => {
     expect(result.item).toMatchObject({ state: "resolved", disposition: { _tag: "late" } });
   });
 
-  // covers IN-003, OR-007
-  it("[TC-IN-1345-03] keeps the claim of an item handed to a running turn while the runtime is slow to take it, so it is never delivered twice", async () => {
+  it("keeps the claim of an item handed to a running turn while the runtime is slow to take it, so it is never delivered twice", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -866,8 +852,7 @@ describe("Handing items to a running turn", () => {
     ]);
   }, 15_000);
 
-  // covers IN-003, OR-007
-  it("[TC-IN-1345-04] sends an item back to pending when its hand-off to a running turn is interrupted", async () => {
+  it("sends an item back to pending when its hand-off to a running turn is interrupted", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -884,8 +869,7 @@ describe("Handing items to a running turn", () => {
     expect(result.item).toMatchObject({ state: "pending", claim: null });
   });
 
-  // covers IN-003, OR-007
-  it("[TC-IN-1345-05] sends an item back to pending when its hand-off is interrupted while it is still being delivered", async () => {
+  it("sends an item back to pending when its hand-off is interrupted while it is still being delivered", async () => {
     // The hand-off is interrupted once the item is claimed and while it is being delivered, before
     // it reaches the runtime, as a slow database lets happen.
     const delivering = Deferred.makeUnsafe<void>();
@@ -929,8 +913,7 @@ const silentTurn =
   });
 
 describe("Blockers", () => {
-  // covers IN-007
-  it("[TC-IN-090] turns an item that runs out of deliveries into a blocker to retry, and a retry gives it as many deliveries again", async () => {
+  it("turns an item that runs out of deliveries into a blocker to retry, and a retry gives it as many deliveries again", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -973,8 +956,7 @@ describe("Blockers", () => {
     ]);
   });
 
-  // covers IN-007
-  it("[TC-IN-091] dismisses a blocker as you, records the choice, and takes no second choice", async () => {
+  it("dismisses a blocker as you, records the choice, and takes no second choice", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -1006,8 +988,7 @@ describe("Blockers", () => {
     expect(result.blocked).toEqual([]);
   });
 
-  // covers IN-007
-  it("[TC-IN-092] fails a retired hob's waiting item as a blocker to dismiss, and leaves an item a turn still holds and routine progress", async () => {
+  it("fails a retired hob's waiting item as a blocker to dismiss, and leaves an item a turn still holds and routine progress", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -1060,8 +1041,7 @@ describe("Blockers", () => {
     expect(result.progress).toMatchObject({ kind: "progress", state: "pending", blockers: [] });
   });
 
-  // covers IN-007
-  it("[TC-IN-093] holds an item to the configured limit of deliveries", async () => {
+  it("holds an item to the configured limit of deliveries", async () => {
     const result = await run(
       Effect.gen(function* () {
         const { item } = yield* campaign;
@@ -1083,8 +1063,7 @@ describe("Blockers", () => {
     ]);
   });
 
-  // covers IN-007
-  it("[TC-IN-094] binds a choice to the blocker it was made for, so a late one never reaches a newer blocker", async () => {
+  it("binds a choice to the blocker it was made for, so a late one never reaches a newer blocker", async () => {
     const retired = new Set<string>();
     const result = await run(
       Effect.gen(function* () {
@@ -1126,8 +1105,7 @@ describe("Blockers", () => {
     expect(result.resumed).toEqual(["t1"]);
     expect(result.runs).toBe(6);
   });
-  // covers OP-003
-  it("[TC-OP-030] runs no turn while work is held after a restore, and delivers the item once it resumes", async () => {
+  it("runs no turn while work is held after a restore, and delivers the item once it resumes", async () => {
     let held = true;
     const HeldHost = Layer.effect(
       DispatcherHost,

@@ -24,14 +24,14 @@ const answered = (fields: Partial<ConstructorParameters<typeof Question>[0]>) =>
   });
 
 describe("your answer", () => {
-  it("[TC-IN-487] says you answered here on the same surface, and names the other surface elsewhere", () => {
+  it("says you answered here on the same surface, and names the other surface elsewhere", () => {
     expect(yourAnswer(answered({}), "task")).toBe("You answered here: light");
     expect(yourAnswer(answered({}), "chat")).toBe("You answered in the quest: light");
     expect(yourAnswer(answered({ answeredVia: "inbox" }), "task")).toBe("You answered in the Inbox: light");
     expect(yourAnswer(answered({ answeredVia: "chat" }), "task")).toBe("You answered in the chat: light");
   });
 
-  it("[TC-IN-488] just says you answered when nobody recorded where, and nothing for a lead's answer or an open question", () => {
+  it("just says you answered when nobody recorded where, and nothing for a lead's answer or an open question", () => {
     expect(yourAnswer(answered({ answeredVia: null, answeredByDeviceId: null }), "task")).toBe("You answered: light");
     expect(yourAnswer(answered({ answeredBy: { _tag: "Lead", agentId: AgentId.make("aldric") } }), "task")).toBeNull();
     expect(yourAnswer(answered({ state: "open", answer: null, answeredBy: null }), "task")).toBeNull();

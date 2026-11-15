@@ -16,8 +16,7 @@ const startQuest = async (page: import("@playwright/test").Page) => {
   return asks;
 };
 
-// covers OR-003, OR-004, UX-001
-test("[TC-UX-908] a member asks with choices, the question climbs to you, you pick one on its card, and the member goes on with it", async ({
+test("a member asks with choices, the question climbs to you, you pick one on its card, and the member goes on with it", async ({
   page,
 }) => {
   const asks = await startQuest(page);
@@ -37,13 +36,12 @@ test("[TC-UX-908] a member asks with choices, the question climbs to you, you pi
   await expect(choices).toHaveCount(0);
 
   // In the fake Quest, Ada then says which choice she goes on with. That the answer reaches a member's
-  // own turn through the tools is checked at hub level, in [TC-OR-580].
+  // own turn through the tools is checked at hub level, in apps/server/test/question-choices.test.ts.
   await openQuest(page, "Plan the Black Friday campaign");
   await expect(lane(page, "Ada")).toContainText("Going with Dec 12 for international", { timeout: 30_000 });
 });
 
-// covers UX-001
-test("[TC-UX-909] in Ada's lane the choices are chips, and a choice's number key picks it", async ({ page }) => {
+test("in Ada's lane the choices are chips, and a choice's number key picks it", async ({ page }) => {
   await startQuest(page);
   await openQuest(page, "Plan the Black Friday campaign");
   const asks = lane(page, "Ada").getByRole("region", { name: "Ada asks you" });

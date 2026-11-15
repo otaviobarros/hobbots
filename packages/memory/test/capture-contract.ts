@@ -533,7 +533,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
 
   describe(`memory capture: ${name}`, () => {
     // covers ADR 028 (Capture and summaries)
-    it("[TC-GEN-300] leaves one session page for a thread whichever brains wrote it, and a replay does not duplicate it", () =>
+    it("leaves one session page for a thread whichever brains wrote it, and a replay does not duplicate it", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -580,7 +580,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (Capture and summaries), PE-006
-    it("[TC-GEN-301] sends nothing that redaction removes", () =>
+    it("sends nothing that redaction removes", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -597,7 +597,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (Capture and summaries)
-    it("[TC-GEN-302] ends a session when its thread is archived, and the thread goes on in the same session", () =>
+    it("ends a session when its thread is archived, and the thread goes on in the same session", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -625,7 +625,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (Capture and summaries), #959
-    it("[TC-GEN-339] keeps a session's end while you have its chat note pinned, and sends it once you unpin the note", () =>
+    it("keeps a session's end while you have its chat note pinned, and sends it once you unpin the note", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -666,7 +666,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (Capture and summaries)
-    it("[TC-GEN-303] sends a page again once after a crash between memory's acknowledgement and the cursor's save, with no duplicate", () =>
+    it("sends a page again once after a crash between memory's acknowledgement and the cursor's save, with no duplicate", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -683,7 +683,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (When memory is down)
-    it("[TC-GEN-304] keeps everything while memory is down, past the journal's 7 days, and sends it all once memory is back", () =>
+    it("keeps everything while memory is down, past the journal's 7 days, and sends it all once memory is back", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -713,7 +713,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (Capture and summaries)
-    it("[TC-GEN-305] tags a thread's session with the Quests its hob led there", () =>
+    it("tags a thread's session with the Quests its hob led there", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -742,7 +742,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (Capture and summaries)
-    it("[TC-GEN-306] waits for memory's 30 minutes of quiet by the time of a thread's last entry", () =>
+    it("waits for memory's 30 minutes of quiet by the time of a thread's last entry", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -759,7 +759,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (Capture and summaries), #1012
-    it("[TC-GEN-395] keeps a party member's Attempt in a session of the member's own memory, ended with its Task", () =>
+    it("keeps a party member's Attempt in a session of the member's own memory, ended with its Task", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -788,7 +788,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (Capture and summaries), #1012
-    it("[TC-GEN-396] writes nothing twice for a redelivered or retried Attempt, or a replayed journal", () =>
+    it("writes nothing twice for a redelivered or retried Attempt, or a replayed journal", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -841,7 +841,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (Capture and summaries), PE-006, #1012
-    it("[TC-GEN-397] sends nothing of a member's work that redaction removes, and ends a quiet Attempt's session", () =>
+    it("sends nothing of a member's work that redaction removes, and ends a quiet Attempt's session", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -863,7 +863,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (Capture and summaries), #1012
-    it("[TC-GEN-398] keeps the steps an Attempt finishes after its session ended for quiet, in the same session", () =>
+    it("keeps the steps an Attempt finishes after its session ended for quiet, in the same session", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -897,7 +897,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (Capture and summaries), #1028
-    it("[TC-GEN-399] keeps the work that wakes a member or a thread in the session of the turn that took it in, once", () =>
+    it("keeps the work that wakes a member or a thread in the session of the turn that took it in, once", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -985,7 +985,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (When memory is down)
-    it("[TC-GEN-309] settles a save memory took before the hub stopped without writing it again", () =>
+    it("settles a save memory took before the hub stopped without writing it again", () =>
       run(
         ({ memory, saves, capture }) =>
           Effect.gen(function* () {
@@ -1009,7 +1009,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (When memory is down)
-    it("[TC-GEN-310] never lets a save kept through an outage replace a page written after it", () =>
+    it("never lets a save kept through an outage replace a page written after it", () =>
       run(
         ({ memory, saves, capture }) =>
           Effect.gen(function* () {
@@ -1037,7 +1037,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (When memory is down)
-    it("[TC-GEN-311] warns when it sends entries older than memory's 30-day replay window", () =>
+    it("warns when it sends entries older than memory's 30-day replay window", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -1054,7 +1054,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (When memory is down)
-    it("[TC-GEN-312] keeps the newest of several saves of one page kept through an outage", () =>
+    it("keeps the newest of several saves of one page kept through an outage", () =>
       run(
         ({ memory, saves, capture }) =>
           Effect.gen(function* () {
@@ -1082,7 +1082,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
         "now",
       ));
     // covers ADR 028 (When memory is down), #1049
-    it("[TC-GEN-400] tells a thread's session that a save kept through an outage landed, on Claude Code and Codex", () =>
+    it("tells a thread's session that a save kept through an outage landed, on Claude Code and Codex", () =>
       run(
         ({ memory, journal, saves, capture }) =>
           Effect.gen(function* () {
@@ -1123,7 +1123,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (When memory is down), #1049
-    it("[TC-GEN-401] tells the Attempt outside any chat that made a kept save that it landed, after a retry too", () =>
+    it("tells the Attempt outside any chat that made a kept save that it landed, after a retry too", () =>
       run(
         ({ memory, journal, saves, capture }) =>
           Effect.gen(function* () {
@@ -1165,7 +1165,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 028 (When memory is down), #1049
-    it("[TC-GEN-402] keeps the time each thing happened when it reaches memory after an outage", () =>
+    it("keeps the time each thing happened when it reaches memory after an outage", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -1192,7 +1192,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
-    it("[TC-GEN-1377-01] sends nothing of a private camp or its Quest's work, after a replayed journal too, and moves the cursor past it", () =>
+    it("sends nothing of a private camp or its Quest's work, after a replayed journal too, and moves the cursor past it", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -1265,7 +1265,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
-    it("[TC-GEN-1377-02] stops capture from when a camp is made private, keeps what memory had, and goes on once it is public again", () =>
+    it("stops capture from when a camp is made private, keeps what memory had, and goes on once it is public again", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -1302,7 +1302,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
-    it("[TC-GEN-1377-06] never sends what was written while a camp was private, once it is public again, from a backlog or a replay", () =>
+    it("never sends what was written while a camp was private, once it is public again, from a backlog or a replay", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           // Memory is down while the camp is private, and public again by the time it is back.
@@ -1364,7 +1364,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 037 (A camp is a thread with a kind), ADR 028 (Capture and summaries)
-    it("[TC-GEN-1377-09] keeps out for good an Attempt's step and a reply written while the camp was private, after it is public again", () =>
+    it("keeps out for good an Attempt's step and a reply written while the camp was private, after it is public again", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const threadId = ThreadId.make(crypto.randomUUID());
@@ -1433,7 +1433,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 039 (Memory in a shared thread)
-    it("[TC-GEN-1466-02] keeps each hob's own replies, and the messages it took a turn on, in its own memory only, on Claude Code and Codex", () =>
+    it("keeps each hob's own replies, and the messages it took a turn on, in its own memory only, on Claude Code and Codex", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const camp = ThreadId.make(crypto.randomUUID());
@@ -1483,7 +1483,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 039 (Memory in a shared thread), ADR 037 (A camp is a thread with a kind)
-    it("[TC-GEN-1466-03] captures nothing of a private camp in any member hob's memory, and making it private ends every hob's session", () =>
+    it("captures nothing of a private camp in any member hob's memory, and making it private ends every hob's session", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           const quiet = ThreadId.make(crypto.randomUUID());
@@ -1517,7 +1517,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 039 (Memory in a shared thread), ADR 028 (Scopes)
-    it("[TC-GEN-1466-04] writes a hob's capture only to its own memory, as itself, never to another hob's", () =>
+    it("writes a hob's capture only to its own memory, as itself, never to another hob's", () =>
       run(({ memory, journal }) =>
         Effect.gen(function* () {
           const writes: Array<{ readonly as: string; readonly to: string; readonly sessionId: string }> = [];
@@ -1561,7 +1561,7 @@ export const captureContract = (name: string, open: () => Effect.Effect<CaptureU
       ));
 
     // covers ADR 039 (Memory in a shared thread), ADR 037 (A camp is a thread with a kind)
-    it("[TC-GEN-1466-06] never keeps a message written before capture started, whose camp may have been private then", () =>
+    it("never keeps a message written before capture started, whose camp may have been private then", () =>
       run(({ memory, journal, capture }) =>
         Effect.gen(function* () {
           // Memory was off when the message was written, so capture never saw whether its camp was private.

@@ -152,8 +152,7 @@ const request = async (method: string, path: string, body?: unknown) => {
 };
 
 describe("creating hobs", () => {
-  // covers AG-001
-  it("[TC-AG-002] creates a hob that appears in the hob list and chats with its chosen model and effort", async () => {
+  it("creates a hob that appears in the hob list and chats with its chosen model and effort", async () => {
     const created = await request("POST", "/api/agents", hob);
     expect(created.status).toBe(200);
     const agent: Agent = created.body;
@@ -175,8 +174,7 @@ describe("creating hobs", () => {
     ]);
   });
 
-  // covers AG-001, AG-004
-  it("[TC-AG-050] a second hob with another model chats on its own threads, apart from the first", async () => {
+  it("a second hob with another model chats on its own threads, apart from the first", async () => {
     const first: Agent = (await request("POST", "/api/agents", hob)).body;
     const second: Agent = (
       await request("POST", "/api/agents", {
@@ -221,8 +219,7 @@ describe("creating hobs", () => {
     expect(await said(secondThread.id)).toEqual(["hello Moss"]);
   });
 
-  // covers AG-001
-  it("[TC-AG-003] rejects invalid input with a typed error and creates nothing", async () => {
+  it("rejects invalid input with a typed error and creates nothing", async () => {
     const blankName = await request("POST", "/api/agents", { ...hob, name: "  " });
     expect(blankName).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "name" } });
 
@@ -241,8 +238,7 @@ describe("creating hobs", () => {
     expect((await request("GET", "/api/agents")).body).toEqual([]);
   });
 
-  // covers AG-001
-  it("[TC-AG-007] returns the hob created first when a create is retried with the same id", async () => {
+  it("returns the hob created first when a create is retried with the same id", async () => {
     const id = crypto.randomUUID();
     const first = await request("POST", "/api/agents", { ...hob, id });
     expect(first).toMatchObject({ status: 200, body: { ...hob, id } });
@@ -252,8 +248,7 @@ describe("creating hobs", () => {
     expect((await request("GET", "/api/agents")).body).toEqual([first.body]);
   });
 
-  // covers AG-001
-  it("[TC-AG-008] rejects a create that reuses an id for different choices or is not a UUID", async () => {
+  it("rejects a create that reuses an id for different choices or is not a UUID", async () => {
     const id = crypto.randomUUID();
     const first = await request("POST", "/api/agents", { ...hob, id });
 
@@ -266,8 +261,7 @@ describe("creating hobs", () => {
     expect((await request("GET", "/api/agents")).body).toEqual([first.body]);
   });
 
-  // covers AG-001, AG-005
-  it("[TC-AG-004] lists the models the runtime offers for the picker", async () => {
+  it("lists the models the runtime offers for the picker", async () => {
     const models = await request("GET", "/api/runtimes/claude-code/models");
     expect(models.status).toBe(200);
     expect(models.body.source).toBe("runtime");
@@ -287,8 +281,7 @@ const waitFor = (ready: () => Promise<boolean>) =>
   );
 
 describe("editing hobs", () => {
-  // covers AG-002
-  it("[TC-AG-022] runs a reply with the configuration it started with and the next reply with the edit", async () => {
+  it("runs a reply with the configuration it started with and the next reply with the edit", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     expect(agent.configVersion).toBe(1);
     const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
@@ -334,8 +327,7 @@ describe("editing hobs", () => {
     expect((await request("GET", "/api/agents")).body).toEqual([edited.body]);
   });
 
-  // covers AG-002
-  it("[TC-AG-099] restores the earlier instructions after a stopped turn that may have delivered the edit", async () => {
+  it("restores the earlier instructions after a stopped turn that may have delivered the edit", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
     const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
@@ -363,8 +355,7 @@ describe("editing hobs", () => {
     expect(prompts.at(-1)?.instructionsChanged).toBe(true);
   });
 
-  // covers AG-002
-  it("[TC-AG-100] brings a thread edited before #164 back to its hob's current instructions", async () => {
+  it("brings a thread edited before #164 back to its hob's current instructions", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
     const replies = async () =>
@@ -388,8 +379,7 @@ describe("editing hobs", () => {
     expect(await ask(fakeInstructionsPrompt, 3)).toBe(told("Write long answers."));
   });
 
-  // covers AG-002
-  it("[TC-AG-023] validates an edit, keeps the hob unchanged when it fails and adds no version for a no-op", async () => {
+  it("validates an edit, keeps the hob unchanged when it fails and adds no version for a no-op", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
 
     const unknownModel = await request("PATCH", `/api/agents/${agent.id}`, { model: "gpt-9" });
@@ -411,8 +401,7 @@ describe("editing hobs", () => {
     expect((await request("GET", "/api/agents")).body).toEqual([quick.body]);
   });
 
-  // covers AG-001, AG-002
-  it("[TC-AG-073] stores a role change as a new version, with a starter role's own title or a custom title and borrowed sigil", async () => {
+  it("stores a role change as a new version, with a starter role's own title or a custom title and borrowed sigil", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     expect(agent).toMatchObject({
       role: "writer",
@@ -451,8 +440,7 @@ describe("editing hobs", () => {
     expect((await request("GET", "/api/agents")).body).toEqual([custom.body, borrowed.body]);
   });
 
-  // covers AG-002
-  it("[TC-AG-083] tells the runtime the hob's current role on the next turn, ahead of its instructions", async () => {
+  it("tells the runtime the hob's current role on the next turn, ahead of its instructions", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
     const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
@@ -474,8 +462,7 @@ describe("editing hobs", () => {
     ]);
   });
 
-  // covers AG-002
-  it("[TC-AG-102] renames a hob and changes its look as a new version, and tells the runtime its new name on the next turn", async () => {
+  it("renames a hob and changes its look as a new version, and tells the runtime its new name on the next turn", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
     const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
@@ -504,8 +491,7 @@ describe("editing hobs", () => {
     ]);
   });
 
-  // covers AG-002
-  it("[TC-AG-087] starts a hob at Default and Balanced, and tells the runtime a tone saved as a new version", async () => {
+  it("starts a hob at Default and Balanced, and tells the runtime a tone saved as a new version", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     expect([agent.voice, agent.length]).toEqual(["default", "balanced"]);
     const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
@@ -531,8 +517,7 @@ describe("editing hobs", () => {
 });
 
 describe("what a hob is good at", () => {
-  // covers AG-001, AG-002
-  it("[TC-AG-1232-01] prefills good at from the chores or the starter role, and stores what a create gives as one line", async () => {
+  it("prefills good at from the chores or the starter role, and stores what a create gives as one line", async () => {
     const fromRole: Agent = (await request("POST", "/api/agents", hob)).body;
     expect(fromRole.goodAt).toBe(starterRole("writer").note);
     const fromChores: Agent = (
@@ -560,8 +545,7 @@ describe("what a hob is good at", () => {
     expect(long).toMatchObject({ status: 400, body: { _tag: "InvalidHob", field: "goodAt" } });
   });
 
-  // covers AG-002
-  it("[TC-AG-1232-02] stores an edit of good at as a new version that the instructions never change, and never tells the hob", async () => {
+  it("stores an edit of good at as a new version that the instructions never change, and never tells the hob", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
     const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
     const messages = async () => (await request("GET", `/api/threads/${thread.id}/messages`)).body as Array<Message>;
@@ -603,8 +587,7 @@ describe("visible to other hobs", () => {
     };
   };
 
-  // covers AG-002
-  it("[TC-AG-1233-01] hides a hob from every other hob's next look at the hub and brings it back, as new versions", async () => {
+  it("hides a hob from every other hob's next look at the hub and brings it back, as new versions", async () => {
     const wren: Agent = (await request("POST", "/api/agents", hob)).body;
     const ada: Agent = (await request("POST", "/api/agents", { ...hob, name: "Ada" })).body;
     expect(wren.visibleToHobs).toBe(true);
@@ -626,8 +609,7 @@ describe("visible to other hobs", () => {
     expect([seen.listed, seen.found("Wren")]).toEqual([["Wren"], ["Wren"]]);
   });
 
-  // covers AG-002
-  it("[TC-AG-1233-02] creates a hob hidden when asked, and never tells the runtime about the switch", async () => {
+  it("creates a hob hidden when asked, and never tells the runtime about the switch", async () => {
     const quiet: Agent = (await request("POST", "/api/agents", { ...hob, visibleToHobs: false })).body;
     expect(quiet.visibleToHobs).toBe(false);
     const thread = (await request("POST", `/api/agents/${quiet.id}/threads`)).body;
@@ -638,8 +620,7 @@ describe("visible to other hobs", () => {
 });
 
 describe("several hobs at once", () => {
-  // covers AG-001, AG-002, AG-006
-  it("[TC-AG-097] three hobs with different models chat at once, an edit mid-reply reaches only the next reply, and a retired hob refuses messages but stays readable", async () => {
+  it("three hobs with different models chat at once, an edit mid-reply reaches only the next reply, and a retired hob refuses messages but stays readable", async () => {
     const create = async (fields: Record<string, unknown>) =>
       (await request("POST", "/api/agents", { ...hob, ...fields })).body as Agent;
     const wren = await create({});

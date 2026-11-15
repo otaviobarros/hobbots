@@ -20,8 +20,7 @@ const sprites = (on: Locator) =>
 /** The ticket's height, which never changes however the work goes. */
 const height = async (on: Locator) => (await on.boundingBox())?.height ?? 0;
 
-// covers UX-002, UX-006, OR-001, OR-004
-test("[TC-UX-220] a Quest's ticket stays one line under the request and follows it live as Tasks wait, need you and finish", async ({
+test("a Quest's ticket stays one line under the request and follows it live as Tasks wait, need you and finish", async ({
   page,
 }) => {
   const { url, aldric } = await questHub();
@@ -58,8 +57,7 @@ test("[TC-UX-220] a Quest's ticket stays one line under the request and follows 
   await expect(chat.getByRole("button", { name: "Open in Workbench" })).toHaveCount(0);
 });
 
-// covers UX-002, OR-001
-test("[TC-UX-221] two Quests in one thread each keep their own ticket under the message that started them, and their own quest button", async ({
+test("two Quests in one thread each keep their own ticket under the message that started them, and their own quest button", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -128,8 +126,7 @@ test("[TC-UX-221] two Quests in one thread each keep their own ticket under the 
   await expect(questSheet(page, "Write the summary")).toBeHidden();
 });
 
-// covers UX-002, UX-006
-test("[TC-UX-222] a finished Quest's ticket says how it ended, needs nothing from you, and still opens its recap after a reload", async ({
+test("a finished Quest's ticket says how it ended, needs nothing from you, and still opens its recap after a reload", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -170,8 +167,7 @@ const durations = async (page: Page, title: string) => {
   };
 };
 
-// covers UX-002, UX-006
-test("[TC-UX-224] a finished Quest's ticket and finish banner show one duration, which a reload after its lead's turn ends keeps (#1007)", async ({
+test("a finished Quest's ticket and finish banner show one duration, which a reload after its lead's turn ends keeps (#1007)", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -212,8 +208,7 @@ const expectWithin = async (inner: Locator, outer: Locator) => {
   expect(a.x + a.width).toBeLessThanOrEqual(b.x + b.width + 1);
 };
 
-// covers UX-001, UX-002
-test("[TC-UX-223] at 1024 wide, beside the Workbench, a party of five's ticket keeps its title, its state, what needs you and its way in readable", async ({
+test("at 1024 wide, beside the Workbench, a party of five's ticket keeps its title, its state, what needs you and its way in readable", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1024, height: 768 });

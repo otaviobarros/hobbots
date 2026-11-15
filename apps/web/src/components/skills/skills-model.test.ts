@@ -164,7 +164,7 @@ describe("the library by scope", () => {
   });
 
   // covers ADR 029 (Skill sets), #1143
-  it("[TC-UI-1143-01] lists a set as one row with its skills, and names the folders its skills share", () => {
+  it("lists a set as one row with its skills, and names the folders its skills share", () => {
     const set = skill("s9", "agent-engineering", "A playbook.");
     const member = (name: string) => ({
       name: SkillName.make(name),

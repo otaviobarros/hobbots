@@ -16,8 +16,7 @@ import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
-// covers UX-002, UX-006
-test("[TC-UX-021] a finished Task's Workbench opens in the room on Changes, counts each tab, greys out the Terminal it did not use and keeps the same chat beside it", async ({
+test("a finished Task's Workbench opens in the room on Changes, counts each tab, greys out the Terminal it did not use and keeps the same chat beside it", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -89,8 +88,7 @@ test("[TC-UX-021] a finished Task's Workbench opens in the room on Changes, coun
   await expect(bench).toBeHidden();
 });
 
-// covers UX-002, UX-006
-test("[TC-UX-022] the header's quest button opens the room, and a lane's Show in the Workbench opens its Changes in the dock", async ({
+test("the header's quest button opens the room, and a lane's Show in the Workbench opens its Changes in the dock", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -119,8 +117,7 @@ test("[TC-UX-022] the header's quest button opens the room, and a lane's Show in
   await expect(composer).toHaveValue("Keep the headings short");
 });
 
-// covers UX-002, UX-006
-test("[TC-UX-030] a finished Task's summary in its lane says what happened and what it made, and links each file into Changes and Files", async ({
+test("a finished Task's summary in its lane says what happened and what it made, and links each file into Changes and Files", async ({
   page,
 }) => {
   const { url, aldric, folder } = await aldricHub();
@@ -189,8 +186,7 @@ test("[TC-UX-030] a finished Task's summary in its lane says what happened and w
   expect(new URL(page.url().replace("/#/", "/")).searchParams.get("file")).toBe(report);
 });
 
-// covers UX-002, UX-006
-test("[TC-UX-031] a question waiting for you shows in the lane above the Workbench, not again under Still open", async ({
+test("a question waiting for you shows in the lane above the Workbench, not again under Still open", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -222,8 +218,7 @@ test("[TC-UX-031] a question waiting for you shows in the lane above the Workben
   await expect(inLane.getByRole("textbox", { name: "Your answer to Aldric" })).toBeVisible();
 });
 
-// covers UX-002, UX-006
-test("[TC-UX-032] a Quest pinned from another thread holds its question in its lane there", async ({ page }) => {
+test("a Quest pinned from another thread holds its question in its lane there", async ({ page }) => {
   const { url, aldric, hub } = await aldricHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
@@ -262,8 +257,7 @@ test("[TC-UX-032] a Quest pinned from another thread holds its question in its l
   expect(new URL(page.url().replace("/#/", "/")).pathname).not.toBe(questThread);
 });
 
-// covers UX-002, UX-006
-test("[TC-UX-033] Still open says nothing is open only once it could read what waits, and offers Try again when it could not", async ({
+test("Still open says nothing is open only once it could read what waits, and offers Try again when it could not", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();
@@ -302,8 +296,7 @@ test("[TC-UX-033] Still open says nothing is open only once it could read what w
   await expect(open.getByRole("alert")).toBeHidden();
 });
 
-// covers UX-002, UX-006, OR-007
-test("[TC-UX-034] a retried step's Workbench opens on the Attempt that did the work, past a retry that did nothing", async ({
+test("a retried step's Workbench opens on the Attempt that did the work, past a retry that did nothing", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();

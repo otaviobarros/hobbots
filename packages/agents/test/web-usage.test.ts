@@ -62,7 +62,7 @@ describe("web limits and records", () => {
   });
 
   // covers ADR 036 (Usage and limits)
-  it("[TC-AG-1269-01] records each search with its hob, chat, reply, Attempt, results and billing, and refuses past the turn's limit", async () => {
+  it("records each search with its hob, chat, reply, Attempt, results and billing, and refuses past the turn's limit", async () => {
     const { usage, refusals } = await run(
       Effect.gen(function* () {
         const records = yield* WebRecords;
@@ -93,7 +93,7 @@ describe("web limits and records", () => {
   });
 
   // covers ADR 036 (Usage and limits: Codex's soft per-turn limit and the daily limit)
-  it("[TC-AG-1269-02] a turn over its search limit starts the session's next turn with search off, and a hob over its daily limit has search off", async () => {
+  it("a turn over its search limit starts the session's next turn with search off, and a hob over its daily limit has search off", async () => {
     const turns = await run(
       Effect.gen(function* () {
         const records = yield* WebRecords;
@@ -131,7 +131,7 @@ describe("web limits and records", () => {
   });
 
   // covers ADR 036 (Usage and limits: the daily limit holds across a hob's turns)
-  it("[TC-AG-1269-03] two turns of one hob running at once share its daily allowance, and a search admitted but never run gives its place back", async () => {
+  it("two turns of one hob running at once share its daily allowance, and a search admitted but never run gives its place back", async () => {
     const answers = await run(
       Effect.gen(function* () {
         const records = yield* WebRecords;

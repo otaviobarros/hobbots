@@ -65,9 +65,8 @@ const turnWith = <A>(taken: ReadonlyArray<string>, use: (prepared: PreparedSandb
 const AS_NETTLE = "-c user.name=Nettle -c user.email=nettle@example.com -c commit.gpgsign=false";
 
 describe("what you took over, in a hob turn's sandbox", () => {
-  // covers PE-005, OR-006, #1537
   it.runIf(sandboxed)(
-    "[TC-PE-1537-02] fails every write to a taken folder, and leaves the rest of the folder and Git open",
+    "fails every write to a taken folder, and leaves the rest of the folder and Git open",
     async () => {
       hubGit("init", "--quiet", "-b", "main");
       mkdirSync(join(project, "docs"));

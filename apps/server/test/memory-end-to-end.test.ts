@@ -69,7 +69,7 @@ const SAYS_ANSWERS =
 // #955 at hub level: hobs reach memory only through the hub's memory tools (ADR 028), with the hub's
 // own composition (the memory tools beside the Task tools), the fake runtime making the scripted
 // calls, the in-memory store, and the save records on SQLite or PostgreSQL (TestDatabase). Claude
-// Code and Codex serve the same hub tools with no change of their own (TC-GEN-252).
+// Code and Codex serve the same hub tools with no change of their own (hub-tools.test.ts in @hobbots/runtimes).
 
 const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-memory-e2e-")));
 const project = join(temp, "app");
@@ -220,7 +220,7 @@ const lesson = {
 
 describe("hobs remember through the hub, end to end", () => {
   // covers ADR 028 (The memory tools)
-  it("[TC-GEN-254] a lesson a hob saves in one thread is found in its next thread, never by another hob, and Never refuses before memory", async () => {
+  it("a lesson a hob saves in one thread is found in its next thread, never by another hob, and Never refuses before memory", async () => {
     await request("PATCH", "/api/setup", { completed: true, safetyPreset: "balanced", approvedFolders: [project] });
     const pip = await summon("Pip", 955);
     const quill = await summon("Quill", 956);
@@ -271,8 +271,7 @@ describe("hobs remember through the hub, end to end", () => {
     expect(other).toBeNull();
   });
 
-  // covers EX-004, ADR 028 (The memory tools), ADR 031
-  it("[TC-PE-494] the fake runtime records a memory call's step with the reply before memory is reached", async () => {
+  it("the fake runtime records a memory call's step with the reply before memory is reached", async () => {
     await request("PATCH", "/api/setup", { completed: true, safetyPreset: "balanced", approvedFolders: [project] });
     const ember = await summon("Ember", 957);
     const thread = (await request<Thread>("POST", `/api/agents/${ember.id}/threads`)).body;

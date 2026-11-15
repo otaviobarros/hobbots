@@ -151,8 +151,7 @@ const saveAndSearch = async (runtime: HubCallRuntime, records: boolean, threadId
 };
 
 describe("the Memory tools on every runtime", () => {
-  // covers EX-004, ADR 028 (The memory tools), ADR 031
-  it("[TC-PE-495] each runtime records a memory call's step before memory is reached, and reaches nothing unrecorded", {
+  it("each runtime records a memory call's step before memory is reached, and reaches nothing unrecorded", {
     timeout: 240_000,
   }, async () => {
     expect(runtimes.runtimes.map((runtime) => runtime.name)).toEqual(expectedRuntimes);
@@ -174,7 +173,7 @@ describe("the Memory tools on every runtime", () => {
   });
 
   // covers ADR 037 (A camp is a thread with a kind), ADR 028 (The memory tools)
-  it("[TC-GEN-1377-08] each runtime's save from a private camp is refused before memory is reached, and its search still runs", {
+  it("each runtime's save from a private camp is refused before memory is reached, and its search still runs", {
     timeout: 240_000,
   }, async () => {
     for (const runtime of runtimes.runtimes) {

@@ -283,8 +283,7 @@ const twoHobQuest = Effect.gen(function* () {
 });
 
 describe("Diagnostics", () => {
-  // covers OP-002, OR-002, OR-007
-  it("[TC-OP-050] follows a Quest that delegated to two hobs through its Tasks, Delegations, Attempts and runtimes", async () => {
+  it("follows a Quest that delegated to two hobs through its Tasks, Delegations, Attempts and runtimes", async () => {
     await runtime.runPromise(twoHobQuest);
 
     const quests = await get("/api/diagnostics/quests");
@@ -324,8 +323,7 @@ describe("Diagnostics", () => {
     expect((await get("/api/diagnostics/quests/nope")).body).toMatchObject({ _tag: "QuestNotFound" });
   });
 
-  // covers OP-002, PE-007
-  it("[TC-OP-051] makes a report of the Quest that holds its IDs but no message text, brief, result, path or credential", async () => {
+  it("makes a report of the Quest that holds its IDs but no message text, brief, result, path or credential", async () => {
     await runtime.runPromise(twoHobQuest);
 
     const response = await get("/api/diagnostics/report?questId=q1");
@@ -394,8 +392,7 @@ describe("Diagnostics", () => {
     expect((await get("/api/diagnostics/report?questId=nope")).body).toMatchObject({ _tag: "QuestNotFound" });
   });
 
-  // covers OP-002, EX-004
-  it("[TC-OP-052] shows each runtime's health, stalled work and the last start's recovery errors, redacted", async () => {
+  it("shows each runtime's health, stalled work and the last start's recovery errors, redacted", async () => {
     await runtime.runPromise(
       Effect.gen(function* () {
         yield* twoHobQuest;
@@ -444,8 +441,7 @@ describe("Diagnostics", () => {
     expect(report.memory).toEqual(current.memory);
   });
 
-  // covers OP-002, OP-003
-  it("[TC-OP-039] says work is held while a restore holds it, in Right now and in the report", async () => {
+  it("says work is held while a restore holds it, in Right now and in the report", async () => {
     held = true;
     const current = Schema.decodeUnknownSync(DiagnosticsNow)((await get("/api/diagnostics")).body);
     const report = Schema.decodeUnknownSync(DiagnosticsReport)((await get("/api/diagnostics/report")).body);
@@ -455,7 +451,7 @@ describe("Diagnostics", () => {
     expect(Schema.decodeUnknownSync(DiagnosticsNow)((await get("/api/diagnostics")).body).workHeld).toBe(false);
   });
   // covers ADR 029 (Backups, exports and Diagnostics), #1064
-  it("[TC-OP-119] names each hob's skills and revisions in Right now and in the report, never their contents", async () => {
+  it("names each hob's skills and revisions in Right now and in the report, never their contents", async () => {
     const DESCRIPTION = "How this repository releases, step by step.";
     const hash = SkillRevisionHash.make("d".repeat(64));
     await runtime.runPromise(

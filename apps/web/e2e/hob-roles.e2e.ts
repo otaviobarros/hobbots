@@ -9,8 +9,7 @@ test.afterEach(async () => {
   removeDataDir(dataDir);
 });
 
-// covers AG-001
-test("[TC-AG-082] picking a role by keyboard alone dresses the hob, and a custom title with a borrowed sigil is saved and changed from the profile", async ({
+test("picking a role by keyboard alone dresses the hob, and a custom title with a borrowed sigil is saved and changed from the profile", async ({
   page,
 }) => {
   dataDir = emptyDataDir();

@@ -10,8 +10,7 @@ test.afterEach(stopAldricHub);
 
 const FINDING = "The README and SPEC are already there from an earlier run";
 
-// covers OR-002, OR-004, UX-002
-test("[TC-OR-402] the Quest room shows a step that stopped on a finding as blocked, and the step after it held", async ({
+test("the Quest room shows a step that stopped on a finding as blocked, and the step after it held", async ({
   page,
 }) => {
   const { url, aldric } = await aldricHub();

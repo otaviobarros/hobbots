@@ -70,8 +70,7 @@ const PUSH = "fake:tool Bash git push origin feature";
 
 type Grants = ReadonlyArray<{ readonly agentId: string; readonly lifetime: string; readonly taskId: string | null }>;
 
-// covers PE-007, OR-001
-test("[TC-IN-152] a request made in a Task offers This task, shows the rule it saves, and the next push runs without asking", async ({
+test("a request made in a Task offers This task, shows the rule it saves, and the next push runs without asking", async ({
   page,
 }) => {
   const { current, composer } = await aldricsChat(page);
@@ -121,8 +120,7 @@ test("[TC-IN-152] a request made in a Task offers This task, shows the rule it s
   expect(grants.map(({ lifetime, taskId }) => [lifetime, taskId !== null])).toEqual([["task", true]]);
 });
 
-// covers PE-004, PE-006, PE-007
-test("[TC-IN-153] a party member's request in the Inbox offers This quest, and its grant answers only that member", async ({
+test("a party member's request in the Inbox offers This quest, and its grant answers only that member", async ({
   page,
 }) => {
   const { current, composer } = await aldricsChat(page);

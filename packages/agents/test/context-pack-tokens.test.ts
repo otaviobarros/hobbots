@@ -62,7 +62,7 @@ const lastTopicCosts = () => {
 
 describe("tokens per turn", () => {
   // covers ADR 037 (The context pack), STD-ARCH-018
-  it("[TC-CH-1380-08] on the last topic of a 200-message, 4-topic chat, every turn starts with fewer tokens than before", () => {
+  it("on the last topic of a 200-message, 4-topic chat, every turn starts with fewer tokens than before", () => {
     const costs = lastTopicCosts();
     expect(costs).toHaveLength(25);
     for (const { before, after } of costs) expect(after).toBeLessThan(before);

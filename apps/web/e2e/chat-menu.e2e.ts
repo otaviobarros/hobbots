@@ -6,8 +6,7 @@ import { aldricHub, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
-// covers CH-001, UX-001
-test("[TC-CH-262] the chat menu renames the chat in the header, pins it, searches it, opens the hob's page and archives it with Undo", async ({
+test("the chat menu renames the chat in the header, pins it, searches it, opens the hob's page and archives it with Undo", async ({
   page,
 }) => {
   const { url, aldric, hub } = await aldricHub();

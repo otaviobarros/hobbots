@@ -115,7 +115,7 @@ afterAll(() => {
 
 describe("the hub's web fetcher (ADR 036)", () => {
   // covers ADR 036 (Reading a page)
-  it("[TC-PE-1267-01] reads an article as Markdown with its title, absolute links and no script", async () => {
+  it("reads an article as Markdown with its title, absolute links and no script", async () => {
     const read = page(await fetchPage("/article"));
     expect(read.url).toBe(site("/article"));
     expect(read.title).toBe("The Lamp | Site");
@@ -134,7 +134,7 @@ describe("the hub's web fetcher (ADR 036)", () => {
   });
 
   // covers ADR 036 (What it sends)
-  it("[TC-PE-1267-02] sends one GET with the Hobbots user agent and no cookie, credential or body", async () => {
+  it("sends one GET with the Hobbots user agent and no cookie, credential or body", async () => {
     seen.length = 0;
     page(await fetchPage("/article"));
     const request = seen.find((one) => one.url === "/article");
@@ -147,7 +147,7 @@ describe("the hub's web fetcher (ADR 036)", () => {
   });
 
   // covers ADR 036 (What it reads)
-  it("[TC-PE-1267-03] reads plain text and JSON as sent, and answers a PDF as not a page it can read", async () => {
+  it("reads plain text and JSON as sent, and answers a PDF as not a page it can read", async () => {
     const notes = page(await fetchPage("/notes.txt"));
     expect(notes.text).toBe("Plain notes. More at https://example.test/more.");
     expect(notes.links).toEqual([{ url: "https://example.test/more", text: "" }]);
@@ -159,7 +159,7 @@ describe("the hub's web fetcher (ADR 036)", () => {
   });
 
   // covers ADR 036 (Answers a hob can act on)
-  it("[TC-PE-1267-04] refuses a page over 10 MB, declared or sent, and answers the site's own error status", async () => {
+  it("refuses a page over 10 MB, declared or sent, and answers the site's own error status", async () => {
     expect(failure(await fetchPage("/huge")).reason).toBe("too-large");
     expect(failure(await fetchPage("/endless")).reason).toBe("too-large");
     const missing = failure(await fetchPage("/nowhere"));
@@ -168,13 +168,13 @@ describe("the hub's web fetcher (ADR 036)", () => {
   });
 
   // covers ADR 036 (Redirects)
-  it("[TC-PE-1267-05] follows no redirect itself: it hands the hub the new URL to decide", async () => {
+  it("follows no redirect itself: it hands the hub the new URL to decide", async () => {
     const moved = await fetchPage("/moved");
     expect(Result.isSuccess(moved) && moved.success).toEqual({ _tag: "Redirect", status: 301, location: "/article" });
   });
 
   // covers ADR 036 (robots.txt)
-  it("[TC-PE-1267-06] honors robots.txt rules that name Hobbots and skips the generic ones", async () => {
+  it("honors robots.txt rules that name Hobbots and skips the generic ones", async () => {
     expect(page(await fetchPage("/article")).title).toBe("The Lamp | Site");
     const refused = failure(await fetchPage("/private/page"));
     expect(refused.reason).toBe("refused-by-site");
@@ -182,7 +182,7 @@ describe("the hub's web fetcher (ADR 036)", () => {
   });
 
   // covers ADR 036 (Egress from the hub)
-  it("[TC-PE-1267-07] connects to the addresses it was given, never to what the name resolves to now", async () => {
+  it("connects to the addresses it was given, never to what the name resolves to now", async () => {
     // The resolver says site.test is OTHER, which reaches nothing; the checked address is the site.
     expect(page(await fetchPage("/notes.txt", at([SITE]))).text).toContain("Plain notes");
     expect(failure(await fetchPage("/notes.txt", at([OTHER]))).reason).toBe("unreachable");
@@ -191,7 +191,7 @@ describe("the hub's web fetcher (ADR 036)", () => {
   });
 
   // covers ADR 036 (Cache)
-  it("[TC-PE-1267-08] keeps a page it read for every hob, and asks again after a refusal", async () => {
+  it("keeps a page it read for every hob, and asks again after a refusal", async () => {
     const one = await run(
       Effect.gen(function* () {
         const fetcher = yield* WebFetcher;

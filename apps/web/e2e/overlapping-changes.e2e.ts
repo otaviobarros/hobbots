@@ -8,8 +8,7 @@ test.afterEach(stopQuestHub);
 // file while both are at work. The hub's finding shows on both Tasks. Issue #658: Aldric cleared
 // the badge before he delegated, and his long-running Attempt keeps that change; it is no finding.
 
-// covers OR-004
-test("[TC-OR-283] two members changing the same file show the hub's finding on both Tasks", async ({ page }) => {
+test("two members changing the same file show the hub's finding on both Tasks", async ({ page }) => {
   const { url, aldric } = await questHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
@@ -37,8 +36,7 @@ test("[TC-OR-283] two members changing the same file show the hub's finding on b
   }
 });
 
-// covers OR-004
-test("[TC-OR-411] the lead's change from before it delegated shows no Same file label", async ({ page }) => {
+test("the lead's change from before it delegated shows no Same file label", async ({ page }) => {
   const { url, aldric } = await questHub();
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });

@@ -14,7 +14,7 @@ const table = (name: string, runtime: string, model: string) =>
 
 describe("the memory model as the engine's provider settings", () => {
   // covers ADR 028
-  it("[TC-GEN-212] sends every task to the hub's endpoint for the provider's runtime, with the model and effort", () => {
+  it("sends every task to the hub's endpoint for the provider's runtime, with the model and effort", () => {
     const config = configFor(settings());
     expect(config).toContain('llm_provider = "openai-compat"');
     // No model chosen: the runtime's smallest, which the endpoint picks from what the runtime offers.
@@ -39,7 +39,7 @@ describe("the memory model as the engine's provider settings", () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-213] turns off every model call with No AI, whatever else was chosen", () => {
+  it("turns off every model call with No AI, whatever else was chosen", () => {
     const chosen = settings({
       provider: "none",
       fallback: "other",
@@ -51,7 +51,7 @@ describe("the memory model as the engine's provider settings", () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-214] falls back to the other runtime's smallest model through the same endpoint", () => {
+  it("falls back to the other runtime's smallest model through the same endpoint", () => {
     expect(configFor(settings({ fallback: "other" }))).toContain(table("[llm_fallbacks]", "codex", "smallest"));
     expect(configFor(settings({ provider: "chatgpt", fallback: "other" }))).toContain(
       table("[llm_fallbacks]", "claude-code", "smallest"),
@@ -61,7 +61,7 @@ describe("the memory model as the engine's provider settings", () => {
   });
 
   // covers ADR 028
-  it("[TC-GEN-215] gives a task its own model of the runtime with its own fallbacks, or sums up chats with no AI", () => {
+  it("gives a task its own model of the runtime with its own fallbacks, or sums up chats with no AI", () => {
     const config = configFor(
       settings({
         fallback: "other",

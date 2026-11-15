@@ -302,8 +302,7 @@ const streamed = (entries: ReadonlyArray<EventEnvelope>, attemptId: string) => {
 };
 
 describe("the Workbench, end to end", () => {
-  // covers UX-002, UX-006, PE-005
-  it("[TC-UX-060] a Task that edits files and runs commands reads Live while its turn runs, from the records and the event stream, and as History once it ends", async () => {
+  it("a Task that edits files and runs commands reads Live while its turn runs, from the records and the event stream, and as History once it ends", async () => {
     const thread = await aldricWithThread();
     // The first turn starts the Task, so the next turn's work belongs to its Attempt.
     await exchange(
@@ -445,8 +444,7 @@ describe("the Workbench, end to end", () => {
     expect(await served.text()).toBe("## 1.2.0\n\n- Faster search.\n");
   }, 60_000);
 
-  // covers UX-002, UX-006
-  it("[TC-UX-061] a Task that runs no command records none, so its Terminal is not used, while its changes and files are kept", async () => {
+  it("a Task that runs no command records none, so its Terminal is not used, while its changes and files are kept", async () => {
     const thread = await aldricWithThread();
     await exchange(
       thread,

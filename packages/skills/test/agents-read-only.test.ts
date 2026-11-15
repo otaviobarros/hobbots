@@ -48,7 +48,7 @@ const dropFiles = (folder: string) =>
 
 describe("~/.agents/skills is read-only in Hobbots", () => {
   // covers ADR 029 (~/.agents/skills stays, through Hobbots; Make a copy), #1139
-  it("[TC-AG-161] refuses an edit or another source's content, and Make a copy gives an editable skill with the same files", async () => {
+  it("refuses an edit or another source's content, and Make a copy gives an editable skill with the same files", async () => {
     const folder = await folderOf({
       "pdf-forms/SKILL.md": skillMd("pdf-forms"),
       "pdf-forms/scripts/fields.py": { text: "print('fields')\n", executable: true },
@@ -109,7 +109,7 @@ describe("~/.agents/skills is read-only in Hobbots", () => {
   });
 
   // covers ADR 029 (Backups, exports and Diagnostics), ADR 026, #1139
-  it("[TC-AG-162] after a restore without its files, a read moves each assignment, held ones too, to the folder's revision and notes it", async () => {
+  it("after a restore without its files, a read moves each assignment, held ones too, to the folder's revision and notes it", async () => {
     const folder = await folderOf({ "release/SKILL.md": skillMd("release") });
     const moves = await Effect.runPromise(Ref.make<ReadonlyArray<AgentsFolderMove>>([]));
     await Effect.gen(function* () {
@@ -153,7 +153,7 @@ describe("~/.agents/skills is read-only in Hobbots", () => {
   });
 
   // covers ADR 029 (Backups, exports and Diagnostics), #1139
-  it("[TC-OP-123] an export leaves out every skill from ~/.agents/skills and names it", async () => {
+  it("an export leaves out every skill from ~/.agents/skills and names it", async () => {
     const folder = await folderOf({ "pdf-forms/SKILL.md": skillMd("pdf-forms") });
     const mine = await folderOf({ "SKILL.md": skillMd("release") });
     const out = await temp("export");
