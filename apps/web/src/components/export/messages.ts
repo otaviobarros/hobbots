@@ -18,14 +18,14 @@ export const messages = {
   dialogIntro: {
     channel: "This chat and the quests started in it, as Markdown and JSON you can read without Hobbots.",
     hob: ({ name }: { name: string }) =>
-      `${name}'s channels, the quests it led and the tasks it worked on, as Markdown and JSON you can read without Hobbots. Other hobs' tasks show only their titles and states.`,
+      `${name}'s threads, the quests it led and the tasks it worked on, as Markdown and JSON you can read without Hobbots. Other hobs' tasks show only their titles and states.`,
   },
   redacted: "Every piece of text is redacted, your own messages included. Redaction is best effort.",
   close: "Close",
   menuChannel: "Export chat…",
   menuHob: "Export hob…",
   saved: ({ folder }: { folder: string }) => `Saved to ${folder}`,
-  held: { channels: "Channels", quests: "Quests", files: "Files copied" },
+  held: { channels: "Threads", quests: "Quests", files: "Files copied" },
   notCopied: {
     one: "1 file is listed with why it was not copied.",
     other: ({ count }: { count: string }) => `${count} files are listed with why they were not copied.`,

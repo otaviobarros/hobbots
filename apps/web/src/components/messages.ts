@@ -234,7 +234,7 @@ export const messages = {
       heading: "Other hobs",
       label: "Visible to other hobs",
       on: ({ name }: { name: string }) =>
-        `Other hobs see ${name}'s name, role, what it is good at, whether it is paused, the AI it thinks with, its Charms and its permissions. Never its instructions, memory or channels.`,
+        `Other hobs see ${name}'s name, role, what it is good at, whether it is paused, the AI it thinks with, its Charms and its permissions. Never its instructions, memory or threads.`,
       off: ({ name }: { name: string }) =>
         `Other hobs don't see ${name} at all. A hob you tell to give ${name} a Task can still find it by name.`,
     },
@@ -275,11 +275,11 @@ export const messages = {
       wake: ({ name }: { name: string }) => `Wake ${name}`,
       pauseLine: ({ name }: { name: string }) => `Pausing stops ${name} from starting new work. Wake it any time.`,
       pausedLine: ({ name }: { name: string }) =>
-        `${name} is paused. It starts nothing new until you wake it. Its channels stay where they are.`,
+        `${name} is paused. It starts nothing new until you wake it. Its threads stay where they are.`,
       pauseFailed: ({ name, paused }: { name: string; paused: boolean }) =>
         `Hobbots could not ${paused ? "wake" : "pause"} ${name}. Try again.`,
       retireLine: ({ name }: { name: string }) =>
-        `Retiring puts ${name} to sleep for good. Its channels stay readable in the Archive.`,
+        `Retiring puts ${name} to sleep for good. Its threads stay readable in the Archive.`,
       retire: ({ name }: { name: string }) => `Retire ${name}…`,
       retiringLine: ({ name }: { name: string }) =>
         `${name} is finishing its open Tasks, then retires. It takes no new work meanwhile.`,
@@ -304,7 +304,7 @@ export const messages = {
       cannotTake: ({ taker, count }: { taker: string; count: number }) =>
         `${taker} cannot take ${count === 1 ? "one of these Tasks" : `${count} of these Tasks`}. Pick another hob, or let it finish first.`,
       choices: ({ name }: { name: string }) => `What happens to ${name}'s work`,
-      kept: "Its channels are kept and stay readable. Retiring can't be undone, but you can summon a new hob any time.",
+      kept: "Its threads are kept and stay readable. Retiring can't be undone, but you can summon a new hob any time.",
       failed: ({ name }: { name: string }) => `Hobbots could not retire ${name}. Try again.`,
       keep: ({ name }: { name: string }) => `Keep ${name}`,
       confirm: ({ name }: { name: string }) => `Retire ${name}`,
@@ -384,9 +384,9 @@ export const messages = {
   },
   jump: {
     label: "Jump anywhere",
-    input: "Find a hob, channel or message",
-    placeholder: "Jump to a hob or channel…",
-    list: "Hobs and channels",
+    input: "Find a hob, thread or message",
+    placeholder: "Jump to a hob or thread…",
+    list: "Hobs and threads",
     open: "↵ open",
     /** The pages the sidebar leaves out, which the finder lists by name. */
     pages: { memory: "Memory", skills: "Skills" },
@@ -398,7 +398,7 @@ export const messages = {
     editHob: "Edit hob",
     ideas: ["Plan a product launch", "Sum up this week's inbox", "Tidy my Downloads folder"],
     askWhat: "What are we making?",
-    newChannel: "New channel",
+    newChannel: "New thread",
     openHob: ({ name }: { name: string }) => `Open ${name}'s page`,
     /** The back arrow at the start of the chat header, which opens the hob's page on its chats. */
     backToChats: ({ name }: { name: string }) => `Back to ${name}'s chats`,
@@ -410,7 +410,7 @@ export const messages = {
       `waiting on ${formatCount(count)} commands · ${time}`,
     hello: ({ name }: { name: string }) => `Hello, I'm ${name}!`,
     freshPage: "A fresh page",
-    helloBody: "Tell me my first chore. I keep working even if you switch to another channel.",
+    helloBody: "Tell me my first chore. I keep working even if you switch to another thread.",
     freshBody: ({ name }: { name: string }) =>
       `Tell ${name} what you want done. ${name} plans it, brings in other hobs when it needs them, and asks you before anything risky.`,
     waiting: "Waiting to send",
@@ -467,7 +467,7 @@ export const messages = {
         other: `${who} aren't in this camp. Add them?`,
       });
     },
-    pausedPlaceholder: ({ name }: { name: string }) => `${name} is paused. Wake ${name} to start a channel.`,
+    pausedPlaceholder: ({ name }: { name: string }) => `${name} is paused. Wake ${name} to start a thread.`,
     stop: "■ Stop",
     stopping: "Stopping…",
     wake: ({ name }: { name: string }) => `Wake ${name}`,
@@ -535,8 +535,8 @@ export const messages = {
     change: "Change brain",
     continueFailed: ({ name }: { name: string }) => `Hobbots could not switch ${name}'s brain. Try again.`,
     title: "Think with",
-    scope: "Changes this channel from its next reply.",
-    freshPage: "Send a first message, then you can change this channel's brain.",
+    scope: "Changes this thread from its next reply.",
+    freshPage: "Send a first message, then you can change this thread's brain.",
     defaultModel: "Default model",
     effort: "Effort",
     noEffort: ({ model }: { model: string }) => `${model} takes no effort setting.`,

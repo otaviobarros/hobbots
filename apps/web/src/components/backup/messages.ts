@@ -41,7 +41,7 @@ export const messages = {
   holds: {
     title: "What a backup holds",
     kept: [
-      "Chats and channels",
+      "Chats and threads",
       "Quests, tasks and backpack history",
       "What hobs made, and the Workbench",
       "Hob settings, looks and permissions",
@@ -79,7 +79,7 @@ export const messages = {
     }) => {
       const count = (n: number, one: string, other: string) =>
         plural(n, { one: `${formatCount(n)} ${one}`, other: `${formatCount(n)} ${other}` });
-      return `${count(hobs, "hob", "hobs")}, ${count(channels, "channel", "channels")}, ${count(quests, "quest", "quests")}, ${count(tasks, "task", "tasks")} and ${count(skills, "skill", "skills")}`;
+      return `${count(hobs, "hob", "hobs")}, ${count(channels, "thread", "threads")}, ${count(quests, "quest", "quests")}, ${count(tasks, "task", "tasks")} and ${count(skills, "skill", "skills")}`;
     },
     missing: "Not on this computer, so set these hobs' folders again after the restore:",
     notBack:
