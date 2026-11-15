@@ -115,6 +115,13 @@ const inputOf = (item: ResponseItem): Record<string, unknown> => {
   }
 };
 
+/**
+ * How much of a refused command its label is read from. The rollout is the hob's to write, so a
+ * command can be as long as a line; labelling one tokenizes it, so only its start is, once the whole
+ * of it is redacted, which keeps a read's work bounded however long its commands are.
+ */
+const LABEL_COMMAND_CHARS = 4 * 1024;
+
 /** A refused call's step label: a command by its command line, as Codex's own commands show. */
 const labelOf = (
   tool: string,
@@ -126,7 +133,7 @@ const labelOf = (
   const command = input.cmd ?? input.command;
   const line = Array.isArray(command) ? command.filter((word) => typeof word === "string").join(" ") : command;
   return runtimeTool === "commands" && typeof line === "string"
-    ? refusedCallLabel("Bash", { command: line }, redact)
+    ? refusedCallLabel("Bash", { command: (redact ?? redactSecrets)(line).slice(0, LABEL_COMMAND_CHARS) }, redact)
     : refusedCallLabel(tool, input, redact);
 };
 

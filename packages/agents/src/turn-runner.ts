@@ -308,12 +308,9 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
                 skillUses.organization(event.organizationSkills);
                 // The runtime accepted the turn: the work it carries is now being processed.
                 yield* carry.accepted(event.sessionId);
-                yield* session.record(event.sessionId, (yield* Ref.get(reply.current)).id);
-                // A mark the turn started with, as from a relaying hob's reply, is kept on the session
+                // A mark the turn holds, as from a relaying hob's reply, is recorded with the session
                 // it now knows, so its next turn is marked too.
-                yield* Effect.flatMap(webMark.current, (mark) =>
-                  mark === null ? Effect.void : session.change((known) => markedSession(known, mark)),
-                );
+                yield* session.record(event.sessionId, (yield* Ref.get(reply.current)).id, yield* webMark.current);
                 if (event.billing && !event.billing.startsWith("subscription") && event.billing !== "fake") {
                   yield* Effect.logWarning(
                     `${RUNTIME_NAMES[brain.runtime]} is billing via ${event.billing}, not the subscription`,
