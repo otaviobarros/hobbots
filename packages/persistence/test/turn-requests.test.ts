@@ -47,9 +47,12 @@ const run = <A, E>(effect: Effect.Effect<A, E, Services>, database: typeof TestD
     Effect.runPromise,
   );
 
-/** The migrations that ran before turn requests were recorded. */
+/**
+ * The migrations that ran before turn requests were recorded, and the one that keeps a reply's
+ * read-the-web mark, which the repository writes each message with.
+ */
 const earlier = Object.fromEntries(
-  Object.entries(migrations).filter(([id]) => id < "20261114003401"),
+  Object.entries(migrations).filter(([id]) => id < "20261114003401" || id === "20261115002636_message_read_web"),
 ) as typeof migrations;
 
 const hob = (id: AgentId) =>

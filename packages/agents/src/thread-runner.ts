@@ -36,6 +36,7 @@ import {
   TurnRequestId,
   TurnRequests,
   titleFromPrompt,
+  type WebReadMark,
 } from "@hobbots/domain";
 import { DateTime, Deferred, Effect, Fiber, FiberMap, HashMap, Option, Ref, Semaphore } from "effect";
 import { HobAdmission, withThreadLock } from "./admission.ts";
@@ -144,6 +145,20 @@ export interface ThreadRunnerDeps
   /** Saves a turn's new reply, the requests it answers taking the floor with it; null when one no longer waits. */
   readonly saveSpeaking: (reply: Message, speaking: ReadonlyArray<TurnRequestId>) => Effect.Effect<Message | null>;
 }
+
+/**
+ * The read-the-web mark a hob's reply in a turn's context carries, if one does (ADR 039, A relay
+ * carries the read-the-web mark): the reply it answers, in any chapter, the live chapter its session
+ * hears, and the reply Continue resumes. What it wrote may carry what a page said.
+ */
+const contextReadWeb = (
+  yours: Message | undefined,
+  told: ReadonlyArray<Message>,
+  continued: Message | null,
+): WebReadMark | null =>
+  [...(yours === undefined ? [] : [yours]), ...told, ...(continued === null ? [] : [continued])].find(
+    (m) => m.readWeb !== null,
+  )?.readWeb ?? null;
 
 export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
   Effect.gen(function* () {
@@ -422,6 +437,7 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
         const briefing =
           [briefed, uncertain, stopped, start.context ?? null].filter((part) => part !== null).join("\n\n") || null;
         const changed = yield* instructionsChanged(speaker, brain.runtime, systemInstructions(config.name, config));
+        const yours = saved.promptId === null ? undefined : transcript.find((m) => m.id === saved.promptId);
         // Registered before the turn starts, so a stop sent right away still reaches it.
         const reply: Reply = {
           current: yield* Ref.make(saved),
@@ -447,12 +463,12 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
             config,
             brain,
             prompt,
-            { text: briefing, pack },
+            { text: briefing, pack, readWeb: contextReadWeb(yours, told, continued) },
             reply,
             changed,
             start.carry ?? NOTHING_CARRIED,
             // The message of yours the reply answers, as you wrote it, which Continue keeps (#1005).
-            saved.promptId === null ? undefined : transcript.find((m) => m.id === saved.promptId),
+            yours,
           ).pipe(
             // However the turn ended, the requests it spoke for are answered, or passed with no
             // message when its hob passed (ADR 039), before the floor frees.

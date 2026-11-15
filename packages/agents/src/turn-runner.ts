@@ -92,19 +92,17 @@ const turnEnding = (message: Message): TurnEnding =>
 /** The read-the-web mark of the session a turn resumes, if it read the web. */
 const readWebOf = (known: RuntimeSession | undefined): WebReadMark | null => known?.readWeb ?? null;
 
-/**
- * The read-the-web mark `yours` brings when it is another hob's reply that woke this turn (ADR 036,
- * ADR 039): what it wrote may carry what a page said, so the turn answering it starts marked as the
- * writer's session in the chapter is. Null for a person's message or a writer that read nothing.
- */
-const relayedReadWeb = (thread: Thread, yours: Message | undefined): WebReadMark | null => {
-  const writer = yours?.role === "assistant" && yours.actor?.kind === "hob" ? yours.actor.id : null;
-  if (writer === null) return null;
-  const marked = thread.sessions.find(
-    (known) => known.agentId === writer && known.chapterId === thread.liveChapterId && known.readWeb != null,
-  );
-  return marked?.readWeb ?? null;
-};
+/** The reply with the read-the-web mark its session holds. */
+const withReadWeb =
+  (mark: WebReadMark) =>
+  (message: Message): Message =>
+    new Message({ ...message, readWeb: mark });
+
+/** Keeps `mark` on the reply, when the turn starts marked. */
+const markReply = (
+  update: (f: (message: Message) => Message) => Effect.Effect<unknown>,
+  mark: WebReadMark | null,
+): Effect.Effect<unknown> => (mark === null ? Effect.void : update(withReadWeb(mark)));
 
 /** The thread's session with its read-the-web mark set, or null when it already holds it. */
 const markedSession = (known: RuntimeSession, mark: WebReadMark): RuntimeSession | null =>
@@ -211,7 +209,9 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
       prompt: string,
       // What the turn tells its session ahead of the prompt, and for a new session, what its context
       // pack is built from once the turn knows its memory brief (ADR 037).
-      told: { readonly text: string | null; readonly pack: PackSources | null },
+      // `readWeb` is the mark a hob's reply in the turn's context carries (ADR 039, A relay carries the
+      // read-the-web mark), if one does.
+      told: { readonly text: string | null; readonly pack: PackSources | null; readonly readWeb: WebReadMark | null },
       reply: Reply,
       changed: boolean,
       carry: Carry,
@@ -405,13 +405,16 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
             )
           : null;
         // The session's read-the-web mark (ADR 036): held from where the resumed session left it, or
-        // from the hob whose reply relayed to this one, and kept on the thread's session and on the
-        // Attempt the turn runs as, if any.
-        const latest = Option.getOrElse(yield* repo.findThread(thread.id), () => thread);
-        const markedBefore = readWebOf(session.expected) ?? relayedReadWeb(latest, yours);
+        // from a hob's reply in the turn's context, and kept on the thread's session, on the reply, so
+        // a turn that reads it starts marked too (ADR 039), and on the Attempt the turn runs as, if any.
+        const markedBefore = readWebOf(session.expected) ?? told.readWeb;
+        yield* markReply(update, markedBefore);
         const webMark = yield* makeWebMark(markedBefore, (mark) =>
           Effect.andThen(
-            session.change((known) => markedSession(known, mark)),
+            Effect.andThen(
+              session.change((known) => markedSession(known, mark)),
+              update(withReadWeb(mark)),
+            ),
             Effect.suspend(() => attemptReadWeb(onTask, mark)),
           ),
         );
