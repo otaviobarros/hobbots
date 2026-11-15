@@ -65,7 +65,6 @@ import { type CharmCaller, makeCharmRecords } from "./charm-records.ts";
 import { draftScope, makeChatResolver, type ResolvedCaller } from "./chat-turns.ts";
 import { makeClaiming } from "./claiming.ts";
 import { makeControlling } from "./controlling.ts";
-import { makeCriteria } from "./criteria.ts";
 import { makeDelegating } from "./delegating.ts";
 import { makeApprovedRemovals, makeDeliveryCheck, makeDestinationCheck } from "./delivery.ts";
 import { flagIdleQuest } from "./empty-quests.ts";
@@ -288,7 +287,6 @@ export class TaskTools extends Context.Service<
           }),
           ...makeLeading({ tasks, steersTurns }),
           ...makeControlling({ tasks, hobs, capacity, authority, separator }),
-          ...makeCriteria({ tasks }),
           ...(yield* makeClaiming({
             tasks,
             folders: (scope, task) => Effect.map(authority.of(scope, task), (granted) => granted.folders),

@@ -244,7 +244,7 @@ describe("holdsEveryTaskTool", () => {
     // Not known, as for every session recorded before #1543: not held, so the session is replaced.
     expect(holdsEveryTaskTool(undefined)).toBe(false);
     expect(holdsEveryTaskTool([])).toBe(false);
-    expect(holdsEveryTaskTool(all.filter((name) => name !== "check_criterion"))).toBe(false);
+    expect(holdsEveryTaskTool(all.filter((name) => name !== "stop_quest"))).toBe(false);
     expect(holdsEveryTaskTool(all)).toBe(true);
     expect(holdsEveryTaskTool([...all].reverse())).toBe(true);
     // Other hub tools beside them, such as a Charm's, change nothing.
@@ -256,14 +256,13 @@ describe("the ids a Task tool takes", () => {
   /**
    * Where a lead reads each id it passes to a Task tool again, from the records, in any session
    * (#1555). A session never sees an earlier session's tool results, so an id known only from a
-   * call's result is lost to a new session, as the Quest's criterion ids were.
+   * call's result is lost to a new session.
    */
   const REREAD: Record<string, string> = {
     "plan_steps.task_id": "the briefing names the Task it works on; read_tasks",
     "start_quest.task_id": "the briefing names the Task it works on",
     "delegate_task.task_id": "the briefing names the Task it works on",
     "delegate_task.depends_on": "the briefing lists the work under it; read_tasks",
-    "delegate_task.criteria": "the briefing lists the Quest's criteria; read_tasks",
     "report_checkpoint.task_id": "the brief names the Task it works on",
     "report_checkpoint.milestone_id": "the brief lists the milestones to report",
     "ask.task_id": "the briefing names the Task it works on",
@@ -280,12 +279,10 @@ describe("the ids a Task tool takes", () => {
     "reassign_task.task_id": "the briefing lists the work under it; read_tasks",
     "reassign_task.expected_revision": "read_tasks",
     "complete_task.task_id": "the briefing names the Task it works on",
-    "check_criterion.criterion_id": "the briefing lists the Quest's criteria; read_tasks",
-    "check_criterion.evidence": "the briefing lists each artifact; read_tasks",
     "cancel_task.task_id": "the briefing lists the work under it; read_tasks",
     "claim.task_id": "the briefing names the Task it works on",
   };
-  const ID_LISTS = new Set(["tasks", "depends_on", "criteria", "evidence", "expected_revision"]);
+  const ID_LISTS = new Set(["tasks", "depends_on", "expected_revision"]);
 
   // Issue #1555
   it("each have a place a lead reads them again from the records (#1555)", () => {

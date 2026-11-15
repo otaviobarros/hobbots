@@ -1,13 +1,6 @@
 import { runtimeAdapters, TaskRepository, TurnSlots } from "@hobbots/agents";
 import { HobbotsApi, QuestNotFound } from "@hobbots/api";
-import {
-  DEFAULT_TURN_LIMITS,
-  type QuestId,
-  questCost,
-  RuntimeKind,
-  type TurnSlotsReport,
-  unreportedPlan,
-} from "@hobbots/domain";
+import { DEFAULT_TURN_LIMITS, type QuestId, RuntimeKind, type TurnSlotsReport, unreportedPlan } from "@hobbots/domain";
 import { UsageLedger } from "@hobbots/persistence";
 import { DateTime, Duration, Effect, Layer, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
@@ -70,7 +63,7 @@ export const UsageHandlers = HttpApiBuilder.group(HobbotsApi, "usage", (handlers
       questCost: ({ params }) =>
         Effect.gen(function* () {
           const top = yield* topQuest(params.questId);
-          return questCost(top.id, yield* ledger.spentOn(top.id), top.criteria);
+          return { questId: top.id, ...(yield* ledger.spentOn(top.id)) };
         }),
       turns: () => turns,
       setTurnLimits: ({ payload }) =>

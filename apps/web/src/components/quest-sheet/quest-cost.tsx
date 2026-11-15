@@ -8,9 +8,8 @@ import { messages } from "./messages.ts";
 const copy = messages.sheet;
 
 /**
- * What the quest cost per accepted outcome (#1449): the tokens its party's replies and turns reported,
- * over the criteria accepted on evidence, as the hub sums them. Before anything is accepted it says
- * so, with what was spent so far; replies that reported no usage are counted apart, never estimated.
+ * What the quest cost (#1449): the tokens its party's replies and turns reported, as the hub sums
+ * them. Replies that reported no usage are counted apart, never estimated.
  */
 export function QuestCost({ tree }: { tree: TaskTree }) {
   const quest = workCard(tree)?.quest ?? null;
@@ -36,15 +35,10 @@ function CostOf({ quest }: { quest: Pick<Quest, "id" | "revision"> }) {
         </span>
       ) : (
         <>
-          <span className="text-ui text-text-strong">
-            {cost.perAccepted === null
-              ? copy.costNoneAccepted
-              : copy.costPerOutcome({ tokens: cost.perAccepted, accepted: cost.accepted, criteria: cost.criteria })}
-          </span>
-          <span className="text-detail text-text-secondary">
-            {copy.costSpent({ tokens: cost.tokens, turns: cost.turns })}
-            {cost.unreported > 0 && <> {copy.costUnreported({ count: cost.unreported })}</>}
-          </span>
+          <span className="text-ui text-text-strong">{copy.costSpent({ tokens: cost.tokens, turns: cost.turns })}</span>
+          {cost.unreported > 0 && (
+            <span className="text-detail text-text-secondary">{copy.costUnreported({ count: cost.unreported })}</span>
+          )}
         </>
       )}
     </section>

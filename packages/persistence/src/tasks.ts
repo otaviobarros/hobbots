@@ -54,29 +54,13 @@ import {
   TaskTransitions,
   TaskWait,
   type ThreadId,
-  unmetCriteria,
-  unmetCriteriaText,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient, SqlError } from "effect/sql";
-import { registerArtifacts } from "./artifact-rows.ts";
-import { criteriaOf, makeCriteriaChanges, settleWaiverAsks, voidReplacedEvidence } from "./criteria-rows.ts";
 import { lockJournal, makeJournaled, makeJournaledChange } from "./journal.ts";
 import { makeLedger } from "./ledger.ts";
 import { readQuestSummaries } from "./quest-summary-rows.ts";
 import { insertQuestion, makeTaskReads, taskColumns } from "./task-rows.ts";
-
-/**
- * What a lead is told when the artifacts its own completion returns voided evidence (#1445): the
- * version it makes replaced the one a criterion was accepted on. Empty when they voided none.
- */
-const returnedAgain = (registered: ReadonlyArray<JournaledEvent>, voided: ReadonlyArray<JournaledEvent>) => {
-  if (voided.length === 0) return "";
-  const named = registered
-    .flatMap((event) => (event._tag === "ArtifactRegistered" ? [`"${event.artifact.title}"`] : []))
-    .join(", ");
-  return ` Returning ${named} from this completion makes a newer version, which replaces the version a criterion was accepted on. The Quest already holds what its Tasks returned, so leave it out of artifacts.`;
-};
 
 const refuse = (reason: TaskRefusal, message: string) => Effect.fail(new TaskRefused({ reason, message }));
 
@@ -365,7 +349,6 @@ export const TaskRepositoryLive = Layer.effect(
           const { outer, depth } = questPlacement(task, tree, quests);
           const quest = new Quest({
             ...input,
-            criteria: criteriaOf(input),
             leadId: task.ownerId,
             parentQuestId: outer?.id ?? null,
             threadId: task.threadId,
@@ -382,7 +365,6 @@ export const TaskRepositoryLive = Layer.effect(
             thread_id: quest.threadId,
             goal: quest.goal,
             acceptance: JSON.stringify(quest.acceptance),
-            criteria: JSON.stringify(quest.criteria),
             limits: JSON.stringify(quest.limits),
             depth: quest.depth,
             state: quest.state,
@@ -934,26 +916,6 @@ export const TaskRepositoryLive = Layer.effect(
         return { consumes, superseded };
       });
 
-    /**
-     * The criteria gate (#1445), on the records as the completion leaves them: what it returns is
-     * registered first, so a version it makes voids the evidence of the one it replaced. A Quest
-     * completes only once each required criterion is accepted or waived. Returns the events of the
-     * artifacts it registered and the criteria they voided.
-     */
-    const criteriaHold = (task: Task, completed: ReadonlyArray<JournaledEvent>, first: number) =>
-      Effect.gen(function* () {
-        const [quest] = yield* read.questsOn([task.id]);
-        if (quest === undefined) return [];
-        const registered = yield* registerArtifacts(sql, completed, first);
-        const voided = yield* voidReplacedEvidence(sql, registered, first + registered.length);
-        const [now] = yield* read.questsOn([task.id]);
-        const unmet = unmetCriteria(now?.criteria ?? []);
-        if (unmet.length > 0) {
-          return yield* refuse("criteria-unmet", unmetCriteriaText(task.id, unmet, returnedAgain(registered, voided)));
-        }
-        return [...registered, ...voided];
-      });
-
     const completeTask: TaskRepository["Service"]["completeTask"] = (taskId, expected, completion) =>
       change((revision) =>
         Effect.gen(function* () {
@@ -986,7 +948,6 @@ export const TaskRepositoryLive = Layer.effect(
             })}`;
           }
           const events: Array<JournaledEvent> = [{ _tag: "TaskCompleted", task, artifacts }];
-          events.push(...(yield* criteriaHold(task, events, revision + events.length)));
           events.push(...(yield* automatic(task, completion.at, revision + events.length)));
           if (completion.uncommitted !== undefined) {
             const checkpoint = new Checkpoint({
@@ -1164,11 +1125,9 @@ export const TaskRepositoryLive = Layer.effect(
           });
           yield* saveQuestion(question);
           const settled = yield* settleCopies(before, revision + 1);
-          // Your answer to a lead's ask to waive a required criterion waives it, or leaves it (#1445).
-          const waived = yield* settleWaiverAsks(sql, question, from?.actor ?? null, revision + 1 + settled.length);
           return {
             value: question,
-            events: [{ _tag: "QuestionAnswered", question } as const, ...settled, ...waived],
+            events: [{ _tag: "QuestionAnswered", question } as const, ...settled],
           };
         }),
       );
@@ -1345,7 +1304,6 @@ export const TaskRepositoryLive = Layer.effect(
       pauseTask,
       settlePause,
       resumeTask,
-      ...makeCriteriaChanges(sql, change),
       startAttempt,
       updateAttempt,
       resumeAttempt,

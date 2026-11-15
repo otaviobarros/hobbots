@@ -19,7 +19,7 @@ Domain terms used across Hobbots. Each entry points to the document that owns th
 | Runtime / adapter | An existing agent engine (Claude Code, Codex, ACP-compatible) and the capability-aware adapter that hosts it. | [Runtime adapters](../architecture/runtime-adapters.md), [ADR 002](../decisions/002-existing-runtimes.md) |
 | Task | One hob's piece of work, end to end: one owner, one result, even when it takes hours. | [ADR 018](../decisions/018-tasks-and-quests.md), [Agent model](../architecture/agent-model.md) |
 | Step | A part of a Task that its own hob runs in a fresh session from a short brief. Steps never make a Task a Quest. | [ADR 018](../decisions/018-tasks-and-quests.md) |
-| Quest | A Task that brings in other hobs. It keeps the Task's id, card and history, and adds a goal, acceptance criteria and limits. | [ADR 018](../decisions/018-tasks-and-quests.md), [Orchestration](../architecture/orchestration.md) |
+| Quest | A Task that brings in other hobs. It keeps the Task's id, card and history, and adds a goal, a "Done when" list and limits. | [ADR 018](../decisions/018-tasks-and-quests.md), [Orchestration](../architecture/orchestration.md) |
 | Lead | The hob that owns a Quest: the hob you asked. You talk only to the lead. A member that brings in a hob of its own leads that subtree. | [ADR 018](../decisions/018-tasks-and-quests.md) |
 | Party | The other hobs working on a Quest, shown as "Aldric's party: Quill, Ada". Members never talk to each other. | [ADR 018](../decisions/018-tasks-and-quests.md) |
 | Checkpoint | A short record of where a Task stands: a planned milestone, a finding, blocker or question, or an automatic state. | [ADR 018](../decisions/018-tasks-and-quests.md) |

@@ -185,8 +185,8 @@ export const makeThreadRunner = (deps: ThreadRunnerDeps) =>
     /**
      * `thread` as a turn of `agent` on `runtime` sees it (#1543). A runtime that keeps the hub tools a
      * session started with, as Codex does (ADR 024), never gets a Task tool its session lacks, so a
-     * Quest lead in a thread that started before `check_criterion` existed could never accept a
-     * criterion. Such a session, or one without `pass` (ADR 039), or one whose tools are not known, is
+     * hob in a thread that started before that tool existed could never call it. Such a session, or
+     * one without `pass` (ADR 039), or one whose tools are not known, is
      * left out: the turn starts a new session from the context pack in its place, as in a new chapter,
      * and the new one is recorded over it.
      */

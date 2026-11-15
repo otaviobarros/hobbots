@@ -23,7 +23,7 @@ import { StatusStrip } from "../quest/status-strip.tsx";
 import { useQuestProgress } from "../quest/use-quest-progress.ts";
 import { type HobLookup, type Pins, useFollowedTrees, useHobLookup } from "../quest/use-work.ts";
 import { findTask, taskTitle, workCard } from "../quest/work-model.ts";
-import { QuestCriteria } from "./criteria.tsx";
+import { QuestDoneWhen } from "./done-when.tsx";
 import { messages } from "./messages.ts";
 import { PauseControls, pauseControl } from "./pause-controls.tsx";
 import { QuestCost } from "./quest-cost.tsx";
@@ -200,7 +200,7 @@ function QuestBody({
         </Button>
         <PauseControls top={top} quest={card.quest} owner={lead.name} control={pause} />
       </span>
-      <QuestCriteria tree={tree} hobs={hobs} />
+      <QuestDoneWhen tree={tree} />
       <QuestCost tree={tree} />
       <Team tree={tree} hobs={hobs} pins={pins} moves={moves} />
       <QuestThreadView tree={tree} threadId={threadId} lead={card.leadId} hobs={hobs} />

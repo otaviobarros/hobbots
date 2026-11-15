@@ -1,7 +1,6 @@
 import { Effect, Schema } from "effect";
 import { Actor } from "./actor.ts";
 import { ApprovalRequest } from "./approval.ts";
-import { Criterion } from "./criterion.ts";
 import { DeviceId } from "./device.ts";
 import { AgentId, MessageId, ThreadId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
@@ -89,14 +88,6 @@ export class Quest extends Schema.Class<Quest>("Quest")({
   goal: Schema.String,
   /** What has to hold for the Quest to be done, as its lead wrote it. */
   acceptance: Schema.Array(Schema.String),
-  /**
-   * The same conditions as criteria its lead checks against evidence (#1445), in order. Quests
-   * journaled before migration 0111 decode with none.
-   */
-  criteria: Schema.Array(Criterion).pipe(
-    Schema.withDecodingDefaultKey(Effect.succeed([])),
-    Schema.withConstructorDefault(Effect.succeed([])),
-  ),
   limits: QuestLimits,
   /** 1 for a top Quest, one more for each Quest it sits in. */
   depth: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
@@ -185,11 +176,6 @@ export const QuestStates = {
   ...QuestMachine,
   /** Whether its lead may still take work on: under way and not being stopped. */
   takesWork: (quest: Pick<Quest, "state">): boolean => quest.state === "active",
-  /**
-   * Whether its criteria still change: under way, or paused, where a turn that was running as you
-   * paused finishes its checks, and no new turn starts until you resume it (#1446).
-   */
-  checksCriteria: (quest: Pick<Quest, "state">): boolean => quest.state === "active" || quest.state === "paused",
   /** Whether you paused it (#1446). */
   isPaused: (quest: Pick<Quest, "state">): boolean => quest.state === "paused",
   /** Whether its lead stopped it at your request, whether or not the work under it has ended yet. */
@@ -644,17 +630,6 @@ export const TaskRefusal = Schema.Literals([
   "lineage-owner",
   "owner-unavailable",
   "task-changed",
-  // A Quest with required acceptance criteria neither accepted nor waived cannot complete (#1445).
-  "criteria-unmet",
-  // No acceptance criterion with that id in a Quest the caller leads (#1445).
-  "criterion-missing",
-  // A check its criterion's state does not allow, such as accepting without evidence (#1445).
-  "criterion-state",
-  // Evidence that is no artifact of the Quest's, or not at its latest version (#1445).
-  "evidence-missing",
-  "evidence-stale",
-  // A waiver of a required criterion asked of the user, whose answer is still awaited (#1445).
-  "waiver-asked",
   "options-collide",
   "quest-ended",
   // A pause or resume the Task's state does not allow, or new work under a Task you paused (#1446).
