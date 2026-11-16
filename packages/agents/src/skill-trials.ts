@@ -1,6 +1,8 @@
 import { type AgentNotFound, type HobUnavailable, SkillDraftGone } from "@hobbots/api";
 import {
   type AgentId,
+  type Channel,
+  type ChannelId,
   type SkillId,
   SkillNotFound,
   SkillProposalNotFound,
@@ -9,8 +11,6 @@ import {
   type SkillSourceUnreadable,
   SkillTrial,
   skillTitle,
-  type Thread,
-  type ThreadId,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
 import { ChatService } from "./chat.ts";
@@ -61,13 +61,13 @@ export class SkillTrials extends Context.Service<
   SkillTrials,
   {
     /** Checks the draft, keeps its files apart, and opens a new chat with the hob that loads only it. */
-    readonly start: (agentId: AgentId, draft: SkillTrialDraft) => Effect.Effect<Thread, SkillTrialError>;
+    readonly start: (agentId: AgentId, draft: SkillTrialDraft) => Effect.Effect<Channel, SkillTrialError>;
     /**
      * The whole `SKILL.md` the chat tries, so you can go on editing it where it came from; gone when the
      * chat tries no draft or the hub no longer has its files, as after a restore.
      */
     readonly draft: (
-      threadId: ThreadId,
+      channelId: ChannelId,
     ) => Effect.Effect<{ readonly trial: SkillTrial; readonly text: string }, SkillDraftGone>;
   }
 >()("@hobbots/agents/SkillTrials") {}
@@ -126,14 +126,14 @@ export const SkillTrialsLive = Layer.effect(
           const { source, skillId, base, proposalId } = yield* sourceOf(draft);
           const staged = yield* writer.stage(source);
           const skillTrial = new SkillTrial({ ...staged, skillId, base, proposalId });
-          return yield* chat.createThread(agentId, { title: trialTitle(staged.name), skillTrial });
+          return yield* chat.createChannel(agentId, { title: trialTitle(staged.name), skillTrial });
         }),
-      draft: (threadId) =>
+      draft: (channelId) =>
         Effect.gen(function* () {
-          const thread = yield* repo.findThread(threadId);
-          const trial = Option.isSome(thread) ? thread.value.skillTrial : null;
+          const channel = yield* repo.findChannel(channelId);
+          const trial = Option.isSome(channel) ? channel.value.skillTrial : null;
           const text = trial === null ? null : yield* files.draftText(trial.hash);
-          if (trial === null || text === null) return yield* new SkillDraftGone({ threadId });
+          if (trial === null || text === null) return yield* new SkillDraftGone({ channelId });
           return { trial, text };
         }),
     });

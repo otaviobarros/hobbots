@@ -1,6 +1,7 @@
 import type { MemoryStoreShape } from "@hobbots/agents";
 import {
   AgentId,
+  ChannelId,
   type MemoryActor,
   MemoryConflict,
   type MemoryDraft,
@@ -10,7 +11,6 @@ import {
   type MemoryScope,
   type MemoryVersion,
   memoryProjectIdentity,
-  ThreadId,
 } from "@hobbots/domain";
 import { Cause, Effect, Exit } from "effect";
 import { describe, expect, it } from "vitest";
@@ -618,15 +618,15 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (Capture and summaries), #959
-    it("never rewrites a chat note you pinned when its thread's session ends again", () =>
+    it("never rewrites a chat note you pinned when its channel's session ends again", () =>
       run(({ store }) =>
         Effect.gen(function* () {
-          const thread = ThreadId.make("0d6e2f0a-0000-4000-8000-0000000000f2");
-          const path = store.sessionPage(pipsOwn, thread);
-          yield* store.capture(asPip, pipsOwn, thread, [
+          const channel = ChannelId.make("0d6e2f0a-0000-4000-8000-0000000000f2");
+          const path = store.sessionPage(pipsOwn, channel);
+          yield* store.capture(asPip, pipsOwn, channel, [
             { key: "message:m1", kind: "message", text: "How do the tests run?" },
           ]);
-          expect(yield* store.endSession(asPip, pipsOwn, thread, "end:m1")).toBe(true);
+          expect(yield* store.endSession(asPip, pipsOwn, channel, "end:m1")).toBe(true);
           const note = yield* store.page(you, pipsOwn, path);
           expect(note).not.toBeNull();
           const pinned = yield* store.write(
@@ -635,12 +635,12 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
             draft(path, note?.markdown ?? "", { tags: note?.tags ?? [], pinned: true }),
             { _tag: "Version", version: note?.version as MemoryVersion },
           );
-          // The thread goes on and ends again: the pinned note stays as it was.
-          yield* store.capture(asPip, pipsOwn, thread, [
+          // The channel goes on and ends again: the pinned note stays as it was.
+          yield* store.capture(asPip, pipsOwn, channel, [
             { key: "message:m2", kind: "message", text: "And the linter?" },
           ]);
           // The end is put off, not taken: memory answers that it waits.
-          expect(yield* store.endSession(asPip, pipsOwn, thread, "end:m2")).toBe(false);
+          expect(yield* store.endSession(asPip, pipsOwn, channel, "end:m2")).toBe(false);
           const after = yield* store.page(you, pipsOwn, path);
           expect(after).toMatchObject({ version: pinned, pinned: true, author: you });
           expect(after?.markdown).not.toContain("And the linter?");
@@ -651,8 +651,8 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
     it("names a chat's page by its summary's title when it is read, as every list names it (#1316)", () =>
       run(({ store }) =>
         Effect.gen(function* () {
-          const thread = ThreadId.make("0d6e2f0a-0000-4000-8000-0000000000f3");
-          const path = store.sessionPage(pipsOwn, thread);
+          const channel = ChannelId.make("0d6e2f0a-0000-4000-8000-0000000000f3");
+          const path = store.sessionPage(pipsOwn, channel);
           const read = Effect.map(store.page(you, pipsOwn, path), (page) => page as MemoryPage);
           const listedTitle = Effect.map(store.list(you, pipsOwn, 50), (pages) =>
             pages.filter((each) => each.path === path).map((each) => each.title),
@@ -662,13 +662,13 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
               _tag: "Version",
               version: page.version,
             });
-          yield* store.capture(asPip, pipsOwn, thread, [
+          yield* store.capture(asPip, pipsOwn, channel, [
             { key: "message:m1", kind: "message", text: "How do the tests run?" },
           ]);
-          yield* store.endSession(asPip, pipsOwn, thread, "end:m1");
+          yield* store.endSession(asPip, pipsOwn, channel, "end:m1");
           const [title] = yield* listedTitle;
           expect(title).toBeTruthy();
-          expect(title).not.toContain(thread);
+          expect(title).not.toContain(channel);
           const note = yield* read;
           expect(note.title).toBe(title);
           // Pinning it writes its markdown again, and it keeps its title.
@@ -683,21 +683,21 @@ export const memoryStoreContract = (name: string, open: () => Effect.Effect<Memo
       ));
 
     // covers ADR 028 (The MemoryStore service, Capture and summaries)
-    it("keeps a thread's capture in its hob's own memory, refusing any other scope", () =>
+    it("keeps a channel's capture in its hob's own memory, refusing any other scope", () =>
       run(({ store }) =>
         Effect.gen(function* () {
-          const thread = ThreadId.make("0d6e2f0a-0000-4000-8000-0000000000f1");
+          const channel = ChannelId.make("0d6e2f0a-0000-4000-8000-0000000000f1");
           const items = [{ key: "message:m1", kind: "message", text: "How do the tests run?" }] as const;
-          expect(yield* store.capture(asPip, pipsOwn, thread, items)).toBe(1);
+          expect(yield* store.capture(asPip, pipsOwn, channel, items)).toBe(1);
           // Sent again, it is acknowledged and skipped.
-          expect(yield* store.capture(asPip, pipsOwn, thread, items)).toBe(1);
-          yield* store.endSession(asPip, pipsOwn, thread, "end:m1");
-          const page = yield* store.page(you, pipsOwn, store.sessionPage(pipsOwn, thread));
+          expect(yield* store.capture(asPip, pipsOwn, channel, items)).toBe(1);
+          yield* store.endSession(asPip, pipsOwn, channel, "end:m1");
+          const page = yield* store.page(you, pipsOwn, store.sessionPage(pipsOwn, channel));
           expect(page?.markdown).toContain("How do the tests run?");
           expect(page?.author).toEqual(byPip);
           for (const scope of [quillsOwn, theApp, everyone]) {
-            expect(yield* died(store.capture(asPip, scope, thread, items))).toBe(true);
-            expect(yield* died(store.endSession(asPip, scope, thread, "end:m1"))).toBe(true);
+            expect(yield* died(store.capture(asPip, scope, channel, items))).toBe(true);
+            expect(yield* died(store.endSession(asPip, scope, channel, "end:m1"))).toBe(true);
           }
         }),
       ));

@@ -73,7 +73,7 @@ export const HobToolsLive = Layer.effect(
             // "Summoning for every hob" reaches the hobs you made (ADR 034).
             hob: withSummoningForEveryHob(agent, summoningForEveryHob),
             dataFolder: dataDir,
-            // Threads, Quests and delegations add no restrictions yet.
+            // Channels, Quests and delegations add no restrictions yet.
             restrictions: [],
             charmOperations,
           };

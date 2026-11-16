@@ -2,14 +2,14 @@ import type { HobProposalView, WaitingQuestion } from "@hobbots/api";
 import {
   type ApprovalRequest,
   type BackpackItem,
+  type ChannelId,
   type HubQuestion,
   hobProposalOpen,
   openBlocker,
-  type ThreadId,
 } from "@hobbots/domain";
 import {
   approvalEntry,
-  entryThread,
+  entryChannel,
   hobProposalEntry,
   hubQuestionEntry,
   type InboxEntry,
@@ -30,8 +30,8 @@ export type TrayEntry = Exclude<
 
 /**
  * What the tray holds, in the order it asks: pending approvals and hob proposals, then stuck work, then questions,
- * hobs' then the hub's own (#976), each oldest first. With `threadId`, only what is about that
- * thread: a hub question shows in the tray of the chat it concerns, and on Home.
+ * hobs' then the hub's own (#976), each oldest first. With `channelId`, only what is about that
+ * channel: a hub question shows in the tray of the chat it concerns, and on Home.
  */
 export const trayEntries = ({
   requests,
@@ -39,14 +39,14 @@ export const trayEntries = ({
   questions,
   hubQuestions = [],
   hobProposals = [],
-  threadId,
+  channelId,
 }: {
   readonly requests: ReadonlyArray<ApprovalRequest>;
   readonly blockers: ReadonlyArray<BackpackItem>;
   readonly questions: ReadonlyArray<WaitingQuestion>;
   readonly hubQuestions?: ReadonlyArray<HubQuestion>;
   readonly hobProposals?: ReadonlyArray<HobProposalView>;
-  readonly threadId?: ThreadId | undefined;
+  readonly channelId?: ChannelId | undefined;
 }): ReadonlyArray<TrayEntry> => {
   const entries = [
     ...requests.filter((request) => request.state === "pending").map(approvalEntry),
@@ -55,7 +55,7 @@ export const trayEntries = ({
     ...questions.filter(({ question }) => question.state === "open").map(questionEntry),
     ...hubQuestions.filter((question) => question.state === "open").map(hubQuestionEntry),
   ].filter((entry): entry is TrayEntry => entry.kind !== "device" && entry.kind !== "memory");
-  return threadId === undefined ? entries : entries.filter((entry) => entryThread(entry) === threadId);
+  return channelId === undefined ? entries : entries.filter((entry) => entryChannel(entry) === channelId);
 };
 
 /**
@@ -67,9 +67,9 @@ export type TrayScope = "here" | "everywhere";
 /** What a chat's or camp's tray holds in each scope, from everything that waits on you. */
 export const scopedTray = (
   everywhere: ReadonlyArray<TrayEntry>,
-  threadId: ThreadId,
+  channelId: ChannelId,
 ): { readonly here: ReadonlyArray<TrayEntry>; readonly everywhere: ReadonlyArray<TrayEntry> } => ({
-  here: everywhere.filter((entry) => entryThread(entry) === threadId),
+  here: everywhere.filter((entry) => entryChannel(entry) === channelId),
   everywhere,
 });
 

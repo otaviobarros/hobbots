@@ -93,7 +93,7 @@ declare global {
        * notification about a question, a failed Task or a finished Quest is clicked (ADR 027).
        */
       readonly onOpenTask?: (
-        listener: (link: { readonly hobId: string; readonly threadId: string; readonly taskId: string }) => void,
+        listener: (link: { readonly hobId: string; readonly channelId: string; readonly taskId: string }) => void,
       ) => () => void;
       /**
        * Only on a connected desktop (ADR 025): the hub it uses, where the connection stands, and
@@ -154,8 +154,8 @@ export const call = async <A, E>(f: (client: Client) => Effect.Effect<A, E>): Pr
 };
 
 /** Where the hub serves the whole output of a tool step that shows only its start and end. */
-export const toolLogUrl = (threadId: string, messageId: string, stepId: string): string =>
-  `${API_URL}/api/threads/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}/steps/${encodeURIComponent(stepId)}/log`;
+export const toolLogUrl = (channelId: string, messageId: string, stepId: string): string =>
+  `${API_URL}/api/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}/steps/${encodeURIComponent(stepId)}/log`;
 
 /** Where the hub serves a command's whole output, which its record in the Terminal shows cut (ADR 023). */
 export const commandLogUrl = (attemptId: string, commandId: string): string =>

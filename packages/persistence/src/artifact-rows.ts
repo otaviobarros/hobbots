@@ -6,6 +6,7 @@ import {
   type ArtifactSighting,
   AttemptId,
   artifactSightings,
+  ChannelId,
   ChapterId,
   ContentId,
   type DeliveredArtifact,
@@ -22,7 +23,6 @@ import {
   type StoredVersion,
   type StoredVersionSource,
   TaskId,
-  ThreadId,
 } from "@hobbots/domain";
 import { DateTime, Effect, Schema } from "effect";
 import type { SqlClient, SqlError, Statement } from "effect/sql";
@@ -34,7 +34,7 @@ import type { SqlClient, SqlError, Statement } from "effect/sql";
 /** A row of `artifacts`, as the SQL client reads it. */
 export interface ArtifactRow {
   readonly id: string;
-  readonly threadId: string;
+  readonly channelId: string;
   readonly chapterId: string;
   readonly kind: string;
   readonly title: string;
@@ -59,7 +59,7 @@ const decode = Schema.decodeUnknownEffect(Artifact);
 export const artifactFromRow = (row: ArtifactRow) =>
   decode({
     id: row.id,
-    threadId: row.threadId,
+    channelId: row.channelId,
     chapterId: row.chapterId,
     kind: row.kind,
     title: row.title,
@@ -83,7 +83,7 @@ export const artifactsFromRows = (rows: ReadonlyArray<ArtifactRow>) => Effect.fo
 
 const artifactColumns = (artifact: Artifact) => ({
   id: artifact.id,
-  thread_id: artifact.threadId,
+  channel_id: artifact.channelId,
   chapter_id: artifact.chapterId,
   kind: artifact.kind,
   title: artifact.title,
@@ -180,26 +180,26 @@ const resolved = (sql: SqlClient.SqlClient, sighting: ArtifactSighting) =>
       );
 
 /**
- * Where a sighting lands: a reply's own thread, chapter and author, or a Task's thread, that
- * thread's live chapter and the Task's owner. Null for a Task outside any chat or camp.
+ * Where a sighting lands: a reply's own channel, chapter and author, or a Task's channel, that
+ * channel's live chapter and the Task's owner. Null for a Task outside any chat or camp.
  */
 const placeOf = (sql: SqlClient.SqlClient, unresolved: ArtifactSighting) =>
   Effect.gen(function* () {
     const sighting = yield* resolved(sql, unresolved);
     const { from } = sighting;
     if (from._tag === "Message") {
-      return { sighting, threadId: from.threadId, chapterId: from.chapterId, actor: from.actor } as PlacedSighting;
+      return { sighting, channelId: from.channelId, chapterId: from.chapterId, actor: from.actor } as PlacedSighting;
     }
     const [task] = yield* sql<{
-      readonly threadId: string | null;
+      readonly channelId: string | null;
       readonly ownerId: string;
       readonly chapterId: string | null;
-    }>`SELECT t.thread_id, t.owner_id,
-        (SELECT c.id FROM chapters c WHERE c.thread_id = t.thread_id AND c.state = 'live') AS chapter_id
+    }>`SELECT t.channel_id, t.owner_id,
+        (SELECT c.id FROM chapters c WHERE c.channel_id = t.channel_id AND c.state = 'live') AS chapter_id
       FROM tasks t WHERE t.id = ${from.taskId}`;
-    if (task?.threadId == null || task.chapterId == null) return null;
+    if (task?.channelId == null || task.chapterId == null) return null;
     return placedFromTask(sighting, {
-      threadId: ThreadId.make(task.threadId),
+      channelId: ChannelId.make(task.channelId),
       chapterId: ChapterId.make(task.chapterId),
       ownerId: AgentId.make(task.ownerId),
     });
@@ -227,7 +227,7 @@ const register = (sql: SqlClient.SqlClient, placed: PlacedSighting, revision: nu
   Effect.gen(function* () {
     const { sighting } = placed;
     const [row] = yield* sql<ArtifactRow>`SELECT * FROM artifacts
-      WHERE thread_id = ${placed.threadId} AND locator = ${sighting.locator}`;
+      WHERE channel_id = ${placed.channelId} AND locator = ${sighting.locator}`;
     const existing = row === undefined ? null : yield* artifactFromRow(row);
     const seen =
       existing !== null &&

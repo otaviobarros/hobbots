@@ -83,7 +83,7 @@ export interface Delivery {
 
 /** One turn that carries an item: where it runs, its id, and running it until it ends. */
 export interface Turn {
-  /** The thread or Attempt session the turn runs in. */
+  /** The channel or Attempt session the turn runs in. */
   readonly target: string;
   /** The turn's message or Attempt id. */
   readonly turnId: string;
@@ -446,7 +446,7 @@ export class Dispatcher extends Context.Service<
         /**
          * Resolves the waiting items that are late already, so they wait for no turn: a late item
          * starts nothing, and needs none to settle, even where no turn can start now, as in a
-         * thread whose turn you stopped. Returns the rest.
+         * channel whose turn you stopped. Returns the rest.
          */
         const settleLateWaiting = (waiting: ReadonlyArray<BackpackItem>, outcomes: Map<BackpackItemId, Dispatched>) =>
           Effect.filter(waiting, (item) =>

@@ -3,13 +3,13 @@ import { MessageNotQueued } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   type HobbotsEvent,
   Message,
   MessageId,
   mainLine,
   OWNER_ACTOR,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 
 const HOB_ID = AgentId.make("aldric");
-const THREAD_ID = ThreadId.make("t-queued");
+const CHANNEL_ID = ChannelId.make("t-queued");
 const at = "2026-01-01T00:00:00.000Z";
 
 const summonHob = Effect.gen(function* () {
@@ -44,10 +44,10 @@ const summonHob = Effect.gen(function* () {
 // What a previous process left behind: a finished turn and two messages still waiting.
 const leftQueued = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
-  yield* repo.upsertThread(
-    new Thread({
-      id: THREAD_ID,
-      agentId: HOB_ID,
+  yield* repo.upsertChannel(
+    new Channel({
+      id: CHANNEL_ID,
+      ownerHobId: HOB_ID,
       title: "Plans",
       createdAt: at,
       updatedAt: at,
@@ -56,7 +56,7 @@ const leftQueued = Effect.gen(function* () {
   const message = (id: string, role: Message["role"], status: Message["status"]) =>
     new Message({
       id: MessageId.make(id),
-      threadId: THREAD_ID,
+      channelId: CHANNEL_ID,
       actor: role === "assistant" ? null : OWNER_ACTOR,
       role,
       content: id,
@@ -73,7 +73,7 @@ const leftQueued = Effect.gen(function* () {
 });
 
 /**
- * A reply in a thread whose session is not recorded, as these seeded threads' are: a new session,
+ * A reply in a channel whose session is not recorded, as these seeded channels' are: a new session,
  * so the fake echoes its context pack, the live chapter so far, ahead of the prompt (ADR 037).
  */
 const packedEcho = (prompt: string) =>
@@ -84,9 +84,9 @@ const packedEcho = (prompt: string) =>
 const crashedAfterStart = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
   yield* leftQueued;
-  const second = yield* repo.nextQueuedMessage(THREAD_ID).pipe(Effect.map(Option.getOrThrow));
+  const second = yield* repo.nextQueuedMessage(CHANNEL_ID).pipe(Effect.map(Option.getOrThrow));
   // Its request took the floor in the same transaction.
-  const [request] = yield* repo.openTurnRequests(mainLine(THREAD_ID));
+  const [request] = yield* repo.openTurnRequests(mainLine(CHANNEL_ID));
   yield* repo.startQueuedMessage(
     new Message({ ...second, status: "complete" }),
     new Message({
@@ -117,21 +117,21 @@ const testLayer = (seed: Effect.Effect<void, never, HobbotsRepository> = Effect.
     ),
   );
 
-// Waits until the thread ends on a finished reply with nothing streaming or queued and no turn running.
-const settled = (threadId: ThreadId) =>
+// Waits until the channel ends on a finished reply with nothing streaming or queued and no turn running.
+const settled = (channelId: ChannelId) =>
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
     const chat = yield* ChatService;
-    const messages = yield* repo.listMessages(threadId);
-    const active = yield* chat.activeThreads;
+    const messages = yield* repo.listMessages(channelId);
+    const active = yield* chat.activeChannels;
     const unfinished = messages.some((m) => m.status === "streaming" || m.status === "queued");
     if (unfinished || messages.at(-1)?.role !== "assistant" || active.length > 0) {
       return yield* Effect.fail("busy" as const);
     }
   }).pipe(Effect.retry(Schedule.spaced("5 millis")));
 
-const transcript = (threadId: ThreadId) =>
-  HobbotsRepository.use((repo) => repo.listMessages(threadId)).pipe(
+const transcript = (channelId: ChannelId) =>
+  HobbotsRepository.use((repo) => repo.listMessages(channelId)).pipe(
     Effect.map((messages) => messages.map((m) => [m.role, m.content, m.status])),
   );
 
@@ -158,16 +158,16 @@ describe("message queue", () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const events = yield* recordQueueEvents;
-      const thread = yield* chat.createThread(HOB_ID);
+      const channel = yield* chat.createChannel(HOB_ID);
 
-      const first = yield* chat.sendPrompt(thread.id, "one");
-      const second = yield* chat.sendPrompt(thread.id, "two");
-      const third = yield* chat.sendPrompt(thread.id, "three");
-      yield* settled(thread.id);
+      const first = yield* chat.sendPrompt(channel.id, "one");
+      const second = yield* chat.sendPrompt(channel.id, "two");
+      const third = yield* chat.sendPrompt(channel.id, "three");
+      yield* settled(channel.id);
       return {
         replies: [first.assistantMessage, second.assistantMessage, third.assistantMessage].map((m) => m?.status),
         queued: [second.userMessage.status, third.userMessage.status],
-        transcript: yield* transcript(thread.id),
+        transcript: yield* transcript(channel.id),
         events: events.map((e) => (e._tag === "MessageQueued" ? [e._tag, e.message.content] : [e._tag, e.reason])),
       };
     }).pipe(Effect.provide(testLayer()), Effect.scoped, Effect.runPromise);
@@ -196,11 +196,11 @@ describe("message queue", () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       yield* Effect.sleep("60 millis");
-      const whileHeld = yield* transcript(THREAD_ID);
+      const whileHeld = yield* transcript(CHANNEL_ID);
       yield* (yield* WorkHold).release;
       yield* chat.drainAgent(HOB_ID);
-      yield* settled(THREAD_ID);
-      return { whileHeld, resumed: yield* transcript(THREAD_ID) };
+      yield* settled(CHANNEL_ID);
+      return { whileHeld, resumed: yield* transcript(CHANNEL_ID) };
     }).pipe(Effect.provide(testLayer(leftQueued).pipe(Layer.provideMerge(hold))), Effect.scoped, Effect.runPromise);
 
     expect(result.whileHeld).toEqual([
@@ -221,8 +221,8 @@ describe("message queue", () => {
 
   it("starts messages queued before a restart, in order", async () => {
     const result = await Effect.gen(function* () {
-      yield* settled(THREAD_ID);
-      return yield* transcript(THREAD_ID);
+      yield* settled(CHANNEL_ID);
+      return yield* transcript(CHANNEL_ID);
     }).pipe(Effect.provide(testLayer(leftQueued)), Effect.scoped, Effect.runPromise);
 
     expect(result).toEqual([
@@ -237,8 +237,8 @@ describe("message queue", () => {
 
   it("recovers a message that started just before a crash and then runs the rest of the queue", async () => {
     const result = await Effect.gen(function* () {
-      yield* settled(THREAD_ID);
-      return yield* transcript(THREAD_ID);
+      yield* settled(CHANNEL_ID);
+      return yield* transcript(CHANNEL_ID);
     }).pipe(Effect.provide(testLayer(crashedAfterStart)), Effect.scoped, Effect.runPromise);
 
     expect(result).toEqual([
@@ -254,14 +254,14 @@ describe("message queue", () => {
   it("Send now stops the running reply and starts the chosen message before older ones", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
-      const thread = yield* chat.createThread(HOB_ID);
+      const channel = yield* chat.createChannel(HOB_ID);
 
-      yield* chat.sendPrompt(thread.id, "long task please keep going for a while");
-      yield* chat.sendPrompt(thread.id, "later");
-      const urgent = yield* chat.sendPrompt(thread.id, "urgent");
-      yield* chat.sendNow(thread.id, urgent.userMessage.id);
-      yield* settled(thread.id);
-      return yield* transcript(thread.id);
+      yield* chat.sendPrompt(channel.id, "long task please keep going for a while");
+      yield* chat.sendPrompt(channel.id, "later");
+      const urgent = yield* chat.sendPrompt(channel.id, "urgent");
+      yield* chat.sendNow(channel.id, urgent.userMessage.id);
+      yield* settled(channel.id);
+      return yield* transcript(channel.id);
     }).pipe(Effect.provide(testLayer()), Effect.scoped, Effect.runPromise);
 
     expect(result.map(([role, content, status]) => [role, role === "user" ? content : status])).toEqual([
@@ -278,18 +278,18 @@ describe("message queue", () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const events = yield* recordQueueEvents;
-      const thread = yield* chat.createThread(HOB_ID);
+      const channel = yield* chat.createChannel(HOB_ID);
 
-      const first = yield* chat.sendPrompt(thread.id, "keep");
-      const dropped = yield* chat.sendPrompt(thread.id, "drop");
-      yield* chat.removeQueued(thread.id, dropped.userMessage.id);
-      const again = yield* chat.removeQueued(thread.id, dropped.userMessage.id).pipe(Effect.flip);
-      const started = yield* chat.removeQueued(thread.id, first.userMessage.id).pipe(Effect.flip);
-      yield* settled(thread.id);
+      const first = yield* chat.sendPrompt(channel.id, "keep");
+      const dropped = yield* chat.sendPrompt(channel.id, "drop");
+      yield* chat.removeQueued(channel.id, dropped.userMessage.id);
+      const again = yield* chat.removeQueued(channel.id, dropped.userMessage.id).pipe(Effect.flip);
+      const started = yield* chat.removeQueued(channel.id, first.userMessage.id).pipe(Effect.flip);
+      yield* settled(channel.id);
       return {
         again,
         started,
-        transcript: yield* transcript(thread.id),
+        transcript: yield* transcript(channel.id),
         events: events.map((e) => (e._tag === "MessageDequeued" ? [e._tag, e.reason] : [e._tag])),
       };
     }).pipe(Effect.provide(testLayer()), Effect.scoped, Effect.runPromise);
@@ -307,25 +307,25 @@ describe("message queue", () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const lifecycle = yield* HobLifecycle;
-      const thread = yield* chat.createThread(HOB_ID);
+      const channel = yield* chat.createChannel(HOB_ID);
 
-      yield* chat.sendPrompt(thread.id, "now");
-      yield* chat.sendPrompt(thread.id, "after the nap");
+      yield* chat.sendPrompt(channel.id, "now");
+      yield* chat.sendPrompt(channel.id, "after the nap");
       yield* lifecycle.pause(HOB_ID);
       // The running reply finishes; the queued message waits for the hob.
-      yield* HobbotsRepository.use((repo) => repo.listMessages(thread.id)).pipe(
+      yield* HobbotsRepository.use((repo) => repo.listMessages(channel.id)).pipe(
         Effect.flatMap((messages) =>
           messages.some((m) => m.status === "streaming") ? Effect.fail("streaming" as const) : Effect.void,
         ),
         Effect.retry(Schedule.spaced("5 millis")),
       );
-      const sentWhilePaused = yield* chat.sendPrompt(thread.id, "and this");
+      const sentWhilePaused = yield* chat.sendPrompt(channel.id, "and this");
       yield* Effect.sleep("50 millis");
-      const whilePaused = yield* transcript(thread.id);
+      const whilePaused = yield* transcript(channel.id);
       const woke = yield* Effect.forkChild(lifecycle.wake(HOB_ID));
       yield* Fiber.join(woke);
-      yield* settled(thread.id);
-      return { sentWhilePaused, whilePaused, afterWake: yield* transcript(thread.id) };
+      yield* settled(channel.id);
+      return { sentWhilePaused, whilePaused, afterWake: yield* transcript(channel.id) };
     }).pipe(Effect.provide(testLayer()), Effect.scoped, Effect.runPromise);
 
     expect(result.whilePaused).toEqual([

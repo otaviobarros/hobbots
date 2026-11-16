@@ -24,6 +24,8 @@ import {
   AgentId,
   ArtifactId,
   AttemptId,
+  Channel,
+  ChannelId,
   CommandId,
   carriedFrom,
   DEFAULT_QUEST_LIMITS,
@@ -40,8 +42,6 @@ import {
   OWNER_ACTOR,
   QuestId,
   TaskId,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import { makeMemoryStoreFake } from "@hobbots/memory/testing";
 import {
@@ -61,7 +61,7 @@ import { EventBus } from "../src/event-bus.ts";
 import { ExportFoldersLive } from "../src/exports.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
 
-// Issue #453: exports of ADR 026. One thread, one hob or everything, as a folder of Markdown and
+// Issue #453: exports of ADR 026. One channel, one hob or everything, as a folder of Markdown and
 // versioned JSON that opens without Hobbots, with the files the Tasks made, every string redacted,
 // and nothing a backup alone may hold: no device record, token hash or credential.
 
@@ -77,9 +77,9 @@ const AT = "2026-11-02T10:00:00.000Z";
 const LATER = "2026-11-02T11:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
-const CAMPAIGN = ThreadId.make("campaign");
-const NOTES = ThreadId.make("notes");
-const QUILL_THREAD = ThreadId.make("quill-own");
+const CAMPAIGN = ChannelId.make("campaign");
+const NOTES = ChannelId.make("notes");
+const QUILL_CHANNEL = ChannelId.make("quill-own");
 /** The hub's own credential, known by value, and a token you pasted into a message, known by its shape. */
 const HUB_SECRET = "hub-credential-0123456789";
 const PASTED = `ghp_${"a1B2".repeat(9)}`;
@@ -106,10 +106,10 @@ const hob = (id: AgentId, name: string, ownFolders: ReadonlyArray<string>) =>
     policy: { ...EMPTY_HOB_POLICY, ownFolders },
   });
 
-const message = (id: string, threadId: ThreadId, role: "user" | "assistant", content: string, at = AT) =>
+const message = (id: string, channelId: ChannelId, role: "user" | "assistant", content: string, at = AT) =>
   new Message({
     id: MessageId.make(id),
-    threadId,
+    channelId,
     actor: role === "assistant" ? null : OWNER_ACTOR,
     role,
     content,
@@ -141,9 +141,9 @@ const attempt = (id: string): NewAttempt => ({
 });
 
 /**
- * Aldric's campaign thread, with a token in your message, and a Quest that brought in Quill: Aldric's
+ * Aldric's campaign channel, with a token in your message, and a Quest that brought in Quill: Aldric's
  * Task made a report, a chart, an `.env` and a file since deleted, and ran a command; Quill drafted
- * copy with a brief only Quill's export holds. Quill also has a thread of its own.
+ * copy with a brief only Quill's export holds. Quill also has a channel of its own.
  */
 const seed = Effect.gen(function* () {
   yield* (yield* SetupRepository).update({ safetyPreset: "balanced", approvedFolders: [] }, OWNER_ACTOR);
@@ -153,16 +153,16 @@ const seed = Effect.gen(function* () {
   for (const [id, agentId, title] of [
     [CAMPAIGN, ALDRIC, "Black Friday campaign"],
     [NOTES, ALDRIC, "Notes / ideas"],
-    [QUILL_THREAD, QUILL, "Quill's own chat"],
+    [QUILL_CHANNEL, QUILL, "Quill's own chat"],
   ] as const) {
-    yield* repo.upsertThread(new Thread({ id, agentId, title, createdAt: AT, updatedAt: AT }));
+    yield* repo.upsertChannel(new Channel({ id, ownerHobId: agentId, title, createdAt: AT, updatedAt: AT }));
   }
   yield* repo.upsertMessage(
     message("m1", CAMPAIGN, "user", `Plan the campaign. My token is ${PASTED} and the hub's is ${HUB_SECRET}.`),
   );
   yield* repo.upsertMessage(message("m2", CAMPAIGN, "assistant", "On it. **Quill** drafts the copy.", LATER));
   yield* repo.upsertMessage(message("m3", NOTES, "user", "A note to self."));
-  yield* repo.upsertMessage(message("m4", QUILL_THREAD, "user", "Hello Quill."));
+  yield* repo.upsertMessage(message("m4", QUILL_CHANNEL, "user", "Hello Quill."));
 
   const tasks = yield* TaskRepository;
   const top = TaskId.make("campaign-task");
@@ -171,7 +171,7 @@ const seed = Effect.gen(function* () {
       id: top,
       ownerId: ALDRIC,
       parentId: null,
-      threadId: CAMPAIGN,
+      channelId: CAMPAIGN,
       brief: "Run the Black Friday campaign\nWith a report.",
       dependsOn: [],
       createdAt: AT,
@@ -192,7 +192,7 @@ const seed = Effect.gen(function* () {
       id: TaskId.make("copy-task"),
       ownerId: QUILL,
       parentId: top,
-      threadId: CAMPAIGN,
+      channelId: CAMPAIGN,
       brief: "Draft the copy\nQuill's private brief: mention the secret discount.",
       dependsOn: [],
       createdAt: LATER,
@@ -352,14 +352,14 @@ const filesIn = (folder: string): Record<string, Buffer> =>
 
 const decode = Schema.decodeUnknownSync(Schema.fromJsonString(HobbotsExport));
 
-/** The records of Aldric's export: its hobs and threads, the Quest with Quill's Task as a summary, and the work history. */
+/** The records of Aldric's export: its hobs and channels, the Quest with Quill's Task as a summary, and the work history. */
 const expectRecords = (data: HobbotsExport) => {
   expect(data).toMatchObject({ format: "hobbots.export", version: 1, hobbotsVersion: "9.9.9" });
   expect(data.hobs.map((each) => [each.name, each.roleTitle, each.runtime])).toEqual([
     ["Aldric", "Marketing", "claude-code"],
     ["Quill", "Marketing", "claude-code"],
   ]);
-  expect(data.threads.map((thread) => thread.title)).toEqual(["Black Friday campaign", "Notes / ideas"]);
+  expect(data.channels.map((channel) => channel.title)).toEqual(["Black Friday campaign", "Notes / ideas"]);
   const [tree] = data.quests;
   // Quill's Quest is Quill's: its goal and state only.
   expect(tree?.quests.map((quest) => [quest.goal, quest.detail, quest.acceptance])).toEqual([
@@ -399,27 +399,27 @@ const expectMarkdown = (files: Record<string, Buffer>) => {
   expect(quest).toContain("not copied because its name marks it as a file that may hold secrets");
   expect(quest).toContain("Ran `pnpm build`");
   expect(quest).toContain("### Draft the copy");
-  const thread = files["threads/2026-11-02 Black Friday campaign.md"]?.toString() ?? "";
-  expect(thread).toContain("**You** · 2026-11-02 10:00 UTC");
-  expect(thread).toContain("**Aldric** · 2026-11-02 11:00 UTC");
-  expect(thread).toContain("- Running pnpm test: done");
+  const channel = files["channels/2026-11-02 Black Friday campaign.md"]?.toString() ?? "";
+  expect(channel).toContain("**You** · 2026-11-02 10:00 UTC");
+  expect(channel).toContain("**Aldric** · 2026-11-02 11:00 UTC");
+  expect(channel).toContain("- Running pnpm test: done");
 };
 
 describe("exports", () => {
-  it("an export of a hob opens on its own and holds its threads, Quests, artifacts and work history", async () => {
+  it("an export of a hob opens on its own and holds its channels, Quests, artifacts and work history", async () => {
     const result = await run({ _tag: "Hob", agentId: ALDRIC });
     expect(result.folder.startsWith(join(saved, "Hobbots export Aldric "))).toBe(true);
-    expect(result).toMatchObject({ threads: 2, quests: 1, files: 2, notCopied: 3 });
+    expect(result).toMatchObject({ channels: 2, quests: 1, files: 2, notCopied: 3 });
 
     const files = filesIn(result.folder);
     expect(Object.keys(files).sort()).toEqual([
       "README.md",
+      "channels/2026-11-02 Black Friday campaign.md",
+      "channels/2026-11-02 Notes ideas.md",
       "export.json",
       "files/campaign-task/chart #1.png",
       "files/campaign-task/report.md",
       "quests/2026-11-02 A Black Friday campaign.md",
-      "threads/2026-11-02 Black Friday campaign.md",
-      "threads/2026-11-02 Notes ideas.md",
     ]);
     // A text file is redacted like any other string; a binary one with no secret is copied as it is.
     expect(files["files/campaign-task/report.md"]?.toString()).toBe(REPORT.replace(PASTED, "[redacted: GitHub token]"));
@@ -451,17 +451,17 @@ describe("exports", () => {
     expect(existsSync(join(result.folder, "files", "campaign-task", ".env"))).toBe(false);
   });
 
-  it("exports one thread, or everything, and never writes over an earlier export", async () => {
-    const thread = await run({ _tag: "Thread", threadId: CAMPAIGN });
-    const threadData = decode(readFileSync(join(thread.folder, "export.json"), "utf8"));
-    expect(threadData.threads.map((each) => each.title)).toEqual(["Black Friday campaign"]);
-    // In a thread's export every Task of its Quests is in full.
-    expect(threadData.quests[0]?.tasks.map((task) => task.detail)).toEqual(["full", "full"]);
-    expect(JSON.stringify(threadData)).toContain("secret discount");
+  it("exports one channel, or everything, and never writes over an earlier export", async () => {
+    const channel = await run({ _tag: "Channel", channelId: CAMPAIGN });
+    const channelData = decode(readFileSync(join(channel.folder, "export.json"), "utf8"));
+    expect(channelData.channels.map((each) => each.title)).toEqual(["Black Friday campaign"]);
+    // In a channel's export every Task of its Quests is in full.
+    expect(channelData.quests[0]?.tasks.map((task) => task.detail)).toEqual(["full", "full"]);
+    expect(JSON.stringify(channelData)).toContain("secret discount");
 
     const everything = await run({ _tag: "Everything" });
     const everythingData = decode(readFileSync(join(everything.folder, "export.json"), "utf8"));
-    expect(everythingData.threads.map((each) => each.title).sort()).toEqual([
+    expect(everythingData.channels.map((each) => each.title).sort()).toEqual([
       "Black Friday campaign",
       "Notes / ideas",
       "Quill's own chat",
@@ -501,9 +501,9 @@ describe("exports", () => {
     expect(relativePath._tag).toBe("InvalidFolder");
   });
 
-  it("refuses a hob or thread that is not there", async () => {
+  it("refuses a hob or channel that is not there", async () => {
     expect((await refusal({ _tag: "Hob", agentId: AgentId.make("nobody") }))._tag).toBe("AgentNotFound");
-    expect((await refusal({ _tag: "Thread", threadId: ThreadId.make("nothing") }))._tag).toBe("ThreadNotFound");
+    expect((await refusal({ _tag: "Channel", channelId: ChannelId.make("nothing") }))._tag).toBe("ChannelNotFound");
   });
 
   // covers ADR 028 (Backups)
@@ -533,15 +533,15 @@ describe("exports", () => {
     expect(data.memory.pages[1]?.author).toEqual({ _tag: "Hob", agentId: QUILL });
     expect(files["README.md"]?.toString()).toContain("`memory/`: 3 pages your hobs remember");
 
-    // A hob's export holds its own memory only; a thread's holds none.
+    // A hob's export holds its own memory only; a channel's holds none.
     const quill = filesIn((await run({ _tag: "Hob", agentId: QUILL })).folder);
     expect(Object.keys(quill).filter((path) => path.startsWith("memory/"))).toEqual([
       "memory/hobs/Quill/notes/voice.md",
     ]);
-    const thread = decode(
-      filesIn((await run({ _tag: "Thread", threadId: CAMPAIGN })).folder)["export.json"]?.toString(),
+    const channel = decode(
+      filesIn((await run({ _tag: "Channel", channelId: CAMPAIGN })).folder)["export.json"]?.toString(),
     );
-    expect(thread.memory).toEqual({ state: "none", pages: [] });
+    expect(channel.memory).toEqual({ state: "none", pages: [] });
 
     // Memory that does not answer leaves the rest of the export as it is.
     memory.controls.setDown(true);
@@ -550,7 +550,7 @@ describe("exports", () => {
       expect(Object.keys(down).some((path) => path.startsWith("memory/"))).toBe(false);
       expect(decode(down["export.json"]?.toString()).memory.state).toBe("unavailable");
       expect(down["README.md"]?.toString()).toContain("memory did not answer");
-      expect(Object.keys(down)).toContain("threads/2026-11-02 Black Friday campaign.md");
+      expect(Object.keys(down)).toContain("channels/2026-11-02 Black Friday campaign.md");
     } finally {
       memory.controls.setDown(false);
     }
@@ -568,11 +568,11 @@ describe("exports", () => {
         ),
       ),
     );
-    const files = filesIn((await run({ _tag: "Thread", threadId: NOTES })).folder);
+    const files = filesIn((await run({ _tag: "Channel", channelId: NOTES })).folder);
     const data = decode(files["export.json"]?.toString());
-    expect(data.threads[0]?.messages.map((each) => each.authorId)).toEqual([null, QUILL]);
+    expect(data.channels[0]?.messages.map((each) => each.authorId)).toEqual([null, QUILL]);
     expect(data.hobs.map((each) => each.name)).toEqual(["Aldric", "Quill"]);
-    const [transcript] = Object.entries(files).filter(([path]) => path.startsWith("threads/"));
+    const [transcript] = Object.entries(files).filter(([path]) => path.startsWith("channels/"));
     expect(transcript?.[1].toString()).toContain("**Quill** ·");
   });
 });

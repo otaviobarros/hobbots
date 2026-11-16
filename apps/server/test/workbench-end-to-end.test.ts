@@ -16,10 +16,11 @@ import {
   SecretRedaction,
   TaskFiles,
 } from "@hobbots/agents";
-import type { AttemptActivityRead, ThreadTasksRead } from "@hobbots/api";
+import type { AttemptActivityRead, ChannelTasksRead } from "@hobbots/api";
 import {
   type Agent,
   type AttemptFiles,
+  type Channel,
   type CommandOutput,
   type EventEnvelope,
   isInProgress,
@@ -27,7 +28,6 @@ import {
   type Message,
   roleFields,
   type TaskTree,
-  type Thread,
 } from "@hobbots/domain";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -204,8 +204,8 @@ const eventually = <A>(read: () => Promise<A | undefined>) =>
 const script = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 const run = (command: object) => `fake:run ${JSON.stringify(command)}`;
 
-/** A finished setup on Balanced sharing the project folder, with Aldric and one thread of his. */
-const aldricWithThread = async () => {
+/** A finished setup on Balanced sharing the project folder, with Aldric and one channel of his. */
+const aldricWithChannel = async () => {
   await request("PATCH", "/api/setup", { completed: true, safetyPreset: "balanced", approvedFolders: [project] });
   const aldric = (
     await request<Agent>("POST", "/api/agents", {
@@ -219,27 +219,27 @@ const aldricWithThread = async () => {
       instructions: "",
     })
   ).body;
-  return (await request<Thread>("POST", `/api/agents/${aldric.id}/threads`)).body;
+  return (await request<Channel>("POST", `/api/agents/${aldric.id}/channels`)).body;
 };
 
-const messages = async (thread: Thread) =>
-  (await request<ReadonlyArray<Message>>("GET", `/api/threads/${thread.id}/messages`)).body;
+const messages = async (channel: Channel) =>
+  (await request<ReadonlyArray<Message>>("GET", `/api/channels/${channel.id}/messages`)).body;
 
 /** Sends `content` and waits until its reply has ended. */
-const exchange = async (thread: Thread, content: string) => {
-  const before = (await messages(thread)).length;
-  expect((await request("POST", `/api/threads/${thread.id}/messages`, { content })).status).toBe(200);
+const exchange = async (channel: Channel, content: string) => {
+  const before = (await messages(channel)).length;
+  expect((await request("POST", `/api/channels/${channel.id}/messages`, { content })).status).toBe(200);
   return eventually(async () => {
-    const all = await messages(thread);
+    const all = await messages(channel);
     const last = all.at(-1);
     return all.length >= before + 2 && last?.role === "assistant" && !isInProgress(last.status) ? last : undefined;
   });
 };
 
-/** The thread's one request, as the chat's card and the Workbench read it. */
-const treeOf = async (thread: Thread): Promise<TaskTree> => {
-  const [tree] = (await request<ThreadTasksRead>("GET", `/api/threads/${thread.id}/tasks`)).body.trees;
-  if (tree === undefined) throw new Error("no Task in the thread");
+/** The channel's one request, as the chat's card and the Workbench read it. */
+const treeOf = async (channel: Channel): Promise<TaskTree> => {
+  const [tree] = (await request<ChannelTasksRead>("GET", `/api/channels/${channel.id}/tasks`)).body.trees;
+  if (tree === undefined) throw new Error("no Task in the channel");
   return tree;
 };
 
@@ -302,15 +302,15 @@ const streamed = (entries: ReadonlyArray<EventEnvelope>, attemptId: string) => {
 
 describe("the Workbench, end to end", () => {
   it("a Task that edits files and runs commands reads Live while its turn runs, from the records and the event stream, and as History once it ends", async () => {
-    const thread = await aldricWithThread();
+    const channel = await aldricWithChannel();
     // The first turn starts the Task, so the next turn's work belongs to its Attempt.
     await exchange(
-      thread,
+      channel,
       ["Write the release notes", script("start_quest", { key: "quest", goal: "Write the release notes" })].join("\n"),
     );
     // The turn's Attempt ends just after its reply; the next turn on the Task resumes it.
     const started = await eventually(async () => {
-      const read = (await request<ThreadTasksRead>("GET", `/api/threads/${thread.id}/tasks`)).body;
+      const read = (await request<ChannelTasksRead>("GET", `/api/channels/${channel.id}/tasks`)).body;
       return read.trees[0]?.attempts.every((attempt) => attempt.state === "completed") ? read : undefined;
     });
     const task = started.trees[0]?.tasks[0];
@@ -321,7 +321,7 @@ describe("the Workbench, end to end", () => {
 
     // Aldric edits the notes with a file tool, runs a command that rewrites one file, adds one and
     // deletes another, printing a token as it goes, and runs one more that prints a lot.
-    const sent = request("POST", `/api/threads/${thread.id}/messages`, {
+    const sent = request("POST", `/api/channels/${channel.id}/messages`, {
       content: [
         "Finish the notes",
         'fake:write notes.md "# Release notes\\n\\n- Faster search.\\n"',
@@ -339,7 +339,7 @@ describe("the Workbench, end to end", () => {
 
     // Live: the turn is held open once its work is done, and its Attempt's records already show all of it.
     const attemptId = await eventually(async () => {
-      const tree = await treeOf(thread);
+      const tree = await treeOf(channel);
       return tree.attempts.find((attempt) => attempt.number === 1 && isLiveAttempt(attempt.state))?.id;
     });
     const read = await readActivity(attemptId);
@@ -444,9 +444,9 @@ describe("the Workbench, end to end", () => {
   }, 60_000);
 
   it("a Task that runs no command records none, so its Terminal is not used, while its changes and files are kept", async () => {
-    const thread = await aldricWithThread();
+    const channel = await aldricWithChannel();
     await exchange(
-      thread,
+      channel,
       [
         "Tidy the notes",
         'fake:write notes.md "# Release notes\\n\\nTidied.\\n"',
@@ -454,7 +454,7 @@ describe("the Workbench, end to end", () => {
         script("complete_task", { delivered: true, key: "done", summary: "The notes are tidy." }),
       ].join("\n"),
     );
-    const tree = await treeOf(thread);
+    const tree = await treeOf(channel);
     expect(tree.tasks[0]?.state).toBe("completed");
     const attemptId = tree.attempts[0]?.id;
     if (attemptId === undefined) throw new Error("no Attempt");

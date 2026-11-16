@@ -1,11 +1,11 @@
 import {
   type Actor,
   type AnswerOwed,
+  type ChannelId,
   type Line,
   type Message,
   type MessageId,
   relayStateFor,
-  type ThreadId,
   TurnRequest,
   type TurnRequestEvent,
   TurnRequestId,
@@ -17,11 +17,11 @@ import type { SqlClient, SqlError } from "effect/sql";
 // The answers hobs owe each conversation (ADR 039, One hob speaks at a time; migration
 // 20261114003401). An actor is two columns, as a message's author is; PostgreSQL reads BIGINT as a
 // bigint and SQLite as a number. Requests are not journaled, an exception to STD-ARCH-015 that
-// ADR 039's amendment records: clients see the floor through the thread's run.
+// ADR 039's amendment records: clients see the floor through the channel's run.
 
 interface TurnRequestRow {
   readonly id: unknown;
-  readonly threadId: unknown;
+  readonly channelId: unknown;
   readonly rootMessageId: unknown;
   readonly hobId: unknown;
   readonly messageId: unknown;
@@ -46,7 +46,7 @@ const requestsFromRows = (rows: ReadonlyArray<TurnRequestRow>) =>
   Effect.forEach(rows, (row) =>
     decodeRequest({
       id: row.id,
-      threadId: row.threadId,
+      channelId: row.channelId,
       rootMessageId: row.rootMessageId ?? null,
       hobId: row.hobId,
       messageId: row.messageId,
@@ -68,18 +68,18 @@ const OPEN = ["waiting", "paused", "speaking"] as const;
 /** The requests still owed in a line, in floor order. */
 export const selectOpenRequests = (sql: SqlClient.SqlClient, line: Line) =>
   sql<TurnRequestRow>`SELECT * FROM turn_requests
-    WHERE thread_id = ${line.threadId}
+    WHERE channel_id = ${line.channelId}
       AND ${line.rootMessageId === null ? sql`root_message_id IS NULL` : sql`root_message_id = ${line.rootMessageId}`}
       AND ${sql.in("state", OPEN)}
     ORDER BY queued_at, position`.pipe(Effect.flatMap(requestsFromRows));
 
-/** The requests `hobId` waits to answer in the thread, on any line, paused ones included. */
-export const selectWaitingOf = (sql: SqlClient.SqlClient, threadId: ThreadId, hobId: string) =>
+/** The requests `hobId` waits to answer in the channel, on any line, paused ones included. */
+export const selectWaitingOf = (sql: SqlClient.SqlClient, channelId: ChannelId, hobId: string) =>
   sql<TurnRequestRow>`SELECT * FROM turn_requests
-    WHERE thread_id = ${threadId} AND hob_id = ${hobId} AND ${sql.in("state", ["waiting", "paused"])}
+    WHERE channel_id = ${channelId} AND hob_id = ${hobId} AND ${sql.in("state", ["waiting", "paused"])}
     ORDER BY queued_at, position`.pipe(Effect.flatMap(requestsFromRows));
 
-/** Every request in `state`, across threads, in floor order. */
+/** Every request in `state`, across channels, in floor order. */
 export const selectRequestsIn = (sql: SqlClient.SqlClient, state: TurnRequest["state"]) =>
   sql<TurnRequestRow>`SELECT * FROM turn_requests WHERE state = ${state}
     ORDER BY queued_at, position`.pipe(Effect.flatMap(requestsFromRows));
@@ -119,7 +119,7 @@ export const requestsFor = (
     (answerer, position) =>
       new TurnRequest({
         id: TurnRequestId.make(crypto.randomUUID()),
-        threadId: message.threadId,
+        channelId: message.channelId,
         rootMessageId: null,
         hobId: answerer.hobId,
         messageId: message.id,
@@ -138,7 +138,7 @@ export const requestsFor = (
 export const insertRequest = (sql: SqlClient.SqlClient, request: TurnRequest) =>
   sql`INSERT INTO turn_requests ${sql.insert({
     id: request.id,
-    thread_id: request.threadId,
+    channel_id: request.channelId,
     root_message_id: request.rootMessageId,
     hob_id: request.hobId,
     message_id: request.messageId,
@@ -175,7 +175,7 @@ export const selectRequestsOfReply = (sql: SqlClient.SqlClient, replyId: Message
   sql<TurnRequestRow>`SELECT * FROM turn_requests WHERE reply_id = ${replyId} OR message_id = ${replyId}
     ORDER BY queued_at, position`.pipe(Effect.flatMap(requestsFromRows));
 
-/** The threads with a request waiting there, or paused past the relay budget. */
-export const selectThreadsWaiting = (sql: SqlClient.SqlClient) =>
-  sql<{ readonly threadId: string }>`SELECT DISTINCT thread_id FROM turn_requests
-    WHERE state IN ('waiting', 'paused')`.pipe(Effect.map((rows) => rows.map((row) => row.threadId as ThreadId)));
+/** The channels with a request waiting there, or paused past the relay budget. */
+export const selectChannelsWaiting = (sql: SqlClient.SqlClient) =>
+  sql<{ readonly channelId: string }>`SELECT DISTINCT channel_id FROM turn_requests
+    WHERE state IN ('waiting', 'paused')`.pipe(Effect.map((rows) => rows.map((row) => row.channelId as ChannelId)));

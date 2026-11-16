@@ -41,7 +41,7 @@ export const schemaVersion: Effect.Effect<number, SqlError.SqlError, SqlClient.S
 /** What a backup's manifest counts, so a restore can say what comes back before it changes anything. */
 export interface BackupCounts {
   readonly hobs: number;
-  readonly threads: number;
+  readonly channels: number;
   readonly quests: number;
   readonly tasks: number;
   /** Skills in the library, not counting the Archive (ADR 029). */
@@ -83,7 +83,8 @@ const backupCounts = (schema: CopySchema): Effect.Effect<BackupCounts, SqlError.
         : Effect.succeed(0);
     return {
       hobs: yield* count("agents"),
-      threads: yield* count("threads"),
+      // A copy made before the rename to channels (#1610), as an update backs up, still has threads.
+      channels: yield* count(schema.has("channels") ? "channels" : "threads"),
       quests: yield* count("quests"),
       tasks: yield* count("tasks"),
       skills: schema.has("skills", "removed_at")

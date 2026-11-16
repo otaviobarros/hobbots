@@ -22,14 +22,14 @@ import {
   AgentId,
   type ApprovalLifetime,
   type ApprovalRequest,
+  Channel,
+  ChannelId,
   EMPTY_HOB_POLICY,
   type Message,
   OWNER_ACTOR,
   OWNER_USER_ID,
   type PolicyOverrides,
   type TaskTree,
-  Thread,
-  ThreadId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Dispatcher } from "@hobbots/inbox";
@@ -66,7 +66,7 @@ mkdirSync(project, { recursive: true });
 const now = "2026-11-02T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
-const threadId = ThreadId.make("launch");
+const channelId = ChannelId.make("launch");
 /** A prompt with this line of its own waits, before it does anything, until the test lets it go on. */
 const HOLD = "fake:hold";
 const PUSH = "git push origin feature";
@@ -132,8 +132,8 @@ const Party = Layer.effectDiscard(
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
     for (const each of [hob(ALDRIC, "Aldric"), hob(QUILL, "Quill")]) yield* repo.insertAgent(each);
-    yield* repo.upsertThread(
-      new Thread({ id: threadId, agentId: ALDRIC, title: "Launch", createdAt: now, updatedAt: now }),
+    yield* repo.upsertChannel(
+      new Channel({ id: channelId, ownerHobId: ALDRIC, title: "Launch", createdAt: now, updatedAt: now }),
     );
   }),
 );
@@ -203,19 +203,19 @@ const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-/** Sends a message in the thread and waits until every reply in it has ended. */
+/** Sends a message in the channel and waits until every reply in it has ended. */
 const say = (prompt: string) =>
   Effect.gen(function* () {
-    const before = (yield* HobbotsRepository.use((repo) => repo.listMessages(threadId))).length;
-    yield* ChatService.use((chat) => chat.sendPrompt(threadId, prompt));
+    const before = (yield* HobbotsRepository.use((repo) => repo.listMessages(channelId))).length;
+    yield* ChatService.use((chat) => chat.sendPrompt(channelId, prompt));
     return yield* messagesWhen((all) => all.length >= before + 2);
   });
 
-/** The thread's messages once `ready` holds for them, every reply ended. */
+/** The channel's messages once `ready` holds for them, every reply ended. */
 const messagesWhen = (ready: (all: ReadonlyArray<Message>) => boolean) =>
   retry(
     Effect.gen(function* () {
-      const all = yield* HobbotsRepository.use((repo) => repo.listMessages(threadId));
+      const all = yield* HobbotsRepository.use((repo) => repo.listMessages(channelId));
       const ended = all.every((m) => m.status !== "streaming" && m.status !== "stopping");
       return ended && ready(all) ? all : yield* Effect.fail("not yet" as const);
     }),
@@ -225,7 +225,7 @@ const messagesWhen = (ready: (all: ReadonlyArray<Message>) => boolean) =>
 const treeWhen = (ready: (tree: TaskTree) => boolean) =>
   retry(
     Effect.gen(function* () {
-      const [tree] = yield* TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
+      const [tree] = yield* TaskRepository.use((tasks) => tasks.readChannelTrees(channelId));
       return tree !== undefined && ready(tree) ? tree : yield* Effect.fail("not yet" as const);
     }),
   );
@@ -247,8 +247,8 @@ const approve = (request: ApprovalRequest, lifetime: ApprovalLifetime) =>
     approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest, lifetime }),
   );
 
-/** Every request the thread's hobs made, oldest first. */
-const asked = () => ApprovalService.use((approvals) => approvals.listForThread(threadId));
+/** Every request the channel's hobs made, oldest first. */
+const asked = () => ApprovalService.use((approvals) => approvals.listForChannel(channelId));
 
 /** The steps under the Task you asked for that ran a push, by their checkpoints (EX-004). */
 const pushedIn = (tree: TaskTree) =>
@@ -267,9 +267,9 @@ const taskWithPush = (steps: ReadonlyArray<string>) =>
         hub("plan_steps", { key: "plan", steps: steps.map((brief) => ({ brief: [brief, HOLD].join("\n") })) }),
       ].join("\n"),
     );
-    yield* ChatService.use((chat) => chat.sendPrompt(threadId, ["Push the branch", push].join("\n")));
+    yield* ChatService.use((chat) => chat.sendPrompt(channelId, ["Push the branch", push].join("\n")));
     const request = yield* pendingFrom(ALDRIC);
-    const [tree] = yield* TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
+    const [tree] = yield* TaskRepository.use((tasks) => tasks.readChannelTrees(channelId));
     return { request, top: tree?.tasks[0] };
   });
 
@@ -414,7 +414,7 @@ describe("an approval for This Task", () => {
       ),
     );
     expect(second).toMatchObject({ operation: "push", state: "pending", grantable: false, rules: [] });
-    const [tree] = await run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
+    const [tree] = await run(TaskRepository.use((tasks) => tasks.readChannelTrees(channelId)));
     // Only the answers given on purpose are passed on: none at first, then Aldric's push Ask.
     expect(tree?.delegations.map((each) => each.authority.overrides)).toEqual([{}, { push: "ask" }]);
   }, 30_000);
@@ -437,7 +437,7 @@ describe("an approval for This Task", () => {
     expect(entries.some((each) => each.type === "GrantRevoked")).toBe(true);
 
     // With the Task gone, the same push asks again, and a request outside any Task offers no This Task.
-    await run(ChatService.use((chat) => chat.sendPrompt(threadId, ["Push once more", push].join("\n"))));
+    await run(ChatService.use((chat) => chat.sendPrompt(channelId, ["Push once more", push].join("\n"))));
     const again = await run(
       retry(
         Effect.flatMap(asked(), (all) =>

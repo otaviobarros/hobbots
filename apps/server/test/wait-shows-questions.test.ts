@@ -4,11 +4,11 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  Channel,
+  ChannelId,
   type TaskId,
   TaskId as TaskIdSchema,
   type TaskToolDone,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import { TaskTools } from "@hobbots/orchestration";
 import { EventJournal, HobbotsRepositoryLive, TaskRepositoryLive, TaskToolCallsLive } from "@hobbots/persistence";
@@ -78,13 +78,13 @@ const toolsOnly = () => {
         }),
       );
     }
-    const threadId = ThreadId.make("review");
-    yield* repo.upsertThread(
-      new Thread({ id: threadId, agentId: PIP, title: "Review", createdAt: now, updatedAt: now }),
+    const channelId = ChannelId.make("review");
+    yield* repo.upsertChannel(
+      new Channel({ id: channelId, ownerHobId: PIP, title: "Review", createdAt: now, updatedAt: now }),
     );
     const tasks = yield* TaskRepository;
     const created = yield* tasks.createTask({
-      task: { id: TOP, ownerId: PIP, parentId: null, threadId, brief: "Review", dependsOn: [], createdAt: now },
+      task: { id: TOP, ownerId: PIP, parentId: null, channelId, brief: "Review", dependsOn: [], createdAt: now },
       delegation: null,
       milestones: [],
     });

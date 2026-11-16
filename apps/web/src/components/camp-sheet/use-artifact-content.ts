@@ -1,9 +1,9 @@
 import {
   type ArtifactContentRefusal,
   type ArtifactVersionContent,
+  type ChannelId,
   previewMediaType,
   type RegisteredArtifactId,
-  type ThreadId,
 } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
 import { Base64 } from "effect/encoding";
@@ -32,14 +32,14 @@ export interface VersionAsked {
 
 /** Reads a version's contents, or nothing for a version that is null or that nothing kept. */
 const useVersionRead = <A>(
-  threadId: ThreadId,
+  channelId: ChannelId,
   artifactId: RegisteredArtifactId,
   version: VersionAsked | null,
   select: (bytes: Uint8Array) => A,
 ): VersionRead<A> => {
   const asked = version !== null && version.content !== "none";
   const read = useQuery({
-    ...artifactContentQuery(threadId, artifactId, version?.version ?? 1, version?.content ?? "unknown"),
+    ...artifactContentQuery(channelId, artifactId, version?.version ?? 1, version?.content ?? "unknown"),
     enabled: asked,
     select,
   });
@@ -55,10 +55,10 @@ const useVersionRead = <A>(
 
 /** Reads a version's text (UTF-8, redacted and cut by the hub). */
 export const useVersionText = (
-  threadId: ThreadId,
+  channelId: ChannelId,
   artifactId: RegisteredArtifactId,
   version: VersionAsked | null,
-): VersionText => useVersionRead(threadId, artifactId, version, textOf);
+): VersionText => useVersionRead(channelId, artifactId, version, textOf);
 
 /**
  * Reads an image version's bytes and gives them to the page as a `data:` URL of the image's own type,
@@ -66,12 +66,12 @@ export const useVersionText = (
  * version's does (STD-UI-009), instead of a broken image.
  */
 export const useVersionImage = (
-  threadId: ThreadId,
+  channelId: ChannelId,
   artifactId: RegisteredArtifactId,
   locator: string,
   version: VersionAsked,
 ): VersionRead<string> => {
   const type = previewMediaType(locator) ?? "image/png";
   const select = (bytes: Uint8Array) => `data:${type};base64,${Base64.encode(bytes)}`;
-  return useVersionRead(threadId, artifactId, version, select);
+  return useVersionRead(channelId, artifactId, version, select);
 };

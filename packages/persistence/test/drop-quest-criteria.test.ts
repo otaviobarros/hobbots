@@ -1,5 +1,5 @@
 import { HobbotsRepository, TaskRepository } from "@hobbots/agents";
-import { Agent, AgentId, DEFAULT_QUEST_LIMITS, QuestId, QuestionId, TaskId, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, Channel, ChannelId, DEFAULT_QUEST_LIMITS, QuestId, QuestionId, TaskId } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
@@ -14,7 +14,7 @@ import { TestDatabaseAt } from "../src/testing.ts";
 
 const NOW = "2026-11-15T10:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
-const THREAD = ThreadId.make("chat");
+const CHANNEL = ChannelId.make("chat");
 const TASK = TaskId.make("campaign");
 const QUEST = QuestId.make("quest");
 
@@ -55,15 +55,15 @@ const upgraded = Effect.gen(function* () {
       createdAt: NOW,
     }),
   );
-  yield* repo.upsertThread(
-    new Thread({ id: THREAD, agentId: ALDRIC, title: "Campaign", createdAt: NOW, updatedAt: NOW }),
+  yield* repo.upsertChannel(
+    new Channel({ id: CHANNEL, ownerHobId: ALDRIC, title: "Campaign", createdAt: NOW, updatedAt: NOW }),
   );
   yield* tasks.createTask({
     task: {
       id: TASK,
       ownerId: ALDRIC,
       parentId: null,
-      threadId: THREAD,
+      channelId: CHANNEL,
       brief: "A campaign",
       dependsOn: [],
       createdAt: NOW,

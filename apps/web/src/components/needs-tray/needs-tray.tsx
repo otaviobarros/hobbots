@@ -1,4 +1,4 @@
-import type { ApprovalRequest, ApprovalSurface, ThreadId } from "@hobbots/domain";
+import type { ApprovalRequest, ApprovalSurface, ChannelId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
@@ -53,7 +53,7 @@ export function NeedsTray({
   via?: ApprovalSurface;
   scope?: ReactNode;
   where?: (entry: TrayEntry) => ReactNode;
-  inboxIn?: ThreadId | undefined;
+  inboxIn?: ChannelId | undefined;
 }) {
   const hobs = useHobLookup();
   const [place, setPlace] = useState<{ key: string | undefined; index: number }>({ key: undefined, index: 0 });
@@ -137,7 +137,7 @@ const toneOf = (entry: TrayEntry) => ({
 });
 
 /** See all in Inbox's address: Needs you, on the tray's chat or camp when it has one. */
-const inboxSearch = (inboxIn: ThreadId | undefined) =>
+const inboxSearch = (inboxIn: ChannelId | undefined) =>
   inboxIn === undefined ? { tab: "needs" as const } : { tab: "needs" as const, in: inboxIn };
 
 /** Who asks for a question the hub itself puts to you (#976): the hub, shown as the chief. */

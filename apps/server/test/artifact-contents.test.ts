@@ -14,14 +14,14 @@ import {
   AgentId,
   Artifact,
   AttemptId,
+  Channel,
+  ChannelId,
   ChapterId,
   ContentId,
   EMPTY_HOB_POLICY,
   OWNER_ACTOR,
   RegisteredArtifactId,
   type StoredVersion,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import { HobbotsRepositoryLive, SetupRepository } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -44,7 +44,7 @@ const workshop = join(temp, "workshop");
 const AT = "2026-11-12T10:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
 const BRYN = AgentId.make("bryn");
-const CAMP = ThreadId.make("camp");
+const CAMP = ChannelId.make("camp");
 const HUB_SECRET = "hub-credential-0123456789";
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 const KEPT = ContentId.make("kept-1");
@@ -58,7 +58,7 @@ const write = (folder: string, path: string, contents: string | Uint8Array) => {
 const artifact = (id: string, locator: string, maker: AgentId = ALDRIC) =>
   new Artifact({
     id: RegisteredArtifactId.make(id),
-    threadId: CAMP,
+    channelId: CAMP,
     chapterId: ChapterId.make("c1"),
     kind: "doc",
     title: id,
@@ -100,10 +100,10 @@ const STORED: ReadonlyArray<StoredArtifact> = [
 const Records = Layer.succeed(
   RecordRepository,
   RecordRepository.of({
-    artifactVersions: (threadId: ThreadId, artifactId: RegisteredArtifactId) =>
+    artifactVersions: (channelId: ChannelId, artifactId: RegisteredArtifactId) =>
       Effect.succeed(
         Option.fromNullishOr(
-          STORED.find((each) => each.artifact.id === artifactId && each.artifact.threadId === threadId),
+          STORED.find((each) => each.artifact.id === artifactId && each.artifact.channelId === channelId),
         ),
       ),
   } as unknown as RecordRepository["Service"]),
@@ -141,7 +141,9 @@ const Seed = Layer.effectDiscard(
     yield* repo.insertAgent(
       new Agent({ ...aldric, id: BRYN, name: "Bryn", policy: { ...EMPTY_HOB_POLICY, ownFolders: [workshop] } }),
     );
-    yield* repo.upsertThread(new Thread({ id: CAMP, agentId: ALDRIC, title: "Launch", createdAt: AT, updatedAt: AT }));
+    yield* repo.upsertChannel(
+      new Channel({ id: CAMP, ownerHobId: ALDRIC, title: "Launch", createdAt: AT, updatedAt: AT }),
+    );
   }),
 );
 
@@ -178,10 +180,10 @@ beforeAll(async () => {
 afterAll(() => runtime?.dispose());
 
 const decoder = new TextDecoder();
-const content = (id: string, number: number, thread = CAMP) =>
+const content = (id: string, number: number, channel = CAMP) =>
   runtime.runPromise(
     Effect.exit(
-      ArtifactContents.use((contents) => contents.content(thread, RegisteredArtifactId.make(id), number)).pipe(
+      ArtifactContents.use((contents) => contents.content(channel, RegisteredArtifactId.make(id), number)).pipe(
         Effect.map((bytes) => decoder.decode(bytes)),
         Effect.mapError((error) => (error._tag === "ArtifactContentUnavailable" ? error.reason : error._tag)),
       ),
@@ -216,7 +218,7 @@ describe("an artifact's contents", () => {
     expect(refused(await content("binary", 1))).toEqual(["no-contents"]);
     expect(refused(await content("pr", 1))).toEqual(["no-contents"]);
     expect(refused(await content("report", 3))).toEqual(["ArtifactNotFound"]);
-    expect(refused(await content("report", 2, ThreadId.make("other")))).toEqual(["ArtifactNotFound"]);
+    expect(refused(await content("report", 2, ChannelId.make("other")))).toEqual(["ArtifactNotFound"]);
     const image = await runtime.runPromise(
       ArtifactContents.use((contents) => contents.content(CAMP, RegisteredArtifactId.make("chart"), 1)),
     );

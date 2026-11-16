@@ -6,10 +6,10 @@ import {
   BUILD,
   blackFriday,
   CAMPAIGN,
+  CHANNEL,
   COPY,
   memberApproval,
   QUILL,
-  THREAD,
   task,
   tree,
 } from "../../test/quests.ts";
@@ -27,7 +27,7 @@ const message = (
 ) =>
   new Message({
     id: MessageId.make(id),
-    threadId: THREAD,
+    channelId: CHANNEL,
     role,
     content: role === "user" ? "Keep the page to three sections" : "On it.",
     status: fields.status ?? "complete",

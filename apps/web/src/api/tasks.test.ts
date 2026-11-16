@@ -1,32 +1,32 @@
-import type { TaskTreeRead, ThreadTasksRead } from "@hobbots/api";
+import type { ChannelTasksRead, TaskTreeRead } from "@hobbots/api";
 import { Attempt } from "@hobbots/domain";
 import { QueryClient } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { attempt, BUILD, blackFriday, CAMPAIGN, COPY, QUILL, THREAD, task, tree } from "../test/quests.ts";
+import { attempt, BUILD, blackFriday, CAMPAIGN, CHANNEL, COPY, QUILL, task, tree } from "../test/quests.ts";
 import * as client from "./client.ts";
 import { startGeneration } from "./sync.ts";
-import { applyTaskEvent, taskKeys, threadTasksQuery } from "./tasks.ts";
+import { applyTaskEvent, channelTasksQuery, taskKeys } from "./tasks.ts";
 
 afterEach(() => vi.restoreAllMocks());
 
-const read = (trees = [tree()]): ThreadTasksRead => ({ cursor: "1:1", trees });
+const read = (trees = [tree()]): ChannelTasksRead => ({ cursor: "1:1", trees });
 
 /** A read the test answers when it chooses, as a slow network would. */
 const slowRead = () => {
-  let answer: (value: ThreadTasksRead) => void = () => undefined;
+  let answer: (value: ChannelTasksRead) => void = () => undefined;
   vi.spyOn(client, "call").mockReturnValue(
     new Promise((done) => {
       answer = done as typeof answer;
     }) as never,
   );
-  return (value: ThreadTasksRead) => answer(value);
+  return (value: ChannelTasksRead) => answer(value);
 };
 
 describe("Task reads kept live", () => {
-  it("applies an event that arrived while a thread's read was on its way", async () => {
+  it("applies an event that arrived while a channel's read was on its way", async () => {
     const queryClient = new QueryClient();
     const answer = slowRead();
-    const loading = queryClient.fetchQuery(threadTasksQuery(THREAD));
+    const loading = queryClient.fetchQuery(channelTasksQuery(CHANNEL));
     applyTaskEvent(queryClient, {
       _tag: "TaskCreated",
       task: task(COPY, { ownerId: QUILL }),
@@ -40,7 +40,7 @@ describe("Task reads kept live", () => {
 
   it("patches every cached read the event belongs to and leaves the rest", () => {
     const queryClient = new QueryClient();
-    queryClient.setQueryData(taskKeys.thread(THREAD), read([blackFriday()]));
+    queryClient.setQueryData(taskKeys.channel(CHANNEL), read([blackFriday()]));
     queryClient.setQueryData(["tasks", "elsewhere"], { untouched: true });
     applyTaskEvent(queryClient, {
       _tag: "TaskStateChanged",
@@ -49,12 +49,12 @@ describe("Task reads kept live", () => {
       quest: null,
       wait: null,
     });
-    const thread = queryClient.getQueryData<ThreadTasksRead>(taskKeys.thread(THREAD));
-    expect(thread?.trees[0]?.tasks.find((each) => each.id === BUILD)?.state).toBe("active");
+    const channel = queryClient.getQueryData<ChannelTasksRead>(taskKeys.channel(CHANNEL));
+    expect(channel?.trees[0]?.tasks.find((each) => each.id === BUILD)?.state).toBe("active");
     expect(queryClient.getQueryData(["tasks", "elsewhere"])).toEqual({ untouched: true });
   });
 
-  it("keeps a single tree read live too, such as a Quest pinned from another thread", () => {
+  it("keeps a single tree read live too, such as a Quest pinned from another channel", () => {
     const queryClient = new QueryClient();
     queryClient.setQueryData<TaskTreeRead>(taskKeys.tree(CAMPAIGN), { cursor: "1:1", tree: blackFriday() });
     applyTaskEvent(queryClient, {
@@ -96,7 +96,7 @@ describe("Task reads kept live", () => {
         return read();
       })
       .mockResolvedValueOnce(read([blackFriday()]));
-    const loaded = await queryClient.fetchQuery(threadTasksQuery(THREAD));
+    const loaded = await queryClient.fetchQuery(channelTasksQuery(CHANNEL));
     expect(call).toHaveBeenCalledTimes(2);
     expect(loaded.trees[0]?.tasks).toHaveLength(3);
   });

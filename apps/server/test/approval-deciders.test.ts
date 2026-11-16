@@ -12,7 +12,7 @@ import {
   HobService,
   PermissionSummary,
 } from "@hobbots/agents";
-import { type Agent, type ApprovalRequest, roleFields, type Thread, WINDOW_DEVICE_ID } from "@hobbots/domain";
+import { type Agent, type ApprovalRequest, type Channel, roleFields, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
   ApprovalRepositoryLive,
@@ -140,13 +140,13 @@ const eventually = <A>(read: () => Promise<A | undefined>) =>
     ),
   );
 
-const approvals = async (thread: Thread) =>
-  (await request<ReadonlyArray<ApprovalRequest>>(APP, "GET", `/api/threads/${thread.id}/approvals`)).body;
+const approvals = async (channel: Channel) =>
+  (await request<ReadonlyArray<ApprovalRequest>>(APP, "GET", `/api/channels/${channel.id}/approvals`)).body;
 
 const setupDone = () =>
   request(APP, "PATCH", "/api/setup", { completed: true, safetyPreset: "balanced", approvedFolders: [project] });
 
-const hobThread = async () => {
+const hobChannel = async () => {
   const hob = await request<Agent>(APP, "POST", "/api/agents", {
     name: "Nettle",
     ...roleFields("writer"),
@@ -157,20 +157,20 @@ const hobThread = async () => {
     effort: null,
     instructions: "",
   });
-  return (await request<Thread>(APP, "POST", `/api/agents/${hob.body.id}/threads`)).body;
+  return (await request<Channel>(APP, "POST", `/api/agents/${hob.body.id}/channels`)).body;
 };
 
-/** A thread whose turn waits on the user to approve a push to a feature branch. */
+/** A channel whose turn waits on the user to approve a push to a feature branch. */
 const pendingPush = async () => {
-  const thread = await hobThread();
-  await request(APP, "POST", `/api/threads/${thread.id}/messages`, {
+  const channel = await hobChannel();
+  await request(APP, "POST", `/api/channels/${channel.id}/messages`, {
     content: "Ship it\nfake:tool Bash git push origin feature",
   });
   const [pending] = await eventually(async () => {
-    const all = await approvals(thread);
+    const all = await approvals(channel);
     return all.some((approval) => approval.state === "pending") ? all : undefined;
   });
-  return { thread, pending: pending as ApprovalRequest };
+  return { channel, pending: pending as ApprovalRequest };
 };
 
 const cookieFrom = (setCookie: ReadonlyArray<string>, name: string) =>
@@ -205,20 +205,20 @@ describe("approval deciders", () => {
     await setupDone();
     const phone = await pairedBrowser();
     const iphone = await deviceNamed("Safari on iPhone");
-    const { thread, pending } = await pendingPush();
+    const { channel, pending } = await pendingPush();
 
     const decided = await decide(browser(phone, "POST"), pending, { decision: "approve", via: "inbox" });
 
     expect(decided.status).toBe(200);
     expect(decided.body).toMatchObject({ state: "approved", decidedByDeviceId: iphone?.id, decidedVia: "inbox" });
-    const [stored] = await approvals(thread);
+    const [stored] = await approvals(channel);
     expect(stored).toMatchObject({ decidedByDeviceId: iphone?.id, decidedVia: "inbox" });
   });
 
   it("attributes a decision from the hub's window to the window, and keeps the first decider when decided again", async () => {
     await setupDone();
     const phone = await pairedBrowser();
-    const { thread, pending } = await pendingPush();
+    const { channel, pending } = await pendingPush();
 
     const first = await decide(APP, pending, { decision: "deny", via: "chat" });
     const again = await decide(browser(phone, "POST"), pending, { decision: "deny", via: "inbox" });
@@ -226,18 +226,18 @@ describe("approval deciders", () => {
     expect(first.body).toMatchObject({ state: "denied", decidedByDeviceId: WINDOW_DEVICE_ID, decidedVia: "chat" });
     expect(again.status).toBe(200);
     expect(again.body).toMatchObject({ decidedByDeviceId: WINDOW_DEVICE_ID, decidedVia: "chat" });
-    const [stored] = await approvals(thread);
+    const [stored] = await approvals(channel);
     expect(stored).toMatchObject({ decidedByDeviceId: WINDOW_DEVICE_ID, decidedVia: "chat" });
   });
 
   it("records an expired request as expired, with no decider", async () => {
     await setupDone();
-    const { thread } = await pendingPush();
+    const { channel } = await pendingPush();
 
-    await request(APP, "POST", `/api/threads/${thread.id}/interrupt`);
+    await request(APP, "POST", `/api/channels/${channel.id}/interrupt`);
 
     const [stored] = await eventually(async () => {
-      const all = await approvals(thread);
+      const all = await approvals(channel);
       return all[0]?.state === "expired" ? all : undefined;
     });
     expect(stored).toMatchObject({ state: "expired", decidedByDeviceId: null, decidedVia: "expired" });

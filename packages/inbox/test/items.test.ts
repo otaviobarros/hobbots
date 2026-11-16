@@ -4,6 +4,7 @@ import {
   ArtifactRef,
   AttemptId,
   type BackpackItem,
+  ChannelId,
   Checkpoint,
   CheckpointId,
   type CheckpointKind,
@@ -21,13 +22,12 @@ import {
   TaskId,
   TaskNote,
   type TaskState,
-  ThreadId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
   arrivalsText,
   backpackItemsFor,
-  carryingThread,
+  carryingChannel,
   continuationTask,
   lateness,
   tasksTouched,
@@ -36,7 +36,7 @@ import {
 const at = "2026-11-01T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 
 const task = (id: string, ownerId: AgentId, parentId: string | null, state: TaskState = "active", revision = 1) =>
   new Task({
@@ -44,7 +44,7 @@ const task = (id: string, ownerId: AgentId, parentId: string | null, state: Task
     ownerId,
     parentId: parentId === null ? null : TaskId.make(parentId),
     rootId: TaskId.make("campaign"),
-    threadId,
+    channelId,
     brief: id,
     state,
     dependsOn: [],
@@ -64,7 +64,7 @@ const quest = new Quest({
   taskId: campaign.id,
   leadId: ALDRIC,
   parentQuestId: null,
-  threadId,
+  channelId,
   goal: "Campaign",
   acceptance: [],
   limits: DEFAULT_QUEST_LIMITS,
@@ -201,7 +201,7 @@ describe("backpackItemsFor", () => {
     // It continues Aldric's chat on the Task, and is not late while the Task is open.
     const [made] = backpackItemsFor([{ _tag: "CheckpointRecorded", checkpoint: idle({}), milestone: null }], context);
     const held = { ...made, kind: "checkpoint", actionable: true } as unknown as BackpackItem;
-    expect(carryingThread(held, context.tasks)).toBe(threadId);
+    expect(carryingChannel(held, context.tasks)).toBe(channelId);
     expect(lateness(held, context.tasks)).toBeNull();
     expect(arrivalsText([held], "prompt")).toContain(IDLE_QUEST);
     // Any other finding on it, or one its own hob reported, still goes to no one.
@@ -302,7 +302,7 @@ describe("backpackItemsFor", () => {
       });
       const held = { ...item, kind: "message", actionable: true } as unknown as BackpackItem;
       // The step's session may be gone: the note continues the chat where Aldric runs the Quest.
-      expect(carryingThread(held, tasks)).toBe(threadId);
+      expect(carryingChannel(held, tasks)).toBe(channelId);
       expect(continuationTask(held, tasks)).toBeUndefined();
       expect(lateness(held, tasks)).toBeNull();
       expect(arrivalsText([held], "prompt")).toContain(`The user left a note about Task ${step.id}: Shorter`);

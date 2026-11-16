@@ -1,8 +1,8 @@
 import type { HobProposalRow } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
-import { useThreadReplies } from "../../api/hub-status.ts";
-import { openWorkQuery, threadsQuery } from "../../api/queries.ts";
+import { useChannelReplies } from "../../api/hub-status.ts";
+import { channelsQuery, openWorkQuery } from "../../api/queries.ts";
 import { OpenWorkList } from "../hob-profile/retire-parts.tsx";
 import { messages } from "./messages.ts";
 
@@ -14,17 +14,17 @@ const copy = messages.retire;
  * read, so the row is never allowed on a list that only looks empty.
  */
 export function useRetireReview(row: HobProposalRow, enabled: boolean) {
-  const threads = useQuery({ ...threadsQuery(row.hobId), enabled });
+  const channels = useQuery({ ...channelsQuery(row.hobId), enabled });
   const work = useQuery({ ...openWorkQuery(row.hobId, null), enabled });
-  const activity = useThreadReplies();
-  const running = (threads.data ?? []).filter((thread) => activity[thread.id] !== undefined).map((t) => t.title);
-  const state = threads.isError || work.isError ? "failed" : threads.isSuccess && work.isSuccess ? "read" : "reading";
+  const activity = useChannelReplies();
+  const running = (channels.data ?? []).filter((channel) => activity[channel.id] !== undefined).map((t) => t.title);
+  const state = channels.isError || work.isError ? "failed" : channels.isSuccess && work.isSuccess ? "read" : "reading";
   return {
     state,
     running,
     work: work.data,
     retry: () => {
-      if (threads.isError) void threads.refetch();
+      if (channels.isError) void channels.refetch();
       if (work.isError) void work.refetch();
     },
   } as const;

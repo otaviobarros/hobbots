@@ -46,10 +46,10 @@ function OriginLine({ change }: { change: HobChange }) {
       {origin.charm !== null && (
         <span>{copy.viaCharm({ charm: messages.values.charms[origin.charm] ?? origin.charm })}</span>
       )}
-      {origin.threadId !== null && (
+      {origin.channelId !== null && (
         <Link
-          to="/hobs/$hobId/threads/$threadId"
-          params={{ hobId, threadId: origin.threadId }}
+          to="/hobs/$hobId/channels/$channelId"
+          params={{ hobId, channelId: origin.channelId }}
           search={{
             ...(origin.messageId === null ? {} : { message: origin.messageId }),
             ...(origin.taskId === null ? {} : { room: origin.taskId }),

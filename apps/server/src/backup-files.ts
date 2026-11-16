@@ -37,6 +37,7 @@ export const BackupManifest = Schema.Struct({
   installationId: Schema.String,
   counts: Schema.Struct({
     hobs: Schema.Int,
+    /** The hob's channels, under the name every backup's manifest has stored them by (#1610). */
     threads: Schema.Int,
     quests: Schema.Int,
     tasks: Schema.Int,
@@ -47,6 +48,16 @@ export const BackupManifest = Schema.Struct({
   files: Schema.Array(ManifestFile),
 });
 export type BackupManifest = typeof BackupManifest.Type;
+
+/** The counts a manifest stores, from what the hub counted. */
+export const manifestCounts = ({
+  channels,
+  ...rest
+}: { readonly channels: number } & Omit<BackupManifest["counts"], "threads">) =>
+  ({ ...rest, threads: channels }) satisfies BackupManifest["counts"];
+
+/** What a manifest's counts say, by today's names. */
+export const countsOf = ({ threads, ...rest }: BackupManifest["counts"]) => ({ ...rest, channels: threads });
 
 const ManifestJson = Schema.fromJsonString(BackupManifest);
 const decodeManifest = Schema.decodeUnknownSync(ManifestJson);

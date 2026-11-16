@@ -25,7 +25,7 @@ const useHobs = () => {
 /**
  * A hob's work on other hobs' Quests, on its page: the lead, the Quest's
  * goal and its Task's state, each opening the Quest. The goal tells two Quests of one lead apart.
- * It is never one of the hob's threads.
+ * It is never one of the hob's channels.
  */
 export function HobQuestWork({ hob }: { hob: Agent }) {
   const work = useHobQuestWork(hob.id);
@@ -42,7 +42,7 @@ export function HobQuestWork({ hob }: { hob: Agent }) {
           <li key={each.task.id}>
             <QuestLink
               quest={each.quest}
-              threadAgentId={each.threadAgentId}
+              channelAgentId={each.channelAgentId}
               taskId={each.task.id}
               label={messages.openQuest({ name: hob.name, lead: leadName, goal, state })}
               className="flex w-full items-center gap-1.5 rounded-control py-0.5 text-detail text-text-secondary no-underline hover:text-text-strong"

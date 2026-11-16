@@ -57,7 +57,7 @@ export class RestoreSummary extends Schema.Class<RestoreSummary>("RestoreSummary
   hobbotsVersion: Schema.String,
   schemaVersion: Schema.Int,
   hobs: Schema.Int,
-  threads: Schema.Int,
+  channels: Schema.Int,
   quests: Schema.Int,
   tasks: Schema.Int,
   /** Skills in the library, each with every revision, assignment and pin (ADR 029); 0 in a backup from before skills. */

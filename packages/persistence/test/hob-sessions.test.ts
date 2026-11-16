@@ -1,14 +1,14 @@
 import { HobbotsRepository } from "@hobbots/agents";
-import { AgentId, liveSession, ThreadId } from "@hobbots/domain";
+import { AgentId, ChannelId, EVENT_SCHEMA_VERSIONS, liveSession } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import hobSessionsMigration from "../src/migrations/20261114005209_hob_sessions.ts";
-import { TestDatabaseAt } from "../src/testing.ts";
+import { migrateAfter, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1464 (ADR 039): a runtime session belongs to one hob. The migration gives each session a
-// thread keeps, and each session in its journaled entries, the thread's hob, so the hob goes on
+// channel keeps, and each session in its journaled entries, the channel's hob, so the hob goes on
 // resuming it and another hob never does. On SQLite and PostgreSQL alike.
 
 const NOW = "2026-11-13T00:00:00.000Z";
@@ -23,21 +23,21 @@ describe("20261114005209_hob_sessions", () => {
     Layer.provideMerge(TestDatabaseAt(earlier)),
   );
 
-  /** A thread of `agentId` with one session per runtime in its one live chapter, as stored just before this migration. */
-  const stored = (threadId: string, agentId: string, runtimes: ReadonlyArray<string>) =>
+  /** A channel of `agentId` with one session per runtime in its one live chapter, as stored just before this migration. */
+  const stored = (channelId: string, agentId: string, runtimes: ReadonlyArray<string>) =>
     Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();
-      const chapterId = `${threadId}-c1`;
+      const chapterId = `${channelId}-c1`;
       const sessions = runtimes.map((runtime) => ({
         runtime,
-        sessionId: `${threadId}-${runtime}`,
+        sessionId: `${channelId}-${runtime}`,
         chapterId,
         seenThrough: null,
       }));
       yield* sql`INSERT INTO threads ${sql.insert({
-        id: threadId,
+        id: channelId,
         agent_id: agentId,
-        title: threadId,
+        title: channelId,
         sessions: JSON.stringify(sessions),
         created_at: NOW,
         updated_at: NOW,
@@ -45,7 +45,7 @@ describe("20261114005209_hob_sessions", () => {
       })}`;
       yield* sql`INSERT INTO chapters ${sql.insert({
         id: chapterId,
-        thread_id: threadId,
+        thread_id: channelId,
         number: 1,
         title: null,
         summary: null,
@@ -56,9 +56,9 @@ describe("20261114005209_hob_sessions", () => {
         revision: 0,
       })}`;
       return {
-        id: threadId,
+        id: channelId,
         agentId,
-        title: threadId,
+        title: channelId,
         kind: "camp",
         goal: null,
         private: false,
@@ -77,7 +77,7 @@ describe("20261114005209_hob_sessions", () => {
       };
     });
 
-  const journal = (type: string, version: number, agentId: string, threadId: string, payload: object) =>
+  const journal = (type: string, version: number, agentId: string, channelId: string, payload: object) =>
     Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();
       const [head] = yield* sql<{ sequence: unknown }>`SELECT sequence FROM event_journal_head`;
@@ -89,14 +89,14 @@ describe("20261114005209_hob_sessions", () => {
         schema_version: version,
         occurred_at: NOW,
         agent_id: agentId,
-        thread_id: threadId,
+        thread_id: channelId,
         payload: JSON.stringify({ _tag: type, ...payload }),
       })}`;
       yield* sql`UPDATE event_journal_head SET sequence = ${sequence}`;
     });
 
   // covers ADR 039 (The context pack with several hobs), DP-003
-  it("gives every stored and journaled session its thread's hob, which alone resumes it (#1464)", async () => {
+  it("gives every stored and journaled session its channel's hob, which alone resumes it (#1464)", async () => {
     const result = await Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();
       for (const id of [ADA, QUILL]) {
@@ -123,20 +123,23 @@ describe("20261114005209_hob_sessions", () => {
       const once = yield* sql<{ id: string; sessions: string }>`SELECT id, sessions FROM threads ORDER BY id`;
       // A second run changes nothing: every entry is at its new version, every session has its hob.
       yield* hobSessionsMigration;
+      const twice = yield* sql<{ id: string; sessions: string }>`SELECT id, sessions FROM threads ORDER BY id`;
+      // Today's repository and journal read them, so the rows go on to today's schema.
+      yield* migrateAfter("20261114005209");
 
       const repo = yield* HobbotsRepository;
       return {
         once,
-        twice: yield* sql<{ id: string; sessions: string }>`SELECT id, sessions FROM threads ORDER BY id`,
-        threads: yield* Effect.forEach(["lamps", "garden", "empty"], (id) =>
-          repo.findThread(ThreadId.make(id)).pipe(Effect.map(Option.getOrThrow)),
+        twice,
+        channels: yield* Effect.forEach(["lamps", "garden", "empty"], (id) =>
+          repo.findChannel(ChannelId.make(id)).pipe(Effect.map(Option.getOrThrow)),
         ),
         entries: yield* (yield* EventJournal).readAfter(0),
       };
     }).pipe(Effect.provide(layer), Effect.runPromise);
 
     expect(result.twice).toEqual(result.once);
-    const [lamps, garden, empty] = result.threads;
+    const [lamps, garden, empty] = result.channels;
     expect(lamps?.sessions.map((s) => [s.runtime, s.agentId, s.sessionId])).toEqual([
       ["claude-code", ADA, "lamps-claude-code"],
       ["codex", ADA, "lamps-codex"],
@@ -145,22 +148,22 @@ describe("20261114005209_hob_sessions", () => {
       ["codex", QUILL, "garden-codex"],
     ]);
     expect(empty?.sessions).toEqual([]);
-    // The thread's hob resumes its sessions on both runtimes; another hob in the thread has none.
+    // The channel's hob resumes its sessions on both runtimes; another hob in the channel has none.
     if (lamps === undefined) throw new Error("lamps is gone");
     expect(liveSession(lamps, "claude-code", ADA)?.sessionId).toBe("lamps-claude-code");
     expect(liveSession(lamps, "codex", ADA)?.sessionId).toBe("lamps-codex");
     expect(liveSession(lamps, "claude-code", QUILL)).toBeUndefined();
     expect(liveSession(lamps, "codex", QUILL)).toBeUndefined();
 
-    // Every old entry decodes, its sessions with their thread's hob, at its new version.
+    // Every old entry decodes, its sessions with their channel's hob, at its new version.
     expect(result.entries.map((e) => [e.type, e.schemaVersion])).toEqual([
-      ["ThreadUpserted", 7],
-      ["CampMade", 4],
-      ["ChatStartedFresh", 4],
+      ["ChannelUpserted", EVENT_SCHEMA_VERSIONS.ChannelUpserted],
+      ["CampMade", EVENT_SCHEMA_VERSIONS.CampMade],
+      ["ChatStartedFresh", EVENT_SCHEMA_VERSIONS.ChatStartedFresh],
     ]);
     const hobsOf = result.entries.flatMap((e) => {
       const p = e.payload;
-      if (p._tag === "ThreadUpserted" || p._tag === "CampMade") return [p.thread.sessions.map((s) => s.agentId)];
+      if (p._tag === "ChannelUpserted" || p._tag === "CampMade") return [p.channel.sessions.map((s) => s.agentId)];
       if (p._tag === "ChatStartedFresh")
         return [p.superseded.sessions.map((s) => s.agentId), p.chat.sessions.map((s) => s.agentId)];
       return [];

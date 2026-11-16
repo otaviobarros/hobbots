@@ -3,14 +3,14 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  Channel,
+  ChannelId,
   CommandId,
   ContentId,
   FileChangeId,
   type FileVersion,
   FolderScanId,
   TaskId,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { describe, expect, it } from "vitest";
@@ -33,7 +33,7 @@ const run = <A, E>(
 const now = "2026-11-02T00:00:00.000Z";
 const later = "2026-11-02T00:00:05.000Z";
 const ALDRIC = AgentId.make("aldric");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 const taskId = TaskId.make("tidy");
 const attemptId = AttemptId.make("a1");
 const project = "/work/project";
@@ -57,8 +57,8 @@ const seed = Effect.gen(function* () {
       createdAt: now,
     }),
   );
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: ALDRIC, title: "Docs", createdAt: now, updatedAt: now }),
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, ownerHobId: ALDRIC, title: "Docs", createdAt: now, updatedAt: now }),
   );
   const tasks = yield* TaskRepository;
   const created = yield* tasks.createTask({
@@ -66,7 +66,7 @@ const seed = Effect.gen(function* () {
       id: taskId,
       ownerId: ALDRIC,
       parentId: null,
-      threadId,
+      channelId,
       brief: "Tidy the docs",
       dependsOn: [],
       createdAt: now,
@@ -139,7 +139,7 @@ describe("Workbench records", () => {
     expect(ended.value).toMatchObject({ id: "c1", state: "succeeded", exitCode: 0, log: { contentId: contents(1) } });
     expect(entries.map((entry) => entry.type)).toEqual(["CommandRecorded"]);
     expect(entries[0]?.correlation.agentId).toBe(ALDRIC);
-    expect(entries[0]?.correlation.threadId).toBe(threadId);
+    expect(entries[0]?.correlation.channelId).toBe(channelId);
     // One record per call, however often it is written.
     expect(activity.commands).toHaveLength(1);
     expect(activity.commands[0]?.output?.head).toBe("formatted\n");
@@ -161,7 +161,7 @@ describe("Workbench records", () => {
     );
     expect(first.value.changes.map((each) => each.path)).toEqual(["a.md", "b.md"]);
     expect(second.value.removed).toEqual([FileChangeId.make("change-a.md")]);
-    // The settled change registers the file it left as an artifact of the Task's thread (ADR 037).
+    // The settled change registers the file it left as an artifact of the Task's channel (ADR 037).
     expect(second.entries.map((entry) => entry.payload)).toMatchObject([
       { _tag: "FileChangesRecorded", attemptId, taskId, folder: project, removed: ["change-a.md"] },
       {

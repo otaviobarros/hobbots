@@ -1,9 +1,11 @@
-import type { ThreadTasksRead } from "@hobbots/api";
+import type { ChannelTasksRead } from "@hobbots/api";
 import {
   Agent,
   AgentId,
   ApprovalId,
   ApprovalRequest,
+  Channel,
+  ChannelId,
   Message,
   MessageId,
   OWNER_ACTOR,
@@ -14,8 +16,6 @@ import {
   SkillId,
   SkillName,
   SkillRevisionHash,
-  Thread,
-  ThreadId,
   TurnRequest,
   TurnRequestId,
   YOU,
@@ -28,14 +28,14 @@ import { queryKeys } from "./queries.ts";
 import { remoteAccessQuery } from "./remote-access.ts";
 import { skillProposalsQuery } from "./skill-proposals.ts";
 import { skillFeedbackQuery, skillQuery, skillRevisionQuery, skillsListQuery } from "./skills.ts";
-import { threadTasksQuery } from "./tasks.ts";
+import { channelTasksQuery } from "./tasks.ts";
 
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 const now = "2026-10-28T12:00:00.000Z";
 const reply = (status: Message["status"], content: string) =>
   new Message({
     id: MessageId.make("m1"),
-    threadId,
+    channelId,
     role: "assistant",
     content,
     status,
@@ -87,7 +87,7 @@ describe("applyEvent", () => {
       kind: "unclear",
       note: "Step 1 does not say which diff.",
       revision: null,
-      threadId: null,
+      channelId: null,
       messageId: null,
       createdAt: now,
     });
@@ -102,12 +102,12 @@ describe("applyEvent", () => {
     unsubscribe();
   });
 
-  it("makes a reply that lands its thread's last line in the hob's thread list", () => {
+  it("makes a reply that lands its channel's last line in the hob's channel list", () => {
     const client = new QueryClient();
     const agentId = AgentId.make("aldric");
-    const thread = new Thread({ id: threadId, agentId, title: "Plan", createdAt: now, updatedAt: now });
-    client.setQueryData(queryKeys.threads(agentId), [thread]);
-    const lastLine = () => client.getQueryData<ReadonlyArray<Thread>>(queryKeys.threads(agentId))?.[0]?.lastLine;
+    const channel = new Channel({ id: channelId, ownerHobId: agentId, title: "Plan", createdAt: now, updatedAt: now });
+    client.setQueryData(queryKeys.channels(agentId), [channel]);
+    const lastLine = () => client.getQueryData<ReadonlyArray<Channel>>(queryKeys.channels(agentId))?.[0]?.lastLine;
 
     // A reply with no text yet, such as one still calling tools, leaves the line as it is.
     applyEvent(client, { _tag: "MessageUpserted", message: reply("streaming", "") });
@@ -116,61 +116,68 @@ describe("applyEvent", () => {
     expect(lastLine()).toBe("Done. The copy is ready");
   });
 
-  it("does not create a partial list for a thread that was never loaded", () => {
+  it("does not create a partial list for a channel that was never loaded", () => {
     const client = new QueryClient();
     applyEvent(client, { _tag: "MessageUpserted", message: reply("streaming", "") });
     applyEvent(client, {
-      _tag: "ThreadUpserted",
-      thread: new Thread({
-        id: threadId,
-        agentId: AgentId.make("aldric"),
+      _tag: "ChannelUpserted",
+      channel: new Channel({
+        id: channelId,
+        ownerHobId: AgentId.make("aldric"),
         title: "Hi",
         createdAt: now,
         updatedAt: now,
       }),
     });
-    expect(client.getQueryData(queryKeys.messages(threadId))).toBeUndefined();
-    expect(client.getQueryData(queryKeys.threads(AgentId.make("aldric")))).toBeUndefined();
+    expect(client.getQueryData(queryKeys.messages(channelId))).toBeUndefined();
+    expect(client.getQueryData(queryKeys.channels(AgentId.make("aldric")))).toBeUndefined();
   });
 
-  it("moves a thread archived or restored elsewhere between its hob's two lists", () => {
+  it("moves a channel archived or restored elsewhere between its hob's two lists", () => {
     const client = new QueryClient();
     const hobId = AgentId.make("aldric");
-    const live = new Thread({ id: threadId, agentId: hobId, title: "Hi", createdAt: now, updatedAt: now, revision: 1 });
-    const archived = new Thread({ ...live, archivedAt: "2026-10-29T09:00:00.000Z", revision: 2 });
-    const restored = new Thread({ ...live, revision: 3 });
-    client.setQueryData(queryKeys.threads(hobId), [live]);
-    client.setQueryData(queryKeys.archivedThreads(hobId), []);
+    const live = new Channel({
+      id: channelId,
+      ownerHobId: hobId,
+      title: "Hi",
+      createdAt: now,
+      updatedAt: now,
+      revision: 1,
+    });
+    const archived = new Channel({ ...live, archivedAt: "2026-10-29T09:00:00.000Z", revision: 2 });
+    const restored = new Channel({ ...live, revision: 3 });
+    client.setQueryData(queryKeys.channels(hobId), [live]);
+    client.setQueryData(queryKeys.archivedChannels(hobId), []);
 
-    applyEvent(client, { _tag: "ThreadUpserted", thread: archived });
-    expect(client.getQueryData(queryKeys.threads(hobId))).toEqual([]);
-    expect(client.getQueryData(queryKeys.archivedThreads(hobId))).toEqual([archived]);
+    applyEvent(client, { _tag: "ChannelUpserted", channel: archived });
+    expect(client.getQueryData(queryKeys.channels(hobId))).toEqual([]);
+    expect(client.getQueryData(queryKeys.archivedChannels(hobId))).toEqual([archived]);
 
     // An older version arriving late does not move it back.
-    applyEvent(client, { _tag: "ThreadUpserted", thread: live });
-    expect(client.getQueryData(queryKeys.archivedThreads(hobId))).toEqual([archived]);
+    applyEvent(client, { _tag: "ChannelUpserted", channel: live });
+    expect(client.getQueryData(queryKeys.archivedChannels(hobId))).toEqual([archived]);
 
-    applyEvent(client, { _tag: "ThreadUpserted", thread: restored });
-    expect(client.getQueryData(queryKeys.threads(hobId))).toEqual([restored]);
-    expect(client.getQueryData(queryKeys.archivedThreads(hobId))).toEqual([]);
+    applyEvent(client, { _tag: "ChannelUpserted", channel: restored });
+    expect(client.getQueryData(queryKeys.channels(hobId))).toEqual([restored]);
+    expect(client.getQueryData(queryKeys.archivedChannels(hobId))).toEqual([]);
   });
 
   it("drops a chat's first Task read taken before Start fresh moved its work, so the moved work does not show there (#1376)", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const hobId = AgentId.make("aldric");
-    const old = new Thread({ id: threadId, agentId: hobId, title: "Hi", createdAt: now, updatedAt: now });
-    const fresh = new Thread({
-      id: ThreadId.make("fresh"),
-      agentId: hobId,
+    const old = new Channel({ id: channelId, ownerHobId: hobId, title: "Hi", createdAt: now, updatedAt: now });
+    const fresh = new Channel({
+      id: ChannelId.make("fresh"),
+      ownerHobId: hobId,
       title: "New chat",
-      origin: { threadId, chapterId: null },
+      origin: { channelId, chapterId: null },
       createdAt: now,
       updatedAt: now,
     });
-    const reads: Array<(answer: ThreadTasksRead) => void> = [];
+    const reads: Array<(answer: ChannelTasksRead) => void> = [];
     const observer = new QueryObserver(client, {
-      ...threadTasksQuery(threadId),
-      queryFn: () => new Promise<ThreadTasksRead>((resolve) => reads.push(resolve)),
+      ...channelTasksQuery(channelId),
+      queryFn: () => new Promise<ChannelTasksRead>((resolve) => reads.push(resolve)),
     });
     const unsubscribe = observer.subscribe(() => {});
     const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -181,7 +188,7 @@ describe("applyEvent", () => {
     expect(reads).toHaveLength(2);
     reads[1]?.({ cursor: "1:2", trees: [] });
     // The read taken before the move answers last, with the work that has since moved.
-    reads[0]?.({ cursor: "1:1", trees: [{} as ThreadTasksRead["trees"][number]] });
+    reads[0]?.({ cursor: "1:1", trees: [{} as ChannelTasksRead["trees"][number]] });
     await tick();
     expect(observer.getCurrentResult().data?.trees).toEqual([]);
     unsubscribe();
@@ -265,42 +272,42 @@ describe("applyEvent", () => {
 
   it("appends deltas to a loaded, streaming reply", () => {
     const client = new QueryClient();
-    client.setQueryData(queryKeys.messages(threadId), [reply("streaming", "Hel")]);
-    applyEvent(client, { _tag: "MessageDelta", threadId, messageId: MessageId.make("m1"), offset: 3, delta: "lo" });
-    expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId))?.[0]?.content).toBe("Hello");
+    client.setQueryData(queryKeys.messages(channelId), [reply("streaming", "Hel")]);
+    applyEvent(client, { _tag: "MessageDelta", channelId, messageId: MessageId.make("m1"), offset: 3, delta: "lo" });
+    expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(channelId))?.[0]?.content).toBe("Hello");
   });
 
   it("keeps a stopping reply in progress until it is stopped", () => {
     const client = new QueryClient();
-    client.setQueryData(queryKeys.messages(threadId), [reply("streaming", "Hel")]);
+    client.setQueryData(queryKeys.messages(channelId), [reply("streaming", "Hel")]);
 
     applyEvent(client, { _tag: "MessageUpserted", message: reply("stopping", "Hel") });
-    applyEvent(client, { _tag: "TurnStopRequested", threadId, messageId: MessageId.make("m1") });
-    applyEvent(client, { _tag: "MessageDelta", threadId, messageId: MessageId.make("m1"), offset: 3, delta: "lo" });
-    expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId))?.[0]).toMatchObject({
+    applyEvent(client, { _tag: "TurnStopRequested", channelId, messageId: MessageId.make("m1") });
+    applyEvent(client, { _tag: "MessageDelta", channelId, messageId: MessageId.make("m1"), offset: 3, delta: "lo" });
+    expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(channelId))?.[0]).toMatchObject({
       content: "Hello",
       status: "stopping",
     });
 
     applyEvent(client, { _tag: "MessageUpserted", message: reply("stopped", "Hello") });
-    applyEvent(client, { _tag: "TurnStopped", threadId, messageId: MessageId.make("m1") });
-    expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId))?.[0]?.status).toBe("stopped");
+    applyEvent(client, { _tag: "TurnStopped", channelId, messageId: MessageId.make("m1") });
+    expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(channelId))?.[0]?.status).toBe("stopped");
   });
 
   it("moves a queued message that starts to the end and drops one that was removed", () => {
     const client = new QueryClient();
     const user = (id: string, status: Message["status"]) =>
       new Message({ ...reply(status, id), id: MessageId.make(id), role: "user", configVersion: null });
-    client.setQueryData(queryKeys.messages(threadId), [
+    client.setQueryData(queryKeys.messages(channelId), [
       user("first", "complete"),
       user("q1", "queued"),
       user("q2", "queued"),
       reply("streaming", ""),
     ]);
     applyEvent(client, { _tag: "MessageUpserted", message: user("q2", "complete") });
-    applyEvent(client, { _tag: "MessageDequeued", threadId, messageId: MessageId.make("q2"), reason: "started" });
-    applyEvent(client, { _tag: "MessageDequeued", threadId, messageId: MessageId.make("q1"), reason: "removed" });
-    expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId))?.map((m) => m.id)).toEqual([
+    applyEvent(client, { _tag: "MessageDequeued", channelId, messageId: MessageId.make("q2"), reason: "started" });
+    applyEvent(client, { _tag: "MessageDequeued", channelId, messageId: MessageId.make("q1"), reason: "removed" });
+    expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(channelId))?.map((m) => m.id)).toEqual([
       "first",
       "m1",
       "q2",
@@ -311,16 +318,16 @@ describe("applyEvent", () => {
   it("drops the reply of a hob that passed, which leaves no message, and reads what is unread again (#1462)", async () => {
     const client = new QueryClient();
     // The passed reply had ended, so the camp showed as unread.
-    client.setQueryData(queryKeys.unreadThreads, [threadId]);
+    client.setQueryData(queryKeys.unreadChannels, [channelId]);
     const said = new Message({
       ...reply("complete", "What should we plant?"),
       id: MessageId.make("plan"),
       role: "user",
     });
-    client.setQueryData(queryKeys.messages(threadId), [said, reply("streaming", "")]);
+    client.setQueryData(queryKeys.messages(channelId), [said, reply("streaming", "")]);
     const request = new TurnRequest({
       id: TurnRequestId.make("r-1"),
-      threadId,
+      channelId,
       rootMessageId: null,
       hobId: AgentId.make("pip"),
       messageId: said.id,
@@ -335,16 +342,16 @@ describe("applyEvent", () => {
       position: 0,
       createdAt: now,
     });
-    applyEvent(client, { _tag: "TurnPassed", threadId, messageId: MessageId.make("m1"), request });
-    expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId))?.map((m) => m.id)).toEqual([
+    applyEvent(client, { _tag: "TurnPassed", channelId, messageId: MessageId.make("m1"), request });
+    expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(channelId))?.map((m) => m.id)).toEqual([
       "plan",
     ]);
-    await vi.waitFor(() => expect(client.getQueryState(queryKeys.unreadThreads)?.isInvalidated).toBe(true));
+    await vi.waitFor(() => expect(client.getQueryState(queryKeys.unreadChannels)?.isInvalidated).toBe(true));
   });
 
   it("takes a reply's steps from its upsert, so a replayed entry restores them", () => {
     const client = new QueryClient();
-    client.setQueryData(queryKeys.messages(threadId), [reply("streaming", "")]);
+    client.setQueryData(queryKeys.messages(channelId), [reply("streaming", "")]);
     const edit = {
       id: "tool-1",
       kind: "tool",
@@ -356,7 +363,7 @@ describe("applyEvent", () => {
     applyEvent(client, { _tag: "MessageUpserted", message: withSteps });
     // An older entry arriving late changes nothing.
     applyEvent(client, { _tag: "MessageUpserted", message: new Message({ ...reply("streaming", ""), revision: 3 }) });
-    expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId))?.[0]?.steps).toEqual([edit]);
+    expect(client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(channelId))?.[0]?.steps).toEqual([edit]);
   });
 });
 
@@ -365,7 +372,7 @@ describe("approval events", () => {
     new ApprovalRequest({
       id: ApprovalId.make("a1"),
       agentId: AgentId.make("pip"),
-      threadId,
+      channelId,
       messageId: MessageId.make("m1"),
       stepId: "s1",
       tool: "Bash",
@@ -386,28 +393,28 @@ describe("approval events", () => {
   it("adds a new request to a loaded list and keeps the newest state", () => {
     const client = new QueryClient();
     applyEvent(client, { _tag: "ApprovalRequested", approval: approval("pending", 1) });
-    expect(client.getQueryData(approvalsKey(threadId))).toBeUndefined();
-    client.setQueryData(approvalsKey(threadId), []);
+    expect(client.getQueryData(approvalsKey(channelId))).toBeUndefined();
+    client.setQueryData(approvalsKey(channelId), []);
     applyEvent(client, { _tag: "ApprovalRequested", approval: approval("pending", 1) });
     applyEvent(client, { _tag: "ApprovalResolved", approval: approval("denied", 2) });
     // A late copy of the older version changes nothing.
     applyEvent(client, { _tag: "ApprovalRequested", approval: approval("pending", 1) });
-    expect(client.getQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(threadId))?.map((a) => a.state)).toEqual([
+    expect(client.getQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(channelId))?.map((a) => a.state)).toEqual([
       "denied",
     ]);
   });
 
   // covers ADR 037 (Quests in camps), #1389
-  it("moves a request that went with its quest out of the thread it left and into the camp's list (#1389)", () => {
+  it("moves a request that went with its quest out of the channel it left and into the camp's list (#1389)", () => {
     const client = new QueryClient();
-    const camp = ThreadId.make("camp-1");
+    const camp = ChannelId.make("camp-1");
     const asked = approval("pending", 1);
-    client.setQueryData(approvalsKey(threadId), [asked]);
+    client.setQueryData(approvalsKey(channelId), [asked]);
     client.setQueryData(approvalsKey(camp), []);
-    const moved = new ApprovalRequest({ ...asked, threadId: camp, revision: 5 });
-    applyEvent(client, { _tag: "ApprovalMoved", fromThreadId: threadId, approval: moved });
-    expect(client.getQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(threadId))).toEqual([]);
-    expect(client.getQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(camp))?.map((a) => a.threadId)).toEqual([
+    const moved = new ApprovalRequest({ ...asked, channelId: camp, revision: 5 });
+    applyEvent(client, { _tag: "ApprovalMoved", fromChannelId: channelId, approval: moved });
+    expect(client.getQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(channelId))).toEqual([]);
+    expect(client.getQueryData<ReadonlyArray<ApprovalRequest>>(approvalsKey(camp))?.map((a) => a.channelId)).toEqual([
       camp,
     ]);
   });

@@ -8,6 +8,7 @@ import { AgentsFolder } from "@hobbots/skills";
 import { Context, DateTime, Effect, Layer, Option, Ref } from "effect";
 import {
   type BackupManifest,
+  countsOf,
   decodeMarker,
   missingFolders,
   NotRestorable,
@@ -52,7 +53,7 @@ export const summaryOf = (path: string, manifest: BackupManifest) =>
       createdAt: manifest.createdAt,
       hobbotsVersion: manifest.hobbotsVersion,
       schemaVersion: manifest.schemaVersion,
-      ...manifest.counts,
+      ...countsOf(manifest.counts),
       skills: manifest.counts.skills ?? 0,
       missingFolders: await missingFolders(manifest),
     }),

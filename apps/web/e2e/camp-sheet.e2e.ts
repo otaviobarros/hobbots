@@ -1,4 +1,4 @@
-import type { Message, Thread, ThreadId, UnreadThreads } from "@hobbots/domain";
+import type { Channel, ChannelId, Message, UnreadChannels } from "@hobbots/domain";
 import type { Locator, Page, Route } from "@playwright/test";
 import { expectAccessible } from "./accessibility.ts";
 import { campAt, expect, test } from "./hub.ts";
@@ -11,12 +11,12 @@ import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 test.afterEach(stopAldricHub);
 
-const threadOf = (page: Page) => new URL(page.url()).hash.split("/threads/")[1]?.split("?")[0] ?? "";
+const channelOf = (page: Page) => new URL(page.url()).hash.split("/channels/")[1]?.split("?")[0] ?? "";
 
-/** Whether the hub has `chat` unread for you, as your list of unread threads says. */
+/** Whether the hub has `chat` unread for you, as your list of unread channels says. */
 const unreadOf = (url: string, headers: Record<string, string>, chat: string) => async (): Promise<boolean> => {
-  const listed = (await (await fetch(`${url}/api/unread-threads`, { headers })).json()) as UnreadThreads;
-  return listed.threadIds.includes(chat as ThreadId);
+  const listed = (await (await fetch(`${url}/api/unread-channels`, { headers })).json()) as UnreadChannels;
+  return listed.channelIds.includes(chat as ChannelId);
 };
 
 /** Sends `lines` as one message and waits until the reply, which echoes them, has ended. */
@@ -103,9 +103,9 @@ test("records and changes a decision, opens an artifact, writes a note, pins a r
   await expect
     .poll(async () => {
       const listed = (await (
-        await fetch(`${url}/api/agents/${aldric}/threads`, { headers: hub.headers })
-      ).json()) as ReadonlyArray<Thread>;
-      return listed.find((thread) => thread.id === camp.id)?.private;
+        await fetch(`${url}/api/agents/${aldric}/channels`, { headers: hub.headers })
+      ).json()) as ReadonlyArray<Channel>;
+      return listed.find((channel) => channel.id === camp.id)?.private;
     })
     .toBe(true);
 });
@@ -116,9 +116,9 @@ test("offers a grown chat chapter as a camp and moves it into the new camp (#138
   const main = page.getByRole("main", { name: "Chat" });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await say(page, /^Message Aldric/, ["Let us plan the launch."]);
-  const chat = threadOf(page);
+  const chat = channelOf(page);
   for (let n = 1; n <= 5; n++) {
-    await api("POST", `/threads/${chat}/decisions`, { key: `d${n}`, text: `Decision ${n}`, replaces: null });
+    await api("POST", `/channels/${chat}/decisions`, { key: `d${n}`, text: `Decision ${n}`, replaces: null });
   }
 
   const card = main.getByRole("region", { name: "Make Chapter 1 a camp?" });
@@ -136,7 +136,7 @@ test("offers a grown chat chapter as a camp and moves it into the new camp (#138
   // The chapter's messages came along, and the chat no longer holds them.
   await expect(main.getByText("Echo: Let us plan the launch.")).toBeVisible();
   const left = (await (
-    await fetch(`${url}/api/threads/${chat}/messages`, { headers: hub.headers })
+    await fetch(`${url}/api/channels/${chat}/messages`, { headers: hub.headers })
   ).json()) as ReadonlyArray<Message>;
   expect(left).toEqual([]);
 });
@@ -149,16 +149,16 @@ test("a camp suggestion waits while a reply runs, and Make a camp holds the chap
   const main = page.getByRole("main", { name: "Chat" });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await say(page, /^Message Aldric/, ["Let us plan the launch."]);
-  const chat = threadOf(page);
+  const chat = channelOf(page);
   for (let n = 1; n <= 5; n++) {
-    await api("POST", `/threads/${chat}/decisions`, { key: `d${n}`, text: `Decision ${n}`, replaces: null });
+    await api("POST", `/channels/${chat}/decisions`, { key: `d${n}`, text: `Decision ${n}`, replaces: null });
   }
   const card = main.getByRole("region", { name: "Make Chapter 1 a camp?" });
   await expect(card).toBeVisible();
   const longReply = () =>
-    api("POST", `/threads/${chat}/messages`, { content: "Run the long job\nfake:tool Bash sleep 600" });
+    api("POST", `/channels/${chat}/messages`, { content: "Run the long job\nfake:tool Bash sleep 600" });
   const stop = async () => {
-    const stopped = await fetch(`${url}/api/threads/${chat}/stop-all`, { method: "POST", headers: hub.headers });
+    const stopped = await fetch(`${url}/api/channels/${chat}/stop-all`, { method: "POST", headers: hub.headers });
     expect(stopped.ok).toBe(true);
   };
 
@@ -200,12 +200,12 @@ test("catches you up on a chat you left, then folds it (#1387)", async ({ page }
   const main = page.getByRole("main", { name: "Chat" });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await say(page, /^Message Aldric/, ["Hello."]);
-  const chat = threadOf(page);
+  const chat = channelOf(page);
   const address = page.url();
 
   // You leave; Aldric replies and records a decision meanwhile.
   await page.goto(`${url}/#/hobs/${aldric}`);
-  await api("POST", `/threads/${chat}/messages`, {
+  await api("POST", `/channels/${chat}/messages`, {
     content: ["While you are out.", script("record_decision", { key: "fridays", text: "Ship on Fridays." })].join("\n"),
   });
   const unread = unreadOf(url, hub.headers, chat);
@@ -233,12 +233,12 @@ test("a reply that mentions you while you are away shows in the catch-up, and it
   const main = page.getByRole("main", { name: "Chat" });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await say(page, /^Message Aldric/, ["Hello."]);
-  const chat = threadOf(page);
+  const chat = channelOf(page);
   const address = page.url();
 
   // You leave; Aldric's reply, which echoes the message, mentions you by name.
   await page.goto(`${url}/#/hobs/${aldric}`);
-  await api("POST", `/threads/${chat}/messages`, { content: "@Owner can you check the map?" });
+  await api("POST", `/channels/${chat}/messages`, { content: "@Owner can you check the map?" });
   const unread = unreadOf(url, hub.headers, chat);
   await expect.poll(unread, { timeout: 15_000 }).toBe(true);
 
@@ -260,14 +260,14 @@ test("a second visit to a chat you left again catches you up on what is new sinc
   const main = page.getByRole("main", { name: "Chat" });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await say(page, /^Message Aldric/, ["Hello."]);
-  const chat = threadOf(page);
+  const chat = channelOf(page);
   const address = page.url();
   const unread = unreadOf(url, hub.headers, chat);
   // Leaving and coming back changes only the address's hash, so the page and its query cache stay
   // while the chat view unmounts and mounts again, as switching chats in the app does.
   const away = async (decision: { key: string; text: string }) => {
     await page.goto(`${url}/#/hobs/${aldric}`);
-    await api("POST", `/threads/${chat}/messages`, {
+    await api("POST", `/channels/${chat}/messages`, {
       content: [`Meanwhile ${decision.key}.`, script("record_decision", decision)].join("\n"),
     });
     await expect.poll(unread, { timeout: 15_000 }).toBe(true);
@@ -290,11 +290,11 @@ test("a catch-up that cannot be read keeps the chat unread until Try again reads
   const main = page.getByRole("main", { name: "Chat" });
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await say(page, /^Message Aldric/, ["Hello."]);
-  const chat = threadOf(page);
+  const chat = channelOf(page);
   const address = page.url();
   const unread = unreadOf(url, hub.headers, chat);
   await page.goto(`${url}/#/hobs/${aldric}`);
-  await api("POST", `/threads/${chat}/messages`, {
+  await api("POST", `/channels/${chat}/messages`, {
     content: ["While you are out.", script("record_decision", { key: "fridays", text: "Ship on Fridays." })].join("\n"),
   });
   await expect.poll(unread, { timeout: 15_000 }).toBe(true);
@@ -304,8 +304,8 @@ test("a catch-up that cannot be read keeps the chat unread until Try again reads
   const asked: Array<string> = [];
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname;
-    if (path === `/api/threads/${chat}/catch-up`) asked.push("catch-up");
-    if (path === `/api/threads/${chat}/read` && request.method() === "PUT") asked.push("read");
+    if (path === `/api/channels/${chat}/catch-up`) asked.push("catch-up");
+    if (path === `/api/channels/${chat}/read` && request.method() === "PUT") asked.push("read");
   });
   await page.route("**/catch-up", (route) => route.abort());
   await page.goto(address);
@@ -359,7 +359,7 @@ test("the camp sheet's tabs fit it without a sideways scroll, however large thei
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(camp.url);
   // A decision, an artifact and a pin, each then read back over a thousand times.
-  await page.route(/\/api\/threads\/[^/]+\/(decisions|artifacts|pins)$/, repeated(1234));
+  await page.route(/\/api\/channels\/[^/]+\/(decisions|artifacts|pins)$/, repeated(1234));
   await say(page, /^Message Aldric in/, [
     "Plan the launch.",
     'fake:write plan.md "# Plan\\n"',
@@ -390,7 +390,7 @@ test("the camp sheet's tabs fit it without a sideways scroll, however large thei
     }
   }
   await page.keyboard.press("Escape");
-  await page.unroute(/\/api\/threads\/[^/]+\/(decisions|artifacts|pins)$/);
+  await page.unroute(/\/api\/channels\/[^/]+\/(decisions|artifacts|pins)$/);
 
   // The close button keeps clear of the field's edges.
   await page.getByRole("button", { name: "Find", exact: true }).click();
@@ -408,20 +408,20 @@ test("makes a camp from the suggested chapter alone, named as the hub suggests (
   await page.goto(`${url}/#/hobs/${aldric}/chat`);
   await say(page, /^Message Aldric/, ["My cat is called Miso."]);
   await say(page, /^Message Aldric/, ["Now the garden plans."]);
-  const chat = threadOf(page);
+  const chat = channelOf(page);
   const garden = (
     (await (
-      await fetch(`${url}/api/threads/${chat}/messages`, { headers: hub.headers })
+      await fetch(`${url}/api/channels/${chat}/messages`, { headers: hub.headers })
     ).json()) as ReadonlyArray<Message>
   ).find((message) => message.content === "Now the garden plans.");
-  const split = await fetch(`${url}/api/threads/${chat}/chapters/split`, {
+  const split = await fetch(`${url}/api/channels/${chat}/chapters/split`, {
     method: "POST",
     headers: { "content-type": "application/json", ...hub.headers },
     body: JSON.stringify({ key: "garden", messageId: garden?.id, title: "Garden plans" }),
   });
   expect(split.status).toBe(200);
   for (let n = 1; n <= 5; n++) {
-    await api("POST", `/threads/${chat}/decisions`, { key: `g${n}`, text: `Plant bed ${n}`, replaces: null });
+    await api("POST", `/channels/${chat}/decisions`, { key: `g${n}`, text: `Plant bed ${n}`, replaces: null });
   }
 
   // Under No AI the hub names the camp after the chapter's own title, with no goal.
@@ -437,7 +437,7 @@ test("makes a camp from the suggested chapter alone, named as the hub suggests (
 
   // The chat keeps the talk from before the garden.
   const left = (await (
-    await fetch(`${url}/api/threads/${chat}/messages`, { headers: hub.headers })
+    await fetch(`${url}/api/channels/${chat}/messages`, { headers: hub.headers })
   ).json()) as ReadonlyArray<Message>;
   expect(left.map((message) => message.content)).toEqual(["My cat is called Miso.", "Echo: My cat is called Miso."]);
 });

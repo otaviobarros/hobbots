@@ -47,7 +47,7 @@ const fields = {
   taskId: null,
   questId: null,
   attemptId: null,
-  threadId: null,
+  channelId: null,
   dedupeKey: "i1",
   payload: { _tag: "message", senderId: null, text: "Hi" },
   notBefore: null,

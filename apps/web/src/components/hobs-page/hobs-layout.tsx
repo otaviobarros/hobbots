@@ -1,10 +1,10 @@
-import type { AgentId, ThreadId } from "@hobbots/domain";
+import type { AgentId, ChannelId } from "@hobbots/domain";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type ReactNode, useEffect } from "react";
-import { threadsQuery } from "../../api/queries.ts";
+import { channelsQuery } from "../../api/queries.ts";
 import { ArchiveToastViewport } from "../archive/archive-toast.tsx";
-import { ThreadMain, type WorkspaceMainProps } from "../archived-threads/archived-threads.tsx";
+import { ChannelMain, type WorkspaceMainProps } from "../archived-channels/archived-channels.tsx";
 import { usePins } from "../quest/use-work.ts";
 import { ChatColumn, FoldButton } from "../quest-sheet/chat-column.tsx";
 import type { QuestView } from "../quest-sheet/quest-search.ts";
@@ -13,7 +13,7 @@ import { useChatFold, useRoomWidth } from "../quest-sheet/use-chat-fold.ts";
 
 interface WorkspaceProps {
   hobId: AgentId;
-  threadId?: ThreadId | undefined;
+  channelId?: ChannelId | undefined;
   /** A message to scroll to and mark, such as a search match. */
   focusMessageId?: string | undefined;
   main?: ((props: WorkspaceMainProps) => ReactNode) | undefined;
@@ -25,34 +25,34 @@ interface WorkspaceProps {
 
 /**
  * The chat workspace, where a quest's Workbench opens beside the chat; the quest itself opens in the
- * chat's sheet, which the chat's header holds. The middle is the thread's chat
- * unless the route fills it with `main`, such as the hob's archived threads. Threads are archived
+ * chat's sheet, which the chat's header holds. The middle is the channel's chat
+ * unless the route fills it with `main`, such as the hob's archived channels. Channels are archived
  * from their menus or with ⌃⌘A, with Undo in a toast that the app shell holds, so it stays when
  * archiving the last chat opens the hob's fresh page.
  */
 export function HobsLayout({
   hobId,
-  threadId,
+  channelId,
   focusMessageId,
-  main = (props) => <ThreadMain {...props} />,
+  main = (props) => <ChannelMain {...props} />,
   quest,
   aside,
 }: WorkspaceProps) {
-  // Pinned Quests show in every thread's header and open in its sheet.
+  // Pinned Quests show in every channel's header and open in its sheet.
   const pins = usePins();
-  useThreadKeys(hobId, threadId);
+  useChannelKeys(hobId, channelId);
   const width = useRoomWidth();
   const fold = useChatFold(width);
-  const open = threadId !== undefined && quest?.tab !== undefined;
+  const open = channelId !== undefined && quest?.tab !== undefined;
 
   return (
     <div className="flex min-w-0 flex-1">
       {/* The chat reads data-room to give up its minimum width in the column beside the Workbench. */}
       <div className="group/room relative flex min-w-0 flex-1" data-room={open ? "open" : undefined}>
-        {open && <QuestWorkbench hobId={hobId} threadId={threadId} view={quest} pins={pins} />}
+        {open && <QuestWorkbench hobId={hobId} channelId={channelId} view={quest} pins={pins} />}
         <ChatColumn
           hobId={hobId}
-          threadId={threadId}
+          channelId={channelId}
           room={open}
           folded={fold.folded}
           width={width}
@@ -60,7 +60,7 @@ export function HobsLayout({
         >
           {main({
             hobId,
-            threadId,
+            channelId,
             focusMessageId,
             pins,
             headerEnd: open ? <FoldButton onFold={() => fold.setFolded(true)} /> : undefined,
@@ -81,24 +81,24 @@ export function HobsLayout({
   );
 }
 
-/** ⌥↑ and ⌥↓ move between the current hob's threads. */
-const useThreadKeys = (hobId: AgentId, threadId: ThreadId | undefined) => {
-  const threads = useQuery(threadsQuery(hobId));
+/** ⌥↑ and ⌥↓ move between the current hob's channels. */
+const useChannelKeys = (hobId: AgentId, channelId: ChannelId | undefined) => {
+  const channels = useQuery(channelsQuery(hobId));
   const navigate = useNavigate();
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
-      const list = threads.data ?? [];
+      const list = channels.data ?? [];
       if (list.length === 0) return;
-      const index = list.findIndex((t) => t.id === threadId);
+      const index = list.findIndex((t) => t.id === channelId);
       const step = event.key === "ArrowUp" ? -1 : 1;
       const target = list[index === -1 ? 0 : (index + step + list.length) % list.length];
       if (!target) return;
       event.preventDefault();
-      void navigate({ to: "/hobs/$hobId/threads/$threadId", params: { hobId, threadId: target.id } });
+      void navigate({ to: "/hobs/$hobId/channels/$channelId", params: { hobId, channelId: target.id } });
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [threads.data, threadId, hobId, navigate]);
+  }, [channels.data, channelId, hobId, navigate]);
 };

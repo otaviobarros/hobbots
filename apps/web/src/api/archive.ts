@@ -1,39 +1,39 @@
-import type { Thread } from "@hobbots/domain";
+import type { Channel } from "@hobbots/domain";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
-import { placeThread, queryKeys } from "./queries.ts";
-import { recordThread } from "./sync.ts";
+import { placeChannel, queryKeys } from "./queries.ts";
+import { recordChannel } from "./sync.ts";
 
 /**
- * Archives a thread. It leaves the hob's thread list at once; a refusal or a failure puts it back
- * where it was. The archived thread the hub returns goes to the hob's archived list, and other
+ * Archives a channel. It leaves the hob's channel list at once; a refusal or a failure puts it back
+ * where it was. The archived channel the hub returns goes to the hob's archived list, and other
  * clients hear of it from its event.
  */
-export const useArchiveThread = () => {
+export const useArchiveChannel = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (thread: Thread) => call((c) => c.threads.archive({ params: { threadId: thread.id } })),
-    onMutate: (thread) => {
-      queryClient.setQueryData<ReadonlyArray<Thread>>(queryKeys.threads(thread.agentId), (old) =>
-        old?.filter((t) => t.id !== thread.id),
+    mutationFn: (channel: Channel) => call((c) => c.channels.archive({ params: { channelId: channel.id } })),
+    onMutate: (channel) => {
+      queryClient.setQueryData<ReadonlyArray<Channel>>(queryKeys.channels(channel.ownerHobId), (old) =>
+        old?.filter((t) => t.id !== channel.id),
       );
     },
-    onError: (_, thread) => placeThread(queryClient, thread),
+    onError: (_, channel) => placeChannel(queryClient, channel),
     onSuccess: (archived) => {
-      recordThread(queryClient, archived);
-      placeThread(queryClient, archived);
+      recordChannel(queryClient, archived);
+      placeChannel(queryClient, archived);
     },
   });
 };
 
-/** Undoes an archive: the thread is restored and goes back to its place by last activity. */
+/** Undoes an archive: the channel is restored and goes back to its place by last activity. */
 export const useUndoArchive = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (thread: Thread) => call((c) => c.threads.restore({ params: { threadId: thread.id } })),
+    mutationFn: (channel: Channel) => call((c) => c.channels.restore({ params: { channelId: channel.id } })),
     onSuccess: (restored) => {
-      recordThread(queryClient, restored);
-      placeThread(queryClient, restored);
+      recordChannel(queryClient, restored);
+      placeChannel(queryClient, restored);
     },
   });
 };

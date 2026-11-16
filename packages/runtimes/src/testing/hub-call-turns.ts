@@ -232,7 +232,7 @@ const codexRuntime = async (binary: string, root: string): Promise<HubCallRuntim
           }),
           { say: "Done." },
         );
-        // Kept on disk, as a hob's thread is, so its rollout shows a call it was not offered (#1356).
+        // Kept on disk, as a hob's channel is, so its rollout shows a call it was not offered (#1356).
         return runCodexTurn(config, { ...scripted(request), ephemeral: false });
       }).pipe(Stream.ensuring(Effect.sync(() => (model.moves.length = 0)))),
     model.requests,

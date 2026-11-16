@@ -1,4 +1,4 @@
-import { type AgentId, type Task, type TaskId, TaskPauses, type TaskTree, type ThreadId } from "@hobbots/domain";
+import { type AgentId, type ChannelId, type Task, type TaskId, TaskPauses, type TaskTree } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import {
@@ -14,7 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useTaskControl } from "../../api/task-controls.ts";
-import { threadTasksQuery } from "../../api/tasks.ts";
+import { channelTasksQuery } from "../../api/tasks.ts";
 import { topCancel } from "../quest/control-room.ts";
 import { FlagIcon } from "../quest/flag-icon.tsx";
 import { messages as questCopy } from "../quest/messages.ts";
@@ -26,10 +26,10 @@ import { findTask, taskTitle, workCard } from "../quest/work-model.ts";
 import { QuestDoneWhen } from "./done-when.tsx";
 import { messages } from "./messages.ts";
 import { PauseControls, pauseControl } from "./pause-controls.tsx";
+import { QuestChannelView } from "./quest-channel-view.tsx";
 import { QuestCost } from "./quest-cost.tsx";
 import { QuestRead } from "./quest-read.tsx";
 import { type QuestMoves, questSearch, useQuestMoves } from "./quest-search.ts";
-import { QuestThreadView } from "./quest-thread-view.tsx";
 import { RoomFinished, RoomStopped } from "./room-finished.tsx";
 import { Team } from "./team.tsx";
 
@@ -43,30 +43,30 @@ export interface QuestBack {
 
 /**
  * A quest in its chat's or camp's sheet (ADR 037): Back to the camp, the quest's title under who
- * leads it, its progress, who is on it with what waits on you, and its thread, where you message the
+ * leads it, its progress, who is on it with what waits on you, and its channel, where you message the
  * lead and see whom it passed your message to. Show the work opens its Workbench beside the chat.
  * It is built from the hub's records, as the chat's ticket is, and stays live through their events.
  */
 export function QuestPane({
   hobId,
-  threadId,
+  channelId,
   taskId,
   back,
   pins,
 }: {
   hobId: AgentId;
-  threadId: ThreadId;
+  channelId: ChannelId;
   /** A Task of the quest: its top Task, or the one a link named. */
   taskId: TaskId;
   back: QuestBack | null;
   /** The pinned Quests, as the chat's header holds them, so a pin shows there at once. */
   pins: Pins;
 }) {
-  const followed = useFollowedTrees(threadId, pins.pinned);
-  const read = useQuery(threadTasksQuery(threadId));
-  const found = findTask([...followed.thread, ...followed.elsewhere], taskId);
+  const followed = useFollowedTrees(channelId, pins.pinned);
+  const read = useQuery(channelTasksQuery(channelId));
+  const found = findTask([...followed.channel, ...followed.elsewhere], taskId);
   const hobs = useHobLookup();
-  const moves = useQuestMoves(hobId, threadId, found?.tree.tasks[0]?.id);
+  const moves = useQuestMoves(hobId, channelId, found?.tree.tasks[0]?.id);
   if (found === null) {
     return (
       <>
@@ -83,7 +83,7 @@ export function QuestPane({
     <QuestBody
       key={found.tree.tasks[0]?.id}
       tree={found.tree}
-      threadId={threadId}
+      channelId={channelId}
       hobs={hobs}
       pins={pins}
       moves={moves}
@@ -103,14 +103,14 @@ function BackButton({ back }: { back: QuestBack }) {
 
 function QuestBody({
   tree,
-  threadId,
+  channelId,
   hobs,
   pins,
   moves,
   back,
 }: {
   tree: TaskTree;
-  threadId: ThreadId;
+  channelId: ChannelId;
   hobs: HobLookup;
   pins: Pins;
   moves: QuestMoves;
@@ -179,7 +179,7 @@ function QuestBody({
           {copy.line({ done, total, name: lead.name })}
           {needs > 0 && <Badge variant="needs-you">{copy.needYou({ count: needs })}</Badge>}
         </span>
-        <Elsewhere top={top} threadId={threadId} />
+        <Elsewhere top={top} channelId={channelId} />
       </div>
       {segments.length > 0 && <StatusStrip statuses={segments} />}
       {(asking || cancel !== "open") && (
@@ -203,24 +203,24 @@ function QuestBody({
       <QuestDoneWhen tree={tree} />
       <QuestCost tree={tree} />
       <Team tree={tree} hobs={hobs} pins={pins} moves={moves} />
-      <QuestThreadView tree={tree} threadId={threadId} lead={card.leadId} hobs={hobs} />
+      <QuestChannelView tree={tree} channelId={channelId} lead={card.leadId} hobs={hobs} />
     </>
   );
 }
 
-/** A quest pinned from another thread says so, with a link to its own thread, where you message its lead. */
-function Elsewhere({ top, threadId }: { top: Task; threadId: ThreadId }) {
-  if (top.threadId === null || top.threadId === threadId) return null;
+/** A quest pinned from another channel says so, with a link to its own channel, where you message its lead. */
+function Elsewhere({ top, channelId }: { top: Task; channelId: ChannelId }) {
+  if (top.channelId === null || top.channelId === channelId) return null;
   return (
     <span className="flex items-center gap-2 text-meta text-label">
       {questCopy.room.elsewhere}
       <Link
-        to="/hobs/$hobId/threads/$threadId"
-        params={{ hobId: top.ownerId, threadId: top.threadId }}
+        to="/hobs/$hobId/channels/$channelId"
+        params={{ hobId: top.ownerId, channelId: top.channelId }}
         search={questSearch(top.id)}
         className="text-link"
       >
-        {questCopy.room.openThread}
+        {questCopy.room.openChannel}
       </Link>
     </span>
   );

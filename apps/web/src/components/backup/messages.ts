@@ -66,20 +66,20 @@ export const messages = {
     made: ({ when, version }: { when: string; version: string }) => `Made ${when} by Hobbots ${version}`,
     counts: ({
       hobs,
-      threads,
+      channels,
       quests,
       tasks,
       skills,
     }: {
       hobs: number;
-      threads: number;
+      channels: number;
       quests: number;
       tasks: number;
       skills: number;
     }) => {
       const count = (n: number, one: string, other: string) =>
         plural(n, { one: `${formatCount(n)} ${one}`, other: `${formatCount(n)} ${other}` });
-      return `${count(hobs, "hob", "hobs")}, ${count(threads, "thread", "threads")}, ${count(quests, "quest", "quests")}, ${count(tasks, "task", "tasks")} and ${count(skills, "skill", "skills")}`;
+      return `${count(hobs, "hob", "hobs")}, ${count(channels, "thread", "threads")}, ${count(quests, "quest", "quests")}, ${count(tasks, "task", "tasks")} and ${count(skills, "skill", "skills")}`;
     },
     missing: "Not on this computer, so set these hobs' folders again after the restore:",
     notBack:

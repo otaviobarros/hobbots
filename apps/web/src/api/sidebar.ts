@@ -1,5 +1,5 @@
 import type { SidebarRead } from "@hobbots/api";
-import type { HobbotsEvent, ThreadId } from "@hobbots/domain";
+import type { ChannelId, HobbotsEvent } from "@hobbots/domain";
 import { type QueryClient, queryOptions } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { followsEvents } from "./queries.ts";
@@ -9,7 +9,7 @@ const sidebarKey = ["sidebar"] as const;
 
 /**
  * Your camps and direct messages as the hub sorts them by members (ADR 039, The sidebar). The hub
- * works out which section each thread is in, and what waits on you there, on every read; the client
+ * works out which section each channel is in, and what waits on you there, on every read; the client
  * only shows it (STD-REACT-028). A read that lands after a new sync generation began is taken again,
  * since the events between its snapshot and the fresh stream are not replayed (ADR 013).
  */
@@ -26,14 +26,14 @@ export const sidebarQuery = queryOptions({
   },
 });
 
-/** Whether the sidebar counts a mention of you in `threadId` that you have not read. */
-export const mentionsYou = (read: SidebarRead | undefined, threadId: ThreadId): boolean =>
+/** Whether the sidebar counts a mention of you in `channelId` that you have not read. */
+export const mentionsYou = (read: SidebarRead | undefined, channelId: ChannelId): boolean =>
   [...(read?.sidebar.camps ?? []), ...(read?.sidebar.directMessages ?? [])].some(
-    (place) => place.threadId === threadId && place.mentions > 0,
+    (place) => place.channelId === channelId && place.mentions > 0,
   );
 
 /**
- * A thread was made, archived or restored, a hob came or went, a member joined or left, or what you
+ * A channel was made, archived or restored, a hob came or went, a member joined or left, or what you
  * read changed: the sidebar is read again. A read already in flight may predate the change, so it is
  * cancelled first (STD-REACT-012).
  */
@@ -43,17 +43,17 @@ export const sidebarChanged = async (queryClient: QueryClient) => {
 };
 
 /**
- * The events that move a thread between the sidebar's sections, or into or out of it, and those that
+ * The events that move a channel between the sidebar's sections, or into or out of it, and those that
  * change what waits on you in it: a request, a blocker, a question or a Task's state.
  */
 const SIDEBAR_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "AgentUpserted",
-  "ThreadUpserted",
+  "ChannelUpserted",
   "CampMade",
   "ChatStartedFresh",
   "ChapterMoved",
-  "ThreadMemberAdded",
-  "ThreadMemberChanged",
+  "ChannelMemberAdded",
+  "ChannelMemberChanged",
   "ApprovalRequested",
   "ApprovalResolved",
   "ApprovalMoved",

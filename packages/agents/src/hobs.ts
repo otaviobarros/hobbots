@@ -376,7 +376,7 @@ export class HobService extends Context.Service<
     ) => Effect.Effect<Agent, InvalidHob | AgentNotFound>;
     /**
      * `update` with `check` run first and `then` after it, all under the hob's lock, so nothing else
-     * that takes the lock (a thread archived, a turn started) lands between them. A failed check
+     * that takes the lock (a channel archived, a turn started) lands between them. A failed check
      * stores nothing. Neither step may take the hob's lock itself.
      */
     readonly updateThen: <A, E>(

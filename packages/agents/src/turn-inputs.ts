@@ -5,13 +5,13 @@ import {
   type Agent,
   type AgentConfiguration,
   type AgentId,
+  type Channel,
   liveSession,
   Message,
   type RuntimeKind,
   type RuntimeSession,
   skillTitle,
   systemInstructions,
-  type Thread,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { buildBriefing } from "./briefing.ts";
@@ -33,7 +33,7 @@ import type { HobTools } from "./tools.ts";
  * its own latest reply.
  */
 const missedBy = (
-  thread: Thread,
+  channel: Channel,
   runtime: RuntimeKind,
   agentId: AgentId,
   seenThrough: string | null,
@@ -41,7 +41,7 @@ const missedBy = (
 ) => {
   const seen = before.findIndex((m) => m.id === seenThrough);
   if (seen !== -1) return before.slice(before[seen]?.runtime === runtime ? seen + 1 : seen);
-  const own = before.findLastIndex((m) => isOwnReply(m, thread, agentId) && m.runtime === runtime);
+  const own = before.findLastIndex((m) => isOwnReply(m, channel, agentId) && m.runtime === runtime);
   return before.slice(own + 1);
 };
 
@@ -49,8 +49,8 @@ const missedBy = (
  * Whether a session missed what others said, not only what its own hob said on another brain: a
  * reply by another hob, or a person's messages no hob has answered since (ADR 039).
  */
-const missedOthers = (thread: Thread, agentId: AgentId, missed: ReadonlyArray<Message>) =>
-  missed.some((m) => m.role === "assistant" && !isOwnReply(m, thread, agentId)) ||
+const missedOthers = (channel: Channel, agentId: AgentId, missed: ReadonlyArray<Message>) =>
+  missed.some((m) => m.role === "assistant" && !isOwnReply(m, channel, agentId)) ||
   (missed.some((m) => m.role === "user") && !missed.some((m) => m.role === "assistant"));
 
 /** Why a trial chat's turn did not start, and how to try the draft again (ADR 029, Try in a chat). */
@@ -100,17 +100,17 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
         : Effect.succeed(null);
     // A chat that tries a draft records no library skill with a message, and `/` names the draft
     // (ADR 029, Try in a chat).
-    const acceptedIn = (thread: Thread, agent: Agent) =>
-      thread.skillTrial === null ? acceptedSkills(agent) : Effect.succeed<Message["skills"]>([]);
+    const acceptedIn = (channel: Channel, agent: Agent) =>
+      channel.skillTrial === null ? acceptedSkills(agent) : Effect.succeed<Message["skills"]>([]);
     // A turn's skills: those its message was accepted with, or, for a continuation, a message
     // from before or a member hob's turn, the hob's as the turn starts. The reply records them, and the runtime gets their mounts.
     // A chat that tries a draft loads the draft alone, and records no library skill (ADR 029, Try in a chat).
     const skillsFor = (speaker: Speaker, config: AgentConfiguration, tools: ToolAccess | null, yours?: Message) =>
       Effect.gen(function* () {
-        const { agent, thread } = speaker;
-        const trial = thread.skillTrial;
+        const { agent, channel } = speaker;
+        const trial = channel.skillTrial;
         if (trial !== null) return { recorded: [], mounts: yield* skillMounts.draft(trial), trial };
-        // Your message records the skills of the thread's own hob; a member hob that answers it
+        // Your message records the skills of the channel's own hob; a member hob that answers it
         // works with its own (ADR 029), and so does any hob a hob's reply relayed to (ADR 039),
         // since a reply records the skills of the hob that wrote it.
         const recorded =
@@ -120,22 +120,22 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
       });
     // Claude Code keeps a resumed session's first instructions, so a turn whose session may follow
     // others carries them. Which a session follows is not stored: a stopped or failed turn may or may
-    // not have delivered its own, and threads from before #164 never received theirs. So a thread
+    // not have delivered its own, and channels from before #164 never received theirs. So a channel
     // whose replies all ran on the current instructions needs nothing, and any other carries them.
     // Only the hob's own replies count, since only they ran in its session (ADR 039).
     const instructionsChanged = (speaker: Speaker, runtime: RuntimeKind, instructions: string) =>
       Effect.gen(function* () {
-        const { thread, agent } = speaker;
-        if (liveSession(thread, runtime, agent.id) === undefined) return false;
+        const { channel, agent } = speaker;
+        if (liveSession(channel, runtime, agent.id) === undefined) return false;
         const versions = new Set(
-          (yield* repo.listMessages(thread.id)).flatMap((m) =>
-            m.role === "assistant" && m.configVersion !== null && isOwnReply(m, thread, agent.id)
+          (yield* repo.listMessages(channel.id)).flatMap((m) =>
+            m.role === "assistant" && m.configVersion !== null && isOwnReply(m, channel, agent.id)
               ? [m.configVersion]
               : [],
           ),
         );
         // A turn the hob passed ran in the same session, though its reply is gone.
-        for (const version of yield* repo.passedConfigVersions(thread.id, agent.id)) versions.add(version);
+        for (const version of yield* repo.passedConfigVersions(channel.id, agent.id)) versions.add(version);
         for (const version of versions) {
           const config = yield* repo.findAgentConfig(agent.id, version);
           if (Option.isNone(config) || systemInstructions(config.value.name, config.value) !== instructions)
@@ -145,7 +145,7 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
       });
 
     // What a resumed session missed, told ahead of the prompt (ADR 017), built from the stored
-    // transcript without asking the brain the thread left. `before` is the live chapter's transcript
+    // transcript without asking the brain the channel left. `before` is the live chapter's transcript
     // before the turn's own prompt and reply. `switched` when the reply itself moves from another
     // brain, as on Continue. A new session starts from the context pack instead (ADR 037), so this
     // is null for one. When others spoke since the hob last did, it hears what they said, each
@@ -161,18 +161,18 @@ export const makeTurnInputs = (repo: HobbotsRepository["Service"], hobTools: Hob
       reason: TurnReason | null,
     ) =>
       Effect.sync(() => {
-        const { thread } = speaker;
+        const { channel } = speaker;
         const agentId = speaker.agent.id;
-        const session = liveSession(thread, runtime, agentId);
+        const session = liveSession(channel, runtime, agentId);
         if (session === undefined) return null;
-        const missed = missedBy(thread, runtime, agentId, session.seenThrough, before);
-        // The only hob in a thread knows why it answers from its pack: a reason says something only
+        const missed = missedBy(channel, runtime, agentId, session.seenThrough, before);
+        // The only hob in a channel knows why it answers from its pack: a reason says something only
         // when another actor asked it.
         const why =
           reason === null || reason.cause === "only-hob"
             ? null
             : `Why you are answering now: ${reasonLine(reason, people.nameOf)}`;
-        if (missedOthers(thread, agentId, missed)) {
+        if (missedOthers(channel, agentId, missed)) {
           return [why, sinceYouSpoke(missed, people.speaker)].filter((part) => part !== null).join("\n\n") || null;
         }
         // Only a switch needs one: a session is told what other brains wrote that it did not see,

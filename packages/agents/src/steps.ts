@@ -146,7 +146,7 @@ export const uncertainCalls = (steps: ReadonlyArray<ReplyStep>): string | null =
   });
   if (calls.length === 0) return null;
   return [
-    "Earlier in this thread, these tool calls were running when a reply was cut off, so Hobbots does not know whether they took effect:",
+    "Earlier in this channel, these tool calls were running when a reply was cut off, so Hobbots does not know whether they took effect:",
     ...calls,
     "Do not run any of them again until you have checked whether it took effect, and tell the user what you found.",
   ].join("\n");

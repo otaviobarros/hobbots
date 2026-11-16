@@ -1,4 +1,4 @@
-import { isNote, type Message, type MessageId, type Thread } from "@hobbots/domain";
+import { type Channel, isNote, type Message, type MessageId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -11,10 +11,10 @@ import { ReadState, SheetSection } from "./sheet-parts.tsx";
 const copy = messages.mine;
 
 /** What is yours in the camp (ADR 037, Mine): the messages you pinned, then your notes to self. */
-export function MineTab({ thread, onJump }: { thread: Thread; onJump: (messageId: MessageId) => void }) {
-  const pins = useQuery(pinsQuery(thread.id));
-  const transcript = useQuery(messagesQuery(thread.id));
-  const unpin = useSetPinned(thread.id);
+export function MineTab({ channel, onJump }: { channel: Channel; onJump: (messageId: MessageId) => void }) {
+  const pins = useQuery(pinsQuery(channel.id));
+  const transcript = useQuery(messagesQuery(channel.id));
+  const unpin = useSetPinned(channel.id);
   const byId = new Map((transcript.data ?? []).map((message) => [message.id, message]));
   // A pin whose message the transcript does not hold yet waits for it.
   const pinned = (pins.data ?? []).flatMap((pin) => {

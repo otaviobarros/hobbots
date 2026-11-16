@@ -193,7 +193,7 @@ export interface SkillLibraryShape {
   readonly recordUse: (use: SkillUse) => Library<Committed<SkillUse>>;
   /** Uses of one skill, by one hob, or in one reply, the most recent first, at most `limit` (100 unless given). */
   readonly uses: (filter: SkillUseFilter) => Library<ReadonlyArray<SkillUse>>;
-  /** A skill's uses counted in all, since `since`, per hob and per thread, as its Activity shows them. */
+  /** A skill's uses counted in all, since `since`, per hob and per channel, as its Activity shows them. */
   readonly useCounts: (skillId: SkillId, since: string) => Library<SkillUseCounts>;
   /** How often each library skill was used since `since`, as the scope lists show "this week". */
   readonly usesSince: (since: string) => Library<ReadonlyArray<{ readonly skillId: SkillId; readonly count: number }>>;

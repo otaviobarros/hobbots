@@ -1,7 +1,7 @@
 import { Schema } from "effect";
+import { Channel } from "./channel.ts";
 import { MessageId } from "./ids.ts";
 import { MessageRole } from "./message.ts";
-import { Thread } from "./thread.ts";
 
 /** A piece of a snippet; `match` marks words that matched the search. */
 export const SnippetPart = Schema.Struct({
@@ -19,9 +19,9 @@ export const MessageMatch = Schema.Struct({
 });
 export type MessageMatch = typeof MessageMatch.Type;
 
-/** A thread whose title or messages matched; its newest matching messages come first. */
+/** A channel whose title or messages matched; its newest matching messages come first. */
 export const SearchHit = Schema.Struct({
-  thread: Thread,
+  channel: Channel,
   titleMatch: Schema.Boolean,
   /** How many of its messages matched, of which `matches` holds the newest few. */
   matchCount: Schema.Number,

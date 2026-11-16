@@ -5,9 +5,9 @@ import {
   type CampSuggestionId,
   type CampSuggestionRefused,
   CampSuggestions,
+  type ChannelId,
   type JournaledEvent,
   planKeep,
-  type ThreadId,
 } from "@hobbots/domain";
 import { DateTime, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -36,21 +36,21 @@ export const CampSuggestionRepositoryLive = Layer.effect(
     const journal = yield* EventJournal;
     const change = makeJournaledChange(sql);
 
-    const inState = (threadId: ThreadId, state: "open" | "pending") =>
-      sql<CampSuggestionRow>`SELECT * FROM camp_suggestions WHERE thread_id = ${threadId} AND state = ${state}
+    const inState = (channelId: ChannelId, state: "open" | "pending") =>
+      sql<CampSuggestionRow>`SELECT * FROM camp_suggestions WHERE channel_id = ${channelId} AND state = ${state}
         ORDER BY raised_at, id`.pipe(Effect.map((rows) => rows.map(suggestionFromRow)));
 
-    const keep = (threadId: ThreadId, suggestionId: CampSuggestionId, at: string) =>
+    const keep = (channelId: ChannelId, suggestionId: CampSuggestionId, at: string) =>
       change<CampSuggestion, CampSuggestionRefused>((first) =>
         Effect.gen(function* () {
           const [row] = yield* sql<CampSuggestionRow>`SELECT * FROM camp_suggestions
-            WHERE id = ${suggestionId} AND thread_id = ${threadId}`;
+            WHERE id = ${suggestionId} AND channel_id = ${channelId}`;
           const planned = planKeep(suggestionId, row === undefined ? null : suggestionFromRow(row), at);
           if (!("kept" in planned)) return yield* Effect.fail(planned);
           if (!planned.changed) return { value: planned.kept, events: [] };
           const kept = new CampSuggestion({ ...planned.kept, revision: first });
           yield* settleSuggestion(sql, kept);
-          const event: JournaledEvent = { _tag: "CampSuggestionKept", threadId, suggestion: kept };
+          const event: JournaledEvent = { _tag: "CampSuggestionKept", channelId, suggestion: kept };
           return { value: kept, events: [event] };
         }),
       );
@@ -84,7 +84,7 @@ export const CampSuggestionRepositoryLive = Layer.effect(
               if (!(next instanceof CampSuggestion)) return;
               const written = new CampSuggestion({ ...next, revision: first + events.length });
               yield* settleSuggestion(sql, written);
-              events.push({ _tag: tag, threadId: written.threadId, suggestion: written });
+              events.push({ _tag: tag, channelId: written.channelId, suggestion: written });
             });
           for (const withdrawal of round.withdrawn) {
             yield* settle(withdrawal.id, { _tag: "Withdraw", at }, "CampSuggestionExpired", withdrawal);
@@ -95,7 +95,8 @@ export const CampSuggestionRepositoryLive = Layer.effect(
           }
           for (const raise of round.raises) {
             const suggestion = yield* raiseSuggestion(sql, raise.chapterId, raise.reasons, first + events.length, at);
-            if (suggestion !== null) events.push({ _tag: "CampSuggested", threadId: suggestion.threadId, suggestion });
+            if (suggestion !== null)
+              events.push({ _tag: "CampSuggested", channelId: suggestion.channelId, suggestion });
           }
           // Only forward: a round that read an older page never moves the cursor back.
           yield* sql`UPDATE projector_cursors SET sequence = ${sequence}
@@ -105,8 +106,8 @@ export const CampSuggestionRepositoryLive = Layer.effect(
       ).pipe(Effect.map((committed) => committed.entries));
 
     return CampSuggestionRepository.of({
-      listOpen: (threadId) => sqlOrDie(inState(threadId, "open")),
-      listPending: (threadId) => sqlOrDie(inState(threadId, "pending")),
+      listOpen: (channelId) => sqlOrDie(inState(channelId, "open")),
+      listPending: (channelId) => sqlOrDie(inState(channelId, "pending")),
       keep,
       find: (id) => sqlOrDie(suggestionById(sql, id).pipe(Effect.map(Option.fromNullishOr))),
       driftCursor: sqlOrDie(driftCursor),

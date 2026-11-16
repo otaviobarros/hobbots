@@ -787,7 +787,7 @@ describe("sessions across configuration folders", () => {
     expect(existsSync(join(hob, "projects", "-work", "missing.jsonl"))).toBe(false);
   });
 
-  it("keeps a thread's whole history when its turns move between folders", async () => {
+  it("keeps a channel's whole history when its turns move between folders", async () => {
     const user = join(root, "user-claude-2");
     const hob = join(runtimes, "hob-move");
     const transcript = (folder: string, project: string) => join(folder, "projects", project, "s2.jsonl");
@@ -825,7 +825,7 @@ describe("sessions across configuration folders", () => {
   });
 
   it("writes nowhere outside while a command swaps the hob's folders for links", async () => {
-    // A command of another thread of the same hob keeps swapping its project folder for a link outside.
+    // A command of another channel of the same hob keeps swapping its project folder for a link outside.
     const user = join(root, "user-claude-6");
     const hob = join(runtimes, "hob-swapping");
     const elsewhere = join(outside, "swapped");

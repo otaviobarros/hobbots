@@ -5,6 +5,8 @@ import {
   ArtifactId,
   ArtifactRef,
   AttemptId,
+  Channel,
+  ChannelId,
   FileChange,
   FileChangeId,
   type JournaledEvent,
@@ -12,8 +14,6 @@ import {
   roleFields,
   Task,
   TaskId,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -31,7 +31,7 @@ import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 const NOW = "2026-11-12T00:00:00.000Z";
 const LATER = "2026-11-12T01:00:00.000Z";
 const ADA = AgentId.make("ada");
-const THREAD = ThreadId.make("t1");
+const CHANNEL = ChannelId.make("t1");
 const TASK = TaskId.make("task-1");
 const FIRST = AttemptId.make("attempt-1");
 const SECOND = AttemptId.make("attempt-2");
@@ -56,7 +56,7 @@ const task = new Task({
   ownerId: ADA,
   parentId: null,
   rootId: TASK,
-  threadId: THREAD,
+  channelId: CHANNEL,
   brief: "Write the social post",
   state: "completed",
   dependsOn: [],
@@ -110,12 +110,14 @@ const seedWork = Effect.gen(function* () {
       createdAt: NOW,
     }),
   );
-  yield* repo.upsertThread(new Thread({ id: THREAD, agentId: ADA, title: "Launch", createdAt: NOW, updatedAt: NOW }));
+  yield* repo.upsertChannel(
+    new Channel({ id: CHANNEL, ownerHobId: ADA, title: "Launch", createdAt: NOW, updatedAt: NOW }),
+  );
   yield* sql`INSERT INTO tasks ${sql.insert({
     id: TASK,
     owner_id: ADA,
     root_id: TASK,
-    thread_id: THREAD,
+    channel_id: CHANNEL,
     brief: "Write the social post",
     state: "active",
     created_at: NOW,
@@ -185,12 +187,12 @@ describe("artifact versions", () => {
         // A later Attempt changes it again.
         yield* keptChange(SECOND, "content-2", LATER);
         yield* journal([changed(SECOND, LATER)]);
-        const artifacts = yield* records.listArtifacts(THREAD);
+        const artifacts = yield* records.listArtifacts(CHANNEL);
         const id = artifacts[0]?.id ?? RegisteredArtifactId.make("none");
         return {
           artifacts,
-          versions: yield* records.artifactVersions(THREAD, id),
-          elsewhere: yield* records.artifactVersions(ThreadId.make("other"), id),
+          versions: yield* records.artifactVersions(CHANNEL, id),
+          elsewhere: yield* records.artifactVersions(ChannelId.make("other"), id),
         };
       }),
     );
@@ -223,13 +225,13 @@ describe("artifact versions", () => {
         look_color: "moss",
         created_at: NOW,
       })}`;
-      yield* sql`INSERT INTO threads ${sql.insert({ id: THREAD, agent_id: ADA, title: "Launch", created_at: NOW, updated_at: NOW })}`;
-      yield* sql`INSERT INTO chapters ${sql.insert({ id: "c1", thread_id: THREAD, number: 1, state: "live", started_at: NOW })}`;
+      yield* sql`INSERT INTO threads ${sql.insert({ id: CHANNEL, agent_id: ADA, title: "Launch", created_at: NOW, updated_at: NOW })}`;
+      yield* sql`INSERT INTO chapters ${sql.insert({ id: "c1", thread_id: CHANNEL, number: 1, state: "live", started_at: NOW })}`;
       yield* sql`INSERT INTO tasks ${sql.insert({
         id: TASK,
         owner_id: ADA,
         root_id: TASK,
-        thread_id: THREAD,
+        thread_id: CHANNEL,
         brief: "Write the social post",
         state: "completed",
         created_at: NOW,
@@ -267,7 +269,7 @@ describe("artifact versions", () => {
       })}`;
       const row = (id: string, locator: string, title: string, origin: string, review: string, at: string) => ({
         id,
-        thread_id: THREAD,
+        thread_id: CHANNEL,
         chapter_id: "c1",
         kind: "doc",
         title,
@@ -296,7 +298,7 @@ describe("artifact versions", () => {
         yield* sql`INSERT INTO find_records ${sql.insert({
           kind: "artifact",
           record_id: id,
-          thread_id: THREAD,
+          thread_id: CHANNEL,
           chapter_id: "c1",
           title: id,
           detail: locator,

@@ -1,17 +1,17 @@
-import { ChatService, HobAdmission, HobbotsRepository, HobTools, ThreadMemberRepository } from "@hobbots/agents";
+import { ChannelMemberRepository, ChatService, HobAdmission, HobbotsRepository, HobTools } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
+  type ChannelRunStatus,
   hobActor,
   isInProgress,
   Message,
   MessageId,
   OWNER_ACTOR,
-  Thread,
-  ThreadId,
-  type ThreadRunStatus,
 } from "@hobbots/domain";
-import { HobbotsRepositoryLive, ThreadMemberRepositoryLive } from "@hobbots/persistence";
+import { ChannelMemberRepositoryLive, HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, PubSub, Schedule } from "effect";
@@ -26,7 +26,7 @@ import { EventBus } from "../src/event-bus.ts";
 const QUILL = AgentId.make("quill");
 const PIP = AgentId.make("pip");
 const ROOK = AgentId.make("rook");
-const CAMP = ThreadId.make("camp");
+const CAMP = ChannelId.make("camp");
 const NOW = "2026-11-14T10:00:00.000Z";
 
 const hob = (id: AgentId) =>
@@ -47,10 +47,10 @@ const hob = (id: AgentId) =>
 /** Quill's camp, which Pip and Rook joined. */
 const campOfThree = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
-  const members = yield* ThreadMemberRepository;
+  const members = yield* ChannelMemberRepository;
   for (const id of [QUILL, PIP, ROOK]) yield* repo.insertAgent(hob(id));
-  yield* repo.upsertThread(
-    new Thread({ id: CAMP, agentId: QUILL, title: "Plans", kind: "camp", createdAt: NOW, updatedAt: NOW }),
+  yield* repo.upsertChannel(
+    new Channel({ id: CAMP, ownerHobId: QUILL, title: "Plans", kind: "camp", createdAt: NOW, updatedAt: NOW }),
   );
   yield* members.add(CAMP, hobActor(PIP), OWNER_ACTOR);
   yield* members.add(CAMP, hobActor(ROOK), OWNER_ACTOR);
@@ -62,7 +62,7 @@ const mention = (id: string, hobs: ReadonlyArray<AgentId>, status: Message["stat
     repo.sendMessage(
       new Message({
         id: MessageId.make(id),
-        threadId: CAMP,
+        channelId: CAMP,
         actor: OWNER_ACTOR,
         role: "user",
         content: id,
@@ -75,13 +75,13 @@ const mention = (id: string, hobs: ReadonlyArray<AgentId>, status: Message["stat
     ),
   );
 
-const Persistence = Layer.mergeAll(HobbotsRepositoryLive, ThreadMemberRepositoryLive).pipe(
+const Persistence = Layer.mergeAll(HobbotsRepositoryLive, ChannelMemberRepositoryLive).pipe(
   Layer.provideMerge(TestDatabase),
 );
 
 /** A hub over `seed`: what an earlier life of the hub left in the camp before this one started. */
 const hubOver = (
-  seed: Effect.Effect<unknown, unknown, HobbotsRepository | ThreadMemberRepository>,
+  seed: Effect.Effect<unknown, unknown, HobbotsRepository | ChannelMemberRepository>,
   delay: `${number} millis` | `${number} second`,
 ) =>
   ChatService.layer.pipe(
@@ -102,8 +102,8 @@ const settled = Effect.gen(function* () {
   const chat = yield* ChatService;
   yield* Effect.gen(function* () {
     const messages = yield* repo.listMessages(CAMP);
-    const owed = yield* repo.openTurnRequests({ threadId: CAMP, rootMessageId: null });
-    const running = yield* chat.activeThreads;
+    const owed = yield* repo.openTurnRequests({ channelId: CAMP, rootMessageId: null });
+    const running = yield* chat.activeChannels;
     const busy = owed.length > 0 || running.length > 0 || messages.some((m) => isInProgress(m.status));
     if (busy) return yield* Effect.fail("busy" as const);
   }).pipe(Effect.retry(Schedule.spaced("5 millis")));
@@ -120,7 +120,7 @@ const allRequests = Effect.flatMap(SqlClient.SqlClient, (sql) =>
     readonly droppedByKind: string | null;
     readonly droppedById: string | null;
   }>`SELECT hob_id, message_id, state, reply_id, dropped_by_kind, dropped_by_id FROM turn_requests
-    WHERE thread_id = ${CAMP} ORDER BY queued_at, position`.pipe(Effect.orDie),
+    WHERE channel_id = ${CAMP} ORDER BY queued_at, position`.pipe(Effect.orDie),
 );
 
 const replies = (messages: ReadonlyArray<Message>) =>
@@ -138,8 +138,8 @@ describe("one hob speaks at a time", () => {
       yield* chat.wake(CAMP);
       const messages = yield* settled;
       const runs = (yield* PubSub.takeAll(subscription)).flatMap(
-        (event): ReadonlyArray<ThreadRunStatus> =>
-          event._tag === "Transient" && event.event._tag === "ThreadRunChanged" ? [event.event.run] : [],
+        (event): ReadonlyArray<ChannelRunStatus> =>
+          event._tag === "Transient" && event.event._tag === "ChannelRunChanged" ? [event.event.run] : [],
       );
       return { messages, runs, requests: yield* allRequests };
     }).pipe(Effect.provide(hubOver(campOfThree, "2 millis")), Effect.scoped, Effect.runPromise);
@@ -156,7 +156,7 @@ describe("one hob speaks at a time", () => {
       [ROOK, [QUILL]],
       [QUILL, []],
     ]);
-    expect(result.runs.every((run) => run.rootMessageId === null && run.threadId === CAMP)).toBe(true);
+    expect(result.runs.every((run) => run.rootMessageId === null && run.channelId === CAMP)).toBe(true);
     expect(result.requests.map((r) => [r.hobId, r.state])).toEqual([
       [PIP, "answered"],
       [ROOK, "answered"],
@@ -255,9 +255,9 @@ describe("one hob speaks at a time", () => {
         Effect.retry(Schedule.spaced("5 millis")),
       );
       // Once the floor is free again, the status still says Pip waits for it.
-      const lineup = yield* chat.threadRuns.pipe(
+      const lineup = yield* chat.channelRuns.pipe(
         Effect.flatMap(({ runs }) => {
-          const line = runs.find((run) => run.threadId === CAMP);
+          const line = runs.find((run) => run.channelId === CAMP);
           return line?.run === "idle" ? Effect.succeed(line) : Effect.fail("not yet" as const);
         }),
         Effect.retry(Schedule.spaced("5 millis")),

@@ -1,12 +1,12 @@
 import {
   type AskAnswer,
+  type ChannelId,
   type EventEnvelope,
   type FindKind,
   type FindResult,
   type FoundRecord,
   isCrossedOut,
   type JournaledEvent,
-  type ThreadId,
 } from "@hobbots/domain";
 import { Context, type Duration, Effect, Layer, Option, Schema } from "effect";
 import { clip } from "./briefing.ts";
@@ -14,8 +14,8 @@ import { hubDecide, type ProjectorJournal, projectorRound, runEvery } from "./pr
 
 // Find (ADR 037, Records, #1386). The find projector keeps every chat's and camp's decisions,
 // artifacts and chapters in the find index: it reads the journal after its own cursor, and writes
-// the rows of each thread an entry touched, as the records stand now, with the cursor, in one
-// transaction. Rows written from the records themselves are the same however often a thread is
+// the rows of each channel an entry touched, as the records stand now, with the cursor, in one
+// transaction. Rows written from the records themselves are the same however often a channel is
 // written again, so a replay writes nothing new. Find reads the index beside the messages; Ask
 // answers a question from the records that match it, on the hub's brain, and cites each one.
 
@@ -24,17 +24,17 @@ export class FindIndexLog extends Context.Service<
   FindIndexLog,
   ProjectorJournal & {
     /**
-     * In one transaction: writes the rows of each of `threads` from its records as they stand now,
+     * In one transaction: writes the rows of each of `channels` from its records as they stand now,
      * dropping rows of records no longer there, and moves the cursor to `sequence`.
      */
-    readonly index: (sequence: number, threads: ReadonlySet<ThreadId>) => Effect.Effect<void>;
+    readonly index: (sequence: number, channels: ReadonlySet<ChannelId>) => Effect.Effect<void>;
   }
 >()("@hobbots/agents/FindIndexLog") {}
 
 /** Where find looks: one chat or camp, or every one but private camps. */
 export interface FindScope {
   /** The chat or camp to look in, or null for everywhere. */
-  readonly in: ThreadId | null;
+  readonly in: ChannelId | null;
 }
 
 /** The index find reads. A private camp is found only when it is the scope. */
@@ -51,30 +51,30 @@ export class FindIndex extends Context.Service<
   }
 >()("@hobbots/agents/FindIndex") {}
 
-/** The threads whose records an entry changed: the ones whose rows the projector writes again. */
-const touchedBy = (event: JournaledEvent): ReadonlyArray<ThreadId> => {
+/** The channels whose records an entry changed: the ones whose rows the projector writes again. */
+const touchedBy = (event: JournaledEvent): ReadonlyArray<ChannelId> => {
   switch (event._tag) {
     case "DecisionRecorded":
     case "DecisionSuperseded":
-      return [event.decision.threadId];
+      return [event.decision.channelId];
     case "ArtifactRegistered":
-      return [event.artifact.threadId];
+      return [event.artifact.channelId];
     case "ChapterStarted":
     case "ChapterSplit":
     case "ChapterMerged":
     case "ChapterSummarized":
-      return [event.threadId];
+      return [event.channelId];
     case "ChapterMoved":
-      return [event.threadId, event.camp.id];
+      return [event.channelId, event.camp.id];
     case "CampMade":
-      return [event.thread.id];
+      return [event.channel.id];
     default:
       return [];
   }
 };
 
-/** The threads a page of the journal touched, each once. */
-export const threadsTouched = (entries: ReadonlyArray<EventEnvelope>): ReadonlySet<ThreadId> =>
+/** The channels a page of the journal touched, each once. */
+export const channelsTouched = (entries: ReadonlyArray<EventEnvelope>): ReadonlySet<ChannelId> =>
   new Set(entries.flatMap((entry) => touchedBy(entry.payload as JournaledEvent)));
 
 export interface FindIndexerShape {
@@ -90,7 +90,9 @@ export class FindIndexer extends Context.Service<FindIndexer, FindIndexerShape>(
     Effect.gen(function* () {
       const log = yield* FindIndexLog;
       return FindIndexer.of({
-        runOnce: projectorRound("Find index", log, (entries, sequence) => log.index(sequence, threadsTouched(entries))),
+        runOnce: projectorRound("Find index", log, (entries, sequence) =>
+          log.index(sequence, channelsTouched(entries)),
+        ),
       });
     }),
   );
@@ -113,7 +115,9 @@ export const ASK_TIMEOUT: Duration.Input = "90 seconds";
 
 /** How a record reads to the hub's brain: what it is, where, when, and its words. */
 const recordLine = (record: FoundRecord, number: number) => {
-  const where = `in ${record.threadKind} "${record.threadTitle}", ${record.at.slice(0, 10)}`;
+  // A hob's direct channel is its chat, as the hub's brain reads it.
+  const kind = record.channelKind === "direct" ? "chat" : record.channelKind;
+  const where = `in ${kind} "${record.channelTitle}", ${record.at.slice(0, 10)}`;
   switch (record._tag) {
     case "decision":
       return `[${number}] Decision${isCrossedOut(record) ? " (crossed out, no longer holds)" : ""} ${where}: ${record.text}`;

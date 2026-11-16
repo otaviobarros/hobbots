@@ -1,5 +1,6 @@
 import {
   type AgentId,
+  type ChannelId,
   type Committed,
   type EventEnvelope,
   type MemoryActor,
@@ -29,7 +30,6 @@ import {
   memoryScopeKey,
   type SafetyPreset,
   type TaskId,
-  type ThreadId,
 } from "@hobbots/domain";
 import { Context, Effect, Option } from "effect";
 import type { CharmTurn } from "./charms.ts";
@@ -121,10 +121,10 @@ export interface MemoryStoreShape {
     expected: MemoryExpected,
   ) => Memory<MemoryVersion, MemoryUnavailable | MemoryConflict>;
   /**
-   * Sends what happened in a memory session (ADR 028, Capture and summaries), a thread's or an
+   * Sends what happened in a memory session (ADR 028, Capture and summaries), a channel's or an
    * Attempt's outside any chat, to that session in `scope`, a hob's own memory, in order, and
-   * answers how many of the first items memory acknowledged. A thread is one session in each hob's
-   * memory, so a brain switch never splits it, and a thread with several hobs has one in each of
+   * answers how many of the first items memory acknowledged. A channel is one session in each hob's
+   * memory, so a brain switch never splits it, and a channel with several hobs has one in each of
    * theirs (ADR 039). An item whose key memory has seen in the last 30 days is acknowledged and skipped.
    */
   readonly capture: (
@@ -213,7 +213,7 @@ export class MemoryVersionAuthors extends Context.Service<MemoryVersionAuthors, 
 
 /** Calls only you may make: a hob has no delete tool, never restores and never runs Check now (ADR 028). */
 const YOURS_ONLY: ReadonlySet<string> = new Set(["forget", "restore", "check"]);
-/** Calls that reach only a hob's own memory: what happened in its threads is kept there (ADR 028). */
+/** Calls that reach only a hob's own memory: what happened in its channels is kept there (ADR 028). */
 const OWN_ONLY: ReadonlySet<string> = new Set(["capture"]);
 
 /** A call the hub should never have made: its callers build scopes from the actor. */
@@ -338,8 +338,8 @@ export class MemorySaves extends Context.Service<
     readonly unsent: Effect.Effect<ReadonlyArray<MemorySave>>;
     /** The save named `id`, or null when there is none. */
     readonly find: (id: string) => Effect.Effect<MemorySave | null>;
-    /** The saves made from the replies of a thread, oldest first, so its chat shows each under its reply. */
-    readonly inThread: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<MemorySave>>;
+    /** The saves made from the replies of a channel, oldest first, so its chat shows each under its reply. */
+    readonly inChannel: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<MemorySave>>;
     /**
      * Marks a `saved` save undone at `at`, once memory has its earlier version back, and journals it.
      * None when it is not `saved` or was undone already, so two Undos never both land.
@@ -385,8 +385,8 @@ export class MemoryTools extends Context.Service<
 >()("@hobbots/agents/MemoryTools") {}
 
 /**
- * A memory session in a hob's own memory (ADR 028), a thread's or an Attempt's. A thread with several
- * hobs has a session in each one's memory, named by the thread (ADR 039, Memory in a shared thread),
+ * A memory session in a hob's own memory (ADR 028), a channel's or an Attempt's. A channel with several
+ * hobs has a session in each one's memory, named by the channel (ADR 039, Memory in a shared channel),
  * so a session is its hob and its id together.
  */
 export interface MemorySessionRef {
@@ -395,7 +395,7 @@ export interface MemorySessionRef {
 }
 
 /**
- * A memory session that is open (ADR 028), a thread's or an Attempt's: its hob, when it was last
+ * A memory session that is open (ADR 028), a channel's or an Attempt's: its hob, when it was last
  * active, and the key of its last item.
  */
 export interface MemoryCaptureSession extends MemorySessionRef {
@@ -411,7 +411,7 @@ export interface MemoryCaptureSession extends MemorySessionRef {
  * Attempt, a Quest, a backpack item or a save that had an entry written in a private camp.
  */
 export interface MemoryCaptureExclusions {
-  readonly privateThreads: ReadonlyArray<ThreadId>;
+  readonly privateChannels: ReadonlyArray<ChannelId>;
   readonly excluded: ReadonlyArray<string>;
 }
 
@@ -427,22 +427,27 @@ export interface MemoryCaptureState {
   readonly exclusions: MemoryCaptureExclusions;
 }
 
-/** The work journal entries belong to: threads, and the Tasks worked outside any chat. */
+/** The work journal entries belong to: channels, and the Tasks worked outside any chat. */
 export interface MemoryCaptureWork {
-  readonly threadIds: ReadonlySet<ThreadId>;
+  readonly channelIds: ReadonlySet<ChannelId>;
   readonly taskIds: ReadonlySet<TaskId>;
 }
 
-/** What capture reads of that work now: the camps private now, and the thread each Task is in. */
+/** What capture reads of that work now: the camps private now, and the channel each Task is in. */
 export interface MemoryCapturePrivacy {
-  readonly privateNow: ReadonlySet<ThreadId>;
-  readonly taskThreads: ReadonlyMap<TaskId, ThreadId>;
+  readonly privateNow: ReadonlySet<ChannelId>;
+  readonly taskChannels: ReadonlyMap<TaskId, ChannelId>;
 }
 
-/** Whether a turn's work is in a private camp (ADR 037): its thread is one, or its Task's thread is. */
+/** Whether a turn's work is in a private camp (ADR 037): its channel is one, or its Task's channel is. */
 export class PrivateCamps extends Context.Service<
   PrivateCamps,
-  { readonly holds: (work: { readonly threadId: ThreadId | null; readonly taskId?: TaskId }) => Effect.Effect<boolean> }
+  {
+    readonly holds: (work: {
+      readonly channelId: ChannelId | null;
+      readonly taskId?: TaskId;
+    }) => Effect.Effect<boolean>;
+  }
 >()("@hobbots/agents/PrivateCamps") {}
 
 /**
@@ -477,10 +482,10 @@ export class MemoryCaptureLog extends Context.Service<
     ) => Effect.Effect<void>;
     /**
      * The messages of `ids` as they are stored now, those it finds: the people's messages hobs took a
-     * turn on, which each of those hobs captures (ADR 039, Memory in a shared thread).
+     * turn on, which each of those hobs captures (ADR 039, Memory in a shared channel).
      */
     readonly messages: (ids: ReadonlyArray<MessageId>) => Effect.Effect<ReadonlyArray<Message>>;
-    /** Of `work`, the camps private now and the thread of each Task (ADR 037), read as capture sends. */
+    /** Of `work`, the camps private now and the channel of each Task (ADR 037), read as capture sends. */
     readonly privacy: (work: MemoryCaptureWork) => Effect.Effect<MemoryCapturePrivacy>;
   }
 >()("@hobbots/agents/MemoryCaptureLog") {}

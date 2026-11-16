@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { QuestInProgress } from "../../lib/quest-work.ts";
-import { chatGroups, chatMatches, cleanTitle, groupOf, questsByThread, waitingByThread } from "./chats-model.ts";
+import { chatGroups, chatMatches, cleanTitle, groupOf, questsByChannel, waitingByChannel } from "./chats-model.ts";
 
 // A Wednesday, so Earlier this week reaches back to the Thursday before.
 const now = new Date(2026, 10, 4, 15, 0);
@@ -34,7 +34,7 @@ describe("chatGroups", () => {
       ],
       now,
     );
-    expect(groups.map(({ group, threads }) => [group, threads.map((t) => t.id)])).toEqual([
+    expect(groups.map(({ group, channels }) => [group, channels.map((t) => t.id)])).toEqual([
       ["pinned", ["pin-late", "pin-early"]],
       ["today", ["today"]],
       ["older", ["older-newest", "old"]],
@@ -43,16 +43,16 @@ describe("chatGroups", () => {
 });
 
 describe("chatMatches", () => {
-  const threads = [chat("Spring launch plan", at(3)), chat("Weekly report", at(1)), chat("Lisbon trip", at(0))];
+  const channels = [chat("Spring launch plan", at(3)), chat("Weekly report", at(1)), chat("Lisbon trip", at(0))];
 
   it("finds chats by their title here and by their messages from the hub, newest first, with marks", () => {
     const snippet = [
       { text: "codes used for the ", match: false },
       { text: "discount", match: true },
     ];
-    const hits = [{ thread: { id: "Weekly report" }, matches: [{ snippet }] }];
-    const matches = chatMatches(threads as never, hits as never, "spring discount");
-    expect(matches.map((m) => m.thread.id)).toEqual(["Weekly report", "Spring launch plan"]);
+    const hits = [{ channel: { id: "Weekly report" }, matches: [{ snippet }] }];
+    const matches = chatMatches(channels as never, hits as never, "spring discount");
+    expect(matches.map((m) => m.channel.id)).toEqual(["Weekly report", "Spring launch plan"]);
     expect(matches[0]?.snippet).toEqual(snippet);
     expect(matches[1]?.title).toEqual([
       { text: "Spring", match: true },
@@ -62,28 +62,28 @@ describe("chatMatches", () => {
   });
 
   it("matches nothing for a search without words", () => {
-    expect(chatMatches(threads as never, [], " … ")).toEqual([]);
+    expect(chatMatches(channels as never, [], " … ")).toEqual([]);
   });
 });
 
-describe("waitingByThread", () => {
+describe("waitingByChannel", () => {
   it("counts only the approvals still waiting, per chat", () => {
-    const counts = waitingByThread([
-      { threadId: "a", state: "pending" },
-      { threadId: "a", state: "pending" },
-      { threadId: "b", state: "approved" },
+    const counts = waitingByChannel([
+      { channelId: "a", state: "pending" },
+      { channelId: "a", state: "pending" },
+      { channelId: "b", state: "approved" },
     ] as never);
     expect([...counts]).toEqual([["a", 2]]);
   });
 });
 
-describe("questsByThread", () => {
-  const quest = (id: string, goal: string, threadId: string | null) =>
-    ({ quest: { id, goal, threadId }, members: [] }) as unknown as QuestInProgress;
+describe("questsByChannel", () => {
+  const quest = (id: string, goal: string, channelId: string | null) =>
+    ({ quest: { id, goal, channelId }, members: [] }) as unknown as QuestInProgress;
   const summary = (questId: string, done: number, working: number) =>
     [questId, { questId, tones: { needs: 0, working, waiting: 0, done, problem: 0, idle: 0 }, needsYou: 0 }] as never;
   it("gives each chat a chip per Quest it follows, with how many of its Tasks the hub counts done", () => {
-    const chips = questsByThread(
+    const chips = questsByChannel(
       [
         quest("q1", "Spring launch", "th1"),
         quest("q2", "Keywords", "th1"),

@@ -24,6 +24,8 @@ import { LocalGitToolsLive } from "@hobbots/charms";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   type CharmOperation,
   type HobPolicy,
   type Message,
@@ -33,8 +35,6 @@ import {
   type SafetyPreset,
   type Task,
   type TaskTree,
-  Thread,
-  ThreadId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { waitUntil } from "@hobbots/domain/testing";
@@ -74,7 +74,7 @@ export const ALDRIC = AgentId.make("aldric");
 export const QUILL = AgentId.make("quill");
 export const ROOK = AgentId.make("rook");
 export const PIP = AgentId.make("pip");
-export const threadId = ThreadId.make("dependencies");
+export const channelId = ChannelId.make("dependencies");
 
 /** A line `fake:hold <name>` in a prompt waits, before the prompt does anything, until `release(name)`. */
 export const hold = (name: string) => `fake:hold ${name}`;
@@ -302,8 +302,8 @@ const party = (runtime: RuntimeKind) =>
       hob(PIP, "Pip", runtime),
     ];
     for (const each of all) yield* repo.insertAgent(each);
-    yield* repo.upsertThread(
-      new Thread({ id: threadId, agentId: ALDRIC, title: "Dependencies", createdAt: now, updatedAt: now }),
+    yield* repo.upsertChannel(
+      new Channel({ id: channelId, ownerHobId: ALDRIC, title: "Dependencies", createdAt: now, updatedAt: now }),
     );
   });
 
@@ -432,7 +432,7 @@ export const startHub = async (
 };
 
 export const send = (prompt: ReadonlyArray<string>) =>
-  ChatService.use((chat) => chat.sendPrompt(threadId, prompt.join("\n")));
+  ChatService.use((chat) => chat.sendPrompt(channelId, prompt.join("\n")));
 
 const isLive = (state: string) => state === "starting" || state === "running";
 
@@ -440,7 +440,7 @@ const isLive = (state: string) => state === "starting" || state === "running";
 export const treeWhen = (ready: (tree: TaskTree) => boolean) =>
   waitUntil(
     Effect.map(
-      TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)),
+      TaskRepository.use((tasks) => tasks.readChannelTrees(channelId)),
       ([tree]) => tree,
     ),
     (tree): tree is TaskTree => tree !== undefined && ready(tree),
@@ -451,12 +451,12 @@ export const treeWhen = (ready: (tree: TaskTree) => boolean) =>
 export const settledTree = (ready: (tree: TaskTree) => boolean) =>
   treeWhen((tree) => ready(tree) && !tree.attempts.some((each) => isLive(each.state)));
 
-/** The thread's messages once `ready` holds for them, every reply ended. */
+/** The channel's messages once `ready` holds for them, every reply ended. */
 export const messagesWhen = (ready: (all: ReadonlyArray<Message>) => boolean) =>
   waitUntil(
-    HobbotsRepository.use((repo) => repo.listMessages(threadId)),
+    HobbotsRepository.use((repo) => repo.listMessages(channelId)),
     (all) => all.every((m) => m.status !== "streaming" && m.status !== "stopping") && ready(all),
-    { what: "the thread's messages" },
+    { what: "the channel's messages" },
   );
 
 /** Nothing waits in any hob's backpack, routine progress included, nor in yours. */

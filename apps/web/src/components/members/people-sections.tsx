@@ -1,5 +1,5 @@
 import type { MembersReport } from "@hobbots/api";
-import type { Actor, Agent, RuntimeKind, Thread, ThreadMember, User } from "@hobbots/domain";
+import type { Actor, Agent, Channel, ChannelMember, RuntimeKind, User } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { Progress } from "@hobbots/ui/components/progress";
@@ -19,7 +19,7 @@ import { row, sectionTitle } from "./sheet-styles.ts";
 const copy = messages.sheet;
 
 /** The camp's people: you, whoever owns the camp, and the owner marked. */
-export function PeopleSection({ report, members }: { report: MembersReport; members: ReadonlyArray<ThreadMember> }) {
+export function PeopleSection({ report, members }: { report: MembersReport; members: ReadonlyArray<ChannelMember> }) {
   const headingId = useId();
   const you = useQuery(sidebarQuery).data?.you;
   const personOf = (actor: Actor): User | undefined => report.people.find((user) => user.id === actor.id);
@@ -64,9 +64,9 @@ export function PeopleSection({ report, members }: { report: MembersReport; memb
  * thinks with it (brainFor, ADR 017), otherwise each hob's own.
  */
 export const campRuntimes = (
-  camp: Pick<Thread, "brain">,
+  camp: Pick<Channel, "brain">,
   hobs: ReadonlyArray<Pick<Agent, "id" | "runtime">>,
-  members: ReadonlyArray<ThreadMember>,
+  members: ReadonlyArray<ChannelMember>,
 ): ReadonlyArray<RuntimeKind> =>
   camp.brain !== null
     ? [camp.brain.runtime]
@@ -86,10 +86,10 @@ export function CostSection({
   hobs,
   members,
 }: {
-  camp: Thread;
+  camp: Channel;
   report: MembersReport;
   hobs: ReadonlyArray<Agent>;
-  members: ReadonlyArray<ThreadMember>;
+  members: ReadonlyArray<ChannelMember>;
 }) {
   // The plans' own lifecycle: a slow or failed read is not a plan the hub didn't report.
   const plansRead = useQuery(plansQuery);

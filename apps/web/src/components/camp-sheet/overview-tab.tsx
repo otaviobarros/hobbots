@@ -1,13 +1,13 @@
-import { type Chapter, ChapterStates, type TaskId, type TaskTree, type Thread } from "@hobbots/domain";
+import { type Channel, type Chapter, ChapterStates, type TaskId, type TaskTree } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { useQuery } from "@tanstack/react-query";
+import { useSetCampPrivate } from "../../api/channel-settings.ts";
 import { chaptersQuery } from "../../api/chapters.ts";
 import { briefQuery } from "../../api/records.ts";
-import { useSetCampPrivate } from "../../api/thread-settings.ts";
 import { AlongRow } from "../camps/camp-parts.tsx";
 import { StatusStrip } from "../quest/status-strip.tsx";
 import { useQuestProgress } from "../quest/use-quest-progress.ts";
-import { useThreadTrees } from "../quest/use-work.ts";
+import { useChannelTrees } from "../quest/use-work.ts";
 import { taskTitle, workCard } from "../quest/work-model.ts";
 import { messages } from "./messages.ts";
 import { ReadState, SheetSection } from "./sheet-parts.tsx";
@@ -19,17 +19,17 @@ const copy = messages.overview;
  * started here; the camp's chapters; and its settings, where a camp is made private from now on.
  */
 export function OverviewTab({
-  thread,
+  channel,
   hobName,
   onOpenQuest,
 }: {
-  thread: Thread;
+  channel: Channel;
   hobName: string;
   onOpenQuest: (taskId: TaskId) => void;
 }) {
-  const brief = useQuery(briefQuery(thread.id));
-  const chapters = useQuery(chaptersQuery(thread.id));
-  const trees = useThreadTrees(thread.id);
+  const brief = useQuery(briefQuery(channel.id));
+  const chapters = useQuery(chaptersQuery(channel.id));
+  const trees = useChannelTrees(channel.id);
   const text = brief.data?.text ?? "";
   return (
     <div className="flex flex-col gap-4">
@@ -56,7 +56,7 @@ export function OverviewTab({
           {(chapters.data ?? []).filter((chapter) => chapter.state !== "moved").map(ChapterRow)}
         </ul>
       </SheetSection>
-      <PrivateSetting thread={thread} hobName={hobName} />
+      <PrivateSetting channel={channel} hobName={hobName} />
     </div>
   );
 }
@@ -103,15 +103,15 @@ function ChapterRow(chapter: Chapter) {
 }
 
 /** The camp's privacy, changed from now on (ADR 037, #1377): what memory captured before stays. */
-function PrivateSetting({ thread, hobName }: { thread: Thread; hobName: string }) {
+function PrivateSetting({ channel, hobName }: { channel: Channel; hobName: string }) {
   const change = useSetCampPrivate();
   return (
     <SheetSection title={copy.settings}>
       <AlongRow
         title={copy.private}
-        detail={thread.private ? copy.privateOn({ name: hobName }) : copy.privateOff({ name: hobName })}
-        checked={thread.private}
-        onChange={change.isPending ? undefined : (value) => change.mutate({ thread, value })}
+        detail={channel.private ? copy.privateOn({ name: hobName }) : copy.privateOff({ name: hobName })}
+        checked={channel.private}
+        onChange={change.isPending ? undefined : (value) => change.mutate({ channel, value })}
       />
       {change.isError && (
         <p role="alert" className="m-0 text-ui text-rose">

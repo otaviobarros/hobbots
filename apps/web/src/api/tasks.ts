@@ -1,9 +1,9 @@
-import type { TaskTreeRead, ThreadTasksRead } from "@hobbots/api";
-import type { TaskId, ThreadId } from "@hobbots/domain";
+import type { ChannelTasksRead, TaskTreeRead } from "@hobbots/api";
+import type { ChannelId, TaskId } from "@hobbots/domain";
 import { type QueryClient, type QueryFunctionContext, queryOptions } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { syncState } from "./sync.ts";
-import { applyToThreadTrees, applyToTree, type TaskEvent } from "./task-trees.ts";
+import { applyToChannelTrees, applyToTree, type TaskEvent } from "./task-trees.ts";
 
 /**
  * Task reads (ADR 018), kept live by the journal. A read can land after an event it does
@@ -13,7 +13,7 @@ import { applyToThreadTrees, applyToTree, type TaskEvent } from "./task-trees.ts
  */
 export const taskKeys = {
   all: ["tasks"] as const,
-  thread: (threadId: ThreadId) => ["tasks", "thread", threadId] as const,
+  channel: (channelId: ChannelId) => ["tasks", "channel", channelId] as const,
   tree: (taskId: TaskId) => ["tasks", "tree", taskId] as const,
 };
 
@@ -57,30 +57,30 @@ const synced =
     }
   };
 
-const applyToThread =
-  (threadId: ThreadId) =>
-  (read: ThreadTasksRead, event: TaskEvent): ThreadTasksRead => {
-    const trees = applyToThreadTrees(threadId, read.trees, event);
+const applyToChannel =
+  (channelId: ChannelId) =>
+  (read: ChannelTasksRead, event: TaskEvent): ChannelTasksRead => {
+    const trees = applyToChannelTrees(channelId, read.trees, event);
     return trees === read.trees ? read : { ...read, trees };
   };
 
 /**
- * A thread's Tasks moved to another thread, as Start fresh moves them (ADR 037): its list is read
+ * A channel's Tasks moved to another channel, as Start fresh moves them (ADR 037): its list is read
  * again. No Task event says so, so a read already in flight may have been taken before the move, and
  * while the list has no data yet Query would hand that read back instead of starting another. It is
  * cancelled first (STD-REACT-012).
  */
-export const threadTasksMoved = async (queryClient: QueryClient, threadId: ThreadId) => {
-  const queryKey = taskKeys.thread(threadId);
+export const channelTasksMoved = async (queryClient: QueryClient, channelId: ChannelId) => {
+  const queryKey = taskKeys.channel(channelId);
   await queryClient.cancelQueries({ queryKey, exact: true });
   await queryClient.invalidateQueries({ queryKey, exact: true });
 };
 
-/** The Tasks a thread's requests started, each with everything under it. */
-export const threadTasksQuery = (threadId: ThreadId) =>
+/** The Tasks a channel's requests started, each with everything under it. */
+export const channelTasksQuery = (channelId: ChannelId) =>
   queryOptions({
-    queryKey: taskKeys.thread(threadId),
-    queryFn: synced(() => call((c) => c.tasks.threadTasks({ params: { threadId } })), applyToThread(threadId)),
+    queryKey: taskKeys.channel(channelId),
+    queryFn: synced(() => call((c) => c.tasks.channelTasks({ params: { channelId } })), applyToChannel(channelId)),
   });
 
 const applyToTreeRead = (read: TaskTreeRead, event: TaskEvent): TaskTreeRead => {
@@ -88,7 +88,7 @@ const applyToTreeRead = (read: TaskTreeRead, event: TaskEvent): TaskTreeRead => 
   return tree === read.tree ? read : { ...read, tree };
 };
 
-/** A Task and everything under it, such as a Quest pinned from another thread. */
+/** A Task and everything under it, such as a Quest pinned from another channel. */
 export const taskTreeQuery = (taskId: TaskId) =>
   queryOptions({
     queryKey: taskKeys.tree(taskId),
@@ -111,6 +111,6 @@ export const applyTaskEvent = (client: QueryClient, event: TaskEvent) => {
 
 const applyToRead = (queryKey: ReadonlyArray<unknown>, read: unknown, event: TaskEvent): unknown => {
   const [, kind, id] = queryKey;
-  if (kind === "thread") return applyToThread(id as ThreadId)(read as ThreadTasksRead, event);
+  if (kind === "channel") return applyToChannel(id as ChannelId)(read as ChannelTasksRead, event);
   return kind === "tree" ? applyToTreeRead(read as TaskTreeRead, event) : read;
 };

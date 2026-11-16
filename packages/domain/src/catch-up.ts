@@ -1,13 +1,13 @@
 import { Schema } from "effect";
 import { Actor, sameActor } from "./actor.ts";
 import { Artifact } from "./artifact.ts";
+import { leavesUnread } from "./channel.ts";
 import { Decision, DecisionStates } from "./decision.ts";
 import { MessageId } from "./ids.ts";
 import { mentions } from "./mention.ts";
 import type { Message } from "./message.ts";
 import { QuestId, QuestState } from "./quest.ts";
 import type { QuestSummary } from "./quest-summary.ts";
-import { leavesUnread } from "./thread.ts";
 
 /**
  * Catch-up (ADR 037): what changed in a chat or camp since you last read it, as the hub works it out
@@ -47,7 +47,7 @@ export const CatchUpItem = Schema.Union([
 export type CatchUpItem = typeof CatchUpItem.Type;
 
 export class CatchUp extends Schema.Class<CatchUp>("CatchUp")({
-  /** When you last read the thread: the time of the last message you had read, or null when never. */
+  /** When you last read the channel: the time of the last message you had read, or null when never. */
   readUpTo: Schema.NullOr(Schema.String),
   /** The first reply you have not read, where "New since you left" goes; null when none landed. */
   firstUnread: Schema.NullOr(MessageId),
@@ -59,7 +59,7 @@ export class CatchUp extends Schema.Class<CatchUp>("CatchUp")({
   more: Count,
 }) {}
 
-/** A Quest started in the thread, with what it is for, as catch-up reads it. */
+/** A Quest started in the channel, with what it is for, as catch-up reads it. */
 export interface CatchUpQuest {
   readonly summary: Pick<QuestSummary, "questId" | "parentQuestId" | "state" | "needsYou" | "revision">;
   readonly goal: string;
@@ -72,18 +72,18 @@ export type AwayMessage = Pick<
 >;
 
 /**
- * What the away summary reads of a thread for one person (ADR 039, For you): who they are, their
+ * What the away summary reads of a channel for one person (ADR 039, For you): who they are, their
  * read marker and the records written since. Only the messages that mention them matter to it.
  */
 export interface AwayInput {
   /** The person catching up: their own decisions, artifacts and messages are no news to them. */
   readonly you: Actor;
   /**
-   * Whether you decide what the thread's Quests ask (ADR 039, the decider): only then does a Quest
+   * Whether you decide what the channel's Quests ask (ADR 039, the decider): only then does a Quest
    * waiting on its approvals and questions say it needs you. Other members still hear it ended.
    */
   readonly decides: boolean;
-  /** The newest message revision you read through, or null when you never read the thread. */
+  /** The newest message revision you read through, or null when you never read the channel. */
   readonly marker: number | null;
   readonly messages: ReadonlyArray<AwayMessage>;
   readonly decisions: ReadonlyArray<Decision>;
@@ -91,7 +91,7 @@ export interface AwayInput {
   readonly quests: ReadonlyArray<CatchUpQuest>;
 }
 
-/** What catch-up reads of a thread: the away summary's input, with the whole transcript. */
+/** What catch-up reads of a channel: the away summary's input, with the whole transcript. */
 export type CatchUpInput = AwayInput;
 
 /** An item with the revision that orders it, newest first, and whether it waits on you. */
@@ -164,7 +164,7 @@ const artifactItems = (artifacts: AwayInput["artifacts"], you: Actor, since: num
   });
 
 /**
- * Every change in the thread since `marker` (ADR 039, For you › While you were away), uncapped: the
+ * Every change in the channel since `marker` (ADR 039, For you › While you were away), uncapped: the
  * mentions of you and what waits on you first, then the newest, each record once as it stands now.
  * What you wrote yourself is left out, since you made it. Catch-up and For you both list these, so
  * they agree for the same records and read marker.
@@ -190,8 +190,8 @@ export const awaySummaryOf = (
 };
 
 /**
- * What changed in the thread since `marker` (ADR 037): the replies that landed, and the away
- * summary of the records written since. Nothing is new in a thread you never left: a marker past
+ * What changed in the channel since `marker` (ADR 037): the replies that landed, and the away
+ * summary of the records written since. Nothing is new in a channel you never left: a marker past
  * every record gives an empty catch-up.
  */
 export const catchUpOf = (input: CatchUpInput): CatchUp => {

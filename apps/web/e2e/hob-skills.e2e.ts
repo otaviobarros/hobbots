@@ -134,9 +134,9 @@ test("What changed lists a save with its rollout and rolls it back, and a skill'
     instructions: "Read the diff three times.",
   });
 
-  const thread = await api("POST", `/agents/${pip.id}/threads`);
+  const channel = await api("POST", `/agents/${pip.id}/channels`);
   const note = { name: "review-checklist", kind: "unclear", note: "Step 1 does not say which diff." };
-  await api("POST", `/threads/${thread.id}/messages`, {
+  await api("POST", `/channels/${channel.id}/messages`, {
     content: `Review the change\nfake:hub skill_feedback ${JSON.stringify(note)}`,
   });
 
@@ -205,14 +205,14 @@ test("Summon gives the hob the skills picked before it arrives (#1062)", async (
 // covers ADR 029 (Proactive hobs, The Skills page), #1062
 test("To review lists what a hob drafted, counted beside it, and Add decides it there (#1062)", async ({ page }) => {
   const { url, api, pip } = await hubWithSkills();
-  const thread = await api("POST", `/agents/${pip.id}/threads`);
+  const channel = await api("POST", `/agents/${pip.id}/channels`);
   const call = {
     key: "release-steps",
     name: "release-steps",
     instructions: skillMd("release-steps", "What release-steps is for, and when to use it.", "Tag the release."),
     why: "I repeat the release steps.",
   };
-  await api("POST", `/threads/${thread.id}/messages`, {
+  await api("POST", `/channels/${channel.id}/messages`, {
     content: `Keep how we release\nfake:hub skill_propose ${JSON.stringify(call)}`,
   });
 

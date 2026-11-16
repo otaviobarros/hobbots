@@ -21,10 +21,10 @@ export const NotesHandlers = HttpApiBuilder.group(HobbotsApi, "notes", (handlers
       CatchUps.of({ of: () => Effect.succeed(NOTHING_NEW) }),
     );
     return handlers.handleAll({
-      writeNote: ({ params, payload }) => notes.write(params.threadId, payload.key, payload.content),
-      pins: ({ params }) => notes.pins(params.threadId),
-      pinMessage: ({ params, payload }) => notes.setPinned(params.threadId, params.messageId, payload.pinned),
-      catchUp: ({ params }) => catchUps.of(params.threadId),
+      writeNote: ({ params, payload }) => notes.write(params.channelId, payload.key, payload.content),
+      pins: ({ params }) => notes.pins(params.channelId),
+      pinMessage: ({ params, payload }) => notes.setPinned(params.channelId, params.messageId, payload.pinned),
+      catchUp: ({ params }) => catchUps.of(params.channelId),
     });
   }),
 );

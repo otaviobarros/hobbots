@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Charms, ChatService, HobAdmission, HobbotsRepository, HobTools, type ToolAccess } from "@hobbots/agents";
-import { Agent, AgentId, EMPTY_HOB_POLICY, isInProgress, Message, MessageId, type ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, type ChannelId, EMPTY_HOB_POLICY, isInProgress, Message, MessageId } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -55,9 +55,9 @@ describe("ChatService", () => {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
 
-      const thread = yield* chat.createThread(HOB_ID);
-      // Waits until no message in the thread is still streaming or queued.
-      const settled = repo.listMessages(thread.id).pipe(
+      const channel = yield* chat.createChannel(HOB_ID);
+      // Waits until no message in the channel is still streaming or queued.
+      const settled = repo.listMessages(channel.id).pipe(
         Effect.flatMap((messages) =>
           // A started message is saved a moment before its reply, so wait for the reply too.
           messages.some((m) => m.status === "streaming" || m.status === "queued") ||
@@ -68,16 +68,16 @@ describe("ChatService", () => {
         Effect.retry(Schedule.spaced("5 millis")),
       );
 
-      yield* chat.sendPrompt(thread.id, "hello");
+      yield* chat.sendPrompt(channel.id, "hello");
       yield* settled;
-      const afterFirst = yield* repo.findThread(thread.id);
-      yield* chat.sendPrompt(thread.id, "again");
+      const afterFirst = yield* repo.findChannel(channel.id);
+      yield* chat.sendPrompt(channel.id, "again");
       yield* settled;
 
       return {
-        messages: yield* repo.listMessages(thread.id),
-        threadAfterFirst: afterFirst,
-        threadAfterSecond: yield* repo.findThread(thread.id),
+        messages: yield* repo.listMessages(channel.id),
+        channelAfterFirst: afterFirst,
+        channelAfterSecond: yield* repo.findChannel(channel.id),
       };
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
@@ -87,8 +87,8 @@ describe("ChatService", () => {
       ["user", "again", "complete"],
       ["assistant", "Echo: again", "complete"],
     ]);
-    const firstSession = Option.getOrUndefined(result.threadAfterFirst);
-    const secondSession = Option.getOrUndefined(result.threadAfterSecond);
+    const firstSession = Option.getOrUndefined(result.channelAfterFirst);
+    const secondSession = Option.getOrUndefined(result.channelAfterSecond);
     expect(firstSession?.title).toBe("hello");
     expect(firstSession?.sessions).toMatchObject([
       { runtime: "claude-code", sessionId: expect.stringMatching(/^fake-/) },
@@ -96,63 +96,63 @@ describe("ChatService", () => {
     expect(secondSession?.sessions[0]?.sessionId).toBe(firstSession?.sessions[0]?.sessionId);
   });
 
-  it("lists a thread as active while its turn runs and drops it once the turn ends", async () => {
+  it("lists a channel as active while its turn runs and drops it once the turn ends", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
-      const thread = yield* chat.createThread(HOB_ID);
+      const channel = yield* chat.createChannel(HOB_ID);
 
-      yield* chat.sendPrompt(thread.id, "hello");
-      const during = yield* chat.activeThreads;
-      yield* repo.listMessages(thread.id).pipe(
+      yield* chat.sendPrompt(channel.id, "hello");
+      const during = yield* chat.activeChannels;
+      yield* repo.listMessages(channel.id).pipe(
         Effect.flatMap((messages) =>
           messages.some((m) => m.status === "streaming") ? Effect.fail("streaming" as const) : Effect.void,
         ),
         Effect.retry(Schedule.spaced("5 millis")),
       );
       // The turn's fiber leaves the map just after it saves the final message.
-      const after = yield* chat.activeThreads.pipe(
+      const after = yield* chat.activeChannels.pipe(
         Effect.flatMap((ids) => (ids.length > 0 ? Effect.fail("active" as const) : Effect.succeed(ids))),
         Effect.retry(Schedule.spaced("5 millis")),
       );
-      return { threadId: thread.id, during, after };
+      return { channelId: channel.id, during, after };
     }).pipe(Effect.provide(testLayer(FakeRuntimeLayer({ delay: "20 millis" }))), Effect.scoped, Effect.runPromise);
 
-    expect(result.during).toEqual([result.threadId]);
+    expect(result.during).toEqual([result.channelId]);
     expect(result.after).toEqual([]);
   });
 });
 
 describe("a reply that ends early", () => {
-  /** Waits until the thread's latest reply has ended, however it ended, and nothing waits behind it. */
-  const settled = (threadId: ThreadId) =>
+  /** Waits until the channel's latest reply has ended, however it ended, and nothing waits behind it. */
+  const settled = (channelId: ChannelId) =>
     Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
-      const messages = yield* repo.listMessages(threadId);
+      const messages = yield* repo.listMessages(channelId);
       const reply = messages.at(-1);
       return reply?.role !== "assistant" || isInProgress(reply.status) || messages.some((m) => m.status === "queued")
         ? yield* Effect.fail("busy" as const)
         : reply;
     }).pipe(Effect.retry(Schedule.spaced("5 millis")));
-  const replyTo = (threadId: ThreadId, prompt: string) =>
+  const replyTo = (channelId: ChannelId, prompt: string) =>
     Effect.gen(function* () {
-      yield* (yield* ChatService).sendPrompt(threadId, prompt);
-      return yield* settled(threadId);
+      yield* (yield* ChatService).sendPrompt(channelId, prompt);
+      return yield* settled(channelId);
     });
-  // A reply is saved as ended a moment before its turn lets go of the thread.
-  const continueSoon = (threadId: ThreadId, messageId: MessageId) =>
+  // A reply is saved as ended a moment before its turn lets go of the channel.
+  const continueSoon = (channelId: ChannelId, messageId: MessageId) =>
     Effect.gen(function* () {
-      return yield* (yield* ChatService).continueReply(threadId, messageId);
+      return yield* (yield* ChatService).continueReply(channelId, messageId);
     }).pipe(Effect.retry({ schedule: Schedule.spaced("5 millis"), times: 100 }));
 
   it("keeps a cut-off reply with its reason, and Continue resumes it in the same message", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
-      const thread = yield* chat.createThread(HOB_ID);
-      const cut = yield* replyTo(thread.id, `${FAKE_DIRECTIVES.cutOff} please`);
-      const resumed = yield* continueSoon(thread.id, cut.id);
-      const finished = yield* settled(thread.id);
-      const again = yield* chat.continueReply(thread.id, cut.id).pipe(Effect.flip);
+      const channel = yield* chat.createChannel(HOB_ID);
+      const cut = yield* replyTo(channel.id, `${FAKE_DIRECTIVES.cutOff} please`);
+      const resumed = yield* continueSoon(channel.id, cut.id);
+      const finished = yield* settled(channel.id);
+      const again = yield* chat.continueReply(channel.id, cut.id).pipe(Effect.flip);
       return { cut, resumed, finished, again };
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
@@ -170,11 +170,11 @@ describe("a reply that ends early", () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
-      const thread = yield* chat.createThread(HOB_ID);
-      yield* replyTo(thread.id, "hello");
-      yield* replyTo(thread.id, "again");
-      const cut = yield* replyTo(thread.id, `${FAKE_DIRECTIVES.cutOff} please`);
-      return { stored: yield* repo.listMessages(thread.id), cut };
+      const channel = yield* chat.createChannel(HOB_ID);
+      yield* replyTo(channel.id, "hello");
+      yield* replyTo(channel.id, "again");
+      const cut = yield* replyTo(channel.id, `${FAKE_DIRECTIVES.cutOff} please`);
+      return { stored: yield* repo.listMessages(channel.id), cut };
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
     const [first, second] = result.stored.filter((m) => m.role === "assistant");
@@ -202,15 +202,15 @@ describe("a reply that ends early", () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
-      const thread = yield* chat.createThread(HOB_ID);
-      const cut = yield* replyTo(thread.id, `${FAKE_DIRECTIVES.cutOff} please`);
+      const channel = yield* chat.createChannel(HOB_ID);
+      const cut = yield* replyTo(channel.id, `${FAKE_DIRECTIVES.cutOff} please`);
       const hob = Option.getOrThrow(yield* repo.findAgent(HOB_ID));
       yield* repo.updateAgentConfig(
         new Agent({ ...hob, instructions: "Be brief.", configVersion: hob.configVersion + 1 }),
       );
-      const resumed = yield* continueSoon(thread.id, cut.id);
-      yield* settled(thread.id);
-      const stored = (yield* repo.listMessages(thread.id)).find((m) => m.id === cut.id);
+      const resumed = yield* continueSoon(channel.id, cut.id);
+      yield* settled(channel.id);
+      const stored = (yield* repo.listMessages(channel.id)).find((m) => m.id === cut.id);
       return { cut, resumed, stored };
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
@@ -222,8 +222,8 @@ describe("a reply that ends early", () => {
   it("marks a reply the provider limit ended with when the allowance refills", async () => {
     const limited = await Effect.gen(function* () {
       const chat = yield* ChatService;
-      const thread = yield* chat.createThread(HOB_ID);
-      return yield* replyTo(thread.id, `${FAKE_DIRECTIVES.limit} please`);
+      const channel = yield* chat.createChannel(HOB_ID);
+      return yield* replyTo(channel.id, `${FAKE_DIRECTIVES.limit} please`);
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
     expect(limited.status).toBe("limited");
@@ -231,13 +231,13 @@ describe("a reply that ends early", () => {
     expect(limited.content.length).toBeGreaterThan(0);
   });
 
-  it("continues only the thread's latest reply", async () => {
+  it("continues only the channel's latest reply", async () => {
     const error = await Effect.gen(function* () {
       const chat = yield* ChatService;
-      const thread = yield* chat.createThread(HOB_ID);
-      const cut = yield* replyTo(thread.id, `${FAKE_DIRECTIVES.cutOff} please`);
-      yield* replyTo(thread.id, "next");
-      return yield* chat.continueReply(thread.id, cut.id).pipe(Effect.flip);
+      const channel = yield* chat.createChannel(HOB_ID);
+      const cut = yield* replyTo(channel.id, `${FAKE_DIRECTIVES.cutOff} please`);
+      yield* replyTo(channel.id, "next");
+      return yield* chat.continueReply(channel.id, cut.id).pipe(Effect.flip);
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
     expect(error._tag).toBe("ReplyNotResumable");
   });
@@ -250,8 +250,8 @@ describe("a reply that ends early", () => {
       const rook = AgentId.make("rook");
       const aldric = Option.getOrThrow(yield* repo.findAgent(HOB_ID));
       yield* repo.insertAgent(new Agent({ ...aldric, id: rook, name: "Rook", configVersion: 1 }));
-      const thread = yield* chat.createThread(HOB_ID);
-      const cut = yield* replyTo(thread.id, `${FAKE_DIRECTIVES.cutOff} please`);
+      const channel = yield* chat.createChannel(HOB_ID);
+      const cut = yield* replyTo(channel.id, `${FAKE_DIRECTIVES.cutOff} please`);
       // Rook wrote it in a camp of its own, and the chapter moved here, where Rook is no member.
       const moved = new Message({
         ...cut,
@@ -260,7 +260,7 @@ describe("a reply that ends early", () => {
         createdAt: new Date(Date.parse(cut.createdAt) + 1000).toISOString(),
       });
       yield* repo.upsertMessage(moved);
-      return yield* continueSoon(thread.id, moved.id).pipe(Effect.flip);
+      return yield* continueSoon(channel.id, moved.id).pipe(Effect.flip);
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
     expect(error._tag).toBe("ReplyNotResumable");
   });
@@ -296,12 +296,12 @@ describe("tool calls in a reply", () => {
       const bus = yield* EventBus;
       const repo = yield* HobbotsRepository;
       const subscription = yield* bus.subscribe;
-      const thread = yield* chat.createThread(HOB_ID);
+      const channel = yield* chat.createChannel(HOB_ID);
       yield* chat.sendPrompt(
-        thread.id,
+        channel.id,
         `Fix it\nfake:tool Edit ${join(folder, "a.ts")}\nfake:tool Bash pnpm test\nfake:tool Write ${join(root, "outside.txt")}`,
       );
-      const reply = yield* repo.listMessages(thread.id).pipe(
+      const reply = yield* repo.listMessages(channel.id).pipe(
         Effect.flatMap((messages) => {
           const last = messages.at(-1);
           return last?.role === "assistant" && !isInProgress(last.status) ? Effect.succeed(last) : Effect.fail("busy");
@@ -390,13 +390,13 @@ describe("tool calls in a reply", () => {
     const reply = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
-      const thread = yield* chat.createThread(HOB_ID);
+      const channel = yield* chat.createChannel(HOB_ID);
       // The reply repeats the Charm's answer, so the test reads it in the turn that made the call (#1560).
       yield* chat.sendPrompt(
-        thread.id,
+        channel.id,
         `How many issues?\nfake:hub github_search {"kind":"issue"}\n${FAKE_SAY_ANSWERS_DIRECTIVE}`,
       );
-      return yield* repo.listMessages(thread.id).pipe(
+      return yield* repo.listMessages(channel.id).pipe(
         Effect.flatMap((messages) => {
           const last = messages.at(-1);
           return last?.role === "assistant" && !isInProgress(last.status) ? Effect.succeed(last) : Effect.fail("busy");
@@ -440,9 +440,9 @@ describe("tool calls in a reply", () => {
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const repo = yield* HobbotsRepository;
-        const thread = yield* chat.createThread(HOB_ID);
-        yield* chat.sendPrompt(thread.id, "one two three four five six seven eight nine ten");
-        const reply = repo.listMessages(thread.id).pipe(Effect.map((messages) => messages.at(-1)));
+        const channel = yield* chat.createChannel(HOB_ID);
+        yield* chat.sendPrompt(channel.id, "one two three four five six seven eight nine ten");
+        const reply = repo.listMessages(channel.id).pipe(Effect.map((messages) => messages.at(-1)));
         // Text is streaming, so the turn already holds what it was given.
         yield* chat.streamingReplies.pipe(
           Effect.flatMap((replies) => (replies.some((m) => m.content !== "") ? Effect.void : Effect.fail("waiting"))),
@@ -505,15 +505,15 @@ describe("tool calls in a reply", () => {
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const repo = yield* HobbotsRepository;
-        const thread = yield* chat.createThread(HOB_ID);
-        yield* chat.sendPrompt(thread.id, "one two three four five six seven eight nine ten");
+        const channel = yield* chat.createChannel(HOB_ID);
+        yield* chat.sendPrompt(channel.id, "one two three four five six seven eight nine ten");
         yield* chat.streamingReplies.pipe(
           Effect.flatMap((replies) => (replies.some((m) => m.content !== "") ? Effect.void : Effect.fail("waiting"))),
           Effect.retry(Schedule.spaced("5 millis")),
         );
         hob = { ...EMPTY_HOB_POLICY, charms: { granted } };
         yield* chat.reviewAuthority(HOB_ID);
-        return (yield* repo.listMessages(thread.id)).at(-1)?.status;
+        return (yield* repo.listMessages(channel.id)).at(-1)?.status;
       }).pipe(
         Effect.provide(testLayer(FakeRuntimeLayer({ delay: "40 millis" }), changing)),
         Effect.scoped,
@@ -558,8 +558,8 @@ describe("tool calls in a reply", () => {
       return yield* Effect.gen(function* () {
         const chat = yield* ChatService;
         const repo = yield* HobbotsRepository;
-        const thread = yield* chat.createThread(HOB_ID);
-        yield* chat.sendPrompt(thread.id, "one two three four five six seven eight nine ten");
+        const channel = yield* chat.createChannel(HOB_ID);
+        yield* chat.sendPrompt(channel.id, "one two three four five six seven eight nine ten");
         yield* Deferred.await(reading);
         // The narrower policy is saved while the grant still holds the older one.
         restrictions = [{ "edit-files": "deny" }];
@@ -567,7 +567,7 @@ describe("tool calls in a reply", () => {
         yield* Effect.sleep("20 millis");
         yield* Deferred.succeed(release, undefined);
         yield* Fiber.join(review);
-        return (yield* repo.listMessages(thread.id)).at(-1)?.status;
+        return (yield* repo.listMessages(channel.id)).at(-1)?.status;
       }).pipe(Effect.provide(testLayer(FakeRuntimeLayer({ delay: "40 millis" }), slow)));
     }).pipe(Effect.scoped, Effect.runPromise);
     expect(status).toBe("interrupted");
@@ -609,8 +609,8 @@ describe("tool calls in a reply", () => {
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const repo = yield* HobbotsRepository;
-        const thread = yield* chat.createThread(HOB_ID);
-        yield* chat.sendPrompt(thread.id, testRun);
+        const channel = yield* chat.createChannel(HOB_ID);
+        yield* chat.sendPrompt(channel.id, testRun);
         // The command is running.
         yield* chat.streamingReplies.pipe(
           Effect.flatMap((replies) =>
@@ -623,7 +623,7 @@ describe("tool calls in a reply", () => {
         change();
         // The turn has ended when review returns, if it stopped it.
         yield* chat.reviewAuthority(HOB_ID);
-        return (yield* repo.listMessages(thread.id)).at(-1)?.status;
+        return (yield* repo.listMessages(channel.id)).at(-1)?.status;
       }).pipe(
         Effect.provide(testLayer(FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node)), changing)),
         Effect.scoped,

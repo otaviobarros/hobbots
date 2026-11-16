@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { NodeHttpServer } from "@effect/platform-node";
 import {
   ApprovalService,
+  ChannelMemberRepository,
   ChatService,
   GrantService,
   HobAdmission,
@@ -15,22 +16,22 @@ import {
   type PromptRequest,
   RuntimeAdapter,
   type SkillMount,
-  ThreadMemberRepository,
 } from "@hobbots/agents";
 import {
   type Agent,
   AgentId,
+  type Channel,
+  type ChannelId,
   hobActor,
   isInProgress,
   type Message,
   OWNER_ACTOR,
   roleFields,
-  type Thread,
-  type ThreadId,
 } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
+  ChannelMemberRepositoryLive,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
@@ -38,7 +39,6 @@ import {
   SetupRepository,
   SkillLibraryLive,
   TaskRepositoryLive,
-  ThreadMemberRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { makeFakeRuntime } from "@hobbots/runtimes";
@@ -68,7 +68,7 @@ let held: Promise<void>;
 /** When set, the next save of a reply with a skill use waits for `saving.release` before it writes. */
 let saving: { reached: () => void; release: Promise<void> } | undefined;
 /** Adds a hob to a camp as a member, as the owner. */
-let joinCamp: (threadId: ThreadId, agentId: string) => Promise<void>;
+let joinCamp: (channelId: ChannelId, agentId: string) => Promise<void>;
 
 const skillMd = (name: string, description = `What ${name} is for.`, extra = "") =>
   `---\nname: ${name}\ndescription: ${description}\n${extra}---\n\n# ${name}\n`;
@@ -142,13 +142,13 @@ beforeEach(async () => {
     SetupRepository.layer,
     SearchIndex.layer,
     SkillLibraryLive,
-    ThreadMemberRepositoryLive,
+    ChannelMemberRepositoryLive,
   ).pipe(Layer.provideMerge(TestDatabase));
   const Members = Layer.effectDiscard(
     Effect.gen(function* () {
-      const members = yield* ThreadMemberRepository;
-      joinCamp = (threadId, agentId) =>
-        Effect.runPromise(Effect.asVoid(members.add(threadId, hobActor(AgentId.make(agentId)), OWNER_ACTOR)));
+      const members = yield* ChannelMemberRepository;
+      joinCamp = (channelId, agentId) =>
+        Effect.runPromise(Effect.asVoid(members.add(channelId, hobActor(AgentId.make(agentId)), OWNER_ACTOR)));
     }),
   );
   const App = HobLifecycle.layer.pipe(
@@ -222,18 +222,18 @@ const summon = async (name: string, lookSeed: number): Promise<Agent> =>
     })
   ).body;
 
-const messages = async (thread: Thread): Promise<ReadonlyArray<Message>> =>
-  (await request("GET", `/api/threads/${thread.id}/messages`)).body;
+const messages = async (channel: Channel): Promise<ReadonlyArray<Message>> =>
+  (await request("GET", `/api/channels/${channel.id}/messages`)).body;
 
-const send = async (thread: Thread, content: string) => {
-  const sent = await request("POST", `/api/threads/${thread.id}/messages`, { content });
+const send = async (channel: Channel, content: string) => {
+  const sent = await request("POST", `/api/channels/${channel.id}/messages`, { content });
   expect(sent.status).toBe(200);
 };
 
-/** Waits until the thread holds `count` replies, all ended, and returns the last. */
-const replies = (thread: Thread, count: number) =>
+/** Waits until the channel holds `count` replies, all ended, and returns the last. */
+const replies = (channel: Channel, count: number) =>
   eventually(async () => {
-    const ended = (await messages(thread)).filter((m) => m.role === "assistant" && !isInProgress(m.status));
+    const ended = (await messages(channel)).filter((m) => m.role === "assistant" && !isInProgress(m.status));
     return ended.length >= count ? ended.at(-1) : undefined;
   });
 
@@ -267,9 +267,9 @@ describe("skill assignments", () => {
     });
     expect(unknownHob.status).toBe(404);
 
-    const pipThread: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
-    await send(pipThread, "/skills");
-    expect((await replies(pipThread, 1)).content).toBe("release\nreview (only when asked)\nshared");
+    const pipChannel: Channel = (await request("POST", `/api/agents/${pip.id}/channels`)).body;
+    await send(pipChannel, "/skills");
+    expect((await replies(pipChannel, 1)).content).toBe("release\nreview (only when asked)\nshared");
     expect(given.at(-1)?.map((mount) => [mount.name, mount.revision])).toEqual([
       ["release", releaseSkill.revision.hash],
       ["review", review.revision.hash],
@@ -277,22 +277,22 @@ describe("skill assignments", () => {
     ]);
 
     // Another hob gets Everyone's, never Pip's own.
-    const quillThread: Thread = (await request("POST", `/api/agents/${quill.id}/threads`)).body;
-    await send(quillThread, "/skills");
-    expect((await replies(quillThread, 1)).content).toBe("review (only when asked)\nshared");
+    const quillChannel: Channel = (await request("POST", `/api/agents/${quill.id}/channels`)).body;
+    await send(quillChannel, "/skills");
+    expect((await replies(quillChannel, 1)).content).toBe("review (only when asked)\nshared");
 
     // Opting out of an Everyone skill takes it off that hob's next turn only.
     const optedOut = await request("PUT", `/api/skills/hobs/${quill.id}/opt-outs/${shared.id}`, { optedOut: true });
     expect(optedOut.body.optedOut).toEqual([shared.id]);
-    await send(quillThread, "/skills");
-    expect((await replies(quillThread, 2)).content).toBe("review (only when asked)");
-    await send(pipThread, "/skills");
-    expect((await replies(pipThread, 2)).content).toContain("shared");
+    await send(quillChannel, "/skills");
+    expect((await replies(quillChannel, 2)).content).toBe("review (only when asked)");
+    await send(pipChannel, "/skills");
+    expect((await replies(pipChannel, 2)).content).toContain("shared");
 
     // Unassigned, it is gone from the next turn.
     expect((await request("DELETE", `/api/skills/assignments/${toPip.body.id}`)).status).toBe(200);
-    await send(pipThread, "/skills");
-    expect((await replies(pipThread, 3)).content).toBe("review (only when asked)\nshared");
+    await send(pipChannel, "/skills");
+    expect((await replies(pipChannel, 3)).content).toBe("review (only when asked)\nshared");
   });
 
   // covers ADR 029 (Scopes), ADR 039 (One hob speaks at a time)
@@ -303,8 +303,8 @@ describe("skill assignments", () => {
     await request("POST", `/api/skills/${releaseSkill.skill.id}/assignments`, {
       scope: { _tag: "Hob", agentId: pip.id },
     });
-    await request("POST", `/api/agents/${pip.id}/threads`);
-    const camp: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
+    await request("POST", `/api/agents/${pip.id}/channels`);
+    const camp: Channel = (await request("POST", `/api/agents/${pip.id}/channels`)).body;
     expect(camp.kind).toBe("camp");
     await joinCamp(camp.id, quill.id);
 
@@ -323,8 +323,8 @@ describe("skill assignments", () => {
     await request("POST", `/api/skills/${releaseSkill.skill.id}/assignments`, {
       scope: { _tag: "Hob", agentId: pip.id },
     });
-    await request("POST", `/api/agents/${pip.id}/threads`);
-    const camp: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
+    await request("POST", `/api/agents/${pip.id}/channels`);
+    const camp: Channel = (await request("POST", `/api/agents/${pip.id}/channels`)).body;
     await joinCamp(camp.id, quill.id);
 
     await send(camp, "@pip what do you know?");
@@ -357,10 +357,10 @@ describe("skill assignments", () => {
     expect(kept.body).toMatchObject({ held: true, pin: first.revision.hash });
 
     // A turn starts on r1 and is still running when r2 is saved; a message queued behind it was accepted on r1.
-    const thread: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
-    await send(thread, "hold\n/skills");
+    const channel: Channel = (await request("POST", `/api/agents/${pip.id}/channels`)).body;
+    await send(channel, "hold\n/skills");
     await eventually(async () => (given.length === 1 ? true : undefined));
-    await send(thread, "/skills");
+    await send(channel, "/skills");
     const revised = await request("POST", `/api/skills/${first.skill.id}/revisions`, {
       source: written("release", "Releases, now."),
     });
@@ -375,16 +375,16 @@ describe("skill assignments", () => {
     });
     expect(again.body).toMatchObject({ added: false, rolledOut: [] });
     release();
-    await replies(thread, 2);
+    await replies(channel, 2);
     const pinOf = (mounts: ReadonlyArray<SkillMount> | undefined) =>
       mounts?.find((mount) => mount.name === "release")?.revision;
     expect([pinOf(given[0]), pinOf(given[1])]).toEqual([first.revision.hash, first.revision.hash]);
 
     // The next message gets r2, and each reply records the revision it used; the held hob stays on r1.
-    await send(thread, "/skills");
-    await replies(thread, 3);
+    await send(channel, "/skills");
+    await replies(channel, 3);
     expect(pinOf(given.at(-1))).toBe(second.hash);
-    const used = (await messages(thread))
+    const used = (await messages(channel))
       .filter((m) => m.role === "assistant")
       .map((m) => m.skills?.find((skill) => skill.name === "release")?.pin);
     expect(used).toEqual([first.revision.hash, first.revision.hash, second.hash]);
@@ -513,11 +513,11 @@ describe("skill uses", () => {
     const second = (
       await request("POST", `/api/skills/${first.skill.id}/revisions`, { source: written("release-steps", "Now.") })
     ).body.revision;
-    const thread: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
+    const channel: Channel = (await request("POST", `/api/agents/${pip.id}/channels`)).body;
 
     // The hob picks it on its own, twice in one turn, and names a skill it does not have.
-    await send(thread, "fake:skill release-steps\nfake:skill release-steps\nfake:skill commit-style");
-    const reply = await replies(thread, 1);
+    await send(channel, "fake:skill release-steps\nfake:skill release-steps\nfake:skill commit-style");
+    const reply = await replies(channel, 1);
     expect(reply.skillsUsed).toEqual([
       {
         source: "library",
@@ -530,40 +530,43 @@ describe("skill uses", () => {
       },
     ]);
     // A reply that used none says so with an empty list.
-    await send(thread, "Hello");
-    expect((await replies(thread, 2)).skillsUsed).toEqual([]);
+    await send(channel, "Hello");
+    expect((await replies(channel, 2)).skillsUsed).toEqual([]);
   });
 
   // covers ADR 029 (Explicit use, The use line)
-  it("a skill you pick is handed to the turn and shown as yours, and its uses are counted per hob and thread", async () => {
+  it("a skill you pick is handed to the turn and shown as yours, and its uses are counted per hob and channel", async () => {
     const pip = await summon("Pip", 966);
     const quill = await summon("Quill", 967);
     const skill = await importSkill("release-steps");
     await request("POST", `/api/skills/${skill.skill.id}/assignments`, { scope: { _tag: "Everyone" } });
-    const pipThread: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
-    const quillThread: Thread = (await request("POST", `/api/agents/${quill.id}/threads`)).body;
+    const pipChannel: Channel = (await request("POST", `/api/agents/${pip.id}/channels`)).body;
+    const quillChannel: Channel = (await request("POST", `/api/agents/${quill.id}/channels`)).body;
 
-    const sent = await request("POST", `/api/threads/${pipThread.id}/messages`, {
+    const sent = await request("POST", `/api/channels/${pipChannel.id}/messages`, {
       content: "Ship it.",
       skill: "release-steps",
     });
     expect(sent.body.userMessage.askedSkill).toBe("release-steps");
-    expect((await replies(pipThread, 1)).skillsUsed).toMatchObject([{ name: "release-steps", explicit: true }]);
+    expect((await replies(pipChannel, 1)).skillsUsed).toMatchObject([{ name: "release-steps", explicit: true }]);
     // A skill the hob does not have is not handed to the turn.
-    const unknown = await request("POST", `/api/threads/${pipThread.id}/messages`, { content: "Go.", skill: "other" });
+    const unknown = await request("POST", `/api/channels/${pipChannel.id}/messages`, {
+      content: "Go.",
+      skill: "other",
+    });
     expect(unknown.status).toBe(200);
-    expect((await replies(pipThread, 2)).skillsUsed).toEqual([]);
+    expect((await replies(pipChannel, 2)).skillsUsed).toEqual([]);
     // Typed as the composer writes it, `/release-steps` at the start picks it, and the runtime gets the rest.
-    await send(quillThread, "/release-steps Ship it.");
-    const typed = await replies(quillThread, 1);
+    await send(quillChannel, "/release-steps Ship it.");
+    const typed = await replies(quillChannel, 1);
     expect(typed.skillsUsed).toMatchObject([{ name: "release-steps", explicit: true }]);
     expect(typed.content).toBe("Echo: Ship it.");
-    expect((await messages(quillThread)).find((m) => m.role === "user")).toMatchObject({
+    expect((await messages(quillChannel)).find((m) => m.role === "user")).toMatchObject({
       content: "/release-steps Ship it.",
       askedSkill: "release-steps",
     });
-    await send(quillThread, "fake:skill release-steps");
-    await replies(quillThread, 2);
+    await send(quillChannel, "fake:skill release-steps");
+    await replies(quillChannel, 2);
 
     const counts = await request("GET", `/api/skills/${skill.skill.id}/uses`);
     expect(counts.body).toMatchObject({ skillId: skill.skill.id, total: 3, thisWeek: 3 });
@@ -573,14 +576,14 @@ describe("skill uses", () => {
         [quill.id, 2],
       ].sort(),
     );
-    expect(counts.body.threads.map((one: { threadId: string }) => one.threadId).sort()).toEqual(
-      [pipThread.id, quillThread.id].sort(),
+    expect(counts.body.channels.map((one: { channelId: string }) => one.channelId).sort()).toEqual(
+      [pipChannel.id, quillChannel.id].sort(),
     );
     const list = (await request("GET", "/api/skills")).body;
     expect(list.usesThisWeek).toContainEqual({ skillId: skill.skill.id, count: 3 });
     const hob = (await request("GET", `/api/skills/hobs/${pip.id}`)).body;
     expect(hob.lastUsed).toMatchObject([
-      { skillId: skill.skill.id, name: "release-steps", number: 1, threadId: pipThread.id, explicit: true },
+      { skillId: skill.skill.id, name: "release-steps", number: 1, channelId: pipChannel.id, explicit: true },
     ]);
     expect((await request("GET", `/api/skills/${crypto.randomUUID()}/uses`)).status).toBe(404);
   });
@@ -590,15 +593,15 @@ describe("skill uses", () => {
     const pip = await summon("Pip", 968);
     const skill = await importSkill("release-steps");
     await request("POST", `/api/skills/${skill.skill.id}/assignments`, { scope: { _tag: "Everyone" } });
-    const thread: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
-    await send(thread, "stuck\nfake:skill release-steps");
+    const channel: Channel = (await request("POST", `/api/agents/${pip.id}/channels`)).body;
+    await send(channel, "stuck\nfake:skill release-steps");
     // The line and the count are saved together, so the count shows only once the line has.
     await eventually(async () => {
-      const reply = (await messages(thread)).find((m) => m.role === "assistant");
+      const reply = (await messages(channel)).find((m) => m.role === "assistant");
       return reply !== undefined && reply.skillsUsed.length > 0 ? reply : undefined;
     });
-    expect((await request("POST", `/api/threads/${thread.id}/interrupt`)).status).toBe(204);
-    const stopped = await replies(thread, 1);
+    expect((await request("POST", `/api/channels/${channel.id}/interrupt`)).status).toBe(204);
+    const stopped = await replies(channel, 1);
     expect(stopped.status).toBe("stopped");
     expect(stopped.skillsUsed).toMatchObject([{ name: "release-steps", number: 1 }]);
     expect((await request("GET", `/api/skills/${skill.skill.id}/uses`)).body).toMatchObject({ total: 1 });
@@ -609,12 +612,12 @@ describe("skill uses", () => {
     const pip = await summon("Pip", 969);
     const skill = await importSkill("release-steps");
     await request("POST", `/api/skills/${skill.skill.id}/assignments`, { scope: { _tag: "Everyone" } });
-    const thread: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
+    const channel: Channel = (await request("POST", `/api/agents/${pip.id}/channels`)).body;
     let open = () => {};
     const reached = new Promise<void>((resolve) => {
       saving = { reached: resolve, release: new Promise((release) => (open = release)) };
     });
-    await send(thread, "stuck\nfake:skill release-steps");
+    await send(channel, "stuck\nfake:skill release-steps");
     await reached;
     // Retiring the hob with "stop" ends its turn at once, with no stop request first, while the save
     // is held; the save is let through only after.
@@ -622,7 +625,7 @@ describe("skill uses", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     open();
     expect((await stopping).status).toBe(200);
-    const stopped = await replies(thread, 1);
+    const stopped = await replies(channel, 1);
     expect(stopped.status).toBe("interrupted");
     expect(stopped.skillsUsed).toMatchObject([{ name: "release-steps", number: 1 }]);
     expect((await request("GET", `/api/skills/${skill.skill.id}/uses`)).body).toMatchObject({ total: 1 });
@@ -661,9 +664,9 @@ describe("skill uses", () => {
     await request("POST", `/api/skills/assignments/${toQuill.id}/hold`, { held: true });
 
     // Each of the set's skills reaches the turn on the set's revision, named with the set.
-    const pipThread: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
-    await send(pipThread, "/agent-engineering:deliver-change go");
-    const first = await replies(pipThread, 1);
+    const pipChannel: Channel = (await request("POST", `/api/agents/${pip.id}/channels`)).body;
+    await send(pipChannel, "/agent-engineering:deliver-change go");
+    const first = await replies(pipChannel, 1);
     const setMounts = (mounts: ReadonlyArray<SkillMount> | undefined) =>
       (mounts ?? [])
         .filter((mount) => mount.set?.name === "agent-engineering")
@@ -675,11 +678,11 @@ describe("skill uses", () => {
     expect(first.skillsUsed).toMatchObject([{ name: "deliver-change", set: "agent-engineering", explicit: true }]);
     expect(first.content).toBe("Echo: go");
     // A bare name picks the set's skill while no other skill has that name.
-    await send(pipThread, "/plan-change go");
-    expect((await replies(pipThread, 2)).skillsUsed).toMatchObject([
+    await send(pipChannel, "/plan-change go");
+    expect((await replies(pipChannel, 2)).skillsUsed).toMatchObject([
       { name: "plan-change", set: "agent-engineering", explicit: true },
     ]);
-    expect((await messages(pipThread)).filter((m) => m.role === "user").map((m) => m.askedSkill)).toEqual([
+    expect((await messages(pipChannel)).filter((m) => m.role === "user").map((m) => m.askedSkill)).toEqual([
       "agent-engineering:deliver-change",
       "agent-engineering:plan-change",
     ]);
@@ -692,15 +695,15 @@ describe("skill uses", () => {
     expect(revised.status).toBe(200);
     expect(revised.body.revision).toMatchObject({ number: 2, label: "0.6.0" });
     expect(revised.body.rolledOut.map((one: { id: string }) => one.id)).toEqual([toPip.id]);
-    await send(pipThread, "/skills");
-    await replies(pipThread, 3);
+    await send(pipChannel, "/skills");
+    await replies(pipChannel, 3);
     expect(setMounts(given.at(-1))).toEqual([
       ["deliver-change", revised.body.revision.hash],
       ["plan-change", revised.body.revision.hash],
     ]);
-    const quillThread: Thread = (await request("POST", `/api/agents/${quill.id}/threads`)).body;
-    await send(quillThread, "/skills");
-    await replies(quillThread, 1);
+    const quillChannel: Channel = (await request("POST", `/api/agents/${quill.id}/channels`)).body;
+    await send(quillChannel, "/skills");
+    await replies(quillChannel, 1);
     expect(setMounts(given.at(-1))).toEqual([
       ["deliver-change", set.revision.hash],
       ["plan-change", set.revision.hash],
@@ -725,9 +728,9 @@ describe("skill uses", () => {
       agentId: wren.id,
       member: "plan-change",
     });
-    const wrenThread: Thread = (await request("POST", `/api/agents/${wren.id}/threads`)).body;
-    await send(wrenThread, "/skills");
-    await replies(wrenThread, 1);
+    const wrenChannel: Channel = (await request("POST", `/api/agents/${wren.id}/channels`)).body;
+    await send(wrenChannel, "/skills");
+    await replies(wrenChannel, 1);
     expect(setMounts(given.at(-1))).toEqual([["deliver-change", revised.body.revision.hash]]);
 
     // A bare name two sets share picks neither, and reaches the runtime without its `/`.
@@ -739,13 +742,13 @@ describe("skill uses", () => {
     const otherSet = (await request("POST", "/api/skills", { source: { _tag: "Folder", path: other } })).body
       .imported[0];
     await request("POST", `/api/skills/${otherSet.skill.id}/assignments`, { scope: { _tag: "Hob", agentId: pip.id } });
-    await send(pipThread, "/plan-change go");
-    const ambiguous = await replies(pipThread, 4);
+    await send(pipChannel, "/plan-change go");
+    const ambiguous = await replies(pipChannel, 4);
     expect(sent.at(-1)).toEqual({ prompt: "plan-change go", askedSkill: null });
     expect(ambiguous.skillsUsed).toEqual([]);
-    expect((await messages(pipThread)).filter((m) => m.role === "user").at(-1)?.askedSkill).toBeNull();
-    await send(pipThread, "/other-set:plan-change go");
-    expect((await replies(pipThread, 5)).skillsUsed).toMatchObject([{ name: "plan-change", set: "other-set" }]);
+    expect((await messages(pipChannel)).filter((m) => m.role === "user").at(-1)?.askedSkill).toBeNull();
+    await send(pipChannel, "/other-set:plan-change go");
+    expect((await replies(pipChannel, 5)).skillsUsed).toMatchObject([{ name: "plan-change", set: "other-set" }]);
     expect(sent.at(-1)).toEqual({ prompt: "go", askedSkill: "other-set:plan-change" });
 
     // An edit in Hobbots never changes a set.
@@ -796,9 +799,9 @@ describe("skill uses", () => {
     expect((await request("GET", `/api/skills/${one.skill.id}`)).body.shared).toBeNull();
 
     // Each skill of the set counts its own uses.
-    const thread: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
-    await send(thread, "/deliver-change go");
-    await replies(thread, 1);
+    const channel: Channel = (await request("POST", `/api/agents/${pip.id}/channels`)).body;
+    await send(channel, "/deliver-change go");
+    await replies(channel, 1);
     const uses = (await request("GET", `/api/skills/${set.skill.id}/uses`)).body;
     expect(uses).toMatchObject({ total: 1, members: [{ name: "deliver-change", total: 1, thisWeek: 1 }] });
 

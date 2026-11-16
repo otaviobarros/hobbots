@@ -1,4 +1,4 @@
-import { CampSuggestion, CampSuggestionId, Chapter, ChapterId, ThreadId } from "@hobbots/domain";
+import { CampSuggestion, CampSuggestionId, ChannelId, Chapter, ChapterId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { suggestedFrom } from "./camp-suggestions.tsx";
 import { startMakeCamp } from "./make-camp-flow.ts";
@@ -10,7 +10,7 @@ const AT = "2026-11-14T00:00:00.000Z";
 const chapter = (title: string | null) =>
   new Chapter({
     id: ChapterId.make("c1"),
-    threadId: ThreadId.make("chat"),
+    channelId: ChannelId.make("chat"),
     number: 1,
     title,
     summary: null,
@@ -22,7 +22,7 @@ const chapter = (title: string | null) =>
 const suggestion = (title: string | null, goal: string | null) =>
   new CampSuggestion({
     id: CampSuggestionId.make("s1"),
-    threadId: ThreadId.make("chat"),
+    channelId: ChannelId.make("chat"),
     chapterId: ChapterId.make("c1"),
     reasons: [{ code: "decisions", count: 5 }],
     title,

@@ -33,7 +33,7 @@ export const useSettledQuery = (query: string) => {
 };
 
 /**
- * Threads whose title or messages match `query`, asked once typing pauses. While the next answer
+ * Channels whose title or messages match `query`, asked once typing pauses. While the next answer
  * is on its way the previous one stays, so the list does not flicker.
  */
 export const useSearch = (query: string) => {

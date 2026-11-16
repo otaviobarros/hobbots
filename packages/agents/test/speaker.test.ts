@@ -1,4 +1,4 @@
-import { Agent, AgentId, mainLine, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, Channel, ChannelId, mainLine } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { speakerIn } from "../src/speaker.ts";
 
@@ -22,9 +22,9 @@ const hob = (id: string, name: string) =>
   });
 const WREN = hob("wren", "Wren");
 const QUILL = hob("quill", "Quill");
-const camp = new Thread({
-  id: ThreadId.make("camp"),
-  agentId: WREN.id,
+const camp = new Channel({
+  id: ChannelId.make("camp"),
+  ownerHobId: WREN.id,
   title: "Market",
   kind: "camp",
   createdAt: NOW,
@@ -36,7 +36,7 @@ describe("a turn's speaker", () => {
   it("names the hob that speaks, its line and reason, and whether the camp is its own (#1549)", () => {
     const reason = { cause: "mention", by: { kind: "user", id: "leo" } } as const;
     expect(speakerIn(camp, QUILL, reason)).toEqual({
-      thread: camp,
+      channel: camp,
       line: mainLine(camp.id),
       agent: QUILL,
       reason,

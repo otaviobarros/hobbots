@@ -1,13 +1,13 @@
 import {
   type AgentId,
+  type Channel,
+  type ChannelId,
   isTerminalTask,
   type MemberWork,
-  openThreadTask,
+  openChannelTask,
   type QuestSummary,
   type TaskId,
   type TaskTree,
-  type Thread,
-  type ThreadId,
 } from "@hobbots/domain";
 import type { ActivityMap } from "../../api/hub-status.ts";
 import { groupOf } from "../../lib/crew.ts";
@@ -39,36 +39,36 @@ export const homeSummary = (
  * The chat a hob's peek opens: the one it is replying in, else the one it used last. Null when the
  * hob has no chats yet, so the peek starts a new one.
  */
-export const peekThread = <T extends Pick<Thread, "id" | "updatedAt">>(
-  threads: ReadonlyArray<T>,
+export const peekChannel = <T extends Pick<Channel, "id" | "updatedAt">>(
+  channels: ReadonlyArray<T>,
   activity: ActivityMap,
 ): T | null =>
-  threads.find((thread) => activity[thread.id] !== undefined) ??
-  threads.toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ??
+  channels.find((channel) => activity[channel.id] !== undefined) ??
+  channels.toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ??
   null;
 
 /** Where the peek's Open Workbench goes: a Task and the chat whose Workbench shows it. */
 export interface BenchTarget {
   readonly hobId: AgentId;
-  readonly threadId: ThreadId;
+  readonly channelId: ChannelId;
   readonly taskId: TaskId;
 }
 
 /**
- * The Workbench a hob's peek opens: the Task its chat turns work on in `threadId`, else the open
- * Task it does on a Quest, shown in the Quest's own thread. Null when the hob works on no Task.
+ * The Workbench a hob's peek opens: the Task its chat turns work on in `channelId`, else the open
+ * Task it does on a Quest, shown in the Quest's own channel. Null when the hob works on no Task.
  */
 export const peekBench = (
   hobId: AgentId,
-  threadId: ThreadId | null,
+  channelId: ChannelId | null,
   trees: ReadonlyArray<TaskTree>,
   work: ReadonlyArray<MemberWork>,
 ): BenchTarget | null => {
-  const own = threadId === null ? undefined : openThreadTask(trees, hobId);
-  if (own !== undefined && threadId !== null) return { hobId, threadId, taskId: own.top.id };
+  const own = channelId === null ? undefined : openChannelTask(trees, hobId);
+  if (own !== undefined && channelId !== null) return { hobId, channelId, taskId: own.top.id };
   const member = work.findLast((each) => !isTerminalTask(each.task.state));
-  if (member?.threadAgentId != null && member.quest.threadId !== null) {
-    return { hobId: member.threadAgentId, threadId: member.quest.threadId, taskId: member.task.id };
+  if (member?.channelAgentId != null && member.quest.channelId !== null) {
+    return { hobId: member.channelAgentId, channelId: member.quest.channelId, taskId: member.task.id };
   }
   return null;
 };
@@ -95,7 +95,7 @@ export const activeFilter = (picked: HobFilter, chips: ReturnType<typeof sceneCh
 
 /** One row of Pick up where you left off: a chat, or a Quest in progress. */
 export type PickUpRow<H, T> =
-  | { readonly kind: "thread"; readonly hob: H; readonly thread: T; readonly at: string }
+  | { readonly kind: "channel"; readonly hob: H; readonly channel: T; readonly at: string }
   | { readonly kind: "quest"; readonly group: QuestInProgress; readonly at: string };
 
 /** How many rows Pick up where you left off shows. */
@@ -108,21 +108,23 @@ const questMoved = (group: QuestInProgress): string =>
 
 /**
  * Recent chats and Quests in progress in one list, the most recently active first. `chats` are the
- * open threads, so a Quest followed in a thread that is not among them, as in an archived camp, is
- * left out until the thread opens again; a Quest with no thread shows. A chat that follows a Quest
+ * open channels, so a Quest followed in a channel that is not among them, as in an archived camp, is
+ * left out until the channel opens again; a Quest with no channel shows. A chat that follows a Quest
  * shows once, as that Quest.
  */
-export const pickUpRows = <H, T extends Pick<Thread, "id" | "updatedAt">>(
-  chats: ReadonlyArray<{ readonly hob: H; readonly thread: T }>,
+export const pickUpRows = <H, T extends Pick<Channel, "id" | "updatedAt">>(
+  chats: ReadonlyArray<{ readonly hob: H; readonly channel: T }>,
   quests: ReadonlyArray<QuestInProgress>,
 ): ReadonlyArray<PickUpRow<H, T>> => {
-  const open = new Set(chats.map(({ thread }) => thread.id));
-  const shown = quests.filter(({ quest }) => quest.threadId === null || open.has(quest.threadId));
-  const questThreads = new Set(shown.flatMap((group) => (group.quest.threadId === null ? [] : [group.quest.threadId])));
+  const open = new Set(chats.map(({ channel }) => channel.id));
+  const shown = quests.filter(({ quest }) => quest.channelId === null || open.has(quest.channelId));
+  const questChannels = new Set(
+    shown.flatMap((group) => (group.quest.channelId === null ? [] : [group.quest.channelId])),
+  );
   const rows: Array<PickUpRow<H, T>> = [
     ...chats
-      .filter(({ thread }) => !questThreads.has(thread.id))
-      .map(({ hob, thread }) => ({ kind: "thread" as const, hob, thread, at: thread.updatedAt })),
+      .filter(({ channel }) => !questChannels.has(channel.id))
+      .map(({ hob, channel }) => ({ kind: "channel" as const, hob, channel, at: channel.updatedAt })),
     ...shown.map((group) => ({ kind: "quest" as const, group, at: questMoved(group) })),
   ];
   return rows.toSorted((a, b) => b.at.localeCompare(a.at)).slice(0, PICK_UP_LIMIT);

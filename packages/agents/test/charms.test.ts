@@ -41,7 +41,7 @@ const access = (granted: ReadonlyArray<string>): ToolAccess => ({
 
 const turn = (granted: ReadonlyArray<string> | null): CharmTurn => ({
   agentId: AgentId.make("hob"),
-  threadId: null,
+  channelId: null,
   messageId: MessageId.make("m1"),
   scope: () => "reply:m1",
   currentAccess: Effect.succeed(granted === null ? null : access(granted)),
@@ -74,7 +74,7 @@ const stored = (tool: string, charm: string, key: string) =>
     appliedText: `${charm} shows it took effect.`,
     state: "sending",
     result: null,
-    threadId: null,
+    channelId: null,
     messageId: null,
     stepId: null,
     createdAt: "2026-11-07T00:00:00.000Z",

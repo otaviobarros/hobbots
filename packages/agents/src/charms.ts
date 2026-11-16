@@ -2,6 +2,7 @@ import {
   type AgentId,
   type AnyOperation,
   type AttemptId,
+  type ChannelId,
   type CharmDeclaration,
   GIT_INIT_TOOL,
   holdsCharm,
@@ -17,7 +18,6 @@ import {
   START_CHAPTER_TOOL,
   TASK_TOOLS,
   type TaskId,
-  type ThreadId,
   WEB_FETCH_TOOL,
   type WebPageCache,
 } from "@hobbots/domain";
@@ -51,7 +51,7 @@ import { operationDecision } from "./tools.ts";
 
 /** The chat, Task and Attempt a turn's web records name. */
 export interface WebRecordPlace {
-  readonly threadId: ThreadId | null;
+  readonly channelId: ChannelId | null;
   readonly taskId: Effect.Effect<TaskId | null>;
   readonly attemptId: Effect.Effect<AttemptId | null>;
 }
@@ -59,8 +59,8 @@ export interface WebRecordPlace {
 /** A turn that may offer Charm tools: its hob, and how to read the hob's tool access now. */
 export interface CharmTurn {
   readonly agentId: AgentId;
-  /** The thread and reply the turn writes, so a Charm call's record names the step it showed as. */
-  readonly threadId: ThreadId | null;
+  /** The channel and reply the turn writes, so a Charm call's record names the step it showed as. */
+  readonly channelId: ChannelId | null;
   readonly messageId: MessageId | null;
   /** The Attempt a turn outside any chat runs as, so a call it makes names the session it belongs to (#1049). */
   readonly attemptId?: AttemptId;
@@ -68,7 +68,7 @@ export interface CharmTurn {
   readonly taskId?: TaskId;
   /**
    * Where the turn's web records belong (ADR 036, Usage and limits): the chat, and the Task and
-   * Attempt it works on once known. A chat turn's Task comes from the thread's work, and a session's
+   * Attempt it works on once known. A chat turn's Task comes from the channel's work, and a session's
    * chat from its Task. Absent, its records name the fields above.
    */
   readonly webPlace?: WebRecordPlace;
@@ -486,7 +486,7 @@ export class WebTools extends Context.Service<
 
 /**
  * The Chapter tools (ADR 037): `start_chapter`, which ends the live chapter of the chat a turn is in,
- * and `read_message`, which pages a message of the hob's own threads, such as one the context pack
+ * and `read_message`, which pages a message of the hob's own channels, such as one the context pack
  * cut. Neither reaches anything outside the hob's own conversations, so no policy decides them, as
  * none decides the Task tools. Every answer is redacted with the turn's redactor. Absent, a turn
  * offers neither.

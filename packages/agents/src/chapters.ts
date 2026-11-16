@@ -1,6 +1,8 @@
-import { ThreadNotFound } from "@hobbots/api";
+import { ChannelNotFound } from "@hobbots/api";
 import {
   type CampSuggestionId,
+  type ChannelId,
+  ChannelLifecycle,
   type Chapter,
   type ChapterId,
   type ChapterNotFound,
@@ -9,11 +11,9 @@ import {
   type Committed,
   type IllegalChapterTransition,
   type MessageId,
-  type ThreadId,
-  ThreadLifecycle,
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option } from "effect";
-import { HobAdmission, withThreadLock } from "./admission.ts";
+import { HobAdmission, withChannelLock } from "./admission.ts";
 import { announcer, EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 
@@ -30,18 +30,18 @@ export interface SplitInput {
   readonly judged?: { readonly chapterId: ChapterId; readonly revision: number; readonly messagesRevision?: number };
 }
 
-/** Where a thread's chapters are kept (ADR 037). Each command runs its rules and journals its event in one transaction. */
+/** Where a channel's chapters are kept (ADR 037). Each command runs its rules and journals its event in one transaction. */
 export class ChapterRepository extends Context.Service<
   ChapterRepository,
   {
-    /** The thread's chapters in order, moved ones included. */
-    readonly listChapters: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Chapter>>;
+    /** The channel's chapters in order, moved ones included. */
+    readonly listChapters: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<Chapter>>;
     /**
      * Ends the live chapter and starts chapter `id`, journaled as `ChapterStarted`. `id` is the
      * command's idempotency key: once the chapter exists, the same command changes nothing.
      */
     readonly startChapter: (
-      threadId: ThreadId,
+      channelId: ChannelId,
       input: { readonly id: ChapterId; readonly title: string; readonly at: string },
     ) => Effect.Effect<Committed<ChapterPlan>, ChapterRefused | IllegalChapterTransition>;
     /**
@@ -53,7 +53,7 @@ export class ChapterRepository extends Context.Service<
      * `chapter-changed` when the message is no longer in that chapter as it was judged.
      */
     readonly splitChapter: (
-      threadId: ThreadId,
+      channelId: ChannelId,
       input: SplitInput,
     ) => Effect.Effect<Committed<ChapterPlan>, ChapterRefused | IllegalChapterTransition>;
     /**
@@ -61,30 +61,30 @@ export class ChapterRepository extends Context.Service<
      * that was already merged changes nothing.
      */
     readonly mergeChapters: (
-      threadId: ThreadId,
+      channelId: ChannelId,
       chapterId: ChapterId,
     ) => Effect.Effect<Committed<ChapterPlan>, ChapterRefused | ChapterNotFound | IllegalChapterTransition>;
   }
 >()("@hobbots/agents/ChapterRepository") {}
 
-type ChapterErrors = ThreadNotFound | ChapterRefused | ChapterNotFound | IllegalChapterTransition;
+type ChapterErrors = ChannelNotFound | ChapterRefused | ChapterNotFound | IllegalChapterTransition;
 
 /**
  * The chapter commands (ADR 037): start, split and merge. The hob ends a chapter with `start_chapter`
- * (#1381) and you split or merge them (#1382). Each runs under the thread's hob lock, so an archive
+ * (#1381) and you split or merge them (#1382). Each runs under the channel's hob lock, so an archive
  * cannot land between the check and the change, and is announced once committed. A new chapter
  * starts a new runtime session on its next turn, on every runtime, since sessions are keyed by chapter.
  */
 export class ChapterService extends Context.Service<
   ChapterService,
   {
-    readonly listChapters: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Chapter>, ThreadNotFound>;
+    readonly listChapters: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<Chapter>, ChannelNotFound>;
     readonly startChapter: (
-      threadId: ThreadId,
+      channelId: ChannelId,
       input: { readonly id: ChapterId; readonly title: string },
     ) => Effect.Effect<ChapterPlan, ChapterErrors>;
-    readonly splitChapter: (threadId: ThreadId, input: SplitInput) => Effect.Effect<ChapterPlan, ChapterErrors>;
-    readonly mergeChapters: (threadId: ThreadId, chapterId: ChapterId) => Effect.Effect<ChapterPlan, ChapterErrors>;
+    readonly splitChapter: (channelId: ChannelId, input: SplitInput) => Effect.Effect<ChapterPlan, ChapterErrors>;
+    readonly mergeChapters: (channelId: ChannelId, chapterId: ChapterId) => Effect.Effect<ChapterPlan, ChapterErrors>;
   }
 >()("@hobbots/agents/ChapterService") {
   static readonly layer = Layer.effect(
@@ -95,22 +95,22 @@ export class ChapterService extends Context.Service<
       const admission = yield* HobAdmission;
       const announce = announcer(yield* Effect.serviceOption(EventPublisher), "a chapter change");
 
-      // Runs `command` on an open thread under its hob's lock, then announces what it committed.
-      const onOpenThread = <E>(
-        threadId: ThreadId,
+      // Runs `command` on an open channel under its hob's lock, then announces what it committed.
+      const onOpenChannel = <E>(
+        channelId: ChannelId,
         command: Effect.Effect<Committed<ChapterPlan>, E>,
-      ): Effect.Effect<ChapterPlan, E | ThreadNotFound | ChapterRefused> =>
+      ): Effect.Effect<ChapterPlan, E | ChannelNotFound | ChapterRefused> =>
         Effect.gen(function* () {
-          const found = yield* repo.findThread(threadId);
-          if (Option.isNone(found)) return yield* new ThreadNotFound({ threadId });
-          const committed = yield* withThreadLock(
+          const found = yield* repo.findChannel(channelId);
+          if (Option.isNone(found)) return yield* new ChannelNotFound({ channelId });
+          const committed = yield* withChannelLock(
             admission,
             found.value,
             Effect.gen(function* () {
-              const thread = yield* repo.findThread(threadId);
-              if (Option.isNone(thread)) return yield* new ThreadNotFound({ threadId });
-              if (!ThreadLifecycle.isOpen(thread.value)) {
-                return yield* new ChapterRefused({ threadId, reason: "thread-closed" });
+              const channel = yield* repo.findChannel(channelId);
+              if (Option.isNone(channel)) return yield* new ChannelNotFound({ channelId });
+              if (!ChannelLifecycle.isOpen(channel.value)) {
+                return yield* new ChapterRefused({ channelId, reason: "channel-closed" });
               }
               return yield* command;
             }),
@@ -120,20 +120,20 @@ export class ChapterService extends Context.Service<
         });
 
       return ChapterService.of({
-        listChapters: (threadId) =>
+        listChapters: (channelId) =>
           Effect.gen(function* () {
-            if (Option.isNone(yield* repo.findThread(threadId))) return yield* new ThreadNotFound({ threadId });
-            return yield* chapters.listChapters(threadId);
+            if (Option.isNone(yield* repo.findChannel(channelId))) return yield* new ChannelNotFound({ channelId });
+            return yield* chapters.listChapters(channelId);
           }),
-        startChapter: (threadId, input) =>
-          onOpenThread(
-            threadId,
+        startChapter: (channelId, input) =>
+          onOpenChannel(
+            channelId,
             DateTime.now.pipe(
-              Effect.flatMap((now) => chapters.startChapter(threadId, { ...input, at: DateTime.formatIso(now) })),
+              Effect.flatMap((now) => chapters.startChapter(channelId, { ...input, at: DateTime.formatIso(now) })),
             ),
           ),
-        splitChapter: (threadId, input) => onOpenThread(threadId, chapters.splitChapter(threadId, input)),
-        mergeChapters: (threadId, chapterId) => onOpenThread(threadId, chapters.mergeChapters(threadId, chapterId)),
+        splitChapter: (channelId, input) => onOpenChannel(channelId, chapters.splitChapter(channelId, input)),
+        mergeChapters: (channelId, chapterId) => onOpenChannel(channelId, chapters.mergeChapters(channelId, chapterId)),
       });
     }),
   );

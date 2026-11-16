@@ -4,13 +4,13 @@ import {
   type AgentId,
   Artifact,
   type Artifact as ArtifactRecord,
+  ChannelId,
   ChapterId,
   GITHUB_ACTOR,
   type GitHubItem,
   OWNER_ACTOR,
   planPullRequestEnded,
   RegisteredArtifactId,
-  ThreadId,
 } from "@hobbots/domain";
 import { Effect, Layer, Redacted } from "effect";
 import { describe, expect, it } from "vitest";
@@ -25,7 +25,7 @@ const NOW = "2026-11-12T10:00:00.000Z";
 const pr = (id: string, locator: string, actor: Actor = { kind: "hob", id: "ada" }) =>
   new Artifact({
     id: RegisteredArtifactId.make(id),
-    threadId: ThreadId.make(`chat-${id}`),
+    channelId: ChannelId.make(`chat-${id}`),
     chapterId: ChapterId.make("chapter-1"),
     kind: "pr",
     title: locator,

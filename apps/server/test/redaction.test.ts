@@ -143,30 +143,30 @@ describe("secrets in tool calls", () => {
         const repo = yield* HobbotsRepository;
         const journal = yield* EventJournal;
         const subscription = yield* (yield* EventBus).subscribe;
-        const thread = yield* chat.createThread(HOB_ID);
-        yield* chat.sendPrompt(thread.id, PROMPT);
-        const request = yield* approvals.listForThread(thread.id).pipe(
+        const channel = yield* chat.createChannel(HOB_ID);
+        yield* chat.sendPrompt(channel.id, PROMPT);
+        const request = yield* approvals.listForChannel(channel.id).pipe(
           Effect.flatMap((all) =>
             all[0] === undefined ? Effect.fail("none" as const) : Effect.succeed(all[0] as ApprovalRequest),
           ),
           Effect.retry(Schedule.spaced("5 millis")),
         );
         yield* approvals.decide(request.id, { decision: "deny", actionDigest: request.actionDigest });
-        const reply = yield* repo.listMessages(thread.id).pipe(
+        const reply = yield* repo.listMessages(channel.id).pipe(
           Effect.map((messages) => messages.at(-1) as Message),
           Effect.flatMap((m) =>
             m.role === "assistant" && !isInProgress(m.status) ? Effect.succeed(m) : Effect.fail("busy" as const),
           ),
           Effect.retry(Schedule.spaced("5 millis")),
         );
-        const stored = yield* approvals.listForThread(thread.id);
+        const stored = yield* approvals.listForChannel(channel.id);
         const journaled = yield* journal.readAfter(0);
         const published = yield* PubSub.takeAll(subscription);
         return { reply, stored, journaled, published };
       }),
     );
 
-    // The user's prompt, the title made from it and a thread's last line (its last message's text)
+    // The user's prompt, the title made from it and a channel's last line (its last message's text)
     // stay as written, and the reply's text is the model's (the fake runtime echoes the prompt).
     // Everything Hobbots reports about the tool calls is redacted.
     const fromHobbots = (value: unknown) =>
@@ -196,21 +196,21 @@ describe("secrets in tool calls", () => {
         const chat = yield* ChatService;
         const approvals = yield* ApprovalService;
         const repo = yield* HobbotsRepository;
-        const thread = yield* chat.createThread(HOB_ID);
+        const channel = yield* chat.createChannel(HOB_ID);
         yield* chat.sendPrompt(
-          thread.id,
+          channel.id,
           PROMPT.split("\n")
             .filter((line) => line.includes("git push"))
             .join("\n"),
         );
-        const request = yield* approvals.listForThread(thread.id).pipe(
+        const request = yield* approvals.listForChannel(channel.id).pipe(
           Effect.flatMap((all) =>
             all[0] === undefined ? Effect.fail("none" as const) : Effect.succeed(all[0] as ApprovalRequest),
           ),
           Effect.retry(Schedule.spaced("5 millis")),
         );
         yield* approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest });
-        return yield* repo.listMessages(thread.id).pipe(
+        return yield* repo.listMessages(channel.id).pipe(
           Effect.map((messages) => messages.at(-1) as Message),
           Effect.flatMap((m) =>
             m.role === "assistant" && !isInProgress(m.status) ? Effect.succeed(m) : Effect.fail("busy" as const),

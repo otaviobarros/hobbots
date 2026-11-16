@@ -13,7 +13,7 @@ interface Row {
   readonly tool: string;
   readonly scope: string;
   readonly callKey: string;
-  readonly threadId: string | null;
+  readonly channelId: string | null;
   readonly messageId: string | null;
   readonly taskId: string | null;
   readonly stepId: string | null;
@@ -38,7 +38,7 @@ const fromRow = (row: Row) =>
     kind: row.kind,
     tool: row.tool,
     call: { scope: row.scope, key: row.callKey },
-    threadId: row.threadId,
+    channelId: row.channelId,
     messageId: row.messageId,
     taskId: row.taskId,
     stepId: row.stepId,
@@ -61,7 +61,7 @@ const toRow = (proposal: HobProposal) => ({
   tool: proposal.tool,
   scope: proposal.call.scope,
   call_key: proposal.call.key,
-  thread_id: proposal.threadId,
+  channel_id: proposal.channelId,
   message_id: proposal.messageId,
   task_id: proposal.taskId,
   step_id: proposal.stepId,

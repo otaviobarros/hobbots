@@ -26,7 +26,7 @@ const badgeVariants = cva(
         waiting: "bg-line-2 text-text-secondary",
         queued: "bg-line-2 text-text-strong",
         cancelled: "bg-line-2 text-text-secondary",
-        // A thread the user archived: read-only until restored.
+        // A channel the user archived: read-only until restored.
         archived: "bg-line-2 text-text-secondary",
         // An action blocked because the enforcement it needs is missing, such as "Needs the sandbox".
         blocked: "bg-line-2 text-text-secondary",

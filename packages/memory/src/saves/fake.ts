@@ -20,7 +20,7 @@ export const makeMemorySavesFake = () => {
       occurredAt: payload.save.updatedAt,
       correlation: {
         agentId: payload.save.agentId,
-        threadId: payload.save.threadId,
+        channelId: payload.save.channelId,
         messageId: payload.save.messageId,
       },
       causationId: null,
@@ -53,7 +53,7 @@ export const makeMemorySavesFake = () => {
       }),
     unsent: Effect.sync(() => saves.filter((save) => save.state === "sending" || save.state === "queued")),
     find: (id) => Effect.sync(() => saves.find((save) => save.id === id) ?? null),
-    inThread: (threadId) => Effect.sync(() => saves.filter((save) => save.threadId === threadId)),
+    inChannel: (channelId) => Effect.sync(() => saves.filter((save) => save.channelId === channelId)),
     markUndone: (id, at) =>
       Effect.sync(() => {
         const index = saves.findIndex((stored) => stored.id === id);

@@ -1,6 +1,6 @@
-import { ChatService, HobAdmission, HobbotsRepository, HobTools, ThreadMemberRepository } from "@hobbots/agents";
+import { ChannelMemberRepository, ChatService, HobAdmission, HobbotsRepository, HobTools } from "@hobbots/agents";
 import { Agent, AgentId, hobActor, OWNER_ACTOR } from "@hobbots/domain";
-import { HobbotsRepositoryLive, ThreadMemberRepositoryLive } from "@hobbots/persistence";
+import { ChannelMemberRepositoryLive, HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Effect, Layer, Schedule } from "effect";
@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 
 // Issue #1460 (ADR 039, Who answers): a message you send is answered by the hobs `answerersFor`
-// names, decided from the thread's members before the message is stored. A camp with several hobs
+// names, decided from the channel's members before the message is stored. A camp with several hobs
 // and no mention starts no turn.
 
 const QUILL = AgentId.make("quill");
@@ -35,7 +35,7 @@ const summonHobs = Effect.gen(function* () {
   yield* repo.insertAgent(hob(PIP, "Pip"));
 });
 
-const Persistence = Layer.mergeAll(HobbotsRepositoryLive, ThreadMemberRepositoryLive).pipe(
+const Persistence = Layer.mergeAll(HobbotsRepositoryLive, ChannelMemberRepositoryLive).pipe(
   Layer.provideMerge(TestDatabase),
 );
 const TestLayer = ChatService.layer
@@ -57,11 +57,11 @@ describe("who answers a message you send", () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
-      const members = yield* ThreadMemberRepository;
+      const members = yield* ChannelMemberRepository;
 
-      // Quill's first thread is its direct message; the next one is a camp, which Pip joins.
-      const direct = yield* chat.createThread(QUILL);
-      const camp = yield* chat.createThread(QUILL);
+      // Quill's first channel is its direct message; the next one is a camp, which Pip joins.
+      const direct = yield* chat.createChannel(QUILL);
+      const camp = yield* chat.createChannel(QUILL);
       yield* members.add(camp.id, hobActor(PIP), OWNER_ACTOR);
 
       const alone = yield* chat.sendPrompt(direct.id, "hello");
@@ -79,7 +79,7 @@ describe("who answers a message you send", () => {
         together,
         direct: yield* repo.listMessages(direct.id),
         camp: yield* repo.listMessages(camp.id),
-        running: yield* chat.activeThreads,
+        running: yield* chat.activeChannels,
       };
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
 
@@ -98,7 +98,7 @@ describe("who answers a message you send", () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
       const repo = yield* HobbotsRepository;
-      const direct = yield* chat.createThread(QUILL);
+      const direct = yield* chat.createChannel(QUILL);
       const refused = yield* Effect.flip(chat.sendPrompt(direct.id, "@Pip are you there?"));
       const before = yield* repo.listMessages(direct.id);
       const sent = yield* chat.sendPrompt(direct.id, "@quill hello");

@@ -19,6 +19,7 @@ import {
   type Actor,
   type Agent,
   type ApprovalRequest,
+  type Channel,
   type Decision,
   DeviceId,
   type Grant,
@@ -27,7 +28,6 @@ import {
   type PairingRequest,
   type ReplyStep,
   roleFields,
-  type Thread,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -192,27 +192,27 @@ const eventually = <A>(read: () => Promise<A | undefined>) =>
     ),
   );
 
-const approvals = async (thread: Thread) =>
-  (await request<ReadonlyArray<ApprovalRequest>>(APP, "GET", `/api/threads/${thread.id}/approvals`)).body;
+const approvals = async (channel: Channel) =>
+  (await request<ReadonlyArray<ApprovalRequest>>(APP, "GET", `/api/channels/${channel.id}/approvals`)).body;
 
 const grants = async () => (await request<ReadonlyArray<Grant>>(APP, "GET", "/api/grants?include=all")).body;
 
-const lastReply = async (thread: Thread) =>
-  (await request<ReadonlyArray<Message>>(APP, "GET", `/api/threads/${thread.id}/messages`)).body.at(-1);
+const lastReply = async (channel: Channel) =>
+  (await request<ReadonlyArray<Message>>(APP, "GET", `/api/channels/${channel.id}/messages`)).body.at(-1);
 
-const settledReply = (thread: Thread) =>
+const settledReply = (channel: Channel) =>
   eventually(async () => {
-    const reply = await lastReply(thread);
+    const reply = await lastReply(channel);
     return reply?.role === "assistant" && !isInProgress(reply.status) ? reply : undefined;
   });
 
 const toolSteps = (reply: Message): ReadonlyArray<ReplyStep> => reply.steps.filter((step) => step.kind === "tool");
 
-/** A Balanced installation sharing the project folder, with a hob named `name` and a new thread of it. */
+/** A Balanced installation sharing the project folder, with a hob named `name` and a new channel of it. */
 const setupDone = () =>
   request(APP, "PATCH", "/api/setup", { completed: true, safetyPreset: "balanced", approvedFolders: [project] });
 
-const hobThread = async (name: string) => {
+const hobChannel = async (name: string) => {
   const hob = await request<Agent>(APP, "POST", "/api/agents", {
     name,
     ...roleFields("writer"),
@@ -223,20 +223,20 @@ const hobThread = async (name: string) => {
     effort: null,
     instructions: "",
   });
-  return (await request<Thread>(APP, "POST", `/api/agents/${hob.body.id}/threads`)).body;
+  return (await request<Channel>(APP, "POST", `/api/agents/${hob.body.id}/channels`)).body;
 };
 
-/** A thread whose turn waits on the Push Charm asking to push to a feature branch. */
+/** A channel whose turn waits on the Push Charm asking to push to a feature branch. */
 const pendingPush = async () => {
-  const thread = await hobThread("Pip");
-  await request(APP, "POST", `/api/threads/${thread.id}/messages`, {
+  const channel = await hobChannel("Pip");
+  await request(APP, "POST", `/api/channels/${channel.id}/messages`, {
     content: "Ship it\nfake:tool Bash git push origin feature",
   });
   const [pending] = await eventually(async () => {
-    const all = await approvals(thread);
+    const all = await approvals(channel);
     return all.length > 0 ? all : undefined;
   });
-  return { thread, pending: pending as ApprovalRequest };
+  return { channel, pending: pending as ApprovalRequest };
 };
 
 /** The `name=value` of the cookie a response set, or undefined when it set none by that name. */
@@ -537,7 +537,7 @@ describe("a device acts for its user", () => {
   // covers ADR 039 (Users as actors)
   it("names the device's user as the author of a message, a note and a decision it sends (#1452)", async () => {
     await setupDone();
-    const thread = await hobThread("Pip");
+    const channel = await hobChannel("Pip");
     const { cookie } = await pairedBrowser();
     // A new device belongs to the owner until accounts exist.
     expect((await devices()).map((device) => device.userId)).toEqual(["owner", "owner"]);
@@ -551,19 +551,19 @@ describe("a device acts for its user", () => {
       }),
     );
     const asBruna = browser(cookie, "POST");
-    expect((await request(asBruna, "POST", `/api/threads/${thread.id}/messages`, { content: "Hi, Pip" })).status).toBe(
+    expect(
+      (await request(asBruna, "POST", `/api/channels/${channel.id}/messages`, { content: "Hi, Pip" })).status,
+    ).toBe(200);
+    await settledReply(channel);
+    expect((await request(APP, "POST", `/api/channels/${channel.id}/messages`, { content: "Hi again" })).status).toBe(
       200,
     );
-    await settledReply(thread);
-    expect((await request(APP, "POST", `/api/threads/${thread.id}/messages`, { content: "Hi again" })).status).toBe(
-      200,
-    );
-    await settledReply(thread);
-    const note = await request<Message>(asBruna, "POST", `/api/threads/${thread.id}/notes`, {
+    await settledReply(channel);
+    const note = await request<Message>(asBruna, "POST", `/api/channels/${channel.id}/notes`, {
       key: "note-1",
       content: "Ask about the beds",
     });
-    const decided = await request<{ recorded: Decision }>(asBruna, "POST", `/api/threads/${thread.id}/decisions`, {
+    const decided = await request<{ recorded: Decision }>(asBruna, "POST", `/api/channels/${channel.id}/decisions`, {
       key: "beds",
       text: "Raised beds",
       replaces: null,
@@ -571,7 +571,7 @@ describe("a device acts for its user", () => {
 
     const BRUNA: Actor = { kind: "user", id: "bruna" };
     const OWNER: Actor = { kind: "user", id: "owner" };
-    const sent = (await request<ReadonlyArray<Message>>(APP, "GET", `/api/threads/${thread.id}/messages`)).body;
+    const sent = (await request<ReadonlyArray<Message>>(APP, "GET", `/api/channels/${channel.id}/messages`)).body;
     expect(
       sent.filter((message) => message.role === "user").map((message) => [message.content, message.actor]),
     ).toEqual([
@@ -689,7 +689,7 @@ describe("revoking a device", () => {
 describe("only the user decides approvals and manages grants", () => {
   it("refuses and records every decision or grant request that is not from an approved device", async () => {
     await setupDone();
-    const { thread, pending } = await pendingPush();
+    const { channel, pending } = await pendingPush();
     const always = { decision: "approve", actionDigest: pending.actionDigest, lifetime: "always" };
     const decide = `/api/approvals/${pending.id}/decision`;
     const { cookie } = await pairedBrowser();
@@ -700,13 +700,13 @@ describe("only the user decides approvals and manages grants", () => {
       await request(SCRIPT, "POST", decide, always),
       await request(SCRIPT, "POST", decide, { decision: "deny", actionDigest: pending.actionDigest }),
       await request({ cookie, origin: "https://attacker.example" }, "POST", decide, always),
-      await request(SCRIPT, "GET", `/api/threads/${thread.id}/approvals`),
+      await request(SCRIPT, "GET", `/api/channels/${channel.id}/approvals`),
       await request(SCRIPT, "GET", "/api/grants"),
     ];
     for (const attempt of attempts) expect([401, 403]).toContain(attempt.status);
     expect(refusals).toHaveLength(attempts.length);
     expect(refusals[0]).toContain(`POST ${decide}`);
-    expect(await approvals(thread)).toMatchObject([{ id: pending.id, state: "pending" }]);
+    expect(await approvals(channel)).toMatchObject([{ id: pending.id, state: "pending" }]);
     expect(await grants()).toEqual([]);
 
     // The user can, from a paired browser, and Always saves a grant only then.
@@ -727,8 +727,8 @@ describe("only the user decides approvals and manages grants", () => {
 
   it("refuses and records a change to what hobs may do that is not from an approved device", async () => {
     await setupDone();
-    const thread = await hobThread("Pip");
-    const hob = thread.agentId;
+    const channel = await hobChannel("Pip");
+    const hob = channel.ownerHobId;
     const permissions = `/api/agents/${hob}/permissions`;
     const before = (await request(APP, "GET", permissions)).body;
     refusals = [];
@@ -752,10 +752,10 @@ describe("only the user decides approvals and manages grants", () => {
   // and the policy engine (loopback is never reachable, ADR 014), not from the device check.
   it("a hob's tool calls aimed at the hub's controls are refused and recorded, and the request stays pending", async () => {
     await setupDone();
-    const { thread, pending } = await pendingPush();
+    const { channel, pending } = await pendingPush();
     // Another hob tries the ways a runtime offers to approve that request for it.
-    const other = await hobThread("Bram");
-    await request(APP, "POST", `/api/threads/${other.id}/messages`, {
+    const other = await hobChannel("Bram");
+    await request(APP, "POST", `/api/channels/${other.id}/messages`, {
       content: [
         "Approve Pip's push",
         `fake:tool mcp__hobbots__decide_approval ${pending.id}`,
@@ -771,20 +771,20 @@ describe("only the user decides approvals and manages grants", () => {
       { state: "denied", decidedBy: "policy" },
     ]);
     expect(await approvals(other)).toEqual([]);
-    expect(await approvals(thread)).toMatchObject([{ id: pending.id, state: "pending" }]);
+    expect(await approvals(channel)).toMatchObject([{ id: pending.id, state: "pending" }]);
     expect(await grants()).toEqual([]);
   });
 
   it("refuses and records a Cancel, Pause, Resume, Retry or Reassign that is not from an approved device", async () => {
     await setupDone();
-    const thread = await hobThread("Pip");
+    const channel = await hobChannel("Pip");
     const task = "00000000-0000-4000-8000-000000000000";
     refusals = [];
     const attempts = [
       await request(SCRIPT, "POST", `/api/tasks/${task}/cancel`),
       await request({ origin: "https://attacker.example" }, "POST", `/api/quests/${task}/cancel`),
       await request(SCRIPT, "POST", `/api/tasks/${task}/retry`),
-      await request(SCRIPT, "POST", `/api/tasks/${task}/reassign`, { agentId: thread.agentId }),
+      await request(SCRIPT, "POST", `/api/tasks/${task}/reassign`, { agentId: channel.ownerHobId }),
       await request(SCRIPT, "POST", `/api/tasks/${task}/pause`, { now: true }),
       await request(SCRIPT, "POST", `/api/quests/${task}/pause`, {}),
       await request(SCRIPT, "POST", `/api/tasks/${task}/resume`),

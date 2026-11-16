@@ -7,6 +7,7 @@ import {
   BackpackBlocker,
   BackpackItem,
   BackpackItemId,
+  ChannelId,
   Checkpoint,
   CheckpointId,
   DEFAULT_QUEST_LIMITS,
@@ -22,14 +23,13 @@ import {
   TaskId,
   type TaskState,
   TaskTree,
-  ThreadId,
 } from "@hobbots/domain";
 
 /** The Black Friday Quest of ADR 018 as records, for tests: Aldric leads, Quill drafts the copy, Ada builds the campaign. */
 export const ALDRIC = AgentId.make("aldric");
 export const QUILL = AgentId.make("quill");
 export const ADA = AgentId.make("ada");
-export const THREAD = ThreadId.make("thread-bf");
+export const CHANNEL = ChannelId.make("channel-bf");
 export const CAMPAIGN = TaskId.make("campaign");
 export const COPY = TaskId.make("copy");
 export const BUILD = TaskId.make("build");
@@ -54,7 +54,7 @@ export const task = (
     ownerId: fields.ownerId ?? ALDRIC,
     parentId: fields.parentId === undefined ? (id === CAMPAIGN ? null : CAMPAIGN) : fields.parentId,
     rootId: CAMPAIGN,
-    threadId: THREAD,
+    channelId: CHANNEL,
     brief: fields.brief ?? id,
     state: fields.state ?? "active",
     dependsOn: fields.dependsOn ?? [],
@@ -71,7 +71,7 @@ export const quest = (fields: Partial<{ state: Quest["state"]; revision: number 
     taskId: CAMPAIGN,
     leadId: ALDRIC,
     parentQuestId: null,
-    threadId: THREAD,
+    channelId: CHANNEL,
     goal: "A Black Friday campaign",
     acceptance: [],
     limits: DEFAULT_QUEST_LIMITS,
@@ -166,7 +166,7 @@ export const memberApproval = (
   new ApprovalRequest({
     id: ApprovalId.make(`ap-${taskId}`),
     agentId,
-    threadId: THREAD,
+    channelId: CHANNEL,
     messageId: null,
     taskId,
     rootTaskId: CAMPAIGN,
@@ -218,7 +218,7 @@ export const blackFriday = (): TaskTree =>
 /** An hour before the Quest, as the Inbox tests read it. */
 const STUCK_AT = "2026-11-01T09:00:00.000Z";
 
-export const stuckItem = (threadId: ThreadId | null, retired = false): BackpackItem =>
+export const stuckItem = (channelId: ChannelId | null, retired = false): BackpackItem =>
   new BackpackItem({
     id: BackpackItemId.make("b1"),
     recipientId: QUILL,
@@ -229,7 +229,7 @@ export const stuckItem = (threadId: ThreadId | null, retired = false): BackpackI
     taskId: COPY,
     questId: null,
     attemptId: null,
-    threadId,
+    channelId,
     dedupeKey: "b1",
     payload: { _tag: "message", senderId: null, text: "Hi" },
     notBefore: null,

@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import { Actor, hobActor } from "./actor.ts";
 import { ConfigVersion, RuntimeKind } from "./agent.ts";
-import { AgentId, ChapterId, MessageId, ThreadId } from "./ids.ts";
+import { AgentId, ChannelId, ChapterId, MessageId } from "./ids.ts";
 import { StoredOperation } from "./policy.ts";
 import { Revision } from "./revision.ts";
 import { SkillMention, TurnSkill, UsedSkill } from "./skills.ts";
@@ -30,7 +30,7 @@ export const isNote = (message: { readonly role: MessageRole }): boolean => mess
 export const hobReads = (message: { readonly role: MessageRole }): boolean => message.role !== "note";
 
 /**
- * - `queued`: a user message waiting for the thread's current turn to end.
+ * - `queued`: a user message waiting for the channel's current turn to end.
  * - `streaming`: the hob is writing this reply.
  * - `stopping`: the user asked to stop; the reply still counts as in progress until the runtime confirms.
  * - `stopped`: the runtime confirmed the turn ended after a stop request; the partial text is kept.
@@ -50,7 +50,7 @@ export const MessageStatus = Schema.Literals([
 ]);
 export type MessageStatus = typeof MessageStatus.Type;
 
-/** A reply whose turn has not ended yet, so its thread is busy. */
+/** A reply whose turn has not ended yet, so its channel is busy. */
 export const isInProgress = (status: MessageStatus): boolean => status === "streaming" || status === "stopping";
 
 /** Whether you asked to stop the reply, and the runtime has not yet confirmed it stopped. */
@@ -161,15 +161,15 @@ export type ReplyUsage = typeof ReplyUsage.Type;
 
 export class Message extends Schema.Class<Message>("Message")({
   id: MessageId,
-  threadId: ThreadId,
+  channelId: ChannelId,
   /**
-   * The chapter of its thread the message belongs to (ADR 037). Null only on a message not stored
-   * yet: the hub files a new message in its thread's live chapter as it stores it, and a queued one
+   * The chapter of its channel the message belongs to (ADR 037). Null only on a message not stored
+   * yet: the hub files a new message in its channel's live chapter as it stores it, and a queued one
    * again as it starts, so every stored message, read or journaled, carries one.
    */
   chapterId: Schema.NullOr(ChapterId).pipe(Schema.withConstructorDefault(Effect.succeed(null))),
   /**
-   * Who wrote it (ADR 037, Every author is an actor): you for your messages, the thread's hob for its
+   * Who wrote it (ADR 037, Every author is an actor): you for your messages, the channel's hob for its
    * replies. Null only on a message not stored yet, as `chapterId` is: the hub names the author as it
    * stores it, so every stored message, read or journaled, carries one.
    */
@@ -225,7 +225,7 @@ export class Message extends Schema.Class<Message>("Message")({
   /**
    * For a lead's reply to work that arrived while its Quest runs (ADR 027): true when the reply
    * neither finished the work nor brought you a question, so it is routine progress the room already
-   * shows. The chat leaves it out, and it makes no thread unread (#1006). Kept, so its hob's history
+   * shows. The chat leaves it out, and it makes no channel unread (#1006). Kept, so its hob's history
    * and an export still hold it.
    */
   quiet: Schema.Boolean.pipe(
@@ -285,16 +285,16 @@ export class Message extends Schema.Class<Message>("Message")({
 /**
  * Who wrote `message` (ADR 039, A member hob works as itself): its actor, always, since in a camp a
  * reply's hob need not be the hob the camp belongs to. A message not stored yet has no actor: its
- * reply is then `thread`'s own hob's, and a person's is null. This is the one place a message's
- * author falls back to the hob a thread belongs to (STD-ARCH-021).
+ * reply is then `channel`'s own hob's, and a person's is null. This is the one place a message's
+ * author falls back to the hob a channel belongs to (STD-ARCH-021).
  */
-export const authorOf = (message: Message, thread: { readonly agentId: AgentId }): Actor | null =>
-  message.actor ?? (message.role === "assistant" ? hobActor(thread.agentId) : null);
+export const authorOf = (message: Message, channel: { readonly ownerHobId: AgentId }): Actor | null =>
+  message.actor ?? (message.role === "assistant" ? hobActor(channel.ownerHobId) : null);
 
 /** The hob that wrote a reply, as `authorOf` names it; null for a message that is not a hob's reply. */
-export const replyHobOf = (message: Message, thread: { readonly agentId: AgentId }): AgentId | null => {
+export const replyHobOf = (message: Message, channel: { readonly ownerHobId: AgentId }): AgentId | null => {
   if (message.role !== "assistant") return null;
-  const author = authorOf(message, thread);
+  const author = authorOf(message, channel);
   return author?.kind === "hob" ? AgentId.make(author.id) : null;
 };
 
@@ -412,7 +412,7 @@ export const MessageTransitions = {
     endTurn(message, { status: message.status === "stopping" ? "stopped" : "interrupted" }),
 };
 
-/** Pure transitions for a user message waiting in its thread's queue (CH-008). */
+/** Pure transitions for a user message waiting in its channel's queue (CH-008). */
 export const QueuedMessageTransitions = {
   /** The message's turn starts: it leaves the queue and joins the transcript. */
   start: (message: Message): Message | InvalidMessageTransition =>

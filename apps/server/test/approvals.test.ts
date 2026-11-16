@@ -17,13 +17,13 @@ import {
   AgentId,
   ApprovalId,
   type ApprovalRequest,
+  type ChannelId,
   EMPTY_HOB_POLICY,
   isInProgress,
   type Message,
   OWNER_ACTOR,
   OWNER_USER_ID,
   type ReplyStep,
-  type ThreadId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -111,19 +111,19 @@ const PUSH = "Ship it\nfake:tool Bash git push origin feature";
 const PROTECTED_PUSH = "Ship it\nfake:tool Bash git push origin main";
 
 /** Sends the prompt and waits until its tool call waits for a decision. */
-const askInNewThread = (prompt = PUSH) =>
+const askInNewChannel = (prompt = PUSH) =>
   Effect.gen(function* () {
     const chat = yield* ChatService;
-    const thread = yield* chat.createThread(HOB_ID);
-    yield* chat.sendPrompt(thread.id, prompt);
-    const pending = yield* pendingIn(thread.id);
-    return { thread, pending };
+    const channel = yield* chat.createChannel(HOB_ID);
+    yield* chat.sendPrompt(channel.id, prompt);
+    const pending = yield* pendingIn(channel.id);
+    return { channel, pending };
   });
 
-const pendingIn = (threadId: ThreadId) =>
+const pendingIn = (channelId: ChannelId) =>
   Effect.gen(function* () {
     const approvals = yield* ApprovalService;
-    return yield* approvals.listForThread(threadId).pipe(
+    return yield* approvals.listForChannel(channelId).pipe(
       Effect.flatMap((all) => {
         const pending = all.filter((a) => a.state === "pending");
         return pending.length > 0
@@ -134,14 +134,14 @@ const pendingIn = (threadId: ThreadId) =>
     );
   });
 
-const reply = (threadId: ThreadId) =>
+const reply = (channelId: ChannelId) =>
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
-    return (yield* repo.listMessages(threadId)).at(-1) as Message;
+    return (yield* repo.listMessages(channelId)).at(-1) as Message;
   });
 
-const settled = (threadId: ThreadId) =>
-  reply(threadId).pipe(
+const settled = (channelId: ChannelId) =>
+  reply(channelId).pipe(
     Effect.flatMap((message) =>
       message.role === "assistant" && !isInProgress(message.status)
         ? Effect.succeed(message)
@@ -176,16 +176,16 @@ describe("Ask decisions", () => {
         const approvals = yield* ApprovalService;
         const bus = yield* EventBus;
         const subscription = yield* bus.subscribe;
-        const { thread, pending } = yield* askInNewThread();
+        const { channel, pending } = yield* askInNewChannel();
         // Still waiting a while later: nothing decided for the user.
         yield* Effect.sleep("100 millis");
-        const waiting = yield* reply(thread.id);
+        const waiting = yield* reply(channel.id);
         const request = pending[0] as ApprovalRequest;
         const approved = yield* approvals.decide(request.id, {
           decision: "approve",
           actionDigest: request.actionDigest,
         });
-        const done = yield* settled(thread.id);
+        const done = yield* settled(channel.id);
         const events = yield* PubSub.takeAll(subscription);
         return { request, waiting, approved, done, events };
       }),
@@ -221,18 +221,18 @@ describe("Ask decisions", () => {
     const result = await run(
       Effect.gen(function* () {
         const approvals = yield* ApprovalService;
-        const { thread, pending } = yield* askInNewThread(PROTECTED_PUSH);
+        const { channel, pending } = yield* askInNewChannel(PROTECTED_PUSH);
         const request = pending[0] as ApprovalRequest;
         const unconfirmed = yield* Effect.exit(
           approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest }),
         );
-        const stillWaiting = yield* pendingIn(thread.id);
+        const stillWaiting = yield* pendingIn(channel.id);
         const approved = yield* approvals.decide(request.id, {
           decision: "approve",
           actionDigest: request.actionDigest,
           confirmed: true,
         });
-        const done = yield* settled(thread.id);
+        const done = yield* settled(channel.id);
         return { request, unconfirmed, stillWaiting, approved, done };
       }),
     );
@@ -254,7 +254,7 @@ describe("Ask decisions", () => {
         const approvals = yield* ApprovalService;
         const bus = yield* EventBus;
         const subscription = yield* bus.subscribe;
-        const { thread, pending } = yield* askInNewThread();
+        const { channel, pending } = yield* askInNewChannel();
         const request = pending[0] as ApprovalRequest;
         const decision = { decision: "approve", actionDigest: request.actionDigest } as const;
         const both = yield* Effect.all(
@@ -263,7 +263,7 @@ describe("Ask decisions", () => {
             concurrency: "unbounded",
           },
         );
-        yield* settled(thread.id);
+        yield* settled(channel.id);
         const again = yield* approvals.decide(request.id, decision);
         const events = yield* PubSub.takeAll(subscription);
         return { both, again, events };
@@ -286,14 +286,14 @@ describe("Ask decisions", () => {
         const approvals = yield* ApprovalService;
         const bus = yield* EventBus;
         const subscription = yield* bus.subscribe;
-        const { thread, pending } = yield* askInNewThread();
+        const { channel, pending } = yield* askInNewChannel();
         const request = pending[0] as ApprovalRequest;
         const denied = yield* approvals.decide(request.id, {
           decision: "deny",
           actionDigest: request.actionDigest,
           reason: "  Not on Fridays  ",
         });
-        const done = yield* settled(thread.id);
+        const done = yield* settled(channel.id);
         const late = yield* Effect.exit(
           approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest }),
         );
@@ -323,11 +323,11 @@ describe("Ask decisions", () => {
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const approvals = yield* ApprovalService;
-        const { thread, pending } = yield* askInNewThread();
+        const { channel, pending } = yield* askInNewChannel();
         const request = pending[0] as ApprovalRequest;
-        yield* chat.stop(thread.id);
-        const done = yield* settled(thread.id);
-        const stored = (yield* approvals.listForThread(thread.id))[0];
+        yield* chat.stop(channel.id);
+        const done = yield* settled(channel.id);
+        const stored = (yield* approvals.listForChannel(channel.id))[0];
         const late = yield* Effect.exit(
           approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest }),
         );
@@ -340,18 +340,18 @@ describe("Ask decisions", () => {
     expect(Exit.isFailure(result.late) && JSON.stringify(result.late.cause)).toContain("expired");
   });
 
-  it("refuses to archive a thread while its approval waits, and archives it once decided", async () => {
+  it("refuses to archive a channel while its approval waits, and archives it once decided", async () => {
     restrictions = [];
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const approvals = yield* ApprovalService;
-        const { thread, pending } = yield* askInNewThread();
+        const { channel, pending } = yield* askInNewChannel();
         const request = pending[0] as ApprovalRequest;
-        const waiting = yield* Effect.exit(chat.archive(thread.id));
+        const waiting = yield* Effect.exit(chat.archive(channel.id));
         yield* approvals.decide(request.id, { decision: "deny", actionDigest: request.actionDigest });
-        yield* settled(thread.id);
-        const archived = yield* chat.archive(thread.id);
+        yield* settled(channel.id);
+        const archived = yield* chat.archive(channel.id);
         return { waiting, archived };
       }),
     );
@@ -366,11 +366,11 @@ describe("Ask decisions", () => {
       Effect.gen(function* () {
         const approvals = yield* ApprovalService;
         const lifecycle = yield* HobLifecycle;
-        const { thread, pending } = yield* askInNewThread();
+        const { channel, pending } = yield* askInNewChannel();
         const request = pending[0] as ApprovalRequest;
         yield* lifecycle.retire(HOB_ID, "finish");
-        const done = yield* settled(thread.id);
-        const stored = (yield* approvals.listForThread(thread.id))[0];
+        const done = yield* settled(channel.id);
+        const stored = (yield* approvals.listForChannel(channel.id))[0];
         const late = yield* Effect.exit(
           approvals.decide(request.id, { decision: "approve", actionDigest: request.actionDigest }),
         );
@@ -389,12 +389,12 @@ describe("Ask decisions", () => {
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const approvals = yield* ApprovalService;
-        const { thread, pending } = yield* askInNewThread();
+        const { channel, pending } = yield* askInNewChannel();
         const request = pending[0] as ApprovalRequest;
         const exit = yield* Effect.exit(approvals.decide(request.id, { decision: "approve", actionDigest: "other" }));
-        const still = (yield* approvals.listForThread(thread.id))[0];
-        yield* chat.stop(thread.id);
-        yield* settled(thread.id);
+        const still = (yield* approvals.listForChannel(channel.id))[0];
+        yield* chat.stop(channel.id);
+        yield* settled(channel.id);
         return { exit, still };
       }),
     );
@@ -408,14 +408,14 @@ describe("Ask decisions", () => {
     const result = await run(
       Effect.gen(function* () {
         const approvals = yield* ApprovalService;
-        const { thread, pending } = yield* askInNewThread();
+        const { channel, pending } = yield* askInNewChannel();
         const first = pending[0] as ApprovalRequest;
         // Another rule changes, so the policy the approval was given under is not the one now.
         restrictions = [{ "delete-files": "deny" }];
         yield* approvals.decide(first.id, { decision: "approve", actionDigest: first.actionDigest });
-        const second = (yield* pendingIn(thread.id))[0] as ApprovalRequest;
+        const second = (yield* pendingIn(channel.id))[0] as ApprovalRequest;
         yield* approvals.decide(second.id, { decision: "approve", actionDigest: second.actionDigest });
-        const done = yield* settled(thread.id);
+        const done = yield* settled(channel.id);
         return { first, second, done };
       }),
     );
@@ -429,9 +429,9 @@ describe("Ask decisions", () => {
   it("wakes the waiting turn even when the decision's request is cancelled while it is stored", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
-      const thread = yield* chat.createThread(HOB_ID);
-      const sent = yield* chat.sendPrompt(thread.id, "hello");
-      yield* settled(thread.id);
+      const channel = yield* chat.createChannel(HOB_ID);
+      const sent = yield* chat.sendPrompt(channel.id, "hello");
+      yield* settled(channel.id);
       const messageId = (sent.assistantMessage as Message).id;
       // A store whose decision write holds at the commit until the test lets it go.
       const reached = yield* Deferred.make<void>();
@@ -453,7 +453,7 @@ describe("Ask decisions", () => {
       return yield* Effect.gen(function* () {
         const approvals = yield* ApprovalService;
         const turn = yield* approvals.forTurn(
-          { agentId: HOB_ID, threadId: thread.id, messageId },
+          { agentId: HOB_ID, channelId: channel.id, messageId },
           Effect.succeed(null),
           Effect.succeed(null),
         );
@@ -470,7 +470,7 @@ describe("Ask decisions", () => {
           grantable: false,
           rules: [],
         });
-        const [request] = yield* approvals.listForThread(thread.id);
+        const [request] = yield* approvals.listForChannel(channel.id);
         const decision = { decision: "approve", actionDigest: (request as ApprovalRequest).actionDigest } as const;
         const deciding = yield* Effect.forkChild(approvals.decide(pending.approvalId, decision));
         yield* Deferred.await(reached);
@@ -493,15 +493,15 @@ describe("Ask decisions", () => {
   it("expires requests left pending when the server restarts", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
-      const thread = yield* chat.createThread(HOB_ID);
-      const sent = yield* chat.sendPrompt(thread.id, "hello");
-      yield* settled(thread.id);
+      const channel = yield* chat.createChannel(HOB_ID);
+      const sent = yield* chat.sendPrompt(channel.id, "hello");
+      yield* settled(channel.id);
       const messageId = (sent.assistantMessage as Message).id;
       // A turn asks, and the process dies before anyone decides.
       const before = yield* Effect.gen(function* () {
         const approvals = yield* ApprovalService;
         const turn = yield* approvals.forTurn(
-          { agentId: HOB_ID, threadId: thread.id, messageId },
+          { agentId: HOB_ID, channelId: channel.id, messageId },
           Effect.succeed(null),
           Effect.succeed(null),
         );
@@ -518,12 +518,12 @@ describe("Ask decisions", () => {
           grantable: false,
           rules: [],
         });
-        return yield* approvals.listForThread(thread.id);
+        return yield* approvals.listForChannel(channel.id);
       }).pipe(Effect.provide(Layer.fresh(ApprovalService.layer)));
       // The next process starts.
       const after = yield* Effect.gen(function* () {
         const approvals = yield* ApprovalService;
-        return yield* approvals.listForThread(thread.id);
+        return yield* approvals.listForChannel(channel.id);
       }).pipe(Effect.provide(Layer.fresh(ApprovalService.layer)));
       return { before, after };
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
@@ -536,14 +536,14 @@ describe("Ask decisions", () => {
   it("a request expires a day after it was asked, however late its turn starts waiting", async () => {
     const result = await Effect.gen(function* () {
       const chat = yield* ChatService;
-      const thread = yield* chat.createThread(HOB_ID);
-      const sent = yield* chat.sendPrompt(thread.id, "hello");
-      yield* settled(thread.id);
+      const channel = yield* chat.createChannel(HOB_ID);
+      const sent = yield* chat.sendPrompt(channel.id, "hello");
+      yield* settled(channel.id);
       const messageId = (sent.assistantMessage as Message).id;
       return yield* Effect.gen(function* () {
         const approvals = yield* ApprovalService;
         const turn = yield* approvals.forTurn(
-          { agentId: HOB_ID, threadId: thread.id, messageId },
+          { agentId: HOB_ID, channelId: channel.id, messageId },
           Effect.succeed(null),
           Effect.succeed(null),
         );

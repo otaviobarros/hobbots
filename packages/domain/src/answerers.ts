@@ -1,9 +1,9 @@
 import { Schema } from "effect";
 import type { Actor } from "./actor.ts";
-import { AgentId, ThreadId } from "./ids.ts";
+import type { ChannelKind } from "./channel.ts";
+import { type ChannelMember, ChannelMembers } from "./channel-member.ts";
+import { AgentId, ChannelId } from "./ids.ts";
 import type { MessageRole } from "./message.ts";
-import type { ThreadKind } from "./thread.ts";
-import { type ThreadMember, ThreadMembers } from "./thread-member.ts";
 
 /**
  * Who answers a message (ADR 039, Who answers): a pure rule, run in the transaction that stores the
@@ -16,8 +16,8 @@ import { type ThreadMember, ThreadMembers } from "./thread-member.ts";
  * - `mention`: a person @mentioned it.
  * - `reply`: a person replied to one of its messages, which counts as a mention.
  * - `relay`: another hob mentioned it, or replied to it.
- * - `only-hob`: nobody was mentioned and it is the thread's only hob.
- * - `lead`: nobody was mentioned in the thread of a running Quest, and it leads that Quest.
+ * - `only-hob`: nobody was mentioned and it is the channel's only hob.
+ * - `lead`: nobody was mentioned in the channel of a running Quest, and it leads that Quest.
  */
 export type AnswerCause = "mention" | "reply" | "relay" | "only-hob" | "lead";
 
@@ -38,17 +38,17 @@ export interface SaidMessage {
   readonly repliesTo: Actor | null;
 }
 
-/** A Quest running in the thread (ADR 039, rule 5): its lead and the hobs it brought in. */
+/** A Quest running in the channel (ADR 039, rule 5): its lead and the hobs it brought in. */
 export interface RunningQuest {
   readonly leadId: AgentId;
   readonly party: ReadonlyArray<AgentId>;
 }
 
-/** What `answerersFor` reads of the thread. */
+/** What `answerersFor` reads of the channel. */
 export interface AnswerPlace {
-  readonly id: ThreadId;
-  readonly kind: ThreadKind;
-  /** The Quest running in the thread, or null when none runs there. */
+  readonly id: ChannelId;
+  readonly kind: ChannelKind;
+  /** The Quest running in the channel, or null when none runs there. */
   readonly quest: RunningQuest | null;
 }
 
@@ -57,7 +57,7 @@ export interface AnswerPlace {
  * answers). It carries their ids; the client names them ("Rook isn't in this camp. Add Rook?").
  */
 export class MentionRefused extends Schema.TaggedError<MentionRefused>()("MentionRefused", {
-  threadId: ThreadId,
+  channelId: ChannelId,
   /** The hobs mentioned that are not members, each once, in the order they were mentioned. */
   hobs: Schema.Array(AgentId),
 }) {}
@@ -68,20 +68,20 @@ const isHob = (actor: Actor | null): actor is Actor => actor?.kind === "hob";
 const byPerson = (message: SaidMessage): boolean => message.actor === null || message.actor.kind === "user";
 
 /** The active hobs among the members, in the order they are listed. */
-const activeHobs = (members: ReadonlyArray<ThreadMember>): ReadonlyArray<AgentId> =>
+const activeHobs = (members: ReadonlyArray<ChannelMember>): ReadonlyArray<AgentId> =>
   members
-    .filter((member) => member.actor.kind === "hob" && ThreadMembers.isActive(member))
+    .filter((member) => member.actor.kind === "hob" && ChannelMembers.isActive(member))
     .map((member) => AgentId.make(member.actor.id));
 
 /**
- * A hob hears a mention when it is an active member, or, in the thread of a running Quest, when it
+ * A hob hears a mention when it is an active member, or, in the channel of a running Quest, when it
  * leads the Quest or is in its party: a mention there steers it directly (#1345).
  */
 const hears = (hobId: AgentId, members: ReadonlyArray<AgentId>, quest: RunningQuest | null): boolean =>
   members.includes(hobId) || (quest !== null && (quest.leadId === hobId || quest.party.includes(hobId)));
 
 /**
- * Who answers `message` in `thread`, given its `members` in every state: the hobs that owe it an
+ * Who answers `message` in `channel`, given its `members` in every state: the hobs that owe it an
  * answer, in order and empty when nobody does, or `MentionRefused`. The rules, in order:
  *
  * 1. A note to self wakes nobody, and neither does a hob's message that mentions no other hob.
@@ -89,7 +89,7 @@ const hears = (hobId: AgentId, members: ReadonlyArray<AgentId>, quest: RunningQu
  *    that cannot hear it is refused before the message is stored.
  * 3. A reply to a hob's message counts as mentioning that hob, after the @mentions. Replying to a
  *    hob that has since left is not refused: it just mentions nobody.
- * 4. With no mention, in a running Quest's thread its lead answers (rule 5 of the ADR: a running
+ * 4. With no mention, in a running Quest's channel its lead answers (rule 5 of the ADR: a running
  *    Quest keeps its rules).
  * 5. Otherwise the members decide: the only hob answers, and in a camp with several hobs nobody does.
  *
@@ -97,29 +97,29 @@ const hears = (hobId: AgentId, members: ReadonlyArray<AgentId>, quest: RunningQu
  */
 export function answerersFor(
   message: SaidMessage & { readonly mentions: readonly [] },
-  thread: AnswerPlace,
-  members: ReadonlyArray<ThreadMember>,
+  channel: AnswerPlace,
+  members: ReadonlyArray<ChannelMember>,
 ): ReadonlyArray<AnswerOwed>;
 export function answerersFor(
   message: SaidMessage,
-  thread: AnswerPlace,
-  members: ReadonlyArray<ThreadMember>,
+  channel: AnswerPlace,
+  members: ReadonlyArray<ChannelMember>,
 ): ReadonlyArray<AnswerOwed> | MentionRefused;
 export function answerersFor(
   message: SaidMessage,
-  thread: AnswerPlace,
-  members: ReadonlyArray<ThreadMember>,
+  channel: AnswerPlace,
+  members: ReadonlyArray<ChannelMember>,
 ): ReadonlyArray<AnswerOwed> | MentionRefused {
   if (message.role === "note") return [];
   const hobs = activeHobs(members);
   const mentioned = [...new Set(message.mentions.filter(isHob).map((actor) => AgentId.make(actor.id)))];
-  const missing = mentioned.filter((hobId) => !hears(hobId, hobs, thread.quest));
-  if (missing.length > 0) return new MentionRefused({ threadId: thread.id, hobs: missing });
+  const missing = mentioned.filter((hobId) => !hears(hobId, hobs, channel.quest));
+  if (missing.length > 0) return new MentionRefused({ channelId: channel.id, hobs: missing });
 
   const relayed = isHob(message.actor);
   const author = relayed ? message.actor?.id : undefined;
   const replied =
-    isHob(message.repliesTo) && hears(AgentId.make(message.repliesTo.id), hobs, thread.quest)
+    isHob(message.repliesTo) && hears(AgentId.make(message.repliesTo.id), hobs, channel.quest)
       ? [AgentId.make(message.repliesTo.id)]
       : [];
   const named: ReadonlyArray<AnswerOwed> = [
@@ -130,7 +130,7 @@ export function answerersFor(
   ].filter((answerer) => answerer.hobId !== author);
   if (named.length > 0 || !byPerson(message)) return named;
 
-  if (thread.quest !== null) return [{ hobId: thread.quest.leadId, cause: "lead" }];
+  if (channel.quest !== null) return [{ hobId: channel.quest.leadId, cause: "lead" }];
   const [only, ...others] = hobs;
   return only !== undefined && others.length === 0 ? [{ hobId: only, cause: "only-hob" }] : [];
 }

@@ -1,8 +1,10 @@
-import { HobbotsRepository, type SentTo, ThreadMemberRepository } from "@hobbots/agents";
+import { ChannelMemberRepository, HobbotsRepository, type SentTo } from "@hobbots/agents";
 import {
   type Actor,
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   hobActor,
   Message,
   MessageId,
@@ -10,8 +12,6 @@ import {
   mainLine,
   OWNER_ACTOR,
   QueuedMessageTransitions,
-  Thread,
-  ThreadId,
   TurnCause,
   type TurnRequest,
   TurnRequestState,
@@ -21,9 +21,9 @@ import { Effect, Exit, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { HobbotsRepositoryLive, migrations, ThreadMemberRepositoryLive } from "../src/index.ts";
+import { ChannelMemberRepositoryLive, HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import turnRequests, { TURN_CAUSES, TURN_REQUEST_STATES } from "../src/migrations/20261114003401_turn_requests.ts";
-import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
+import { migrateAfter, TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1461 (ADR 039, One hob speaks at a time): each answer a hob owes is a TurnRequest written
 // with the message that caused it; it takes the floor with its turn's reply, is answered when the
@@ -37,22 +37,19 @@ const ROOK = AgentId.make("rook");
 const HOBS = [QUILL, PIP, ROOK];
 const MARINA: Actor = { kind: "user", id: "marina" };
 
-type Services = HobbotsRepository | ThreadMemberRepository | SqlClient.SqlClient;
+type Services = HobbotsRepository | ChannelMemberRepository | SqlClient.SqlClient;
 
 const run = <A, E>(effect: Effect.Effect<A, E, Services>, database: typeof TestDatabase = TestDatabase) =>
   effect.pipe(
     Effect.provide(
-      Layer.mergeAll(HobbotsRepositoryLive, ThreadMemberRepositoryLive).pipe(Layer.provideMerge(database)),
+      Layer.mergeAll(HobbotsRepositoryLive, ChannelMemberRepositoryLive).pipe(Layer.provideMerge(database)),
     ),
     Effect.runPromise,
   );
 
-/**
- * The migrations that ran before turn requests were recorded, and the one that keeps a reply's
- * read-the-web mark, which the repository writes each message with.
- */
+/** The migrations that ran before turn requests were recorded. */
 const earlier = Object.fromEntries(
-  Object.entries(migrations).filter(([id]) => id < "20261114003401" || id === "20261115002636_message_read_web"),
+  Object.entries(migrations).filter(([id]) => id < "20261114003401"),
 ) as typeof migrations;
 
 const hob = (id: AgentId) =>
@@ -76,21 +73,21 @@ const summonAll = Effect.gen(function* () {
 });
 
 /** A camp of Quill's that Pip and Rook joined. */
-const campOfThree = (id: ThreadId) =>
+const campOfThree = (id: ChannelId) =>
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
-    const members = yield* ThreadMemberRepository;
-    yield* repo.upsertThread(
-      new Thread({ id, agentId: QUILL, title: id, kind: "camp", createdAt: NOW, updatedAt: NOW }),
+    const members = yield* ChannelMemberRepository;
+    yield* repo.upsertChannel(
+      new Channel({ id, ownerHobId: QUILL, title: id, kind: "camp", createdAt: NOW, updatedAt: NOW }),
     );
     yield* members.add(id, hobActor(PIP), OWNER_ACTOR);
     yield* members.add(id, hobActor(ROOK), OWNER_ACTOR);
   });
 
-const said = (threadId: ThreadId, id: string, status: MessageStatus, actor: Actor = OWNER_ACTOR) =>
+const said = (channelId: ChannelId, id: string, status: MessageStatus, actor: Actor = OWNER_ACTOR) =>
   new Message({
     id: MessageId.make(id),
-    threadId,
+    channelId,
     actor,
     role: "user",
     content: id,
@@ -100,10 +97,10 @@ const said = (threadId: ThreadId, id: string, status: MessageStatus, actor: Acto
     createdAt: NOW,
   });
 
-const replyTo = (threadId: ThreadId, id: string, hobId: AgentId) =>
+const replyTo = (channelId: ChannelId, id: string, hobId: AgentId) =>
   new Message({
     id: MessageId.make(id),
-    threadId,
+    channelId,
     actor: hobActor(hobId),
     role: "assistant",
     content: "",
@@ -115,15 +112,15 @@ const replyTo = (threadId: ThreadId, id: string, hobId: AgentId) =>
 
 const mentioning = (hobs: ReadonlyArray<AgentId>): SentTo => ({ mentions: hobs.map(hobActor), repliesTo: null });
 
-const open = (threadId: ThreadId) =>
-  Effect.flatMap(HobbotsRepository, (repo) => repo.openTurnRequests(mainLine(threadId)));
+const open = (channelId: ChannelId) =>
+  Effect.flatMap(HobbotsRepository, (repo) => repo.openTurnRequests(mainLine(channelId)));
 
 /** Gives the floor to `next` as the hub does: a queued message starts with it, a said one is its prompt. */
 const speak = (next: TurnRequest, replyId: string) =>
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
     const message = Option.getOrThrow(yield* repo.findMessage(next.messageId));
-    const reply = replyTo(next.threadId, replyId, next.hobId);
+    const reply = replyTo(next.channelId, replyId, next.hobId);
     const started = QueuedMessageTransitions.start(message);
     return started instanceof Message
       ? Option.isSome(yield* repo.startQueuedMessage(started, reply, [next.id]))
@@ -133,7 +130,7 @@ const speak = (next: TurnRequest, replyId: string) =>
 describe("turn requests as records", () => {
   // covers ADR 039 (One hob speaks at a time)
   it("writes one waiting request per hob owed, in mention order, with the message (#1461)", async () => {
-    const camp = ThreadId.make("camp");
+    const camp = ChannelId.make("camp");
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -165,7 +162,7 @@ describe("turn requests as records", () => {
 
   // covers ADR 039 (One hob speaks at a time)
   it("takes the floor with the turn's reply, or neither, and drops what a removed message was owed (#1461)", async () => {
-    const camp = ThreadId.make("camp");
+    const camp = ChannelId.make("camp");
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -197,13 +194,13 @@ describe("turn requests as records", () => {
 });
 
 /** Pip's reply in the camp, saved as its turn left it. */
-const pipSaid = (threadId: ThreadId, id: string, content: string, status: MessageStatus) =>
-  new Message({ ...replyTo(threadId, id, PIP), content, status });
+const pipSaid = (channelId: ChannelId, id: string, content: string, status: MessageStatus) =>
+  new Message({ ...replyTo(channelId, id, PIP), content, status });
 
 describe("relays owed while a turn ends", () => {
   // covers ADR 039 (Hobs talking to hobs)
   it("Stop all picked before the turn ended still drops the relay its reply wrote (#1463)", async () => {
-    const camp = ThreadId.make("camp");
+    const camp = ChannelId.make("camp");
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -232,7 +229,7 @@ describe("relays owed while a turn ends", () => {
 
   // covers ADR 039 (Hobs talking to hobs)
   it("writes a reply's relays as it is saved complete, so a restart before its turn ends keeps them, once (#1463)", async () => {
-    const camp = ThreadId.make("camp");
+    const camp = ChannelId.make("camp");
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -268,7 +265,7 @@ describe("relays owed while a turn ends", () => {
 
   // covers ADR 039 (Hobs talking to hobs)
   it("a reply you asked to stop relays nothing when it completes, even with no request to drop (#1463)", async () => {
-    const camp = ThreadId.make("camp");
+    const camp = ChannelId.make("camp");
     const result = await run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
@@ -288,19 +285,39 @@ describe("relays owed while a turn ends", () => {
 
 describe("recording the answers already owed", () => {
   // covers ADR 039 (One hob speaks at a time, Restart)
-  it("gives each message still queued a waiting request for its thread's hob, in queue order (#1461)", async () => {
-    const chat = ThreadId.make("chat");
+  it("gives each message still queued a waiting request for its channel's hob, in queue order (#1461)", async () => {
+    const chat = ChannelId.make("chat");
     const result = await run(
       Effect.gen(function* () {
-        const repo = yield* HobbotsRepository;
-        yield* repo.insertAgent(hob(QUILL));
-        yield* repo.upsertThread(
-          new Thread({ id: chat, agentId: QUILL, title: "chat", createdAt: NOW, updatedAt: NOW }),
-        );
-        yield* repo.upsertMessage(said(chat, "first", "complete"));
-        yield* repo.upsertMessage(said(chat, "second", "queued"));
-        yield* repo.upsertMessage(said(chat, "third", "queued", MARINA));
+        // The rows as the hub stored them before, when a channel was a thread.
+        const sql = yield* SqlClient.SqlClient;
+        const fields = { roleTitle: "Guide", instructions: "", lookSeed: 1, lookColor: "moss", createdAt: NOW };
+        yield* sql`INSERT INTO agents ${sql.insert({ id: QUILL, name: QUILL, runtime: "claude-code", ...fields })}`;
+        yield* sql`INSERT INTO threads ${sql.insert({ id: chat, agentId: QUILL, title: "chat", kind: "chat", createdAt: NOW, updatedAt: NOW, revision: 1 })}`;
+        yield* sql`INSERT INTO chapters ${sql.insert({ id: "chat-1", threadId: chat, number: 1, state: "live", startedAt: NOW, revision: 1 })}`;
+        const messages = [
+          ["first", "complete", OWNER_ACTOR],
+          ["second", "queued", OWNER_ACTOR],
+          ["third", "queued", MARINA],
+        ] as const;
+        for (const [index, [id, status, actor]] of messages.entries()) {
+          yield* sql`INSERT INTO messages ${sql.insert({
+            id,
+            threadId: chat,
+            chapterId: "chat-1",
+            role: "user",
+            content: id,
+            status,
+            actorKind: actor.kind,
+            actorId: actor.id,
+            createdAt: NOW,
+            seq: index + 1,
+            revision: index + 2,
+          })}`;
+        }
         yield* turnRequests;
+        // Today's repository reads them, so the rows go on to today's schema.
+        yield* migrateAfter("20261114003401");
         return yield* open(chat);
       }),
       TestDatabaseAt(earlier),
@@ -316,7 +333,7 @@ describe("recording the answers already owed", () => {
     // A new state or cause needs a migration of its own.
     expect(TURN_REQUEST_STATES).toEqual(TurnRequestState.literals);
     expect(TURN_CAUSES).toEqual(TurnCause.literals);
-    const camp = ThreadId.make("camp");
+    const camp = ChannelId.make("camp");
     const result = await run(
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
@@ -326,7 +343,7 @@ describe("recording the answers already owed", () => {
         yield* repo.sendMessage(said(camp, "m-1", "complete"), mentioning([PIP]));
         const row = {
           id: "r-x",
-          threadId: camp,
+          channelId: camp,
           hobId: PIP,
           messageId: "m-1",
           causedByKind: "user",
@@ -442,7 +459,7 @@ const modelStep = (m: Model, op: Op, n: number): Model => {
 };
 
 /** The same step on the records, through the repository as the hub uses it. */
-const recordStep = (camp: ThreadId, op: Op, n: number) =>
+const recordStep = (camp: ChannelId, op: Op, n: number) =>
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
     const owed = yield* open(camp);
@@ -493,13 +510,13 @@ describe("the floor's queue on the records", () => {
       Effect.gen(function* () {
         yield* summonAll;
         const repo = yield* HobbotsRepository;
-        const members = yield* ThreadMemberRepository;
+        const members = yield* ChannelMemberRepository;
         yield* Effect.promise(() =>
           fc.assert(
             fc.asyncProperty(fc.array(ops, { maxLength: 16 }), (script) =>
               Effect.runPromise(
                 Effect.gen(function* () {
-                  const camp = ThreadId.make(`camp-${camps++}`);
+                  const camp = ChannelId.make(`camp-${camps++}`);
                   yield* campOfThree(camp);
                   let model: Model = { owed: [], messages: [] };
                   for (const [i, op] of script.entries()) {
@@ -518,7 +535,7 @@ describe("the floor's queue on the records", () => {
                   }
                 }).pipe(
                   Effect.provideService(HobbotsRepository, repo),
-                  Effect.provideService(ThreadMemberRepository, members),
+                  Effect.provideService(ChannelMemberRepository, members),
                 ),
               ),
             ),

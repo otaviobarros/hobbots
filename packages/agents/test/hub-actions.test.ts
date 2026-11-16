@@ -2,6 +2,7 @@ import { UserSession } from "@hobbots/api";
 import {
   AgentId,
   ApprovalId,
+  ChannelId,
   type CharmCall,
   type CharmDeclaration,
   CharmWriteKey,
@@ -12,7 +13,6 @@ import {
   OWNER_USER_ID,
   type PolicyDecision,
   type ReplyStep,
-  ThreadId,
   toolInputJsonSchema,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
@@ -199,7 +199,7 @@ const callPip = (input: unknown, scenario: Scenario = {}) => {
       }),
   })({
     agentId: AgentId.make("hob"),
-    threadId: null,
+    channelId: null,
     messageId: null,
     scope: () => "",
     currentAccess: Effect.sync(() => now),
@@ -252,7 +252,7 @@ describe("the hub action pipeline (ADR 031)", () => {
       Effect.runPromise(
         makeHubActions({ owner: { _tag: "BuiltIn" }, actions: [], decide: () => () => Effect.die("never") })({
           agentId: AgentId.make("hob"),
-          threadId: null,
+          channelId: null,
           messageId: null,
           scope: () => "",
           currentAccess: Effect.succeed(access()),
@@ -395,7 +395,7 @@ describe("the hub action pipeline (ADR 031)", () => {
     const [context] = contexts as Array<Record<string, Record<string, unknown>>>;
     expect(Object.keys(context ?? {}).sort()).toEqual(["access", "stepId", "turn"]);
     expect(context?.stepId).toBe("toolu_1");
-    expect(Object.keys(context?.turn ?? {}).sort()).toEqual(["agentId", "messageId", "scope", "threadId"]);
+    expect(Object.keys(context?.turn ?? {}).sort()).toEqual(["agentId", "channelId", "messageId", "scope"]);
   });
 
   // covers ADR 036 (Amendment: the screens), #1271
@@ -532,7 +532,7 @@ const pipWrites = (scenario: WriteScenario = {}, rows = new Map<string, CharmCal
         calls: runner,
       })({
         agentId: AgentId.make("hob"),
-        threadId: ThreadId.make("t1"),
+        channelId: ChannelId.make("t1"),
         messageId: MessageId.make("m1"),
         scope: () => "reply:m1",
         currentAccess: Effect.succeed(access()),
@@ -705,7 +705,7 @@ describe("Charm writes in the hub action pipeline (ADR 031)", () => {
     const settled = await Effect.gen(function* () {
       const service = yield* CharmCallService;
       return yield* service.settle(
-        { _tag: "Step", threadId: ThreadId.make("t1"), messageId: MessageId.make("m1"), stepId: "toolu_1" },
+        { _tag: "Step", channelId: ChannelId.make("t1"), messageId: MessageId.make("m1"), stepId: "toolu_1" },
         "not-sent",
       );
     }).pipe(
@@ -763,7 +763,7 @@ interface NotesScenario {
 
 const notesTurn = (now: ToolAccess | null, approvals: TurnApprovals | null) => ({
   agentId: AgentId.make("hob"),
-  threadId: null,
+  channelId: null,
   messageId: null,
   scope: () => "",
   currentAccess: Effect.succeed(now),

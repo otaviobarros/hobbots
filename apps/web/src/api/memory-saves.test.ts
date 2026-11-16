@@ -1,15 +1,15 @@
-import { type MemorySave, MessageId, ThreadId } from "@hobbots/domain";
+import { ChannelId, type MemorySave, MessageId } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
-import { applyMemorySave, refreshMemorySaves, threadMemorySavesQuery } from "./memory-saves.ts";
+import { applyMemorySave, channelMemorySavesQuery, refreshMemorySaves } from "./memory-saves.ts";
 
-const thread = ThreadId.make("thread-1");
+const channel = ChannelId.make("channel-1");
 
-/** A save of thread-1's reply, as the hub records it; `undoneAt` marks it undone. */
+/** A save of channel-1's reply, as the hub records it; `undoneAt` marks it undone. */
 const save = (id: string, updatedAt = "2026-11-05T09:55:00.000Z", undoneAt?: string) =>
   ({
     id,
-    threadId: thread,
+    channelId: channel,
     messageId: MessageId.make("reply-1"),
     state: "saved",
     updatedAt,
@@ -17,14 +17,14 @@ const save = (id: string, updatedAt = "2026-11-05T09:55:00.000Z", undoneAt?: str
   }) as unknown as MemorySave;
 
 /**
- * A thread's saves on screen, whose reads answer only when the test says so, in order: `answer(n, …)`
+ * A channel's saves on screen, whose reads answer only when the test says so, in order: `answer(n, …)`
  * settles the nth read with what the hub had when that read was taken.
  */
 const watchedSaves = () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const pending: Array<(value: ReadonlyArray<MemorySave>) => void> = [];
   const observer = new QueryObserver(client, {
-    ...threadMemorySavesQuery(thread),
+    ...channelMemorySavesQuery(channel),
     queryFn: () => new Promise<ReadonlyArray<MemorySave>>((resolve) => pending.push(resolve)),
   });
   const unsubscribe = observer.subscribe(() => {});
@@ -34,7 +34,7 @@ const watchedSaves = () => {
   return { client, answer, shown, settled, reads: () => pending.length, unsubscribe };
 };
 
-describe("a thread's memory saves, kept live", () => {
+describe("a channel's memory saves, kept live", () => {
   // covers ADR 028 (The memory tools), #961, STD-REACT-012
   it("a save that arrives while the first read is on its way still shows when that read answers late (#961)", async () => {
     const saves = watchedSaves();
@@ -55,7 +55,7 @@ describe("a thread's memory saves, kept live", () => {
     const saves = watchedSaves();
     saves.answer(0, [save("s1")]);
     await saves.settled();
-    void saves.client.invalidateQueries({ queryKey: threadMemorySavesQuery(thread).queryKey });
+    void saves.client.invalidateQueries({ queryKey: channelMemorySavesQuery(channel).queryKey });
     await saves.settled();
     expect(saves.reads()).toBe(2);
     const applied = applyMemorySave(saves.client, save("s1", "2026-11-05T10:00:00.000Z", "2026-11-05T10:00:00.000Z"));

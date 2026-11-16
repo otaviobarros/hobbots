@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
+  ChannelId,
   ChapterId,
   DECISION_TEXT_MAX,
   Decision,
@@ -15,18 +16,17 @@ import {
   OWNER_ACTOR,
   planCrossOut,
   planDecision,
-  ThreadId,
 } from "../src/index.ts";
 import { agreesWithModel } from "../testing/machine-model.ts";
 
-const THREAD = ThreadId.make("thread-1");
+const CHANNEL = ChannelId.make("channel-1");
 const CHAPTER = ChapterId.make("chapter-1");
 const at = (minute: number) => new Date(Date.UTC(2026, 10, 12) + minute * 60_000).toISOString();
 
 const decision = (id: string, state: DecisionState = "active") =>
   new Decision({
     id: DecisionId.make(id),
-    threadId: THREAD,
+    channelId: CHANNEL,
     chapterId: CHAPTER,
     sourceMessageId: MessageId.make("message-1"),
     text: "Launch emails go out on Tuesdays.",
@@ -94,13 +94,13 @@ describe("DecisionStateMachine", () => {
 
 const draft = (fields: Partial<Parameters<typeof planDecision>[0]> = {}): Parameters<typeof planDecision>[0] => ({
   id: DecisionId.make("decision-2"),
-  threadId: THREAD,
+  channelId: CHANNEL,
   chapterId: CHAPTER,
   sourceMessageId: null,
   text: "  Ship on Friday.  ",
   actor: OWNER_ACTOR,
   at: at(5),
-  threadOpen: true,
+  channelOpen: true,
   ...fields,
 });
 
@@ -125,8 +125,8 @@ describe("decision rules", () => {
   });
 
   it("refuses a decision in a closed chat or camp", () => {
-    expect(planDecision(draft({ threadOpen: false }))).toMatchObject({ reason: "thread-closed" });
-    expect(planCrossOut(decision("decision-1"), at(5), false)).toMatchObject({ reason: "thread-closed" });
+    expect(planDecision(draft({ channelOpen: false }))).toMatchObject({ reason: "channel-closed" });
+    expect(planCrossOut(decision("decision-1"), at(5), false)).toMatchObject({ reason: "channel-closed" });
   });
 
   it("crosses out the decision it replaces, pointing at the new one, at the same moment", () => {

@@ -1,28 +1,28 @@
 import {
   CHAPTER_TITLE_MAX,
+  ChannelId,
   Chapter,
   ChapterId,
   ChapterRefusal,
   MessageId,
   PackReport,
-  ThreadId,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
-import { ThreadNotFound } from "./errors.ts";
+import { ChannelNotFound } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /**
  * Why a split or a merge changed nothing (ADR 037): a `ChapterRefusal`, or `chapter-not-found` when
- * the chapter to merge is not in the thread, as after another device merged it first.
+ * the chapter to merge is not in the channel, as after another device merged it first.
  */
 export const ChapterChangeRefusal = Schema.Literals([...ChapterRefusal.literals, "chapter-not-found"]);
 export type ChapterChangeRefusal = typeof ChapterChangeRefusal.Type;
 
-/** A split or a merge was refused for `reason`; the thread's chapters are as they were. */
+/** A split or a merge was refused for `reason`; the channel's chapters are as they were. */
 export class ChapterChangeRefused extends Schema.TaggedError<ChapterChangeRefused>()(
   "ChapterChangeRefused",
-  { threadId: ThreadId, reason: ChapterChangeRefusal },
+  { channelId: ChannelId, reason: ChapterChangeRefusal },
   { httpApiStatus: 409 },
 ) {}
 
@@ -39,7 +39,7 @@ export const SplitChapterPayload = Schema.Struct({
 export type SplitChapterPayload = typeof SplitChapterPayload.Type;
 
 /**
- * What the Focus chip shows (ADR 037): the `PackReport` of the pack the thread's last new session
+ * What the Focus chip shows (ADR 037): the `PackReport` of the pack the channel's last new session
  * read (`last-turn`), or, when the hub kept none, as after a restart, the report of the pack its
  * next new session would read (`next-session`).
  */
@@ -49,32 +49,32 @@ export const FocusRead = Schema.Struct({
 });
 export type FocusRead = typeof FocusRead.Type;
 
-/** A thread's chapters (ADR 037), and what its hob reads each turn. */
+/** A channel's chapters (ADR 037), and what its hob reads each turn. */
 export class ChaptersGroup extends HttpApiGroup.make("chapters")
   .add(
-    // The thread's chapters in order; each later change arrives as a chapter event.
-    HttpApiEndpoint.get("list", "/threads/:threadId/chapters", {
-      params: { threadId: ThreadId },
+    // The channel's chapters in order; each later change arrives as a chapter event.
+    HttpApiEndpoint.get("list", "/channels/:channelId/chapters", {
+      params: { channelId: ChannelId },
       success: Schema.Array(Chapter),
-      error: ThreadNotFound,
+      error: ChannelNotFound,
     }),
-    // Returns the thread's chapters after the split.
-    HttpApiEndpoint.post("split", "/threads/:threadId/chapters/split", {
-      params: { threadId: ThreadId },
+    // Returns the channel's chapters after the split.
+    HttpApiEndpoint.post("split", "/channels/:channelId/chapters/split", {
+      params: { channelId: ChannelId },
       payload: SplitChapterPayload,
       success: Schema.Array(Chapter),
-      error: [ThreadNotFound, ChapterChangeRefused],
+      error: [ChannelNotFound, ChapterChangeRefused],
     }),
-    // Merges the chapter into the one before it; returns the thread's chapters after the merge.
-    HttpApiEndpoint.post("merge", "/threads/:threadId/chapters/:chapterId/merge", {
-      params: { threadId: ThreadId, chapterId: ChapterId },
+    // Merges the chapter into the one before it; returns the channel's chapters after the merge.
+    HttpApiEndpoint.post("merge", "/channels/:channelId/chapters/:chapterId/merge", {
+      params: { channelId: ChannelId, chapterId: ChapterId },
       success: Schema.Array(Chapter),
-      error: [ThreadNotFound, ChapterChangeRefused],
+      error: [ChannelNotFound, ChapterChangeRefused],
     }),
-    HttpApiEndpoint.get("focus", "/threads/:threadId/focus", {
-      params: { threadId: ThreadId },
+    HttpApiEndpoint.get("focus", "/channels/:channelId/focus", {
+      params: { channelId: ChannelId },
       success: FocusRead,
-      error: ThreadNotFound,
+      error: ChannelNotFound,
     }),
   )
   .middleware(DeviceSession)

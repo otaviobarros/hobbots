@@ -47,7 +47,7 @@ const proposal = (fields: Partial<HobProposal> = {}) =>
     kind: "summon",
     tool: "summoning_summon",
     call: { scope: "reply:m1", key: "k1" },
-    threadId: null,
+    channelId: null,
     messageId: null,
     taskId: null,
     stepId: null,

@@ -1,4 +1,4 @@
-import { type Agent, type AgentId, type HistoryFilter, STARTER_ROLES, type Thread } from "@hobbots/domain";
+import { type Agent, type AgentId, type Channel, type HistoryFilter, STARTER_ROLES } from "@hobbots/domain";
 import { Schema } from "effect";
 import type { ActivityMap } from "../../api/hub-status.ts";
 import { firstLine } from "../../lib/format.ts";
@@ -90,17 +90,17 @@ export const needLine = (need: HobNeed, hobId: AgentId, nameOf: (id: AgentId) =>
  */
 export const doingOf = (
   state: HobState,
-  threads: ReadonlyArray<Pick<Thread, "id" | "title">>,
+  channels: ReadonlyArray<Pick<Channel, "id" | "title">>,
   activity: ActivityMap,
   need?: string,
 ): Doing | null => {
   if (state === "needs-you" || state === "waiting") return { kind: "needs-you", text: need ?? copy.doing.waiting };
   if (state === "paused") return { kind: "quiet", text: copy.doing.paused };
-  const writing = threads.find((thread) => activity[thread.id] === "working");
+  const writing = channels.find((channel) => activity[channel.id] === "working");
   if (writing) return { kind: "live", text: copy.doing.writing({ title: writing.title }) };
-  const thinking = threads.find((thread) => activity[thread.id] === "thinking");
+  const thinking = channels.find((channel) => activity[channel.id] === "thinking");
   if (thinking) return { kind: "live", text: copy.doing.thinking({ title: thinking.title }) };
-  const waiting = threads.find((thread) => activity[thread.id] === "waiting");
+  const waiting = channels.find((channel) => activity[channel.id] === "waiting");
   if (waiting) return { kind: "live", text: copy.doing.onCommand({ title: waiting.title }) };
   return null;
 };

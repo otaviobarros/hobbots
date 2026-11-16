@@ -1,11 +1,11 @@
 import { Schema } from "effect";
 import { Actor } from "./actor.ts";
 import { RegisteredArtifactKind } from "./artifact.ts";
+import { ChannelKind } from "./channel.ts";
 import { DecisionId, DecisionState, DecisionStates } from "./decision.ts";
-import { AgentId, ChapterId, MessageId, RegisteredArtifactId, ThreadId } from "./ids.ts";
+import { AgentId, ChannelId, ChapterId, MessageId, RegisteredArtifactId } from "./ids.ts";
 import { MessageRole } from "./message.ts";
 import { SnippetPart } from "./search.ts";
-import { ThreadKind } from "./thread.ts";
 
 // Find (ADR 037, Records, #1386): the records of every chat and camp, decisions, artifacts and
 // chapters, found by their words beside the messages that say them, in one chat or camp or
@@ -25,9 +25,9 @@ export const FIND_QUERY_MAX = 200;
 
 /** Where a found thing is: its chat or camp, the message a citation opens, and its words that matched. */
 const place = {
-  threadId: ThreadId,
-  threadTitle: Schema.String,
-  threadKind: ThreadKind,
+  channelId: ChannelId,
+  channelTitle: Schema.String,
+  channelKind: ChannelKind,
   hobId: AgentId,
   /** The message it came from, which a citation opens; null when no message made it, such as a Task's file. */
   messageId: Schema.NullOr(MessageId),

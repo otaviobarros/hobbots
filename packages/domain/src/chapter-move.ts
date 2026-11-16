@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { Channel, ChannelLifecycle } from "./channel.ts";
 import {
   Chapter,
   ChapterNotFound,
@@ -11,61 +12,60 @@ import {
   IllegalChapterTransition,
 } from "./chapter.ts";
 import type { ChapterId } from "./ids.ts";
-import { Thread, ThreadLifecycle } from "./thread.ts";
 
 /**
- * Moving a chapter into a camp (ADR 037): the chapter's messages and records leave the thread for
- * the camp, and the thread keeps the chapter as a stub, moved, that links there. In the camp they
+ * Moving a chapter into a camp (ADR 037): the chapter's messages and records leave the channel for
+ * the camp, and the channel keeps the chapter as a stub, moved, that links there. In the camp they
  * make its live chapter: the topic goes on there. A camp whose live chapter has no message yet, such
  * as one just made, takes them in that chapter; otherwise its live chapter rests and a new one holds
- * them. Moving the thread's live chapter starts a new, empty one in its place, so the thread always
+ * them. Moving the channel's live chapter starts a new, empty one in its place, so the channel always
  * has a live chapter for its next message.
  */
 
 /** What moving a chapter reads, as the command finds it in its transaction. */
 export interface ChapterMoveInput {
-  /** The thread the chapter is in, and its chapters in order. */
-  readonly from: Thread;
+  /** The channel the chapter is in, and its chapters in order. */
+  readonly from: Channel;
   readonly chapters: ReadonlyArray<Chapter>;
   readonly chapterId: ChapterId;
   /** Whether the chapter holds no message, which only a live chapter can. */
   readonly chapterEmpty: boolean;
   /** The camp it moves into, and its chapters in order. */
-  readonly to: Thread;
+  readonly to: Channel;
   readonly campChapters: ReadonlyArray<Chapter>;
   /** Whether the camp's live chapter holds no message yet. */
   readonly campLiveEmpty: boolean;
-  /** The ids of the chapters the move may make: the camp's new live chapter, and the thread's. */
+  /** The ids of the chapters the move may make: the camp's new live chapter, and the channel's. */
   readonly ids: { readonly landed: ChapterId; readonly nextLive: ChapterId };
   readonly at: string;
 }
 
 /** What a move writes. */
 export interface ChapterMovePlan {
-  /** The chapter as the thread keeps it: moved, linking to the camp. */
+  /** The chapter as the channel keeps it: moved, linking to the camp. */
   readonly stub: Chapter;
   /** The camp's chapter that now holds the moved messages and records: its live one. */
   readonly landed: Chapter;
-  /** The thread's chapters and the camp's afterwards, each with the ones the move wrote or made. */
+  /** The channel's chapters and the camp's afterwards, each with the ones the move wrote or made. */
   readonly from: ChapterPlan;
   readonly camp: ChapterPlan;
 }
 
 const refused = (input: ChapterMoveInput, reason: ChapterRefusal) =>
-  new ChapterRefused({ threadId: input.from.id, reason });
+  new ChapterRefused({ channelId: input.from.id, reason });
 
-/** Why the threads refuse the move, or null: an open thread, into another open camp of its hob. */
-const threadsRefusal = (input: ChapterMoveInput): ChapterRefusal | null => {
-  if (!ThreadLifecycle.isOpen(input.from)) return "thread-closed";
-  if (input.to.id === input.from.id) return "same-thread";
+/** Why the channels refuse the move, or null: an open channel, into another open camp of its hob. */
+const channelsRefusal = (input: ChapterMoveInput): ChapterRefusal | null => {
+  if (!ChannelLifecycle.isOpen(input.from)) return "channel-closed";
+  if (input.to.id === input.from.id) return "same-channel";
   const camp = input.to;
-  if (camp.kind !== "camp" || camp.agentId !== input.from.agentId || !ThreadLifecycle.isOpen(camp)) {
+  if (camp.kind !== "camp" || camp.ownerHobId !== input.from.ownerHobId || !ChannelLifecycle.isOpen(camp)) {
     return "not-a-camp";
   }
   return null;
 };
 
-/** The chapter as it leaves the thread, rested first when it was live, with the thread's next live one. */
+/** The chapter as it leaves the channel, rested first when it was live, with the channel's next live one. */
 const leaving = (input: ChapterMoveInput, chapter: Chapter) => {
   if (!ChapterStates.isLive(chapter)) return { rested: chapter, nextLive: null };
   const rested = ChapterStates.transition(chapter, { _tag: "End", at: input.at });
@@ -85,7 +85,7 @@ const landing = (input: ChapterMoveInput, moved: Chapter) => {
   }
   const landed = new Chapter({
     id: input.ids.landed,
-    threadId: input.to.id,
+    channelId: input.to.id,
     number: input.campChapters.length + 1,
     title: moved.title,
     summary: null,
@@ -101,17 +101,17 @@ const landing = (input: ChapterMoveInput, moved: Chapter) => {
 };
 
 /**
- * The pure rule of moving a chapter into a camp (ADR 037). Refused for a closed thread, into itself,
+ * The pure rule of moving a chapter into a camp (ADR 037). Refused for a closed channel, into itself,
  * into anything but an open camp of the same hob, for a chapter moved already, and for an empty one.
  */
 export const planMove = (
   input: ChapterMoveInput,
 ): ChapterMovePlan | ChapterRefused | ChapterNotFound | IllegalChapterTransition => {
-  const reason = threadsRefusal(input);
+  const reason = channelsRefusal(input);
   if (reason !== null) return refused(input, reason);
   const chapter = input.chapters.find((each) => each.id === input.chapterId);
-  if (chapter === undefined) return new ChapterNotFound({ threadId: input.from.id, chapterId: input.chapterId });
-  if (!ChapterStates.isInThread(chapter)) return refused(input, "moved");
+  if (chapter === undefined) return new ChapterNotFound({ channelId: input.from.id, chapterId: input.chapterId });
+  if (!ChapterStates.isInChannel(chapter)) return refused(input, "moved");
   if (input.chapterEmpty) return refused(input, "live-chapter-empty");
   const { rested, nextLive } = leaving(input, chapter);
   if (rested instanceof IllegalChapterTransition) return rested;
@@ -128,10 +128,10 @@ export const planMove = (
   };
 };
 
-/** A chapter moved into a camp, as the command answers it: both threads afterwards, and the stub left behind. */
+/** A chapter moved into a camp, as the command answers it: both channels afterwards, and the stub left behind. */
 export class ChapterMove extends Schema.Class<ChapterMove>("ChapterMove")({
-  thread: Thread,
-  camp: Thread,
+  channel: Channel,
+  camp: Channel,
   stub: Chapter,
   chapters: Schema.Array(Chapter),
   campChapters: Schema.Array(Chapter),

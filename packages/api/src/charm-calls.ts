@@ -1,7 +1,7 @@
-import { CharmCall, MessageId, Task, TaskId, ThreadId } from "@hobbots/domain";
+import { ChannelId, CharmCall, MessageId, Task, TaskId } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
-import { CharmCallNotFound, CharmCallSettled, ThreadNotFound } from "./errors.ts";
+import { ChannelNotFound, CharmCallNotFound, CharmCallSettled } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /** How the user settles an uncertain Charm call, after looking on GitHub (ADR 020, ADR 038). */
@@ -21,15 +21,15 @@ export type WaitingCharmCall = typeof WaitingCharmCall.Type;
  */
 export class CharmCallsGroup extends HttpApiGroup.make("charmCalls")
   .add(
-    // The thread's Charm calls, oldest first, whatever their state.
-    HttpApiEndpoint.get("forThread", "/threads/:threadId/charm-calls", {
-      params: { threadId: ThreadId },
+    // The channel's Charm calls, oldest first, whatever their state.
+    HttpApiEndpoint.get("forChannel", "/channels/:channelId/charm-calls", {
+      params: { channelId: ChannelId },
       success: Schema.Array(CharmCall),
-      error: ThreadNotFound,
+      error: ChannelNotFound,
     }),
     // Settles the uncertain call a reply step showed as.
-    HttpApiEndpoint.post("settle", "/threads/:threadId/messages/:messageId/steps/:stepId/settlement", {
-      params: { threadId: ThreadId, messageId: MessageId, stepId: Schema.String },
+    HttpApiEndpoint.post("settle", "/channels/:channelId/messages/:messageId/steps/:stepId/settlement", {
+      params: { channelId: ChannelId, messageId: MessageId, stepId: Schema.String },
       payload: SettleCharmCallPayload,
       success: CharmCall,
       error: [CharmCallNotFound, CharmCallSettled],

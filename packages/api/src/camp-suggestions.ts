@@ -2,15 +2,15 @@ import {
   CampSuggestion,
   CampSuggestionId,
   CampSuggestionRefusal,
+  ChannelId,
   ChapterId,
   ChapterMove,
   ChapterRefusal,
-  ThreadId,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { MakeCampPayload } from "./camp-payloads.ts";
-import { AgentNotFound, HobUnavailable, ThreadKeyReused, ThreadNotFound } from "./errors.ts";
+import { AgentNotFound, ChannelKeyReused, ChannelNotFound, HobUnavailable } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /**
@@ -18,7 +18,7 @@ import { DeviceSession } from "./user-session.ts";
  * made with it, as Make a camp takes it, whose `key` becomes the camp's id.
  */
 export const MoveChapterPayload = Schema.Union([
-  Schema.TaggedStruct("camp", { campId: ThreadId }),
+  Schema.TaggedStruct("camp", { campId: ChannelId }),
   Schema.TaggedStruct("new", MakeCampPayload.fields),
 ]);
 export type MoveChapterPayload = typeof MoveChapterPayload.Type;
@@ -26,21 +26,21 @@ export type MoveChapterPayload = typeof MoveChapterPayload.Type;
 /** A move that changed nothing, with why (`ChapterRefusal`). */
 export class ChapterMoveRefused extends Schema.TaggedError<ChapterMoveRefused>()(
   "ChapterMoveRefused",
-  { threadId: ThreadId, reason: ChapterRefusal },
+  { channelId: ChannelId, reason: ChapterRefusal },
   { httpApiStatus: 409 },
 ) {}
 
-/** The chapter to move is not in the thread. */
+/** The chapter to move is not in the channel. */
 export class ChapterMissing extends Schema.TaggedError<ChapterMissing>()(
   "ChapterMissing",
-  { threadId: ThreadId, chapterId: ChapterId },
+  { channelId: ChannelId, chapterId: ChapterId },
   { httpApiStatus: 404 },
 ) {}
 
 /** Keep in chat that changed nothing: the suggestion is not in the chat, or was accepted or expired. */
 export class CampSuggestionChangeRefused extends Schema.TaggedError<CampSuggestionChangeRefused>()(
   "CampSuggestionChangeRefused",
-  { threadId: ThreadId, suggestionId: CampSuggestionId, reason: CampSuggestionRefusal },
+  { channelId: ChannelId, suggestionId: CampSuggestionId, reason: CampSuggestionRefusal },
   { httpApiStatus: 409 },
 ) {}
 
@@ -51,23 +51,23 @@ export class CampSuggestionChangeRefused extends Schema.TaggedError<CampSuggesti
 export class CampSuggestionsGroup extends HttpApiGroup.make("campSuggestions")
   .add(
     // The suggestions the chat still offers, oldest first.
-    HttpApiEndpoint.get("campSuggestions", "/threads/:threadId/camp-suggestions", {
-      params: { threadId: ThreadId },
+    HttpApiEndpoint.get("campSuggestions", "/channels/:channelId/camp-suggestions", {
+      params: { channelId: ChannelId },
       success: Schema.Array(CampSuggestion),
-      error: ThreadNotFound,
+      error: ChannelNotFound,
     }),
     // Keeping a suggestion kept already returns it unchanged.
-    HttpApiEndpoint.post("keepInChat", "/threads/:threadId/camp-suggestions/:suggestionId/keep", {
-      params: { threadId: ThreadId, suggestionId: CampSuggestionId },
+    HttpApiEndpoint.post("keepInChat", "/channels/:channelId/camp-suggestions/:suggestionId/keep", {
+      params: { channelId: ChannelId, suggestionId: CampSuggestionId },
       success: CampSuggestion,
-      error: [ThreadNotFound, CampSuggestionChangeRefused],
+      error: [ChannelNotFound, CampSuggestionChangeRefused],
     }),
     // The same move asked again returns what it did.
-    HttpApiEndpoint.post("moveChapter", "/threads/:threadId/chapters/:chapterId/move", {
-      params: { threadId: ThreadId, chapterId: ChapterId },
+    HttpApiEndpoint.post("moveChapter", "/channels/:channelId/chapters/:chapterId/move", {
+      params: { channelId: ChannelId, chapterId: ChapterId },
       payload: MoveChapterPayload,
       success: ChapterMove,
-      error: [ThreadNotFound, ChapterMissing, ChapterMoveRefused, AgentNotFound, HobUnavailable, ThreadKeyReused],
+      error: [ChannelNotFound, ChapterMissing, ChapterMoveRefused, AgentNotFound, HobUnavailable, ChannelKeyReused],
     }),
   )
   .middleware(DeviceSession)

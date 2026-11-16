@@ -1,6 +1,7 @@
 import {
   type Actor,
   type AgentId,
+  type ChannelId,
   type FindResult,
   type FoundMessage,
   type FoundRecord,
@@ -8,7 +9,6 @@ import {
   type MessageId,
   type RegisteredArtifactKind,
   type SnippetPart,
-  type ThreadId,
 } from "@hobbots/domain";
 
 // What Find shows (ADR 037, #1386): what matched, grouped by kind in the design's order, each row
@@ -20,7 +20,7 @@ export type FindGroupKind = "decision" | "artifact" | "chapter" | "message";
 /** Where picking a row or a citation goes: its chat or camp, at the message it came from when it has one. */
 interface FindTarget {
   readonly hobId: AgentId;
-  readonly threadId: ThreadId;
+  readonly channelId: ChannelId;
   readonly messageId: MessageId | null;
 }
 
@@ -57,7 +57,7 @@ const plain = (text: string): ReadonlyArray<SnippetPart> => [{ text, match: fals
 
 const targetOf = (found: FoundRecord | FoundMessage): FindTarget => ({
   hobId: found.hobId,
-  threadId: found.threadId,
+  channelId: found.channelId,
   messageId: found.messageId,
 });
 
@@ -69,7 +69,7 @@ export const rowOf = (found: FoundRecord | FoundMessage, everywhere: boolean): F
     crossedOut: false,
     actor: null,
     at: found.at,
-    where: everywhere ? found.threadTitle : null,
+    where: everywhere ? found.channelTitle : null,
     artifact: null,
     chapterNumber: null,
     target: targetOf(found),

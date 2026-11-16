@@ -22,14 +22,14 @@ export const brainSwitches = (transcript: ReadonlyArray<Message>): ReadonlySet<s
   return switches;
 };
 
-/** The brain of the thread's latest reply, if it recorded one. */
+/** The brain of the channel's latest reply, if it recorded one. */
 export const lastReplyBrain = (transcript: ReadonlyArray<Message>): ReplyBrain | null => {
   const last = transcript.findLast((m) => m.role === "assistant" && m.runtime !== null);
   return last?.runtime == null ? null : { runtime: last.runtime, model: last.model };
 };
 
 /**
- * The brain a pick makes: the runtime and model picked, keeping the thread's effort when the model takes
+ * The brain a pick makes: the runtime and model picked, keeping the channel's effort when the model takes
  * it, otherwise the model's default.
  */
 export const pickedBrain = (

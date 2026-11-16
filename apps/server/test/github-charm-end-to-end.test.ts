@@ -32,11 +32,11 @@ import { type FakeGitHub, startFakeGitHub } from "@hobbots/charms/testing";
 import {
   type Agent,
   type ApprovalRequest,
+  type Channel,
   isInProgress,
   type Message,
   type ReplyStep,
   roleFields,
-  type Thread,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -263,13 +263,13 @@ const eventually = <A>(read: () => Promise<A | undefined>) =>
 
 const toolSteps = (reply: Message): ReadonlyArray<ReplyStep> => reply.steps.filter((step) => step.kind === "tool");
 
-const approvalsOf = async (thread: Thread) =>
-  (await request<ReadonlyArray<ApprovalRequest>>("GET", `/api/threads/${thread.id}/approvals`)).body;
+const approvalsOf = async (channel: Channel) =>
+  (await request<ReadonlyArray<ApprovalRequest>>("GET", `/api/channels/${channel.id}/approvals`)).body;
 
-/** The last reply of the thread once it has ended. */
-const settled = (thread: Thread) =>
+/** The last reply of the channel once it has ended. */
+const settled = (channel: Channel) =>
   eventually(async () => {
-    const reply = (await request<ReadonlyArray<Message>>("GET", `/api/threads/${thread.id}/messages`)).body.at(-1);
+    const reply = (await request<ReadonlyArray<Message>>("GET", `/api/channels/${channel.id}/messages`)).body.at(-1);
     return reply?.role === "assistant" && !isInProgress(reply.status) ? reply : undefined;
   });
 
@@ -297,17 +297,17 @@ const pip = async (): Promise<Agent> => {
   return hob;
 };
 
-/** Pip makes the scripted Charm calls in a new thread: the request it waits on, or its finished reply. */
+/** Pip makes the scripted Charm calls in a new channel: the request it waits on, or its finished reply. */
 const turn = async (...calls: Array<string>) => {
-  const thread = (await request<Thread>("POST", `/api/agents/${(await pip()).id}/threads`)).body;
+  const channel = (await request<Channel>("POST", `/api/agents/${(await pip()).id}/channels`)).body;
   const content = ["Go", ...calls.map((call) => `fake:hub ${call}`)].join("\n");
-  expect((await request("POST", `/api/threads/${thread.id}/messages`, { content })).status).toBe(200);
+  expect((await request("POST", `/api/channels/${channel.id}/messages`, { content })).status).toBe(200);
   return eventually(async () => {
-    const pending = (await approvalsOf(thread)).find((approval) => approval.state === "pending");
-    if (pending) return { thread, pending, reply: undefined };
-    const reply = (await request<ReadonlyArray<Message>>("GET", `/api/threads/${thread.id}/messages`)).body.at(-1);
+    const pending = (await approvalsOf(channel)).find((approval) => approval.state === "pending");
+    if (pending) return { channel, pending, reply: undefined };
+    const reply = (await request<ReadonlyArray<Message>>("GET", `/api/channels/${channel.id}/messages`)).body.at(-1);
     return reply?.role === "assistant" && !isInProgress(reply.status)
-      ? { thread, pending: undefined, reply }
+      ? { channel, pending: undefined, reply }
       : undefined;
   });
 };
@@ -322,7 +322,7 @@ const decide = (approval: ApprovalRequest, decision: Record<string, unknown>) =>
 
 /** Approves the request just this once and waits for the reply to end. */
 const approveOnce = async (
-  asked: { readonly thread: Thread; readonly pending?: ApprovalRequest | undefined },
+  asked: { readonly channel: Channel; readonly pending?: ApprovalRequest | undefined },
   high = false,
 ) => {
   expect(asked.pending).toBeDefined();
@@ -331,7 +331,7 @@ const approveOnce = async (
     ...(high ? { confirmed: true } : {}),
   });
   expect(decided.body).toMatchObject({ state: "approved" });
-  return settled(asked.thread);
+  return settled(asked.channel);
 };
 
 const connected = async () => {
@@ -467,7 +467,7 @@ describe("the GitHub Charm, end to end against a fake GitHub", () => {
     const again = await turn(call("github_push", { branch: "feat/x", force: true, key: "force-feat-x-2" }));
     expect(again.pending).toMatchObject({ onceOnly: true, state: "pending" });
     await decide(again.pending as ApprovalRequest, { decision: "deny", reason: "Not this time" });
-    await settled(again.thread);
+    await settled(again.channel);
     expect(github.headOf("octo/workshop", "feat/x")).toBe(rewritten);
   }, 30_000);
 
@@ -603,10 +603,10 @@ describe("the GitHub Charm, end to end against a fake GitHub", () => {
     }
 
     // What the hob and the clients read: every reply and every answer of the API, approvals included.
-    const threads = (await request<ReadonlyArray<Thread>>("GET", `/api/agents/${(await pip()).id}/threads`)).body;
-    for (const thread of threads) {
-      await request("GET", `/api/threads/${thread.id}/messages`);
-      await request("GET", `/api/threads/${thread.id}/approvals`);
+    const channels = (await request<ReadonlyArray<Channel>>("GET", `/api/agents/${(await pip()).id}/channels`)).body;
+    for (const channel of channels) {
+      await request("GET", `/api/channels/${channel.id}/messages`);
+      await request("GET", `/api/channels/${channel.id}/approvals`);
     }
     for (const text of answered) found.push(...leaks("an API answer", text));
 

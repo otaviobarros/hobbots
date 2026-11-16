@@ -1,5 +1,6 @@
 import {
   AgentId,
+  ChannelId,
   DEFAULT_QUEST_LIMITS,
   Quest,
   QuestId,
@@ -7,7 +8,6 @@ import {
   TaskId,
   type TaskState,
   TaskTree,
-  ThreadId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { COMMIT_RULE, memberPrompt, ownerBriefing, stepPrompt } from "../src/briefs.ts";
@@ -27,7 +27,7 @@ const task = (id: string, ownerId: AgentId, parentId: string | null, state: Task
     ownerId,
     parentId: parentId === null ? null : TaskId.make(parentId),
     rootId: TaskId.make("ledger"),
-    threadId: parentId === null ? ThreadId.make("chat") : null,
+    channelId: parentId === null ? ChannelId.make("chat") : null,
     brief: `Brief for ${id}`,
     state,
     dependsOn: [],
@@ -43,7 +43,7 @@ const quest = new Quest({
   taskId: TaskId.make("ledger"),
   leadId: FRODO,
   parentQuestId: null,
-  threadId: ThreadId.make("chat"),
+  channelId: ChannelId.make("chat"),
   goal: "Keep a pocket ledger",
   acceptance: [],
   limits: DEFAULT_QUEST_LIMITS,

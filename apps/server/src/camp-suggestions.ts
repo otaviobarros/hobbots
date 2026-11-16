@@ -25,7 +25,7 @@ const moveRequest = (payload: MoveChapterPayload) =>
 
 /** A refused move, as the API answers it. */
 const moveRefused = (refused: ChapterRefused) =>
-  Effect.fail(new ChapterMoveRefused({ threadId: refused.threadId, reason: refused.reason }));
+  Effect.fail(new ChapterMoveRefused({ channelId: refused.channelId, reason: refused.reason }));
 
 // Camp suggestions and moving a chapter into a camp (ADR 037, #1385), for user sessions only (PE-006).
 export const CampSuggestionsHandlers = HttpApiBuilder.group(HobbotsApi, "campSuggestions", (handlers) =>
@@ -39,13 +39,13 @@ export const CampSuggestionsHandlers = HttpApiBuilder.group(HobbotsApi, "campSug
     );
     const chat = yield* ChatService;
     return handlers.handleAll({
-      campSuggestions: ({ params }) => suggestions.listOpen(params.threadId),
+      campSuggestions: ({ params }) => suggestions.listOpen(params.channelId),
       keepInChat: ({ params }) =>
-        suggestions.keep(params.threadId, params.suggestionId).pipe(
+        suggestions.keep(params.channelId, params.suggestionId).pipe(
           Effect.catchTag("CampSuggestionRefused", (refused) =>
             Effect.fail(
               new CampSuggestionChangeRefused({
-                threadId: params.threadId,
+                channelId: params.channelId,
                 suggestionId: refused.suggestionId,
                 reason: refused.reason,
               }),
@@ -53,14 +53,14 @@ export const CampSuggestionsHandlers = HttpApiBuilder.group(HobbotsApi, "campSug
           ),
         ),
       moveChapter: ({ params, payload }) =>
-        chat.moveChapter(params.threadId, params.chapterId, moveRequest(payload)).pipe(
+        chat.moveChapter(params.channelId, params.chapterId, moveRequest(payload)).pipe(
           Effect.catchTag("ChapterRefused", moveRefused),
           Effect.catchTag("ChapterNotFound", (missing) =>
-            Effect.fail(new ChapterMissing({ threadId: missing.threadId, chapterId: missing.chapterId })),
+            Effect.fail(new ChapterMissing({ channelId: missing.channelId, chapterId: missing.chapterId })),
           ),
           // A chapter's state that refuses the move is one moved already: the planner checks it first.
           Effect.catchTag("IllegalChapterTransition", () =>
-            Effect.fail(new ChapterMoveRefused({ threadId: params.threadId, reason: "moved" })),
+            Effect.fail(new ChapterMoveRefused({ channelId: params.channelId, reason: "moved" })),
           ),
         ),
     });

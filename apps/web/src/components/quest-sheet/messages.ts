@@ -56,10 +56,10 @@ export const messages = {
     hobWork: ({ name }: Named) => `${name}'s work`,
     showHob: ({ name }: Named) => `Show ${name}'s work in the Workbench`,
     role: { lead: "leads", leads: "leads a party", member: "" },
-    thread: "Thread",
+    channel: "Thread",
     nothingYet: "Nothing said yet. The lead writes here when something lands or needs you.",
-    /** The quest's thread could not read what was said in its chat; what the Tasks hold still shows. */
-    threadUnread: "What was said in this quest could not be read.",
+    /** The quest's channel could not read what was said in its chat; what the Tasks hold still shows. */
+    channelUnread: "What was said in this quest could not be read.",
     you: "You",
     passedTo: ({ name }: Named) => `to ${name}`,
     delivered: "Delivered",

@@ -5,12 +5,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useIsNewHob } from "../../api/history.ts";
 import { useHobSkills } from "../../api/hob-skills.ts";
-import { useHobPresence, useThreadReplies } from "../../api/hub-status.ts";
+import { useChannelReplies, useHobPresence } from "../../api/hub-status.ts";
 import { hobMemoryScopesQuery } from "../../api/memory-saves.ts";
-import { agentsQuery, threadsQuery } from "../../api/queries.ts";
+import { agentsQuery, channelsQuery } from "../../api/queries.ts";
 import { presenceState } from "../../lib/hob-state.ts";
 import { PageToastViewport } from "../archive/archive-toast.tsx";
-import type { WorkspaceMainProps } from "../archived-threads/archived-threads.tsx";
+import type { WorkspaceMainProps } from "../archived-channels/archived-channels.tsx";
 import { HobSkillsTab, SkillsTabIcon } from "../hob-skills/hob-skills-tab.tsx";
 import { MemoryIcon } from "../memory/memory-parts.tsx";
 import { HobAside } from "./hob-aside.tsx";
@@ -60,13 +60,13 @@ export function HobPage({
 }
 
 function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: HistoryFilter; query: string }) {
-  const threads = useQuery(threadsQuery(hob.id));
-  const activity = useThreadReplies();
+  const channels = useQuery(channelsQuery(hob.id));
+  const activity = useChannelReplies();
   const need = useNeedLine(hob.id);
   const navigate = useNavigate();
-  const list = threads.data ?? [];
+  const list = channels.data ?? [];
   const state = presenceState(useHobPresence()[hob.id], hob.status);
-  const fresh = useIsNewHob(hob.id, threads.isSuccess ? list.length : undefined);
+  const fresh = useIsNewHob(hob.id, channels.isSuccess ? list.length : undefined);
 
   // The tab and the History filter live in the URL; Chats and Everything are the defaults and stay out of it.
   const go = (next: HobPageTab, filter: HistoryFilter = "all") =>
@@ -87,7 +87,7 @@ function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: Hi
         hob={hob}
         state={state}
         // The chat count is unknown until the chats are read: never "No chats yet" while asking.
-        stats={threads.isPending ? undefined : statsLine(hob, list.length)}
+        stats={channels.isPending ? undefined : statsLine(hob, list.length)}
         doing={doingOf(state, list, activity, need)}
         fresh={fresh}
       />
@@ -96,7 +96,7 @@ function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: Hi
           <TabsList aria-label={copy.tabs.label({ name: hob.name })}>
             <TabsTrigger value="chats">
               {copy.tabs.chats}
-              <ChatCount count={threads.isPending ? undefined : list.length} />
+              <ChatCount count={channels.isPending ? undefined : list.length} />
             </TabsTrigger>
             <TabsTrigger value="history">{copy.tabs.history}</TabsTrigger>
             <TabsTrigger value="memory">
@@ -111,12 +111,12 @@ function Page({ hob, tab, show, query }: { hob: Agent; tab: HobPageTab; show: Hi
             </TabsTrigger>
           </TabsList>
           <TabsContent value="chats">
-            {threads.isPending ? (
-              <ChatsLoading onRetry={() => void threads.refetch()} />
+            {channels.isPending ? (
+              <ChatsLoading onRetry={() => void channels.refetch()} />
             ) : list.length === 0 ? (
               <NewHob hob={hob} />
             ) : (
-              <HobChats hob={hob} threads={list} activity={activity} initialQuery={query} />
+              <HobChats hob={hob} channels={list} activity={activity} initialQuery={query} />
             )}
           </TabsContent>
           <TabsContent value="history">

@@ -1,4 +1,4 @@
-import { AgentId, type HobPresence, type StatusSnapshot, ThreadId, type ThreadRunStatus } from "@hobbots/domain";
+import { AgentId, ChannelId, type ChannelRunStatus, type HobPresence, type StatusSnapshot } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -11,10 +11,10 @@ vi.mock("./client.ts", () => ({
 const { applyStatusFrame, hubStatusQuery, statusReady } = await import("./hub-status.ts");
 
 const wren = AgentId.make("wren");
-const chat = ThreadId.make("t1");
+const chat = ChannelId.make("t1");
 
-const run = (revision: number, reply: ThreadRunStatus["reply"] = "working"): ThreadRunStatus => ({
-  threadId: chat,
+const run = (revision: number, reply: ChannelRunStatus["reply"] = "working"): ChannelRunStatus => ({
+  channelId: chat,
   rootMessageId: null,
   run: reply === null ? "idle" : "running",
   reply,
@@ -54,7 +54,7 @@ describe("the hub's status in the window", () => {
   it("keeps a status event that came while the snapshot was read, over the older snapshot (#1374)", async () => {
     const status = watched();
     await settled();
-    applyStatusFrame(status.client, frame({ _tag: "ThreadRunChanged", run: run(5, "thinking") }));
+    applyStatusFrame(status.client, frame({ _tag: "ChannelRunChanged", run: run(5, "thinking") }));
     applyStatusFrame(status.client, frame({ _tag: "HobPresenceChanged", presence: presence(3, "thinking") }));
     pending[0]?.(snapshot({ runsRevision: 4, runs: [run(4)], presenceRevision: 2, hobs: [presence(2, "idle")] }));
     await settled();
@@ -103,7 +103,7 @@ describe("the hub's status in the window", () => {
     await settled();
     pending[0]?.(snapshot({ runsRevision: 1, runs: [run(1)], presenceRevision: 1, hobs: [presence(1, "working")] }));
     await settled();
-    applyStatusFrame(status.client, frame({ _tag: "ThreadRunChanged", run: run(2, null) }));
+    applyStatusFrame(status.client, frame({ _tag: "ChannelRunChanged", run: run(2, null) }));
     applyStatusFrame(status.client, frame({ _tag: "HobPresenceRemoved", agentId: wren, revision: 2 }));
     expect(status.shown()).toEqual({ runs: null, hob: null });
     status.unsubscribe();

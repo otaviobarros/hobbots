@@ -30,6 +30,8 @@ import {
   AgentId,
   ArtifactId,
   AttemptId,
+  Channel,
+  ChannelId,
   ContentId,
   carriedFrom,
   DEFAULT_MEMORY_SETTINGS,
@@ -43,8 +45,6 @@ import {
   SkillRevisionHash,
   SUMMONING_DEFAULTS,
   TaskId,
-  Thread,
-  ThreadId,
   WebFetchRecord,
   WebRecordId,
   WebSearchRecord,
@@ -103,7 +103,7 @@ import { SkillsLive } from "../src/skills.ts";
 
 const now = "2026-11-03T10:00:00.000Z";
 const FRODO = AgentId.make("frodo");
-const threadId = ThreadId.make("shire");
+const channelId = ChannelId.make("shire");
 const taskId = TaskId.make("ring");
 /** Pasted into a message: a backup keeps chats exactly as written. */
 const PASTED = "ghp_pastedIntoTheChatOnPurpose";
@@ -162,7 +162,7 @@ const attempt: NewAttempt = {
   startedAt: now,
 };
 
-/** Frodo, a thread with a message, a Quest whose Task finished with an artifact, and two devices. */
+/** Frodo, a channel with a message, a Quest whose Task finished with an artifact, and two devices. */
 const seed = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
   yield* repo.insertAgent(
@@ -180,13 +180,13 @@ const seed = Effect.gen(function* () {
       createdAt: now,
     }),
   );
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: FRODO, title: "To Mordor", createdAt: now, updatedAt: now }),
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, ownerHobId: FRODO, title: "To Mordor", createdAt: now, updatedAt: now }),
   );
   yield* repo.upsertMessage(
     new Message({
       id: MessageId.make("m1"),
-      threadId,
+      channelId,
       actor: OWNER_ACTOR,
       role: "user",
       content: `Take the ring. ${PASTED}`,
@@ -198,7 +198,7 @@ const seed = Effect.gen(function* () {
   );
   const tasks = yield* TaskRepository;
   yield* tasks.createTask({
-    task: { id: taskId, ownerId: FRODO, parentId: null, threadId, brief: "Destroy it", dependsOn: [], createdAt: now },
+    task: { id: taskId, ownerId: FRODO, parentId: null, channelId, brief: "Destroy it", dependsOn: [], createdAt: now },
     delegation: null,
     milestones: [],
   });
@@ -290,7 +290,7 @@ const everyFileText = async (folder: string) => {
 };
 
 describe("backup and restore", () => {
-  it("brings back threads, Quests and artifacts after the data folder is deleted", async () => {
+  it("brings back channels, Quests and artifacts after the data folder is deleted", async () => {
     await onHub(dataDir, seed);
     await seedFiles(dataDir);
     const folder = join(destination, "one.hobbots-backup");
@@ -317,8 +317,8 @@ describe("backup and restore", () => {
         const tasks = yield* TaskRepository;
         const tree = Option.getOrThrow(yield* tasks.readTree(taskId));
         return {
-          threads: yield* repo.listThreads(FRODO),
-          messages: yield* repo.listMessages(threadId),
+          channels: yield* repo.listChannels(FRODO),
+          messages: yield* repo.listMessages(channelId),
           quests: tree.quests,
           artifacts: tree.artifacts,
           restore: yield* (yield* RestoreRepository).latest,
@@ -326,7 +326,7 @@ describe("backup and restore", () => {
         };
       }).pipe(Effect.provide(WorkHoldLive)),
     );
-    expect(restored.threads.map((thread) => thread.title)).toEqual(["To Mordor"]);
+    expect(restored.channels.map((channel) => channel.title)).toEqual(["To Mordor"]);
     expect(restored.messages.map((message) => message.content)).toEqual([`Take the ring. ${PASTED}`]);
     expect(restored.quests.map((quest) => quest.goal)).toEqual(["Destroy the ring"]);
     expect(restored.artifacts.map((artifact) => [artifact.label, artifact.value])).toEqual([
@@ -349,7 +349,7 @@ describe("backup and restore", () => {
   it("brings back web searches, pages read, Settings › Web and a hob's own limits (#1269)", async () => {
     const where = {
       agentId: FRODO,
-      threadId,
+      channelId,
       messageId: MessageId.make("m1"),
       taskId: null,
       attemptId: null,
@@ -764,6 +764,42 @@ describe("backup and restore", () => {
       // The next start migrates it.
       await Effect.runPromise(Effect.provide(Effect.void, SqliteLive(databaseOf(dir))));
     }
+  });
+
+  it("counts the threads of a data folder backed up before the rename to channels (#1610)", async () => {
+    const older = Object.fromEntries(
+      Object.entries(migrations).filter(([id]) => id < "20261115225102"),
+    ) as typeof migrations;
+    const at = "2026-11-15T00:00:00.000Z";
+    const seedThread = Effect.gen(function* () {
+      const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "ada",
+        name: "Ada",
+        runtime: "claude-code",
+        role_title: "Guide",
+        instructions: "",
+        look_seed: 1,
+        look_color: "moss",
+        created_at: at,
+      })}`;
+      yield* sql`INSERT INTO threads ${sql.insert({
+        id: "lamps",
+        agent_id: "ada",
+        title: "Lamps",
+        kind: "chat",
+        state: "open",
+        sessions: "[]",
+        created_at: at,
+        updated_at: at,
+        revision: 1,
+      })}`;
+    });
+    await Effect.runPromise(Effect.provide(seedThread, SqliteLive(databaseOf(dataDir), older)));
+    const made = await Effect.runPromise(backupBeforeMigrations(dataDir, "0.15.0"));
+    expect(made).not.toBeNull();
+    const manifest = await readBackup(made as string, knownSchemaVersion());
+    expect(manifest.counts).toEqual({ hobs: 1, threads: 1, quests: 0, tasks: 0, skills: 0 });
   });
 
   // covers ADR 028 (Backups)

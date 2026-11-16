@@ -18,11 +18,11 @@ export const messages = {
   /** The tray's scope in a chat or camp (#1423): what waits there, or everywhere. */
   scope: {
     label: "Show what waits",
-    here: ({ kind }: { kind: "chat" | "camp" }) => (kind === "camp" ? "This camp" : "This chat"),
+    here: ({ kind }: { kind: "direct" | "camp" }) => (kind === "camp" ? "This camp" : "This chat"),
     everywhere: "Everywhere",
     /** The tray of a chat or camp where nothing waits while something waits elsewhere. */
     elsewhereLabel: "Waiting elsewhere",
-    elsewhere: ({ kind, count }: { kind: "chat" | "camp"; count: number }) =>
+    elsewhere: ({ kind, count }: { kind: "direct" | "camp"; count: number }) =>
       plural(count, {
         one: `Nothing waits in this ${kind}. 1 thing waits elsewhere.`,
         other: `Nothing waits in this ${kind}. ${formatCount(count)} things wait elsewhere.`,

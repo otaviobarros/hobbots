@@ -1,7 +1,7 @@
 import { DateTime, Schema } from "effect";
 import { ApprovalId, type ApprovalRequest, ApprovalState, exactAction } from "./approval.ts";
 import { ApprovalLifetime } from "./grant-rule.ts";
-import { AgentId, ThreadId } from "./ids.ts";
+import { AgentId, ChannelId } from "./ids.ts";
 import { StoredOperation } from "./policy.ts";
 import { type Delegation, partyOf, type Quest, QuestId, type Question, QuestionId, QuestState } from "./quest.ts";
 import { type Attempt, AttemptId, type Task, TaskId } from "./task.ts";
@@ -25,12 +25,12 @@ const base = {
   /** The hob that did it, or that asked you. */
   agentId: AgentId,
   taskId: Schema.NullOr(TaskId),
-  threadId: Schema.NullOr(ThreadId),
+  channelId: Schema.NullOr(ChannelId),
   /**
-   * The hob whose chat holds `threadId`: the hob you asked, which for a member's work is not the hob
-   * that did it. Chat and Workbench open in that hob's chat. Null without a thread.
+   * The hob whose chat holds `channelId`: the hob you asked, which for a member's work is not the hob
+   * that did it. Chat and Workbench open in that hob's chat. Null without a channel.
    */
-  threadAgentId: Schema.NullOr(AgentId),
+  channelAgentId: Schema.NullOr(AgentId),
   /** The Attempt the Workbench opens on, when there is one. */
   attemptId: Schema.NullOr(AttemptId),
   quest: Schema.NullOr(HistoryQuest),
@@ -127,8 +127,8 @@ export interface HistoryRecords {
   readonly approvals: ReadonlyArray<ApprovalRequest>;
   /** The questions about `tasks` that reached you. */
   readonly questions: ReadonlyArray<Question>;
-  /** The hob whose chat holds each thread the records name. */
-  readonly threadOwners: ReadonlyMap<string, AgentId>;
+  /** The hob whose chat holds each channel the records name. */
+  readonly channelOwners: ReadonlyMap<string, AgentId>;
 }
 
 const newestFirst = (a: HistoryEvent, b: HistoryEvent) =>
@@ -141,8 +141,8 @@ export const historyEvents = (agentId: AgentId, records: HistoryRecords): Readon
   const delegated = new Map(records.delegations.map((delegation) => [delegation.childTaskId, delegation]));
   const attempts = new Map(records.attempts.map((attempt) => [attempt.id, attempt]));
   const tasks = new Map(records.tasks.map((task) => [task.id, task]));
-  const ownerOf = (threadId: ThreadId | null) =>
-    threadId === null ? null : (records.threadOwners.get(threadId) ?? null);
+  const ownerOf = (channelId: ChannelId | null) =>
+    channelId === null ? null : (records.channelOwners.get(channelId) ?? null);
   const short = (quest: Quest | undefined): HistoryQuest | null =>
     quest === undefined ? null : { id: quest.id, goal: quest.goal };
   // A member's Task serves the Quest that gave it; any other Task the Quest on it or on its top Task.
@@ -157,8 +157,8 @@ export const historyEvents = (agentId: AgentId, records: HistoryRecords): Readon
     at,
     agentId: task.ownerId,
     taskId: task.id,
-    threadId: task.threadId,
-    threadAgentId: ownerOf(task.threadId),
+    channelId: task.channelId,
+    channelAgentId: ownerOf(task.channelId),
     attemptId,
     quest: questOf(task.id, task.rootId),
   });
@@ -204,8 +204,8 @@ export const historyEvents = (agentId: AgentId, records: HistoryRecords): Readon
       at: when,
       agentId: quest.leadId,
       taskId: quest.taskId,
-      threadId: quest.threadId,
-      threadAgentId: ownerOf(quest.threadId),
+      channelId: quest.channelId,
+      channelAgentId: ownerOf(quest.channelId),
       attemptId: null,
       quest: short(quest),
     });
@@ -224,8 +224,8 @@ export const historyEvents = (agentId: AgentId, records: HistoryRecords): Readon
       at: approval.decidedAt ?? approval.createdAt,
       agentId: approval.agentId,
       taskId: approval.taskId,
-      threadId: approval.threadId,
-      threadAgentId: ownerOf(approval.threadId),
+      channelId: approval.channelId,
+      channelAgentId: ownerOf(approval.channelId),
       attemptId: null,
       quest: questOf(approval.taskId, approval.rootTaskId),
       approvalId: approval.id,

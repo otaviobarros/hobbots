@@ -6,12 +6,12 @@ import {
   BUILD,
   blackFriday,
   CAMPAIGN,
+  CHANNEL,
   COPY,
   checkpoint,
   memberApproval,
   QUILL,
   question,
-  THREAD,
   task,
   tree,
 } from "../../test/quests.ts";
@@ -33,7 +33,7 @@ describe("taskTitle", () => {
 });
 
 const message = (id: string, role: "user" | "assistant", createdAt: string) =>
-  ({ id: MessageId.make(id), threadId: THREAD, role, createdAt }) as unknown as Message;
+  ({ id: MessageId.make(id), channelId: CHANNEL, role, createdAt }) as unknown as Message;
 
 describe("where work stands", () => {
   it("puts a Task that waits on another under waiting, and one a question for you holds under needs you", () => {

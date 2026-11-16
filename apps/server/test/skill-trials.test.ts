@@ -20,12 +20,12 @@ import {
 } from "@hobbots/agents";
 import {
   type Agent,
+  type Channel,
   isInProgress,
   type Message,
   type RuntimeKind,
   roleFields,
   SKILL_PROPOSE_TOOL,
-  type Thread,
 } from "@hobbots/domain";
 import { MemoryProjectsLive } from "@hobbots/memory";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -199,17 +199,17 @@ const summon = async (name: string, runtime: RuntimeKind, lookSeed: number): Pro
   return summoned.body;
 };
 
-const messages = async (thread: Thread): Promise<ReadonlyArray<Message>> =>
-  (await request("GET", `/api/threads/${thread.id}/messages`)).body;
+const messages = async (channel: Channel): Promise<ReadonlyArray<Message>> =>
+  (await request("GET", `/api/channels/${channel.id}/messages`)).body;
 
 /** Sends `content` and waits for its reply to end; returns the reply and what its turn was given. */
-const turn = async (thread: Thread, content: string) => {
-  const before = (await messages(thread)).filter((m) => m.role === "assistant").length;
+const turn = async (channel: Channel, content: string) => {
+  const before = (await messages(channel)).filter((m) => m.role === "assistant").length;
   const turns = given.length;
-  const sent = await request("POST", `/api/threads/${thread.id}/messages`, { content });
+  const sent = await request("POST", `/api/channels/${channel.id}/messages`, { content });
   expect(sent.status).toBe(200);
   const reply = await eventually(async () => {
-    const ended = (await messages(thread)).filter((m) => m.role === "assistant" && !isInProgress(m.status));
+    const ended = (await messages(channel)).filter((m) => m.role === "assistant" && !isInProgress(m.status));
     return ended.length > before ? ended.at(-1) : undefined;
   });
   const [one] = given.slice(turns);
@@ -250,7 +250,7 @@ describe("trying a skill in a chat, and the health checks", () => {
     ).toBe(200);
 
     // A hob proposes a skill from its own chat; it waits in the Inbox.
-    const pipChat: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
+    const pipChat: Channel = (await request("POST", `/api/agents/${pip.id}/channels`)).body;
     const proposal = {
       key: "changelog",
       name: "changelog",
@@ -269,7 +269,7 @@ describe("trying a skill in a chat, and the health checks", () => {
     });
     expect(written.status).toBe(200);
     expect(written.body).toMatchObject({
-      agentId: pip.id,
+      ownerHobId: pip.id,
       title: "Trying Notes",
       skillTrial: { name: "notes", skillId: null, base: null, proposalId: null },
     });
@@ -326,11 +326,11 @@ describe("trying a skill in a chat, and the health checks", () => {
     }
 
     // A draft that breaks a check is refused as import refuses it, and no chat opens.
-    const threads = (await request("GET", `/api/agents/${pip.id}/threads`)).body.length;
+    const channels = (await request("GET", `/api/agents/${pip.id}/channels`)).body.length;
     const refused = await startTrial(pip.id, { _tag: "Written", text: "No front matter here." });
     expect(refused.status).toBeGreaterThanOrEqual(400);
     expect(refused.body._tag).toBe("SkillImportRefused");
-    expect((await request("GET", `/api/agents/${pip.id}/threads`)).body).toHaveLength(threads);
+    expect((await request("GET", `/api/agents/${pip.id}/channels`)).body).toHaveLength(channels);
     expect((await startTrial(pip.id, { _tag: "Proposal", proposalId: "missing" })).status).toBe(404);
 
     // Nothing reached the library: no skill, revision, assignment, change or use, and the proposal still waits.
@@ -403,28 +403,28 @@ describe("trying a skill in a chat, and the health checks", () => {
     );
     const started = await startTrial(pip.id, { _tag: "Written", text });
     expect(started.status).toBe(200);
-    const thread: Thread = started.body;
+    const channel: Channel = started.body;
 
     // The editor it came from opens on exactly the text you tried.
-    const read = await request("GET", `/api/skill-trials/${thread.id}`);
+    const read = await request("GET", `/api/skill-trials/${channel.id}`);
     expect(read).toMatchObject({ status: 200, body: { trial: { name: "standup", skillId: null }, text } });
     // An ordinary chat tries no draft.
-    const plain: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
+    const plain: Channel = (await request("POST", `/api/agents/${pip.id}/channels`)).body;
     expect((await request("GET", `/api/skill-trials/${plain.id}`)).body._tag).toBe("SkillDraftGone");
 
     // The draft's files go, as when a backup without them is restored.
-    const folder = join(drafts, thread.skillTrial?.hash ?? "");
+    const folder = join(drafts, channel.skillTrial?.hash ?? "");
     unlock(folder);
     rmSync(folder, { recursive: true, force: true });
-    expect(await request("GET", `/api/skill-trials/${thread.id}`)).toMatchObject({
+    expect(await request("GET", `/api/skill-trials/${channel.id}`)).toMatchObject({
       status: 404,
       body: { _tag: "SkillDraftGone" },
     });
     // The next message runs nothing without the draft, and the reply says how to try it again.
     const turns = given.length;
-    expect((await request("POST", `/api/threads/${thread.id}/messages`, { content: "Write it." })).status).toBe(200);
+    expect((await request("POST", `/api/channels/${channel.id}/messages`, { content: "Write it." })).status).toBe(200);
     const reply = await eventually(async () => {
-      const ended = (await messages(thread)).filter((m) => m.role === "assistant" && !isInProgress(m.status));
+      const ended = (await messages(channel)).filter((m) => m.role === "assistant" && !isInProgress(m.status));
       return ended.at(-1);
     });
     expect(reply).toMatchObject({ status: "failed" });

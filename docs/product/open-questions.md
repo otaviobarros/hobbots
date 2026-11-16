@@ -7,7 +7,7 @@ These choices are not decided yet. They do not reopen decided product direction.
 | Runtime support | Exact installed Codex/Claude/Gemini CLI/Ollama/ACP versions, integration routes, auth, sandbox/approval hooks, resume/cancel/concurrency/preview capabilities. |
 | Effect v4 | Exact compatible pins, SQL drivers and unstable Workflow/HttpApi integration; evaluate native durable Workflow versus persistent workflow services behind the domain interfaces. |
 | Toolchain | Package manager, workspace/build/test tooling, supported Node/Electron versions. Decided for the validation slice in ADR 009. |
-| Configuration | Canonical app database versus portable JSON/YAML definitions versus both; import and versioning details. The export of threads and work history is decided in [ADR 026](../decisions/026-backup-export-diagnostics.md); it is not a configuration format. |
+| Configuration | Canonical app database versus portable JSON/YAML definitions versus both; import and versioning details. The export of channels and work history is decided in [ADR 026](../decisions/026-backup-export-diagnostics.md); it is not a configuration format. |
 | Delegation default | Explicit collaborator allowlist versus all configured hobs by default; automatic dynamic agent creation is not assumed. |
 | Limits | Final concurrency, timeout, fairness, batching, retry and cost-limit defaults. The depth limit defaults to 2 ([ADR 018](../decisions/018-tasks-and-quests.md)). |
 | Remote-to-local routing | Explicit handoff versus configured scoped routes, pairing, grant transport and revocation. No silent privilege expansion. |
@@ -18,6 +18,6 @@ These choices are not decided yet. They do not reopen decided product direction.
 | UI extensions | Narrow-window behavior and a screen-reader and keyboard pass in the real app (the design tokens pass WCAG AA); generalized takeover/replay remains later. |
 | Providers | How API-key providers (Grok, OpenAI-compatible keys, Gemini without its CLI) run tools and delegation, given [ADR 002](../decisions/002-existing-runtimes.md)'s reuse of existing agent runtimes; what usage data each provider reports for the Usage potions. |
 | Home | Exact Home contents beyond the design (what is happening, a summary, usage limits); team grouping for many hobs. |
-| Optional suggestions | Thread forking/context snapshots and advanced memory are not MVP decisions. |
+| Optional suggestions | Channel forking/context snapshots and advanced memory are not MVP decisions. |
 
 These documents are concrete enough for requirements review and scoped engineering plans. They are not proof of live runtime capability, a production threat model, or an installed dependency stack. Avoid silently converting this table into defaults.

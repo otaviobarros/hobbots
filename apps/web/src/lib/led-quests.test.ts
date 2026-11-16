@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ledQuests } from "./led-quests.ts";
 
-const group = (id: string, leadId: string) => ({ quest: { id, leadId }, threadAgentId: leadId, members: [] }) as never;
+const group = (id: string, leadId: string) => ({ quest: { id, leadId }, channelAgentId: leadId, members: [] }) as never;
 
 const summary = (questId: string, done: number, working: number, needsYou: number) =>
   [questId, { questId, tones: { needs: 0, working, waiting: 0, done, problem: 0, idle: 0 }, needsYou }] as never;

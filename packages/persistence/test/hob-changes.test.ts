@@ -34,7 +34,7 @@ describe("HobChanges", () => {
       const sql = yield* SqlClient.SqlClient;
       yield* repo.insertAgent(hob(chief, "Chief"));
       const created = Option.getOrThrow(yield* repo.insertAgent(hob(wren, "Wren"))).value;
-      yield* sql`INSERT INTO threads ${sql.insert({
+      yield* sql`INSERT INTO channels ${sql.insert({
         id: "t1",
         agent_id: chief,
         title: "Hiring",
@@ -43,14 +43,14 @@ describe("HobChanges", () => {
       })}`;
       yield* sql`INSERT INTO chapters ${sql.insert({
         id: "c1",
-        thread_id: "t1",
+        channel_id: "t1",
         number: 1,
         state: "live",
         started_at: now,
       })}`;
       yield* sql`INSERT INTO messages ${sql.insert({
         id: "m1",
-        thread_id: "t1",
+        channel_id: "t1",
         chapter_id: "c1",
         actor_kind: "hob",
         actor_id: chief,
@@ -78,7 +78,7 @@ describe("HobChanges", () => {
     expect(result.forHob[0]).toMatchObject({
       from: "active",
       status: "paused",
-      origin: { charm: null, taskId: null, threadId: "t1", messageId: "m1" },
+      origin: { charm: null, taskId: null, channelId: "t1", messageId: "m1" },
     });
     expect(result.forHob[1]).toMatchObject({
       config: { version: 2, name: "Ash" },

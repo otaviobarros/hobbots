@@ -358,7 +358,7 @@ const acmeSteering = (pushesFrom: ReadonlyArray<string>): Promise<CallSteering> 
   };
   return charmTakeoversFor({
     agentId: AgentId.make("hob-1"),
-    threadId: null,
+    channelId: null,
     messageId: null,
     scope: () => "",
     currentAccess: Effect.succeed(tools),

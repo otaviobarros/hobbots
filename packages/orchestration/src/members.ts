@@ -129,7 +129,7 @@ const resumableAttempt = (task: Task, tree: TaskTree, config: AgentConfiguration
  * dispatcher, and goes on in the Task's current Attempt (#668). A turn that ends without the Task's result leaves it
  * waiting for what comes next, such as a hand-off from its lead or an answer, which starts the
  * next turn in the same session. A member's tool calls that need approval ask you directly, in the
- * Inbox, under the lead's thread (PE-006).
+ * Inbox, under the lead's channel (PE-006).
  */
 export const makeMemberRunner = (deps: MemberDeps) => {
   const { tasks, repo, running } = deps;
@@ -337,11 +337,11 @@ export const makeMemberRunner = (deps: MemberDeps) => {
         }
         const lead = yield* leadName(task, tree);
         const handle =
-          Option.isNone(deps.approvals) || task.threadId === null
+          Option.isNone(deps.approvals) || task.channelId === null
             ? null
             : yield* deps.approvals.value.forTurn(
-                // The member's requests reach you in the Inbox under its lead's thread, as its own (PE-006).
-                { agentId: agent.id, threadId: task.threadId, messageId: null, taskId: task.id },
+                // The member's requests reach you in the Inbox under its lead's channel, as its own (PE-006).
+                { agentId: agent.id, channelId: task.channelId, messageId: null, taskId: task.id },
                 currentAccessOf(run),
                 // A member's This Task binds to the top of its lead's tree, so it ends with the Quest (ADR 018).
                 Effect.succeed(task.rootId),
@@ -361,7 +361,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
               config,
               taskId: task.id,
               attemptId,
-              threadId: task.threadId,
+              channelId: task.channelId,
               prompt,
               sessionId,
               access: run.access,
@@ -372,7 +372,7 @@ export const makeMemberRunner = (deps: MemberDeps) => {
                   { agentId: agent.id, taskId: task.id, carried: work.holding },
                   {
                     attemptId,
-                    threadId: task.threadId,
+                    channelId: task.channelId,
                     currentAccess: currentAccessOf(run),
                     redactor: deps.redactor,
                     approvals,

@@ -9,14 +9,14 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  Channel,
+  ChannelId,
   type Checkpoint,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
   FileChangeId,
   QuestId,
   TaskId,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
 import {
@@ -41,7 +41,7 @@ const now = "2026-11-03T01:06:00.000Z";
 const FRODO = AgentId.make("frodo");
 const ROOK = AgentId.make("rook");
 const PIP = AgentId.make("pip");
-const threadId = ThreadId.make("badge");
+const channelId = ChannelId.make("badge");
 const LEAD = TaskId.make("site");
 const ROOK_TASK = TaskId.make("make-badge");
 const PIP_TASK = TaskId.make("review");
@@ -84,7 +84,7 @@ const hob = (id: AgentId, name: string) =>
   });
 
 const member = (id: TaskId, ownerId: AgentId) => ({
-  task: { id, ownerId, parentId: LEAD, threadId, brief: `Brief for ${id}`, dependsOn: [], createdAt: now },
+  task: { id, ownerId, parentId: LEAD, channelId, brief: `Brief for ${id}`, dependsOn: [], createdAt: now },
   delegation: {
     id: DelegationId.make(`d-${id}`),
     brief: `Brief for ${id}`,
@@ -105,8 +105,8 @@ const seedLead = (attempt: { readonly id: AttemptId; readonly startedAt: string 
       [PIP, "Pip"],
     ] as const)
       yield* repo.insertAgent(hob(id, name));
-    yield* repo.upsertThread(
-      new Thread({ id: threadId, agentId: FRODO, title: "Badge", createdAt: now, updatedAt: now }),
+    yield* repo.upsertChannel(
+      new Channel({ id: channelId, ownerHobId: FRODO, title: "Badge", createdAt: now, updatedAt: now }),
     );
     const tasks = yield* TaskRepository;
     yield* tasks.createTask({
@@ -114,7 +114,7 @@ const seedLead = (attempt: { readonly id: AttemptId; readonly startedAt: string 
         id: LEAD,
         ownerId: FRODO,
         parentId: null,
-        threadId,
+        channelId,
         brief: "Build the site",
         dependsOn: [],
         createdAt: now,

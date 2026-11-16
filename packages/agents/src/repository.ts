@@ -1,4 +1,4 @@
-import type { HobUnavailable, ThreadArchived, ThreadKeyReused } from "@hobbots/api";
+import type { ChannelArchived, ChannelKeyReused, HobUnavailable } from "@hobbots/api";
 import type {
   Actor,
   Agent,
@@ -9,6 +9,10 @@ import type {
   CarriedOver,
   CarriedOverEntry,
   ChangeActor,
+  Channel,
+  ChannelCheckpoint,
+  ChannelId,
+  ChannelMember,
   ChapterId,
   ChapterMove,
   ChapterNotFound,
@@ -24,22 +28,18 @@ import type {
   Retiring,
   SkillUse,
   StartedFresh,
-  Thread,
-  ThreadCheckpoint,
-  ThreadId,
-  ThreadMember,
   TurnRequest,
   TurnRequestId,
-  UnreadThreads,
+  UnreadChannels,
 } from "@hobbots/domain";
 import { Context, type Effect, type Option } from "effect";
 
 /** The camp a chapter moves into: an open camp of the hob's, or `camp`, made in the same transaction under its id as key. */
 export type ChapterMoveTarget =
-  | { readonly _tag: "camp"; readonly campId: ThreadId }
+  | { readonly _tag: "camp"; readonly campId: ChannelId }
   | {
       readonly _tag: "new";
-      readonly camp: Thread;
+      readonly camp: Channel;
       /** The other hobs the new camp is made with (ADR 039); the chapter's hob leads it. */
       readonly hobs?: ReadonlyArray<AgentId>;
     };
@@ -78,7 +78,7 @@ export interface SentMessage {
  */
 export type SendMessage = (message: Message, to: SentTo) => Effect.Effect<Committed<SentMessage>, MentionRefused>;
 
-/** Where hobs, their configuration versions, threads and messages are stored. Each write journals its events. */
+/** Where hobs, their configuration versions, channels and messages are stored. Each write journals its events. */
 export class HobbotsRepository extends Context.Service<
   HobbotsRepository,
   {
@@ -117,39 +117,39 @@ export class HobbotsRepository extends Context.Service<
      * it (another edit landed first).
      */
     readonly updateAgentConfig: (agent: Agent, actor?: ChangeActor) => Effect.Effect<Option.Option<Committed<Agent>>>;
-    /** The hob's live threads, most recently active first; archived threads are left out. */
-    readonly listThreads: (agentId: AgentId) => Effect.Effect<ReadonlyArray<Thread>>;
-    /** The hob's archived threads, most recently archived first. */
-    readonly listArchivedThreads: (agentId: AgentId) => Effect.Effect<ReadonlyArray<Thread>>;
-    readonly findThread: (id: ThreadId) => Effect.Effect<Option.Option<Thread>>;
+    /** The hob's live channels, most recently active first; archived channels are left out. */
+    readonly listChannels: (agentId: AgentId) => Effect.Effect<ReadonlyArray<Channel>>;
+    /** The hob's archived channels, most recently archived first. */
+    readonly listArchivedChannels: (agentId: AgentId) => Effect.Effect<ReadonlyArray<Channel>>;
+    readonly findChannel: (id: ChannelId) => Effect.Effect<Option.Option<Channel>>;
     /**
-     * Writes the thread, leaving how far you read it as it is: only `markThreadRead` moves that. A
-     * thread stored for the first time starts its first chapter in the same transaction (ADR 037),
-     * journaled as `ChapterStarted` after its `ThreadUpserted`, and its first two members, the
-     * person whose session made it and its hob, each journaled as `ThreadMemberAdded` (ADR 039).
+     * Writes the channel, leaving how far you read it as it is: only `markChannelRead` moves that. A
+     * channel stored for the first time starts its first chapter in the same transaction (ADR 037),
+     * journaled as `ChapterStarted` after its `ChannelUpserted`, and its first two members, the
+     * person whose session made it and its hob, each journaled as `ChannelMemberAdded` (ADR 039).
      */
-    readonly upsertThread: (thread: Thread) => Effect.Effect<Committed<Thread>>;
+    readonly upsertChannel: (channel: Channel) => Effect.Effect<Committed<Channel>>;
     /**
-     * Records that the person asking read the thread through `messageId`, as they saw it at
+     * Records that the person asking read the channel through `messageId`, as they saw it at
      * `revision` (ADR 027): their member row's marker takes the newest revision of the messages up to
      * it, but never past `revision`, so a reply continued after they saw it stays unread, and is
-     * journaled as `ThreadMemberChanged` (ADR 039). It only moves forward: none, and nothing journaled,
-     * when the message is not in the thread, they had read past it or they are not a member.
+     * journaled as `ChannelMemberChanged` (ADR 039). It only moves forward: none, and nothing journaled,
+     * when the message is not in the channel, they had read past it or they are not a member.
      */
-    readonly markThreadRead: (
-      threadId: ThreadId,
+    readonly markChannelRead: (
+      channelId: ChannelId,
       messageId: MessageId,
       revision: number,
-    ) => Effect.Effect<Option.Option<Committed<ThreadMember>>>;
-    /** The threads where a hob wrote since the person asking last read them (ADR 039, read markers per member). */
-    readonly listUnreadThreads: Effect.Effect<UnreadThreads>;
-    readonly listMessages: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<Message>>;
-    /** The message with `id`, in whichever thread it is. */
+    ) => Effect.Effect<Option.Option<Committed<ChannelMember>>>;
+    /** The channels where a hob wrote since the person asking last read them (ADR 039, read markers per member). */
+    readonly listUnreadChannels: Effect.Effect<UnreadChannels>;
+    readonly listMessages: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<Message>>;
+    /** The message with `id`, in whichever channel it is. */
     readonly findMessage: (id: MessageId) => Effect.Effect<Option.Option<Message>>;
     /**
      * Saves the message with the events it produces (`messageEvents`), and in the same transaction
      * any skill uses its turn recorded, each journaled as `SkillUsed` (ADR 029, The use line). A new
-     * message joins its thread's live chapter; the message returned carries the chapter it is in.
+     * message joins its channel's live chapter; the message returned carries the chapter it is in.
      * A hob's reply saved complete that @mentions other hobs of the camp owes each one a relay
      * request (ADR 039, Hobs talking to hobs), at one more than its turn's relay depth and `paused`
      * past `HOB_RELAY_BUDGET`, written with it; a reply whose turn was stopped relays nothing, and a
@@ -158,7 +158,7 @@ export class HobbotsRepository extends Context.Service<
     readonly upsertMessage: (message: Message, uses?: ReadonlyArray<SkillUse>) => Effect.Effect<Committed<Message>>;
     /**
      * Stores a message you send and decides who answers it in the same transaction (ADR 039, Who
-     * answers), from the thread's members and its running Quest as they stand at that moment. A
+     * answers), from the channel's members and its running Quest as they stand at that moment. A
      * message nobody answers is stored complete, never queued. A mention of a hob that cannot hear
      * it is refused, and nothing is stored. Without mentions nothing can be refused.
      */
@@ -173,15 +173,15 @@ export class HobbotsRepository extends Context.Service<
      * so a crash keeps what had streamed by then. Does nothing once the reply has ended.
      */
     readonly checkpointMessage: (message: Message) => Effect.Effect<void>;
-    /** Assistant replies whose turn has not ended (streaming or stopping), across every thread. */
+    /** Assistant replies whose turn has not ended (streaming or stopping), across every channel. */
     readonly listUnfinishedMessages: Effect.Effect<ReadonlyArray<Message>>;
-    /** The thread's queued message that has waited longest, if any (CH-008). */
-    readonly nextQueuedMessage: (threadId: ThreadId) => Effect.Effect<Option.Option<Message>>;
-    /** Threads with at least one queued message. */
-    readonly threadsWithQueuedMessages: Effect.Effect<ReadonlyArray<ThreadId>>;
+    /** The channel's queued message that has waited longest, if any (CH-008). */
+    readonly nextQueuedMessage: (channelId: ChannelId) => Effect.Effect<Option.Option<Message>>;
+    /** Channels with at least one queued message. */
+    readonly channelsWithQueuedMessages: Effect.Effect<ReadonlyArray<ChannelId>>;
     /**
      * Saves a queued message that started and its streaming reply in one transaction: the message
-     * moves after every message in the thread, into its live chapter, and the reply follows it, so a crash leaves either a
+     * moves after every message in the channel, into its live chapter, and the reply follows it, so a crash leaves either a
      * queued message or a reply that recovery marks interrupted. None, and nothing changed, when
      * the message is no longer queued.
      */
@@ -235,20 +235,20 @@ export class HobbotsRepository extends Context.Service<
       by: Actor | null,
     ) => Effect.Effect<Committed<ReadonlyArray<TurnRequest>>>;
     /**
-     * The configuration versions of the turns `agentId` passed in `threadId`, whose replies were
+     * The configuration versions of the turns `agentId` passed in `channelId`, whose replies were
      * removed (#1462), so a resumed session still hears instructions changed since.
      */
-    readonly passedConfigVersions: (threadId: ThreadId, agentId: AgentId) => Effect.Effect<ReadonlyArray<number>>;
+    readonly passedConfigVersions: (channelId: ChannelId, agentId: AgentId) => Effect.Effect<ReadonlyArray<number>>;
     /**
      * At start: requests whose turn was speaking when the hub stopped are answered by its interrupted
      * reply, or passed, with its reply removed, when its hob had passed.
      */
     readonly answerUnfinishedTurnRequests: Effect.Effect<Committed<void>>;
-    /** Threads with a `TurnRequest` waiting, or paused past the relay budget, so a start shows each line as it was. */
-    readonly threadsWithWaitingRequests: Effect.Effect<ReadonlyArray<ThreadId>>;
+    /** Channels with a `TurnRequest` waiting, or paused past the relay budget, so a start shows each line as it was. */
+    readonly channelsWithWaitingRequests: Effect.Effect<ReadonlyArray<ChannelId>>;
     /**
      * Takes `actor` out of a camp, by `by` (ADR 039, Members), in one transaction: the member moves to
-     * `removed`, journaled `ThreadMemberChanged`, and a hob's answers still waiting there are dropped,
+     * `removed`, journaled `ChannelMemberChanged`, and a hob's answers still waiting there are dropped,
      * recording who removed it, so it never takes the floor again. A queued message left with nothing
      * owed leaves the queue said. The answer it is speaking stays for Stop to end. One already gone is
      * returned as it is, with nothing journaled. A direct message, its owner, the hob a camp leads
@@ -256,45 +256,48 @@ export class HobbotsRepository extends Context.Service<
      * as the change is written, and the change itself when the camp was archived meanwhile.
      */
     readonly removeMember: (
-      threadId: ThreadId,
+      channelId: ChannelId,
       actor: Actor,
       by: Actor,
     ) => Effect.Effect<
-      Committed<{ readonly member: ThreadMember; readonly dropped: ReadonlyArray<TurnRequest> }>,
-      MemberRefused | ThreadArchived
+      Committed<{ readonly member: ChannelMember; readonly dropped: ReadonlyArray<TurnRequest> }>,
+      MemberRefused | ChannelArchived
     >;
-    /** Deletes a message that is still queued in the thread; none, and nothing deleted, when it is not. */
-    readonly removeQueuedMessage: (threadId: ThreadId, id: MessageId) => Effect.Effect<Option.Option<Committed<void>>>;
-    /** The thread's stored summary of older messages, if a handoff made one (ADR 017). */
-    readonly findCheckpoint: (threadId: ThreadId) => Effect.Effect<Option.Option<ThreadCheckpoint>>;
-    /** Replaces the thread's stored summary. */
-    readonly saveCheckpoint: (checkpoint: ThreadCheckpoint) => Effect.Effect<void>;
+    /** Deletes a message that is still queued in the channel; none, and nothing deleted, when it is not. */
+    readonly removeQueuedMessage: (
+      channelId: ChannelId,
+      id: MessageId,
+    ) => Effect.Effect<Option.Option<Committed<void>>>;
+    /** The channel's stored summary of older messages, if a handoff made one (ADR 017). */
+    readonly findCheckpoint: (channelId: ChannelId) => Effect.Effect<Option.Option<ChannelCheckpoint>>;
+    /** Replaces the channel's stored summary. */
+    readonly saveCheckpoint: (checkpoint: ChannelCheckpoint) => Effect.Effect<void>;
     /**
      * Writes a new camp and journals `CampMade`, in one transaction (ADR 037). The camp's id is the
      * command's key: the same camp stored under it already is returned as it is, with nothing
-     * journaled, and a different thread under it is refused. A hob it is made with that no longer
+     * journaled, and a different channel under it is refused. A hob it is made with that no longer
      * takes new work as it is written is refused `HobUnavailable`, and no camp is made.
      */
     readonly makeCamp: (
-      camp: Thread,
-      /** The other hobs it is made with, each journaled `ThreadMemberAdded` after its first two members. */
+      camp: Channel,
+      /** The other hobs it is made with, each journaled `ChannelMemberAdded` after its first two members. */
       hobs?: ReadonlyArray<AgentId>,
-    ) => Effect.Effect<Committed<Thread>, ThreadKeyReused | HobUnavailable>;
+    ) => Effect.Effect<Committed<Channel>, ChannelKeyReused | HobUnavailable>;
     /**
      * Moves a chapter into a camp, in one transaction (ADR 037, #1385): re-parents its messages,
      * decisions, artifacts and the quests started in it with their open questions and backpack
-     * items, leaves a stub in the thread, and journals `ChapterMoved`, after `CampMade` for a new
+     * items, leaves a stub in the channel, and journals `ChapterMoved`, after `CampMade` for a new
      * camp and before the suggestion it accepts and each moved backpack item. The same move asked
      * again returns what it did and journals nothing.
      */
     readonly moveChapter: (input: {
-      readonly threadId: ThreadId;
+      readonly channelId: ChannelId;
       readonly chapterId: ChapterId;
       readonly target: ChapterMoveTarget;
       readonly at: string;
     }) => Effect.Effect<
       Committed<ChapterMove>,
-      ChapterRefused | ChapterNotFound | IllegalChapterTransition | ThreadKeyReused | HobUnavailable
+      ChapterRefused | ChapterNotFound | IllegalChapterTransition | ChannelKeyReused | HobUnavailable
     >;
     /**
      * Start fresh, in one transaction (ADR 037): writes `superseded`, the chat after its Supersede,
@@ -303,21 +306,21 @@ export class HobbotsRepository extends Context.Service<
      * item as `BackpackItemChanged`. None, and nothing changed, when the chat changed since it was read.
      */
     readonly startFresh: (input: {
-      readonly superseded: Thread;
-      readonly chat: Thread;
+      readonly superseded: Channel;
+      readonly chat: Channel;
     }) => Effect.Effect<Option.Option<Committed<StartedFresh>>>;
-    /** What Start fresh carried into the thread, in the order it recorded them; none for most threads. */
-    readonly listCarriedOver: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<CarriedOver>>;
+    /** What Start fresh carried into the channel, in the order it recorded them; none for most channels. */
+    readonly listCarriedOver: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<CarriedOver>>;
     /**
-     * The thread's open work, as Start fresh would carry it (ADR 037): the Tasks asked for there
+     * The channel's open work, as Start fresh would carry it (ADR 037): the Tasks asked for there
      * that are not over, with their trees, their open questions and the backpack items the
-     * thread's turns carry. The context pack names it (#1380).
+     * channel's turns carry. The context pack names it (#1380).
      */
-    readonly listOpenWork: (threadId: ThreadId) => Effect.Effect<ChatWork>;
+    readonly listOpenWork: (channelId: ChannelId) => Effect.Effect<ChatWork>;
     /**
-     * What Start fresh would carry out of the thread if it ran now, in the order it would record
+     * What Start fresh would carry out of the channel if it ran now, in the order it would record
      * them, read with the same rule; it changes nothing.
      */
-    readonly carryOver: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<CarriedOverEntry>>;
+    readonly carryOver: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<CarriedOverEntry>>;
   }
 >()("@hobbots/agents/HobbotsRepository") {}

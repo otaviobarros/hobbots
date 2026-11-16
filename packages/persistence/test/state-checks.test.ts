@@ -1,5 +1,4 @@
-import { HobbotsRepository } from "@hobbots/agents";
-import { Agent, AgentId, AttemptState, QuestionState, QuestState, TaskState } from "@hobbots/domain";
+import { AttemptState, QuestionState, QuestState, TaskState } from "@hobbots/domain";
 import { Cause, Effect, Exit, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
@@ -13,46 +12,23 @@ import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const at = "2026-11-04T00:00:00.000Z";
 
-const agent = new Agent({
-  id: AgentId.make("frodo"),
-  name: "Frodo",
-  roleTitle: "Lead",
-  runtime: "claude-code",
-  model: null,
-  effort: null,
-  instructions: "",
-  lookSeed: 1,
-  lookColor: "moss",
-  configVersion: 1,
-  createdAt: at,
-});
-
-// Keeps 0047, 0076, 0079, 0080, 0082 and 0083 too: the repository that seeds the hob writes its name with
-// each version, its Charms, whether other hobs see it, its good at and who made and summoned it, and its Summoning scope;
-// 0053 and 0114 too: the journal moves a retired hob's thread members (ADR 039), which need both.
 const migrationsBefore = (id: string) =>
-  Object.fromEntries(
-    Object.entries(migrations).filter(
-      ([key]) =>
-        key < id ||
-        [
-          "0047_versioned_name",
-          "0076_charm_grants",
-          "0079_hob_visibility",
-          "0080_hob_good_at",
-          "0082_hob_actors",
-          "0083_summoning",
-          "0053_thread_reads",
-          "0114_thread_members",
-        ].includes(key),
-    ),
-  ) as typeof migrations;
+  Object.fromEntries(Object.entries(migrations).filter(([key]) => key < id)) as typeof migrations;
 
 /** One row in each of the four tables, written as raw SQL so nothing but the database checks it. */
 const seed = (taskState = "active") =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
-    yield* (yield* HobbotsRepository).insertAgent(agent);
+    yield* sql`INSERT INTO agents ${sql.insert({
+      id: "frodo",
+      name: "Frodo",
+      runtime: "claude-code",
+      roleTitle: "Lead",
+      instructions: "",
+      lookSeed: 1,
+      lookColor: "moss",
+      createdAt: at,
+    })}`;
     yield* sql`INSERT INTO tasks ${sql.insert({
       id: "top",
       ownerId: "frodo",

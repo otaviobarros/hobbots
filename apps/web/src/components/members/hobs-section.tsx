@@ -2,15 +2,15 @@ import type { HobToday, MembersReport } from "@hobbots/api";
 import {
   type Agent,
   AgentId,
+  type Channel,
+  type ChannelMember,
+  ChannelMembers,
   hobActor,
-  type Thread,
-  type ThreadMember,
-  ThreadMembers,
   takesNewWork,
 } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { useId, useState } from "react";
-import { useThreadRuns } from "../../api/hub-status.ts";
+import { useChannelRuns } from "../../api/hub-status.ts";
 import { useAddMember, useRemoveMember } from "../../api/members.ts";
 import { formatCompact } from "../../lib/format.ts";
 import { formatDay, formatTime } from "../../lib/time.ts";
@@ -32,17 +32,17 @@ export function HobsSection({
   hobs,
   members,
 }: {
-  camp: Thread;
+  camp: Channel;
   report: MembersReport;
   hobs: ReadonlyArray<Agent>;
-  members: ReadonlyArray<ThreadMember>;
+  members: ReadonlyArray<ChannelMember>;
 }) {
   const [adding, setAdding] = useState(false);
   const add = useAddMember(camp.id);
   const remove = useRemoveMember(camp.id);
   const [failure, setFailure] = useState<{ readonly error: MemberError; readonly name: string } | null>(null);
   const headingId = useId();
-  const runs = useThreadRuns()[camp.id];
+  const runs = useChannelRuns()[camp.id];
   const inCamp = new Set(members.map((member) => member.actor.id));
   // Every hob that takes new work and is not here yet, a hob taken out included.
   const joinable = hobs.filter((hob) => takesNewWork(hob) && !inCamp.has(hob.id));
@@ -80,8 +80,7 @@ export function HobsSection({
               key={member.actor.id}
               member={member}
               hob={hob}
-              // standards-allow STD-ARCH-021: the camp's lead is the hob it was made with (ADR 039)
-              lead={member.actor.id === camp.agentId}
+              lead={member.actor.id === camp.ownerHobId}
               today={report.today.find((each) => each.hobId === member.actor.id)}
               speaking={runs?.speaking ?? null}
               next={runs?.next ?? []}
@@ -126,7 +125,7 @@ function HobRow({
   removable,
   onRemove,
 }: {
-  member: ThreadMember;
+  member: ChannelMember;
   hob: Agent | undefined;
   lead: boolean;
   today: HobToday | undefined;
@@ -155,7 +154,7 @@ function HobRow({
           {copy.tokens({ tokens: formatCompact(today?.tokens ?? 0) })}
         </span>
         {/* A hob that retired left the camp, and comes back with it when it returns: nothing to take out. */}
-        {removable && !lead && ThreadMembers.isActive(member) && (
+        {removable && !lead && ChannelMembers.isActive(member) && (
           <button
             type="button"
             aria-label={copy.remove({ name })}
@@ -181,12 +180,12 @@ function HobLine({
   speaking,
   next,
 }: {
-  member: ThreadMember;
+  member: ChannelMember;
   today: HobToday | undefined;
   speaking: AgentId | null;
   next: ReadonlyArray<AgentId>;
 }) {
-  if (!ThreadMembers.isActive(member)) return <small className="truncate text-meta text-label">{copy.left}</small>;
+  if (!ChannelMembers.isActive(member)) return <small className="truncate text-meta text-label">{copy.left}</small>;
   if (speaking === member.actor.id) return <small className="truncate text-meta text-mint">{copy.speaking}</small>;
   if (next.some((hobId) => hobId === member.actor.id)) {
     return <small className="truncate text-meta text-text-secondary">{copy.waiting}</small>;

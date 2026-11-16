@@ -1,8 +1,8 @@
-import type { Agent, AgentId, Thread } from "@hobbots/domain";
+import type { Agent, AgentId, Channel } from "@hobbots/domain";
 import { Toast, ToastAction, ToastDescription, ToastProvider, ToastViewport } from "@hobbots/ui/components/toast";
 import { createContext, type ReactNode, useContext, useState } from "react";
-import { useArchiveThread } from "../../api/archive.ts";
-import { useRestoreThread } from "../../api/archived-threads.ts";
+import { useArchiveChannel } from "../../api/archive.ts";
+import { useRestoreChannel } from "../../api/archived-channels.ts";
 import { useBringBackHob, useRetireAgain } from "../../api/queries.ts";
 import { messages } from "./messages.ts";
 
@@ -10,8 +10,8 @@ const copy = messages.toast;
 
 /** What the Archive's toast says; `id` makes each notice a new toast. */
 type Notice = { readonly id: number; readonly hob: Agent } & (
-  | { readonly kind: "restored"; readonly thread: Thread }
-  | { readonly kind: "failed"; readonly action: "restore" | "undo"; readonly thread: Thread }
+  | { readonly kind: "restored"; readonly channel: Channel }
+  | { readonly kind: "failed"; readonly action: "restore" | "undo"; readonly channel: Channel }
   | { readonly kind: "back"; readonly chats: number }
   | { readonly kind: "hob-failed"; readonly action: "bring-back" | "undo"; readonly chats: number }
 );
@@ -20,9 +20,9 @@ type NoticeBody = Notice extends infer N ? (N extends Notice ? Omit<N, "id"> : n
 
 interface ArchiveActions {
   /** Restores an archived chat, then says so with Undo. `onDone` runs once it is restored. */
-  readonly restore: (hob: Agent, thread: Thread, onDone?: () => void) => void;
+  readonly restore: (hob: Agent, channel: Channel, onDone?: () => void) => void;
   /** Whether this chat is being restored or archived again right now. */
-  readonly busy: (thread: Thread) => boolean;
+  readonly busy: (channel: Channel) => boolean;
   /**
    * Brings a retired hob back, then says how many chats came with it, with Undo. `onDone` runs once
    * it is back.
@@ -45,27 +45,27 @@ export const useArchiveActions = (): ArchiveActions => {
  * back to the list. Undo archives a restored chat again, or retires a hob brought back.
  */
 export function ArchiveNotices({ children }: { children: ReactNode }) {
-  const restoring = useRestoreThread();
-  const archiving = useArchiveThread();
+  const restoring = useRestoreChannel();
+  const archiving = useArchiveChannel();
   const bringing = useBringBackHob();
   const retiring = useRetireAgain();
   const [notice, setNotice] = useState<Notice | null>(null);
   const show = (body: NoticeBody) => setNotice((old) => ({ ...body, id: (old?.id ?? 0) + 1 }) as Notice);
 
-  const restore = (hob: Agent, thread: Thread, onDone?: () => void) => {
+  const restore = (hob: Agent, channel: Channel, onDone?: () => void) => {
     setNotice(null);
-    restoring.mutate(thread.id, {
+    restoring.mutate(channel.id, {
       onSuccess: () => {
         onDone?.();
-        show({ kind: "restored", hob, thread });
+        show({ kind: "restored", hob, channel });
       },
-      onError: () => show({ kind: "failed", action: "restore", hob, thread }),
+      onError: () => show({ kind: "failed", action: "restore", hob, channel }),
     });
   };
 
-  const archiveAgain = (hob: Agent, thread: Thread) => {
+  const archiveAgain = (hob: Agent, channel: Channel) => {
     setNotice(null);
-    archiving.mutate(thread, { onError: () => show({ kind: "failed", action: "undo", hob, thread }) });
+    archiving.mutate(channel, { onError: () => show({ kind: "failed", action: "undo", hob, channel }) });
   };
 
   const bringBack = (hob: Agent, chats: number, onDone?: () => void) => {
@@ -84,20 +84,20 @@ export function ArchiveNotices({ children }: { children: ReactNode }) {
     retiring.mutate(hob.id, { onError: () => show({ kind: "hob-failed", action: "undo", hob, chats }) });
   };
 
-  const busy = (thread: Thread) =>
-    (restoring.isPending && restoring.variables === thread.id) ||
-    (archiving.isPending && archiving.variables?.id === thread.id);
+  const busy = (channel: Channel) =>
+    (restoring.isPending && restoring.variables === channel.id) ||
+    (archiving.isPending && archiving.variables?.id === channel.id);
   const hobBusy = (hobId: AgentId) =>
     (bringing.isPending && bringing.variables === hobId) || (retiring.isPending && retiring.variables === hobId);
 
   const undo = (current: Notice) => {
-    if (current.kind === "restored") archiveAgain(current.hob, current.thread);
+    if (current.kind === "restored") archiveAgain(current.hob, current.channel);
     if (current.kind === "back") retireAgain(current.hob, current.chats);
   };
   const retry = (current: Notice) => {
     if (current.kind === "failed") {
-      if (current.action === "undo") archiveAgain(current.hob, current.thread);
-      else restore(current.hob, current.thread);
+      if (current.action === "undo") archiveAgain(current.hob, current.channel);
+      else restore(current.hob, current.channel);
     }
     if (current.kind === "hob-failed") {
       if (current.action === "undo") retireAgain(current.hob, current.chats);
@@ -133,11 +133,11 @@ const toastText = (notice: Notice): { line: string; action: string; alt: string;
   const name = notice.hob.name;
   switch (notice.kind) {
     case "restored": {
-      const title = notice.thread.title;
+      const title = notice.channel.title;
       return { line: copy.restored({ title, name }), action: copy.undo, alt: copy.undoAlt({ title }), failed: false };
     }
     case "failed": {
-      const title = notice.thread.title;
+      const title = notice.channel.title;
       const line = notice.action === "undo" ? copy.undoFailed({ title }) : copy.restoreFailed({ title });
       return { line, action: copy.tryAgain, alt: copy.tryAgainAlt({ title }), failed: true };
     }

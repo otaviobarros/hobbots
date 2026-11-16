@@ -244,7 +244,7 @@ export const test = base.extend<{
 export { expect } from "@playwright/test";
 
 /**
- * A camp for the hob, made as Make a camp makes one (ADR 037), titled `title`: a thread of its own
+ * A camp for the hob, made as Make a camp makes one (ADR 037), titled `title`: a channel of its own
  * beside the hob's one chat. Gives back its address in the web client.
  */
 export const campAt = async (
@@ -261,11 +261,11 @@ export const campAt = async (
   });
   if (!response.ok) throw new Error(`Make a camp answered ${response.status}: ${await response.text()}`);
   const camp = (await response.json()) as { readonly id: string };
-  return { id: camp.id, url: `${current.url}/#/hobs/${hobId}/threads/${camp.id}` };
+  return { id: camp.id, url: `${current.url}/#/hobs/${hobId}/channels/${camp.id}` };
 };
 
 /** A camp in the sidebar's Camps, a link named by its title (ADR 039, The sidebar). */
-export const sidebarThread = (page: Page, title: string) =>
+export const sidebarChannel = (page: Page, title: string) =>
   page
     .getByRole("navigation", { name: "Sections" })
     .getByRole("list", { name: "Camps" })

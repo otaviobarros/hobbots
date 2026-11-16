@@ -1,11 +1,11 @@
 import {
   AgentId,
+  ChannelId,
   hobActor,
   Message,
   MessageId,
   OWNER_ACTOR,
   type ReplyStep,
-  ThreadId,
   type TurnCause,
   TurnRequest,
   TurnRequestId,
@@ -23,7 +23,7 @@ const PIP = AgentId.make("pip");
 const reply = (content: string, steps: ReadonlyArray<ReplyStep> = []) =>
   new Message({
     id: MessageId.make("reply-pip"),
-    threadId: ThreadId.make("camp"),
+    channelId: ChannelId.make("camp"),
     actor: hobActor(PIP),
     role: "assistant",
     content,
@@ -37,7 +37,7 @@ const reply = (content: string, steps: ReadonlyArray<ReplyStep> = []) =>
 const owed = (cause: TurnCause, state: TurnRequestState = "speaking") =>
   new TurnRequest({
     id: TurnRequestId.make(`r-${cause}`),
-    threadId: ThreadId.make("camp"),
+    channelId: ChannelId.make("camp"),
     rootMessageId: null,
     hobId: PIP,
     messageId: MessageId.make("plan"),

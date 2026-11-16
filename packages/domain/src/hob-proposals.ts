@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { AgentStatus, ConfigVersion, RetireWork } from "./agent.ts";
 import { ChangeCall } from "./change-actor.ts";
-import { AgentId, MessageId, ThreadId } from "./ids.ts";
+import { AgentId, ChannelId, MessageId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { CharmOperationId } from "./policy.ts";
 import { Revision } from "./revision.ts";
@@ -73,7 +73,7 @@ export class HobProposal extends Schema.Class<HobProposal>("HobProposal")({
   tool: Schema.String,
   /** The call behind it: the work its key belongs to and the key, as a change it applies records (ADR 031). */
   call: ChangeCall,
-  threadId: Schema.NullOr(ThreadId),
+  channelId: Schema.NullOr(ChannelId),
   messageId: Schema.NullOr(MessageId),
   /** The Task the manager's turn worked on, or null outside one. */
   taskId: Schema.NullOr(TaskId),

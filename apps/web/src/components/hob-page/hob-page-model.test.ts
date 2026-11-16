@@ -1,9 +1,9 @@
-import { AgentId, ThreadId } from "@hobbots/domain";
+import { AgentId, ChannelId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { doingOf, helloOf, isHobPageTab, needLine, startersOf, stateTag, statsLine } from "./hob-page-model.ts";
 
-const plan = { id: ThreadId.make("t-plan"), title: "Plan the spring launch" };
-const notes = { id: ThreadId.make("t-notes"), title: "Meeting notes" };
+const plan = { id: ChannelId.make("t-plan"), title: "Plan the spring launch" };
+const notes = { id: ChannelId.make("t-notes"), title: "Meeting notes" };
 
 describe("stateTag", () => {
   it("gives each state one of the four families, with its glyph and word", () => {

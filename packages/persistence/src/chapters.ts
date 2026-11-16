@@ -1,5 +1,7 @@
 import { ChapterRepository, type SplitInput } from "@hobbots/agents";
 import {
+  type Channel,
+  type ChannelId,
   Chapter,
   ChapterId,
   type ChapterNotFound,
@@ -13,24 +15,22 @@ import {
   planSplit,
   planStart,
   type SplitPoint,
-  type Thread,
-  type ThreadId,
 } from "@hobbots/domain";
 import { DateTime, Effect, Layer } from "effect";
 import { SqlClient, type SqlError, type Statement } from "effect/sql";
 import { reconcileSplit } from "./camp-suggestion-rows.ts";
+import { keepReadersRead } from "./channel-member-rows.ts";
 import { chapterRows, messagesRevisionOf } from "./chapter-rows.ts";
 import { makeJournaledChange } from "./journal.ts";
-import { keepReadersRead } from "./thread-member-rows.ts";
 
-// A thread's chapters (ADR 037, migration 0099). The rules of each command are the pure planners
+// A channel's chapters (ADR 037, migration 0099). The rules of each command are the pure planners
 // in @hobbots/domain; this runs them on the chapters as stored, inside the transaction that writes
 // their result and journals its event, so a crash leaves all of a change or none of it.
 
 /** The columns a chapter is stored in. */
 export const chapterColumns = (chapter: Chapter) => ({
   id: chapter.id,
-  thread_id: chapter.threadId,
+  channel_id: chapter.channelId,
   number: chapter.number,
   title: chapter.title,
   summary: chapter.summary,
@@ -42,16 +42,16 @@ export const chapterColumns = (chapter: Chapter) => ({
 });
 
 /**
- * Starts the first chapter of `thread` at `revision`, the sequence of the `ChapterStarted` that
- * journals it, unless the thread has chapters already; the chapter started, or null. Every thread
+ * Starts the first chapter of `channel` at `revision`, the sequence of the `ChapterStarted` that
+ * journals it, unless the channel has chapters already; the chapter started, or null. Every channel
  * stored has a live chapter for its messages to join (ADR 037).
  */
-export const startFirstChapterIn = (sql: SqlClient.SqlClient) => (thread: Thread, revision: number) =>
+export const startFirstChapterIn = (sql: SqlClient.SqlClient) => (channel: Channel, revision: number) =>
   Effect.gen(function* () {
-    const chaptered = yield* sql`SELECT 1 FROM chapters WHERE thread_id = ${thread.id} LIMIT 1`;
+    const chaptered = yield* sql`SELECT 1 FROM chapters WHERE channel_id = ${channel.id} LIMIT 1`;
     if (chaptered.length > 0) return null;
     const started = new Chapter({
-      ...firstChapter(ChapterId.make(crypto.randomUUID()), thread.id, thread.createdAt),
+      ...firstChapter(ChapterId.make(crypto.randomUUID()), channel.id, channel.createdAt),
       revision,
     });
     yield* sql`INSERT INTO chapters ${sql.insert(chapterColumns(started))}`;
@@ -67,7 +67,7 @@ export const writeChapters = (sql: SqlClient.SqlClient, plan: ChapterPlan) =>
     plan.changed,
     (chapter) =>
       sql`INSERT INTO chapters ${sql.insert(chapterColumns(chapter))} ON CONFLICT (id) DO UPDATE SET
-        thread_id = excluded.thread_id,
+        channel_id = excluded.channel_id,
         number = excluded.number,
         title = excluded.title,
         summary = excluded.summary,
@@ -101,8 +101,8 @@ export const ChapterRepositoryLive = Layer.effect(
     const sql = yield* SqlClient.SqlClient;
     const journaledChange = makeJournaledChange(sql);
 
-    const listChapters = (threadId: ThreadId) =>
-      sql`SELECT * FROM chapters WHERE thread_id = ${threadId} ORDER BY number`.pipe(Effect.map(chapterRows));
+    const listChapters = (channelId: ChannelId) =>
+      sql`SELECT * FROM chapters WHERE channel_id = ${channelId} ORDER BY number`.pipe(Effect.map(chapterRows));
 
     // A command whose chapter already exists, or was merged away, ran before: it changes nothing.
     const ranBefore = (id: ChapterId) =>
@@ -111,8 +111,8 @@ export const ChapterRepositoryLive = Layer.effect(
           UNION ALL SELECT id FROM merged_chapters WHERE id = ${id}`;
         return known.length > 0;
       });
-    const unchanged = (threadId: ThreadId) =>
-      listChapters(threadId).pipe(
+    const unchanged = (channelId: ChannelId) =>
+      listChapters(channelId).pipe(
         Effect.map(
           (chapters): Written => ({
             value: { chapters, changed: [] },
@@ -124,10 +124,10 @@ export const ChapterRepositoryLive = Layer.effect(
     const writeChanged = (plan: ChapterPlan) => writeChapters(sql, plan);
 
     // Moves messages to another chapter at `revision`, the sequence of the event that moves them, so a
-    // client holding an earlier version of one takes this one. A thread you had read stays read.
-    const moveMessages = (threadId: ThreadId, revision: number, to: ChapterId, which: Statement.Fragment) =>
+    // client holding an earlier version of one takes this one. A channel you had read stays read.
+    const moveMessages = (channelId: ChannelId, revision: number, to: ChapterId, which: Statement.Fragment) =>
       Effect.gen(function* () {
-        yield* keepReadersRead(sql, [threadId], revision);
+        yield* keepReadersRead(sql, [channelId], revision);
         yield* sql`UPDATE messages SET chapter_id = ${to}, revision = ${revision} WHERE ${which}`;
       });
 
@@ -150,15 +150,15 @@ export const ChapterRepositoryLive = Layer.effect(
     // A change of chapter boundaries leaves nothing behind that was worked out from the old ones: the
     // briefing checkpoint summed up messages that may now be in another chapter (STD-ARCH-018), and
     // `dropped` chapters' sessions, which must not be resumed when one of them is live again.
-    const forgetBoundaries = (threadId: ThreadId, dropped: ReadonlyArray<ChapterId>) =>
+    const forgetBoundaries = (channelId: ChannelId, dropped: ReadonlyArray<ChapterId>) =>
       Effect.gen(function* () {
-        yield* sql`DELETE FROM thread_checkpoints WHERE thread_id = ${threadId}`;
+        yield* sql`DELETE FROM channel_checkpoints WHERE channel_id = ${channelId}`;
         if (dropped.length === 0) return;
-        const [row] = yield* sql<{ readonly sessions: unknown }>`SELECT sessions FROM threads WHERE id = ${threadId}`;
+        const [row] = yield* sql<{ readonly sessions: unknown }>`SELECT sessions FROM channels WHERE id = ${channelId}`;
         const sessions: ReadonlyArray<{ readonly chapterId?: unknown }> = JSON.parse(String(row?.sessions ?? "[]"));
         const kept = sessions.filter((session) => !dropped.includes(session.chapterId as ChapterId));
         if (kept.length === sessions.length) return;
-        yield* sql`UPDATE threads SET sessions = ${JSON.stringify(kept)} WHERE id = ${threadId}`;
+        yield* sql`UPDATE channels SET sessions = ${JSON.stringify(kept)} WHERE id = ${channelId}`;
       });
 
     // Runs a planned command, or fails with its refusal, which rolls the transaction back.
@@ -171,9 +171,9 @@ export const ChapterRepositoryLive = Layer.effect(
     const changedOne = (plan: ChapterPlan, id: ChapterId) =>
       plan.changed.find((chapter) => chapter.id === id) as Chapter;
 
-    // A command that makes chapter `id`, its idempotency key, from the thread's chapters as stored.
+    // A command that makes chapter `id`, its idempotency key, from the channel's chapters as stored.
     const making = (
-      threadId: ThreadId,
+      channelId: ChannelId,
       id: ChapterId,
       body: (
         first: number,
@@ -182,32 +182,32 @@ export const ChapterRepositoryLive = Layer.effect(
     ) =>
       journaledChange<ChapterPlan, ChapterRefused | IllegalChapterTransition>((first) =>
         Effect.gen(function* () {
-          if (yield* ranBefore(id)) return yield* unchanged(threadId);
-          return yield* body(first, yield* listChapters(threadId));
+          if (yield* ranBefore(id)) return yield* unchanged(channelId);
+          return yield* body(first, yield* listChapters(channelId));
         }),
       );
 
-    const startChapter = (threadId: ThreadId, input: { id: ChapterId; title: string; at: string }) =>
-      making(threadId, input.id, (first, chapters) =>
+    const startChapter = (channelId: ChannelId, input: { id: ChapterId; title: string; at: string }) =>
+      making(channelId, input.id, (first, chapters) =>
         Effect.gen(function* () {
           const live = chapters.find(ChapterStates.isLive);
           const held =
             live === undefined ? [] : yield* sql`SELECT 1 FROM messages WHERE chapter_id = ${live.id} LIMIT 1`;
           const plan = yield* planOrFail(
-            planStart(threadId, chapters, { ...input, liveHasMessages: held.length > 0 }),
+            planStart(channelId, chapters, { ...input, liveHasMessages: held.length > 0 }),
             first,
           );
           yield* writeChanged(plan);
-          yield* forgetBoundaries(threadId, []);
+          yield* forgetBoundaries(channelId, []);
           const chapter = changedOne(plan, input.id);
           const ended = plan.changed.find((c) => c.id !== input.id) ?? null;
-          const event: JournaledEvent = { _tag: "ChapterStarted", threadId, chapter, ended };
+          const event: JournaledEvent = { _tag: "ChapterStarted", channelId, chapter, ended };
           return { value: plan, events: [event] };
         }),
       );
 
-    const splitChapter = (threadId: ThreadId, input: SplitInput) =>
-      making(threadId, input.id, (first, chapters) =>
+    const splitChapter = (channelId: ChannelId, input: SplitInput) =>
+      making(channelId, input.id, (first, chapters) =>
         Effect.gen(function* () {
           const [at] = yield* sql<{
             readonly chapterId: string;
@@ -217,7 +217,7 @@ export const ChapterRepositoryLive = Layer.effect(
           }>`SELECT m.chapter_id, m.created_at, m.seq,
               (CASE WHEN EXISTS (SELECT 1 FROM messages e WHERE e.chapter_id = m.chapter_id AND e.seq < m.seq)
                 THEN 0 ELSE 1 END) AS first
-            FROM messages m WHERE m.id = ${input.messageId} AND m.thread_id = ${threadId}`;
+            FROM messages m WHERE m.id = ${input.messageId} AND m.channel_id = ${channelId}`;
           const point: SplitPoint | null =
             at === undefined
               ? null
@@ -237,17 +237,17 @@ export const ChapterRepositoryLive = Layer.effect(
             judged !== undefined &&
             (cut?.id !== judged.chapterId || cut.revision !== judged.revision || messagesMoved)
           ) {
-            return yield* Effect.fail(new ChapterRefused({ threadId, reason: "chapter-changed" }));
+            return yield* Effect.fail(new ChapterRefused({ channelId, reason: "chapter-changed" }));
           }
-          const plan = yield* planOrFail(planSplit(threadId, chapters, point, input), first);
+          const plan = yield* planOrFail(planSplit(channelId, chapters, point, input), first);
           yield* writeChanged(plan);
           const from = point?.chapterId as ChapterId;
-          yield* moveMessages(threadId, first, input.id, sql`chapter_id = ${from} AND seq >= ${Number(at?.seq)}`);
+          yield* moveMessages(channelId, first, input.id, sql`chapter_id = ${from} AND seq >= ${Number(at?.seq)}`);
           yield* moveRecords(first, input.id, from, point?.createdAt ?? null);
-          yield* forgetBoundaries(threadId, []);
+          yield* forgetBoundaries(channelId, []);
           const event: JournaledEvent = {
             _tag: "ChapterSplit",
-            threadId,
+            channelId,
             from,
             chapter: input.id,
             messageId: input.messageId,
@@ -260,30 +260,31 @@ export const ChapterRepositoryLive = Layer.effect(
         }),
       );
 
-    const mergeChapters = (threadId: ThreadId, chapterId: ChapterId) =>
+    const mergeChapters = (channelId: ChannelId, chapterId: ChapterId) =>
       journaledChange<ChapterPlan, ChapterRefused | ChapterNotFound | IllegalChapterTransition>((first) =>
         Effect.gen(function* () {
-          const merged = yield* sql`SELECT 1 FROM merged_chapters WHERE id = ${chapterId} AND thread_id = ${threadId}`;
-          if (merged.length > 0) return yield* unchanged(threadId);
-          const chapters = yield* listChapters(threadId);
-          const plan = yield* planOrFail(planMerge(threadId, chapters, chapterId), first);
+          const merged =
+            yield* sql`SELECT 1 FROM merged_chapters WHERE id = ${chapterId} AND channel_id = ${channelId}`;
+          if (merged.length > 0) return yield* unchanged(channelId);
+          const chapters = yield* listChapters(channelId);
+          const plan = yield* planOrFail(planMerge(channelId, chapters, chapterId), first);
           const into = chapters[chapters.findIndex((chapter) => chapter.id === chapterId) - 1] as Chapter;
           // The messages and records move before their chapter goes, and it goes before the one it merged into
           // may become live.
-          yield* moveMessages(threadId, first, into.id, sql`chapter_id = ${chapterId}`);
+          yield* moveMessages(channelId, first, into.id, sql`chapter_id = ${chapterId}`);
           yield* moveRecords(first, into.id, chapterId, null);
           yield* sql`DELETE FROM chapters WHERE id = ${chapterId}`;
           yield* sql`INSERT INTO merged_chapters ${sql.insert({
             id: chapterId,
-            thread_id: threadId,
+            channel_id: channelId,
             into_id: into.id,
             merged_at: DateTime.formatIso(yield* DateTime.now),
           })}`;
           yield* writeChanged(plan);
-          yield* forgetBoundaries(threadId, [into.id, chapterId]);
+          yield* forgetBoundaries(channelId, [into.id, chapterId]);
           const event: JournaledEvent = {
             _tag: "ChapterMerged",
-            threadId,
+            channelId,
             into: into.id,
             absorbed: chapterId,
             chapters: plan.chapters,
@@ -293,7 +294,7 @@ export const ChapterRepositoryLive = Layer.effect(
       );
 
     return ChapterRepository.of({
-      listChapters: (threadId) => listChapters(threadId).pipe(Effect.orDie),
+      listChapters: (channelId) => listChapters(channelId).pipe(Effect.orDie),
       startChapter,
       splitChapter,
       mergeChapters,

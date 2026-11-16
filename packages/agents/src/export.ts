@@ -1,20 +1,21 @@
-import { AgentNotFound, type ExportFailed, type ExportResult, type InvalidFolder, ThreadNotFound } from "@hobbots/api";
+import { AgentNotFound, ChannelNotFound, type ExportFailed, type ExportResult, type InvalidFolder } from "@hobbots/api";
 import {
   type Agent,
   type AgentId,
   type ArtifactNotCopied,
   type ArtifactRef,
+  type Channel,
   EXPORT_FORMAT,
   EXPORT_VERSION,
   type ExportedArtifact,
   type ExportedAttempt,
+  type ExportedChannel,
   type ExportedHob,
   type ExportedMemory,
   type ExportedMemoryPage,
   type ExportedMessage,
   type ExportedQuest,
   type ExportedTask,
-  type ExportedThread,
   type ExportedTree,
   type ExportedWeb,
   type ExportScope,
@@ -27,7 +28,6 @@ import {
   safeFileName,
   type Task,
   type TaskTree,
-  type Thread,
   taskTitleOf,
   uniqueName,
 } from "@hobbots/domain";
@@ -35,7 +35,7 @@ import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import { ActivityRepository } from "./activity.ts";
 import { SaveDestinations } from "./destinations.ts";
 import { EXPORT_LIMITS, type ExportLimits, exportedContents, overLimits } from "./export-files.ts";
-import { type ExportNames, readmeMarkdown, threadMarkdown, treeMarkdown } from "./export-markdown.ts";
+import { channelMarkdown, type ExportNames, readmeMarkdown, treeMarkdown } from "./export-markdown.ts";
 import { MemoryStore } from "./memory.ts";
 import { hobFoldersNow } from "./permissions.ts";
 import { FolderChecks, InstallationSettings, SettingHistory } from "./ports.ts";
@@ -52,9 +52,9 @@ const EXPORT_WEB_RECORDS = 100_000;
 const EXPORT_SETTING_CHANGES = 100_000;
 
 /**
- * Exports of ADR 026: one thread, one hob or everything, as a folder of Markdown and versioned
+ * Exports of ADR 026: one channel, one hob or everything, as a folder of Markdown and versioned
  * JSON you can read without Hobbots. Every string goes through the hub's redactor. An export reads
- * hobs, threads, Tasks and the Workbench's records, and the files Tasks made from the hob's folders;
+ * hobs, channels, Tasks and the Workbench's records, and the files Tasks made from the hob's folders;
  * it never reads the keychain, the runtimes folder or any device record.
  */
 
@@ -76,7 +76,7 @@ export class ExportFolders extends Context.Service<ExportFolders, ExportFoldersS
 interface Gathered {
   /** Each hob the export names, so its records and bylines can name it. */
   readonly hobs: ReadonlyArray<Agent>;
-  readonly threads: ReadonlyArray<Thread>;
+  readonly channels: ReadonlyArray<Channel>;
   readonly trees: ReadonlyArray<TaskTree>;
   /** Whether a Task is exported in full, or as its title and state only. */
   readonly full: (task: Task) => boolean;
@@ -94,10 +94,10 @@ const exportedHob = (agent: Agent): ExportedHob => ({
 });
 
 // A reply's author is the hob that wrote it, which in a camp may be a member (ADR 039).
-const exportedMessage = (message: Message, thread: Thread): ExportedMessage => ({
+const exportedMessage = (message: Message, channel: Channel): ExportedMessage => ({
   id: message.id,
   role: message.role,
-  authorId: replyHobOf(message, thread),
+  authorId: replyHobOf(message, channel),
   content: message.content,
   status: message.status,
   error: message.error,
@@ -225,8 +225,8 @@ const folderName = (data: HobbotsExport): string => {
   const date = data.exportedAt.slice(0, 10);
   const { scope } = data;
   switch (scope._tag) {
-    case "Thread":
-      return `Hobbots export ${safeFileName(data.threads[0]?.title ?? "", "thread")} ${date}`;
+    case "Channel":
+      return `Hobbots export ${safeFileName(data.channels[0]?.title ?? "", "channel")} ${date}`;
     case "Hob":
       return `Hobbots export ${safeFileName(data.hobs.find((hob) => hob.id === scope.agentId)?.name ?? "", "hob")} ${date}`;
     default:
@@ -243,7 +243,7 @@ export class DataExport extends Context.Service<
     readonly run: (
       scope: ExportScope,
       destination: string,
-    ) => Effect.Effect<ExportResult, InvalidFolder | AgentNotFound | ThreadNotFound | ExportFailed>;
+    ) => Effect.Effect<ExportResult, InvalidFolder | AgentNotFound | ChannelNotFound | ExportFailed>;
   }
 >()("@hobbots/agents/DataExport") {
   /** `version` is the hub's own, which the export names. `limits` are ADR 026's unless a test sets smaller ones. */
@@ -269,20 +269,20 @@ export class DataExport extends Context.Service<
         const redactor = Option.getOrElse(yield* Effect.serviceOption(SecretRedaction), () => makeRedactor());
 
         const allHobs = repo.listAgentsWithStatus(["active", "paused", "retired"]);
-        const threadsOf = (agentId: AgentId) =>
-          Effect.map(Effect.all([repo.listThreads(agentId), repo.listArchivedThreads(agentId)]), ([live, archived]) => [
-            ...live,
-            ...archived,
-          ]);
-        const allThreads = (hobs: ReadonlyArray<Agent>) =>
+        const channelsOf = (agentId: AgentId) =>
           Effect.map(
-            Effect.forEach(hobs, (hob) => threadsOf(hob.id)),
+            Effect.all([repo.listChannels(agentId), repo.listArchivedChannels(agentId)]),
+            ([live, archived]) => [...live, ...archived],
+          );
+        const allChannels = (hobs: ReadonlyArray<Agent>) =>
+          Effect.map(
+            Effect.forEach(hobs, (hob) => channelsOf(hob.id)),
             (each) => each.flat(),
           );
-        /** Each tree started in the threads, once, oldest first within each thread. */
-        const treesOf = (threads: ReadonlyArray<Thread>) =>
+        /** Each tree started in the channels, once, oldest first within each channel. */
+        const treesOf = (channels: ReadonlyArray<Channel>) =>
           Effect.map(
-            Effect.forEach(threads, (thread) => tasks.readThreadTrees(thread.id)),
+            Effect.forEach(channels, (channel) => tasks.readChannelTrees(channel.id)),
             (each) => {
               const seen = new Set<string>();
               return each.flat().filter((tree) => {
@@ -298,31 +298,31 @@ export class DataExport extends Context.Service<
           Effect.gen(function* () {
             const hobs = yield* allHobs;
             switch (scope._tag) {
-              case "Thread": {
-                const thread = yield* repo.findThread(scope.threadId);
-                if (Option.isNone(thread)) return yield* new ThreadNotFound({ threadId: scope.threadId });
-                const trees = yield* treesOf([thread.value]);
-                return { hobs, threads: [thread.value], trees, full: () => true } satisfies Gathered;
+              case "Channel": {
+                const channel = yield* repo.findChannel(scope.channelId);
+                if (Option.isNone(channel)) return yield* new ChannelNotFound({ channelId: scope.channelId });
+                const trees = yield* treesOf([channel.value]);
+                return { hobs, channels: [channel.value], trees, full: () => true } satisfies Gathered;
               }
               case "Hob": {
                 if (!hobs.some((hob) => hob.id === scope.agentId)) {
                   return yield* new AgentNotFound({ agentId: scope.agentId });
                 }
-                // Its own threads, and every tree it worked in, wherever the tree started (ADR 026).
-                const trees = (yield* treesOf(yield* allThreads(hobs))).filter((tree) =>
+                // Its own channels, and every tree it worked in, wherever the tree started (ADR 026).
+                const trees = (yield* treesOf(yield* allChannels(hobs))).filter((tree) =>
                   tree.tasks.some((task) => task.ownerId === scope.agentId),
                 );
-                const threads = yield* threadsOf(scope.agentId);
+                const channels = yield* channelsOf(scope.agentId);
                 return {
                   hobs,
-                  threads,
+                  channels,
                   trees,
                   full: (task: Task) => task.ownerId === scope.agentId,
                 } satisfies Gathered;
               }
               default: {
-                const threads = yield* allThreads(hobs);
-                return { hobs, threads, trees: yield* treesOf(threads), full: () => true } satisfies Gathered;
+                const channels = yield* allChannels(hobs);
+                return { hobs, channels, trees: yield* treesOf(channels), full: () => true } satisfies Gathered;
               }
             }
           });
@@ -382,7 +382,7 @@ export class DataExport extends Context.Service<
             const quest = tree.quests.find((each) => each.taskId === top.id);
             return {
               rootTaskId: top.id,
-              threadId: top.threadId,
+              channelId: top.channelId,
               title: quest?.goal ?? taskTitleOf(top.brief),
               file: "",
               quests: tree.quests.map((each) => {
@@ -395,12 +395,12 @@ export class DataExport extends Context.Service<
 
         /**
          * Each memory page the scope covers, as you read it (ADR 028): every scope for everything, the
-         * hob's own memory for a hob, none for a thread. Memory that does not answer leaves the rest
+         * hob's own memory for a hob, none for a channel. Memory that does not answer leaves the rest
          * of the export as it is, and the README says so.
          */
         const gatherMemory = (scope: ExportScope, hobs: ReadonlyArray<Agent>) =>
           Effect.gen(function* () {
-            if (Option.isNone(memoryStore) || scope._tag === "Thread") return NO_MEMORY;
+            if (Option.isNone(memoryStore) || scope._tag === "Channel") return NO_MEMORY;
             const store = memoryStore.value;
             const you = { _tag: "You" } as const;
             const held = yield* store.scopes(you);
@@ -443,7 +443,7 @@ export class DataExport extends Context.Service<
           );
 
         /**
-         * The scope's web searches and pages (ADR 036): a thread's, a hob's, or every one with Settings ›
+         * The scope's web searches and pages (ADR 036): a channel's, a hob's, or every one with Settings ›
          * Web and each hob's own limits. None on a hub that keeps no web records.
          */
         const gatherWeb = (scope: ExportScope, hobs: ReadonlyArray<Agent>) =>
@@ -451,8 +451,8 @@ export class DataExport extends Context.Service<
             if (Option.isNone(webRecords)) return null;
             const store = webRecords.value;
             const filter =
-              scope._tag === "Thread"
-                ? { threadId: scope.threadId }
+              scope._tag === "Channel"
+                ? { channelId: scope.channelId }
                 : scope._tag === "Hob"
                   ? { agentId: scope.agentId }
                   : {};
@@ -475,14 +475,13 @@ export class DataExport extends Context.Service<
         const namedHobs = (
           scope: ExportScope,
           gathered: Gathered,
-          threads: ReadonlyArray<ExportedThread>,
+          channels: ReadonlyArray<ExportedChannel>,
           trees: ReadonlyArray<ExportedTree>,
         ) => {
           if (scope._tag === "Everything") return gathered.hobs;
-          // standards-allow STD-ARCH-021: an export names whose threads it holds
-          const named = new Set<string>(gathered.threads.map((thread) => thread.agentId));
-          for (const thread of threads) {
-            for (const message of thread.messages) if (message.authorId !== null) named.add(message.authorId);
+          const named = new Set<string>(gathered.channels.map((channel) => channel.ownerHobId));
+          for (const channel of channels) {
+            for (const message of channel.messages) if (message.authorId !== null) named.add(message.authorId);
           }
           for (const tree of trees) {
             for (const task of tree.tasks) {
@@ -498,21 +497,20 @@ export class DataExport extends Context.Service<
         /** The export's records, unredacted, with where each file artifact's bytes come from. */
         const records = (scope: ExportScope, gathered: Gathered, exportedAt: string, memory: ExportedMemory) =>
           Effect.gen(function* () {
-            const threads = yield* Effect.forEach(gathered.threads, (thread) =>
+            const channels = yield* Effect.forEach(gathered.channels, (channel) =>
               Effect.map(
-                repo.listMessages(thread.id),
-                (messages): ExportedThread => ({
-                  id: thread.id,
-                  // standards-allow STD-ARCH-021: an export names whose thread it is
-                  agentId: thread.agentId,
-                  title: thread.title,
-                  createdAt: thread.createdAt,
-                  updatedAt: thread.updatedAt,
-                  archivedAt: thread.archivedAt,
+                repo.listMessages(channel.id),
+                (messages): ExportedChannel => ({
+                  id: channel.id,
+                  agentId: channel.ownerHobId,
+                  title: channel.title,
+                  createdAt: channel.createdAt,
+                  updatedAt: channel.updatedAt,
+                  archivedAt: channel.archivedAt,
                   file: "",
                   messages: messages
                     .filter((message) => message.status !== "queued")
-                    .map((message) => exportedMessage(message, thread)),
+                    .map((message) => exportedMessage(message, channel)),
                 }),
               ),
             );
@@ -537,8 +535,8 @@ export class DataExport extends Context.Service<
               exportedAt,
               hobbotsVersion: version,
               scope,
-              hobs: namedHobs(scope, gathered, threads, trees).map(exportedHob),
-              threads,
+              hobs: namedHobs(scope, gathered, channels, trees).map(exportedHob),
+              channels,
               quests: trees,
               memory,
               ...(web === null ? {} : { web }),
@@ -547,17 +545,17 @@ export class DataExport extends Context.Service<
             return { data, sources };
           });
 
-        /** Names each thread's and tree's Markdown file, once each, by its date and its redacted title. */
+        /** Names each channel's and tree's Markdown file, once each, by its date and its redacted title. */
         const named = (data: HobbotsExport): HobbotsExport => {
-          const threadNames = new Set<string>();
+          const channelNames = new Set<string>();
           const treeNames = new Set<string>();
           const fileOf = (taken: Set<string>, folder: string, at: string, title: string, fallback: string) =>
             `${folder}/${uniqueName(taken, `${at.slice(0, 10)} ${safeFileName(title, fallback)}`, ".md")}`;
           return {
             ...data,
-            threads: data.threads.map((thread) => ({
-              ...thread,
-              file: fileOf(threadNames, "threads", thread.createdAt, thread.title, "Thread"),
+            channels: data.channels.map((channel) => ({
+              ...channel,
+              file: fileOf(channelNames, "channels", channel.createdAt, channel.title, "Channel"),
             })),
             quests: data.quests.map((tree) => ({
               ...tree,
@@ -633,7 +631,8 @@ export class DataExport extends Context.Service<
             const names: ExportNames = new Map(data.hobs.map((hob) => [hob.id, hob.name]));
             const artifacts = data.quests.flatMap((tree) => tree.tasks.flatMap((task) => task.artifacts));
             const copied = artifacts.filter((artifact) => artifact.copiedTo !== null).length;
-            for (const thread of data.threads) yield* folders.write(folder, thread.file, threadMarkdown(thread, names));
+            for (const channel of data.channels)
+              yield* folders.write(folder, channel.file, channelMarkdown(channel, names));
             for (const tree of data.quests) yield* folders.write(folder, tree.file, treeMarkdown(tree, names));
             // Each memory page as its Markdown, through the redactor like every other string.
             for (const [index, page] of data.memory.pages.entries()) {
@@ -643,7 +642,7 @@ export class DataExport extends Context.Service<
             yield* folders.write(folder, "README.md", readmeMarkdown(data, names, copied));
             return {
               folder,
-              threads: data.threads.length,
+              channels: data.channels.length,
               quests: data.quests.length,
               files: copied,
               notCopied: artifacts.filter((artifact) => artifact.notCopied !== null).length,

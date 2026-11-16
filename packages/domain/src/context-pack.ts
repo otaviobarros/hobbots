@@ -3,7 +3,7 @@ import { Schema } from "effect";
 /**
  * The parts of a context pack (ADR 037), in the order a session reads them. The memory brief is
  * sent beside the pack, as ADR 028 sends it, and counts against the pack's budget. `members` says
- * who is in the thread and why the turn runs (ADR 039, The context pack with several hobs).
+ * who is in the channel and why the turn runs (ADR 039, The context pack with several hobs).
  */
 export const PackPartName = Schema.Literals([
   "memory-brief",

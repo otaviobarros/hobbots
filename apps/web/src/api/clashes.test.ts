@@ -1,4 +1,4 @@
-import type { ClaimClash, ThreadId } from "@hobbots/domain";
+import type { ChannelId, ClaimClash } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { expect, it } from "vitest";
 import { applyClaimEvent, clashesQuery } from "./clashes.ts";
@@ -10,7 +10,7 @@ it("drops a first read of the clashes taken before a claim, so the new Heads-up 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const reads: Array<(clashes: ReadonlyArray<ClaimClash>) => void> = [];
   const observer = new QueryObserver(client, {
-    ...clashesQuery("thread-1" as ThreadId),
+    ...clashesQuery("channel-1" as ChannelId),
     queryFn: () => new Promise<ReadonlyArray<ClaimClash>>((resolve) => reads.push(resolve)),
   });
   const unsubscribe = observer.subscribe(() => {});

@@ -1,4 +1,4 @@
-import { type Message, mentionTargets, NoteId, type TaskNote, type ThreadId } from "@hobbots/domain";
+import { type ChannelId, type Message, mentionTargets, NoteId, type TaskNote } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
@@ -14,10 +14,10 @@ export const makeMentionNotes = Effect.gen(function* () {
   const bus = yield* EventPublisher;
 
   /** The members' Tasks `content` mentions in a Quest led from the chat; none when it mentions no one there. */
-  const targets = (threadId: ThreadId, content: string) =>
+  const targets = (channelId: ChannelId, content: string) =>
     Effect.gen(function* () {
       if (Option.isNone(tasks) || !content.includes("@")) return [];
-      const trees = yield* tasks.value.readThreadTrees(threadId);
+      const trees = yield* tasks.value.readChannelTrees(channelId);
       if (trees.length === 0) return [];
       // Parsed as the hub parses the message it stores, so a mention in Markdown code reaches nobody.
       return mentionTargets(trees, yield* repo.mentionsIn(content));

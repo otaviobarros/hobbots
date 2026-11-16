@@ -2,18 +2,19 @@ import { ChapterRepository, HobbotsRepository } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelCheckpoint,
+  ChannelId,
   ChapterId,
   type ChapterRefusal,
   ChapterRefused,
+  EVENT_SCHEMA_VERSIONS,
   IllegalChapterTransition,
   liveSession,
   Message,
   MessageId,
   OWNER_ACTOR,
   roleFields,
-  Thread,
-  ThreadCheckpoint,
-  ThreadId,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer, ManagedRuntime, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -21,13 +22,11 @@ import * as fc from "fast-check";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ChapterRepositoryLive, EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import chaptersMigration from "../src/migrations/0099_chapters.ts";
-import recordsMigration from "../src/migrations/0101_records.ts";
-import hobSessionsMigration from "../src/migrations/20261114005209_hob_sessions.ts";
-import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
+import { migrateAfter, TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
-// Issue #1379 (ADR 037): a thread's transcript is split into chapters. The migration gives each
-// thread one live chapter holding its history, and every message a chapter; the database keeps one
-// live chapter per thread and refuses a message without one; start, split and merge keep every
+// Issue #1379 (ADR 037): a channel's transcript is split into chapters. The migration gives each
+// channel one live chapter holding its history, and every message a chapter; the database keeps one
+// live chapter per channel and refuses a message without one; start, split and merge keep every
 // message in exactly one chapter, each journaling one event in its own transaction. On SQLite and
 // PostgreSQL alike.
 
@@ -49,13 +48,13 @@ const hob = (id: string) =>
     createdAt: NOW,
   });
 
-const newThread = (id: string, agentId = "ada") =>
-  new Thread({ id: ThreadId.make(id), agentId: AgentId.make(agentId), title: id, createdAt: NOW, updatedAt: NOW });
+const newChannel = (id: string, agentId = "ada") =>
+  new Channel({ id: ChannelId.make(id), ownerHobId: AgentId.make(agentId), title: id, createdAt: NOW, updatedAt: NOW });
 
-const userMessage = (threadId: string, id: string, status: Message["status"] = "complete") =>
+const userMessage = (channelId: string, id: string, status: Message["status"] = "complete") =>
   new Message({
     id: MessageId.make(id),
-    threadId: ThreadId.make(threadId),
+    channelId: ChannelId.make(channelId),
     actor: OWNER_ACTOR,
     role: "user",
     content: id,
@@ -71,15 +70,15 @@ describe("0099_chapters", () => {
     Layer.provideMerge(TestDatabaseAt(earlier)),
   );
 
-  /** A thread, its messages and their journal entries, as the hub stored them before 0099. */
-  const stored = (threadId: string, sessions: ReadonlyArray<string>, messages: ReadonlyArray<[string, string]>) =>
+  /** A channel, its messages and their journal entries, as the hub stored them before 0099. */
+  const stored = (channelId: string, sessions: ReadonlyArray<string>, messages: ReadonlyArray<[string, string]>) =>
     Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();
       const keyed = sessions.map((sessionId) => ({ runtime: "claude-code", sessionId, seenThrough: null }));
       yield* sql`INSERT INTO threads ${sql.insert({
-        id: threadId,
+        id: channelId,
         agent_id: "ada",
-        title: threadId,
+        title: channelId,
         sessions: JSON.stringify(keyed),
         created_at: at(1),
         updated_at: at(2),
@@ -97,15 +96,15 @@ describe("0099_chapters", () => {
             schema_version: version,
             occurred_at: NOW,
             agent_id: "ada",
-            thread_id: threadId,
+            thread_id: channelId,
             payload: JSON.stringify({ _tag: type, ...payload }),
           })}`;
           yield* sql`UPDATE event_journal_head SET sequence = ${sequence}`;
         });
-      const thread = {
-        id: threadId,
+      const channel = {
+        id: channelId,
         agentId: "ada",
-        title: threadId,
+        title: channelId,
         kind: "camp",
         goal: null,
         private: false,
@@ -122,11 +121,11 @@ describe("0099_chapters", () => {
         updatedAt: at(2),
         revision: 1,
       };
-      yield* journal("ThreadUpserted", 4, { thread });
+      yield* journal("ThreadUpserted", 4, { thread: channel });
       for (const [index, [id, status]] of messages.entries()) {
         yield* sql`INSERT INTO messages ${sql.insert({
           id,
-          thread_id: threadId,
+          thread_id: channelId,
           seq: index + 1,
           role: "user",
           content: id,
@@ -135,7 +134,7 @@ describe("0099_chapters", () => {
         })}`;
         const message = {
           id,
-          threadId,
+          threadId: channelId,
           role: "user",
           content: id,
           status,
@@ -155,7 +154,7 @@ describe("0099_chapters", () => {
     });
 
   // covers ADR 037 (Chapters), DP-003
-  it("gives each thread one live chapter holding its history, and every message and session its chapter (#1379)", async () => {
+  it("gives each channel one live chapter holding its history, and every message and session its chapter (#1379)", async () => {
     const result = await Effect.gen(function* () {
       const sql = (yield* SqlClient.SqlClient).withoutTransforms();
       yield* sql`INSERT INTO agents ${sql.insert({
@@ -180,22 +179,19 @@ describe("0099_chapters", () => {
       yield* stored("empty", [], []);
 
       yield* chaptersMigration;
-      // Sessions now also name their hob (20261114005209_hob_sessions), which the hub reads them with.
-      yield* hobSessionsMigration;
-      // The entries as 0099 left them, before 0101 names every message's author, which the hub reads
-      // a thread's last line with.
+      // Today's hub reads them, so the rows and entries go on to today's schema.
+      yield* migrateAfter("0099");
       const entries = yield* (yield* EventJournal).readAfter(0);
-      yield* recordsMigration;
 
       const repo = yield* HobbotsRepository;
       const chapters = yield* ChapterRepository;
-      const threads = yield* Effect.forEach(["lamps", "empty"], (id) =>
-        repo.findThread(ThreadId.make(id)).pipe(Effect.map(Option.getOrThrow)),
+      const channels = yield* Effect.forEach(["lamps", "empty"], (id) =>
+        repo.findChannel(ChannelId.make(id)).pipe(Effect.map(Option.getOrThrow)),
       );
       return {
-        threads,
-        chapters: yield* Effect.forEach(threads, (thread) => chapters.listChapters(thread.id)),
-        messages: yield* repo.listMessages(ThreadId.make("lamps")),
+        channels,
+        chapters: yield* Effect.forEach(channels, (channel) => chapters.listChapters(channel.id)),
+        messages: yield* repo.listMessages(ChannelId.make("lamps")),
         entries,
       };
     }).pipe(Effect.provide(layer), Effect.runPromise);
@@ -204,8 +200,8 @@ describe("0099_chapters", () => {
     for (const [index, list] of [lamps, empty].entries()) {
       expect(list).toEqual([
         {
-          id: result.threads[index]?.liveChapterId,
-          threadId: result.threads[index]?.id,
+          id: result.channels[index]?.liveChapterId,
+          channelId: result.channels[index]?.id,
           number: 1,
           title: null,
           summary: null,
@@ -217,24 +213,24 @@ describe("0099_chapters", () => {
         },
       ]);
     }
-    const lampsChapter = result.threads[0]?.liveChapterId;
-    expect(lampsChapter).not.toBe(result.threads[1]?.liveChapterId);
+    const lampsChapter = result.channels[0]?.liveChapterId;
+    expect(lampsChapter).not.toBe(result.channels[1]?.liveChapterId);
     expect(result.messages.map((m) => [m.id, m.chapterId])).toEqual([
       ["m1", lampsChapter],
       ["m2", lampsChapter],
       ["m3", lampsChapter],
     ]);
-    // The session the thread kept goes on being resumed, in its one chapter.
-    expect(result.threads[0]?.sessions).toEqual([
+    // The session the channel kept goes on being resumed, in its one chapter.
+    expect(result.channels[0]?.sessions).toEqual([
       { runtime: "claude-code", agentId: "ada", sessionId: "s1", chapterId: lampsChapter, seenThrough: null },
     ]);
-    // Every old entry decodes, with the chapter its thread now has, at its new version.
+    // Every old entry decodes, with the chapter its channel now has, at its new version.
     expect(result.entries.map((e) => [e.type, e.schemaVersion])).toEqual([
-      ["ThreadUpserted", 7],
-      ["MessageUpserted", 5],
-      ["MessageUpserted", 5],
-      ["MessageQueued", 2],
-      ["ThreadUpserted", 7],
+      ["ChannelUpserted", EVENT_SCHEMA_VERSIONS.ChannelUpserted],
+      ["MessageUpserted", EVENT_SCHEMA_VERSIONS.MessageUpserted],
+      ["MessageUpserted", EVENT_SCHEMA_VERSIONS.MessageUpserted],
+      ["MessageQueued", EVENT_SCHEMA_VERSIONS.MessageQueued],
+      ["ChannelUpserted", EVENT_SCHEMA_VERSIONS.ChannelUpserted],
     ]);
     const payloads = result.entries.map((e) => e.payload);
     expect(payloads.flatMap((p) => ("message" in p ? [p.message.chapterId] : []))).toEqual([
@@ -242,10 +238,10 @@ describe("0099_chapters", () => {
       lampsChapter,
       lampsChapter,
     ]);
-    expect(payloads.flatMap((p) => (p._tag === "ThreadUpserted" ? [p.thread.liveChapterId] : []))).toEqual(
-      result.threads.map((t) => t.liveChapterId),
+    expect(payloads.flatMap((p) => (p._tag === "ChannelUpserted" ? [p.channel.liveChapterId] : []))).toEqual(
+      result.channels.map((t) => t.liveChapterId),
     );
-    expect(payloads[0]?._tag === "ThreadUpserted" && payloads[0].thread.sessions[0]?.chapterId).toBe(lampsChapter);
+    expect(payloads[0]?._tag === "ChannelUpserted" && payloads[0].channel.sessions[0]?.chapterId).toBe(lampsChapter);
   });
 });
 
@@ -255,16 +251,16 @@ describe("chapters in the database", () => {
   );
 
   // covers ADR 037 (Chapters), DP-003
-  it("keeps one live chapter per thread and refuses a message without a chapter (#1379)", async () => {
+  it("keeps one live chapter per channel and refuses a message without a chapter (#1379)", async () => {
     const result = await Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(hob("ada"));
-      const thread = yield* repo.upsertThread(newThread("lamps"));
+      const channel = yield* repo.upsertChannel(newChannel("lamps"));
       const sql = yield* SqlClient.SqlClient;
       const secondLive = yield* Effect.exit(
         sql`INSERT INTO chapters ${sql.insert({
           id: "c2",
-          threadId: "lamps",
+          channelId: "lamps",
           number: 2,
           state: "live",
           startedAt: NOW,
@@ -273,19 +269,19 @@ describe("chapters in the database", () => {
       const resting = yield* Effect.exit(
         sql`INSERT INTO chapters ${sql.insert({
           id: "c3",
-          threadId: "lamps",
+          channelId: "lamps",
           number: 2,
           state: "resting",
           startedAt: NOW,
         })}`,
       );
       const unknownState = yield* Effect.exit(
-        sql`INSERT INTO chapters ${sql.insert({ id: "c4", threadId: "lamps", number: 3, state: "gone", startedAt: NOW })}`,
+        sql`INSERT INTO chapters ${sql.insert({ id: "c4", channelId: "lamps", number: 3, state: "gone", startedAt: NOW })}`,
       );
       const orphan = yield* Effect.exit(
         sql`INSERT INTO messages ${sql.insert({
           id: "raw",
-          threadId: "lamps",
+          channelId: "lamps",
           seq: 1,
           role: "user",
           content: "raw",
@@ -295,10 +291,19 @@ describe("chapters in the database", () => {
       );
       const saved = yield* repo.upsertMessage(userMessage("lamps", "m1"));
       const cleared = yield* Effect.exit(sql`UPDATE messages SET chapter_id = NULL WHERE id = 'm1'`);
-      // A thread saved again keeps its one chapter.
-      yield* repo.upsertThread(new Thread({ ...thread.value, title: "Renamed" }));
-      const chapters = yield* (yield* ChapterRepository).listChapters(ThreadId.make("lamps"));
-      return { thread: thread.value, secondLive, resting, unknownState, orphan, saved: saved.value, cleared, chapters };
+      // A channel saved again keeps its one chapter.
+      yield* repo.upsertChannel(new Channel({ ...channel.value, title: "Renamed" }));
+      const chapters = yield* (yield* ChapterRepository).listChapters(ChannelId.make("lamps"));
+      return {
+        channel: channel.value,
+        secondLive,
+        resting,
+        unknownState,
+        orphan,
+        saved: saved.value,
+        cleared,
+        chapters,
+      };
     }).pipe(Effect.provide(layer), Effect.runPromise);
 
     expect(Exit.isFailure(result.secondLive)).toBe(true);
@@ -306,9 +311,9 @@ describe("chapters in the database", () => {
     expect(Exit.isFailure(result.unknownState)).toBe(true);
     expect(Exit.isFailure(result.orphan)).toBe(true);
     expect(Exit.isFailure(result.cleared)).toBe(true);
-    expect(result.saved.chapterId).toBe(result.thread.liveChapterId);
+    expect(result.saved.chapterId).toBe(result.channel.liveChapterId);
     expect(result.chapters.map((c) => [c.id, c.state])).toEqual([
-      [result.thread.liveChapterId, "live"],
+      [result.channel.liveChapterId, "live"],
       ["c3", "resting"],
     ]);
   });
@@ -322,35 +327,35 @@ describe("chapters in the database", () => {
       const journal = yield* EventJournal;
       yield* repo.insertAgent(hob("ada"));
       yield* repo.insertAgent(hob("bo"));
-      yield* repo.upsertThread(newThread("other", "bo"));
-      const thread = ThreadId.make("lamps");
-      yield* repo.upsertThread(newThread("lamps"));
+      yield* repo.upsertChannel(newChannel("other", "bo"));
+      const channel = ChannelId.make("lamps");
+      yield* repo.upsertChannel(newChannel("lamps"));
       yield* repo.upsertMessage(userMessage("lamps", "m1"));
       const start = { id: ChapterId.make("c2"), title: "Garden", at: at(5) };
-      const started = yield* chapters.startChapter(thread, start);
-      const again = yield* chapters.startChapter(thread, start);
+      const started = yield* chapters.startChapter(channel, start);
+      const again = yield* chapters.startChapter(channel, start);
       yield* repo.upsertMessage(userMessage("lamps", "m2"));
       yield* repo.upsertMessage(userMessage("lamps", "m3"));
       const split = { id: ChapterId.make("c3"), messageId: MessageId.make("m3"), title: "Lamps" };
-      yield* chapters.splitChapter(thread, split);
-      const splitAgain = yield* chapters.splitChapter(thread, split);
-      // Another thread already remembers a merged chapter by this id, so the merge fails at its last write.
+      yield* chapters.splitChapter(channel, split);
+      const splitAgain = yield* chapters.splitChapter(channel, split);
+      // Another channel already remembers a merged chapter by this id, so the merge fails at its last write.
       yield* sql`INSERT INTO merged_chapters ${sql.insert({
         id: "c3",
-        threadId: "other",
+        channelId: "other",
         intoId: "x",
         mergedAt: NOW,
       })}`;
       const before = yield* journal.head;
-      const failed = yield* Effect.exit(chapters.mergeChapters(thread, ChapterId.make("c3")));
+      const failed = yield* Effect.exit(chapters.mergeChapters(channel, ChapterId.make("c3")));
       const afterFailure = {
         head: (yield* journal.head).sequence,
-        chapters: (yield* chapters.listChapters(thread)).map((c) => [c.id, c.number, c.state]),
-        messages: (yield* repo.listMessages(thread)).map((m) => [m.id, m.chapterId]),
+        chapters: (yield* chapters.listChapters(channel)).map((c) => [c.id, c.number, c.state]),
+        messages: (yield* repo.listMessages(channel)).map((m) => [m.id, m.chapterId]),
       };
       yield* sql`DELETE FROM merged_chapters WHERE id = 'c3'`;
-      const merged = yield* chapters.mergeChapters(thread, ChapterId.make("c3"));
-      const mergedAgain = yield* chapters.mergeChapters(thread, ChapterId.make("c3"));
+      const merged = yield* chapters.mergeChapters(channel, ChapterId.make("c3"));
+      const mergedAgain = yield* chapters.mergeChapters(channel, ChapterId.make("c3"));
       return { started, again, splitAgain, before: before.sequence, failed, afterFailure, merged, mergedAgain };
     }).pipe(Effect.provide(layer), Effect.runPromise);
 
@@ -380,7 +385,7 @@ describe("chapters in the database", () => {
     expect(result.mergedAgain.entries).toEqual([]);
   });
 
-  // The model-based test: random messages, starts, splits and merges on a thread, against a model
+  // The model-based test: random messages, starts, splits and merges on a channel, against a model
   // that keeps each chapter's messages in order.
   type Op =
     | { readonly _tag: "Say" }
@@ -437,24 +442,24 @@ describe("chapters in the database", () => {
     }
   };
 
-  /** Runs an op on the thread: a message of yours, or a chapter command. */
-  const perform = (op: Op, threadId: ThreadId, made: string, message: string, step: number) =>
+  /** Runs an op on the channel: a message of yours, or a chapter command. */
+  const perform = (op: Op, channelId: ChannelId, made: string, message: string, step: number) =>
     Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
       const store = yield* ChapterRepository;
       const id = ChapterId.make(made);
       switch (op._tag) {
         case "Say":
-          return (yield* repo.upsertMessage(userMessage(threadId, message))).entries;
+          return (yield* repo.upsertMessage(userMessage(channelId, message))).entries;
         case "Start":
-          return (yield* store.startChapter(threadId, { id, title: op.title, at: at(step) })).entries;
+          return (yield* store.startChapter(channelId, { id, title: op.title, at: at(step) })).entries;
         case "Split": {
-          const point = (yield* repo.listMessages(threadId))[op.at]?.id ?? MessageId.make("missing");
-          return (yield* store.splitChapter(threadId, { id, messageId: point, title: "Split" })).entries;
+          const point = (yield* repo.listMessages(channelId))[op.at]?.id ?? MessageId.make("missing");
+          return (yield* store.splitChapter(channelId, { id, messageId: point, title: "Split" })).entries;
         }
         case "Merge": {
-          const chapter = (yield* store.listChapters(threadId))[op.at];
-          return (yield* store.mergeChapters(threadId, chapter?.id ?? ChapterId.make("missing"))).entries;
+          const chapter = (yield* store.listChapters(channelId))[op.at];
+          return (yield* store.mergeChapters(channelId, chapter?.id ?? ChapterId.make("missing"))).entries;
         }
       }
     });
@@ -478,14 +483,14 @@ describe("chapters in the database", () => {
             runs += 1;
             const repo = yield* HobbotsRepository;
             const store = yield* ChapterRepository;
-            const threadId = ThreadId.make(`t${runs}`);
-            const thread = (yield* repo.upsertThread(newThread(threadId))).value;
-            let model: ReadonlyArray<ModelChapter> = [{ id: thread.liveChapterId as string, messages: [] }];
+            const channelId = ChannelId.make(`t${runs}`);
+            const channel = (yield* repo.upsertChannel(newChannel(channelId))).value;
+            let model: ReadonlyArray<ModelChapter> = [{ id: channel.liveChapterId as string, messages: [] }];
             for (const [step, op] of script.entries()) {
               const made = `t${runs}-c${step}`;
               const message = `t${runs}-m${step}`;
               const expected = modelStep(model, op, made, message);
-              const outcome = yield* Effect.exit(perform(op, threadId, made, message, step));
+              const outcome = yield* Effect.exit(perform(op, channelId, made, message, step));
               const where = `step ${step} of ${JSON.stringify(script)}`;
               if (typeof expected === "string") {
                 expect(Exit.isFailure(outcome), where).toBe(true);
@@ -505,8 +510,8 @@ describe("chapters in the database", () => {
                 }
                 model = expected;
               }
-              const chapters = yield* store.listChapters(threadId);
-              const messages = yield* repo.listMessages(threadId);
+              const chapters = yield* store.listChapters(channelId);
+              const messages = yield* repo.listMessages(channelId);
               expect(
                 chapters.map((c) => [c.id, c.number, c.state]),
                 where,
@@ -515,7 +520,7 @@ describe("chapters in the database", () => {
                 messages.map((m) => [m.id, m.chapterId]),
                 where,
               ).toEqual(model.flatMap((c) => c.messages.map((m) => [m, c.id])));
-              const stored = Option.getOrThrow(yield* repo.findThread(threadId));
+              const stored = Option.getOrThrow(yield* repo.findChannel(channelId));
               expect(stored.liveChapterId, where).toBe(model.at(-1)?.id);
             }
           }),
@@ -532,15 +537,15 @@ describe("chapters in the database", () => {
         const repo = yield* HobbotsRepository;
         const store = yield* ChapterRepository;
         const sql = yield* SqlClient.SqlClient;
-        const threadId = ThreadId.make("moved");
-        yield* repo.upsertThread(newThread(threadId));
-        yield* repo.upsertMessage(userMessage(threadId, "moved-m1"));
-        yield* store.startChapter(threadId, { id: ChapterId.make("moved-c2"), title: "Next", at: at(1) });
+        const channelId = ChannelId.make("moved");
+        yield* repo.upsertChannel(newChannel(channelId));
+        yield* repo.upsertMessage(userMessage(channelId, "moved-m1"));
+        yield* store.startChapter(channelId, { id: ChapterId.make("moved-c2"), title: "Next", at: at(1) });
         // A chapter that moved into a camp (#1364) takes nothing in.
-        yield* repo.upsertThread(newThread("camp"));
-        yield* sql`UPDATE chapters SET state = 'moved', moved_to = 'camp' WHERE thread_id = 'moved' AND number = 1`;
+        yield* repo.upsertChannel(newChannel("camp"));
+        yield* sql`UPDATE chapters SET state = 'moved', moved_to = 'camp' WHERE channel_id = 'moved' AND number = 1`;
         const head = (yield* (yield* EventJournal).head).sequence;
-        const refused = yield* Effect.exit(store.mergeChapters(threadId, ChapterId.make("moved-c2")));
+        const refused = yield* Effect.exit(store.mergeChapters(channelId, ChapterId.make("moved-c2")));
         return { refused, head, after: (yield* (yield* EventJournal).head).sequence };
       }),
     );
@@ -558,16 +563,16 @@ describe("chapters in the database", () => {
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
         const store = yield* ChapterRepository;
-        const threadId = ThreadId.make("versions");
-        yield* repo.upsertThread(newThread(threadId));
+        const channelId = ChannelId.make("versions");
+        yield* repo.upsertChannel(newChannel(channelId));
         const reply = (id: string) =>
-          new Message({ ...userMessage(threadId, id), role: "assistant", content: `Reply ${id}` });
-        for (const message of [userMessage(threadId, "v1"), reply("v2"), userMessage(threadId, "v3"), reply("v4")])
+          new Message({ ...userMessage(channelId, id), role: "assistant", content: `Reply ${id}` });
+        for (const message of [userMessage(channelId, "v1"), reply("v2"), userMessage(channelId, "v3"), reply("v4")])
           yield* repo.upsertMessage(message);
-        const stored = Option.getOrThrow(yield* repo.findThread(threadId));
+        const stored = Option.getOrThrow(yield* repo.findChannel(channelId));
         const first = stored.liveChapterId as ChapterId;
-        yield* repo.upsertThread(
-          new Thread({
+        yield* repo.upsertChannel(
+          new Channel({
             ...stored,
             sessions: [
               {
@@ -580,9 +585,9 @@ describe("chapters in the database", () => {
             ],
           }),
         );
-        yield* repo.markThreadRead(threadId, MessageId.make("v4"), Number.MAX_SAFE_INTEGER);
-        const checkpoint = new ThreadCheckpoint({
-          threadId,
+        yield* repo.markChannelRead(channelId, MessageId.make("v4"), Number.MAX_SAFE_INTEGER);
+        const checkpoint = new ChannelCheckpoint({
+          channelId,
           throughMessageId: MessageId.make("v4"),
           lines: ["- User: “v1”"],
           omitted: 0,
@@ -590,28 +595,29 @@ describe("chapters in the database", () => {
         });
         yield* repo.saveCheckpoint(checkpoint);
         const revisions = () =>
-          repo.listMessages(threadId).pipe(Effect.map((all) => all.map((m) => [m.id, m.chapterId, m.revision])));
+          repo.listMessages(channelId).pipe(Effect.map((all) => all.map((m) => [m.id, m.chapterId, m.revision])));
         const before = yield* revisions();
 
-        const split = yield* store.splitChapter(threadId, {
+        const split = yield* store.splitChapter(channelId, {
           id: ChapterId.make("versions-c2"),
           messageId: MessageId.make("v3"),
           title: "Later",
         });
-        const unread = () => repo.listUnreadThreads.pipe(Effect.map((listed) => listed.threadIds.includes(threadId)));
+        const unread = () =>
+          repo.listUnreadChannels.pipe(Effect.map((listed) => listed.channelIds.includes(channelId)));
         const afterSplit = {
           messages: yield* revisions(),
           unread: yield* unread(),
-          thread: Option.getOrThrow(yield* repo.findThread(threadId)),
-          checkpoint: yield* repo.findCheckpoint(threadId),
+          channel: Option.getOrThrow(yield* repo.findChannel(channelId)),
+          checkpoint: yield* repo.findCheckpoint(channelId),
         };
         yield* repo.saveCheckpoint(checkpoint);
-        const merged = yield* store.mergeChapters(threadId, ChapterId.make("versions-c2"));
+        const merged = yield* store.mergeChapters(channelId, ChapterId.make("versions-c2"));
         const afterMerge = {
           messages: yield* revisions(),
           unread: yield* unread(),
-          thread: Option.getOrThrow(yield* repo.findThread(threadId)),
-          checkpoint: yield* repo.findCheckpoint(threadId),
+          channel: Option.getOrThrow(yield* repo.findChannel(channelId)),
+          checkpoint: yield* repo.findCheckpoint(channelId),
         };
         return { first, before, split, afterSplit, merged, afterMerge };
       }),
@@ -632,7 +638,7 @@ describe("chapters in the database", () => {
       ["v3", result.first, mergedAt],
       ["v4", result.first, mergedAt],
     ]);
-    // A thread you had read stays read, and the briefing summary of the old boundaries is gone.
+    // A channel you had read stays read, and the briefing summary of the old boundaries is gone.
     expect([result.afterSplit.unread, result.afterMerge.unread]).toEqual([false, false]);
     expect([Option.isNone(result.afterSplit.checkpoint), Option.isNone(result.afterMerge.checkpoint)]).toEqual([
       true,
@@ -640,29 +646,33 @@ describe("chapters in the database", () => {
     ]);
     // A split leaves the first chapter's session, which is resting; the merge makes it live again
     // and drops it, so it is never resumed.
-    expect(result.afterSplit.thread.sessions.map((s) => s.sessionId)).toEqual(["s1"]);
-    expect(result.afterMerge.thread).toMatchObject({ liveChapterId: result.first, liveChapterMerges: 1, sessions: [] });
+    expect(result.afterSplit.channel.sessions.map((s) => s.sessionId)).toEqual(["s1"]);
+    expect(result.afterMerge.channel).toMatchObject({
+      liveChapterId: result.first,
+      liveChapterMerges: 1,
+      sessions: [],
+    });
   });
 
   // covers ADR 037 (Chapters), STD-ARCH-014
-  it("a thread read before a merge and written back with its session after it does not bring that session back (#1379)", async () => {
+  it("a channel read before a merge and written back with its session after it does not bring that session back (#1379)", async () => {
     const result = await hub.runPromise(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
         const store = yield* ChapterRepository;
-        const threadId = ThreadId.make("fenced");
-        yield* repo.upsertThread(newThread(threadId));
-        yield* repo.upsertMessage(userMessage(threadId, "f1"));
-        yield* repo.upsertMessage(userMessage(threadId, "f2"));
-        yield* store.splitChapter(threadId, {
+        const channelId = ChannelId.make("fenced");
+        yield* repo.upsertChannel(newChannel(channelId));
+        yield* repo.upsertMessage(userMessage(channelId, "f1"));
+        yield* repo.upsertMessage(userMessage(channelId, "f2"));
+        yield* store.splitChapter(channelId, {
           id: ChapterId.make("fenced-c2"),
           messageId: MessageId.make("f2"),
           title: "Later",
         });
-        yield* store.mergeChapters(threadId, ChapterId.make("fenced-c2"));
-        // A turn records its session from a read of the thread, after which the chapter it read
+        yield* store.mergeChapters(channelId, ChapterId.make("fenced-c2"));
+        // A turn records its session from a read of the channel, after which the chapter it read
         // as live is split off and merged back again, before the turn's write lands.
-        const read = Option.getOrThrow(yield* repo.findThread(threadId));
+        const read = Option.getOrThrow(yield* repo.findChannel(channelId));
         const live = read.liveChapterId as ChapterId;
         const session = {
           runtime: "claude-code" as const,
@@ -672,17 +682,17 @@ describe("chapters in the database", () => {
           chapterMerges: read.liveChapterMerges,
           seenThrough: MessageId.make("f2"),
         };
-        yield* repo.upsertMessage(userMessage(threadId, "f3"));
-        yield* store.splitChapter(threadId, {
+        yield* repo.upsertMessage(userMessage(channelId, "f3"));
+        yield* store.splitChapter(channelId, {
           id: ChapterId.make("fenced-c3"),
           messageId: MessageId.make("f3"),
           title: "Again",
         });
-        yield* store.mergeChapters(threadId, ChapterId.make("fenced-c3"));
-        yield* repo.upsertThread(new Thread({ ...read, sessions: [session] }));
-        const after = Option.getOrThrow(yield* repo.findThread(threadId));
+        yield* store.mergeChapters(channelId, ChapterId.make("fenced-c3"));
+        yield* repo.upsertChannel(new Channel({ ...read, sessions: [session] }));
+        const after = Option.getOrThrow(yield* repo.findChannel(channelId));
         // A session that started after the last merge is the one resumed.
-        const fresh = new Thread({
+        const fresh = new Channel({
           ...after,
           sessions: [{ ...session, sessionId: "s-after", chapterMerges: after.liveChapterMerges }],
         });

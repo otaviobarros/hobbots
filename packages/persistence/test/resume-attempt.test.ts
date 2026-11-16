@@ -1,5 +1,5 @@
 import { type AttemptResume, HobbotsRepository, type NewAttempt, TaskRepository } from "@hobbots/agents";
-import { Agent, AgentId, type AttemptEnd, AttemptId, TaskId, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, type AttemptEnd, AttemptId, Channel, ChannelId, TaskId } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { describe, expect, it } from "vitest";
 import { EventJournal, HobbotsRepositoryLive, TaskRepositoryLive } from "../src/index.ts";
@@ -17,7 +17,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, HobbotsRepository | TaskRepositor
 const now = "2026-11-03T00:00:00.000Z";
 const later = "2026-11-03T00:05:00.000Z";
 const ALDRIC = AgentId.make("aldric");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 const top = TaskId.make("campaign");
 
 const attempt = (id: string): NewAttempt => ({
@@ -37,7 +37,7 @@ const ENDS: Record<"completed" | "interrupted" | "unresolved", AttemptEnd> = {
   unresolved: { _tag: "Unconfirmed", reason: "Not confirmed" },
 };
 
-/** Aldric's Task in his thread, with its first turn's Attempt ended as `ended`. */
+/** Aldric's Task in his channel, with its first turn's Attempt ended as `ended`. */
 const turnEnded = (ended: keyof typeof ENDS = "completed") =>
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
@@ -56,8 +56,8 @@ const turnEnded = (ended: keyof typeof ENDS = "completed") =>
         createdAt: now,
       }),
     );
-    yield* repo.upsertThread(
-      new Thread({ id: threadId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
+    yield* repo.upsertChannel(
+      new Channel({ id: channelId, ownerHobId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
     );
     const tasks = yield* TaskRepository;
     const created = yield* tasks.createTask({
@@ -65,7 +65,7 @@ const turnEnded = (ended: keyof typeof ENDS = "completed") =>
         id: top,
         ownerId: ALDRIC,
         parentId: null,
-        threadId,
+        channelId,
         brief: "Plan the campaign",
         dependsOn: [],
         createdAt: now,
@@ -171,7 +171,7 @@ describe("resuming a Task's Attempt", () => {
         const tasks = yield* TaskRepository;
         yield* turnEnded();
         const created = yield* tasks.createTask({
-          task: { id: step, ownerId: ALDRIC, parentId: top, threadId, brief: "Draft", dependsOn: [], createdAt: now },
+          task: { id: step, ownerId: ALDRIC, parentId: top, channelId, brief: "Draft", dependsOn: [], createdAt: now },
           delegation: null,
           milestones: [],
         });

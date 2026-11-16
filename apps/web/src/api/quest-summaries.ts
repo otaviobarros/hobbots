@@ -1,4 +1,4 @@
-import type { Quest, QuestId, QuestSummary, ThreadId } from "@hobbots/domain";
+import type { ChannelId, Quest, QuestId, QuestSummary } from "@hobbots/domain";
 import { type QueryClient, type QueryFunctionContext, queryOptions, useQuery } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { followsEvents } from "./queries.ts";
@@ -17,7 +17,7 @@ export const summariesRoot = "quest-summaries";
 
 const questSummaryKeys = {
   active: [summariesRoot, "active"] as const,
-  of: (threadId: ThreadId) => [summariesRoot, "thread", threadId] as const,
+  of: (channelId: ChannelId) => [summariesRoot, "channel", channelId] as const,
 };
 
 /** How many summaries this client has taken from events: a read that missed one is made again. */
@@ -34,14 +34,14 @@ const merged = (held: Summaries | undefined, read: ReadonlyArray<QuestSummary>):
   return next;
 };
 
-const summariesQuery = (queryKey: ReadonlyArray<string>, threadId: ThreadId | undefined) =>
+const summariesQuery = (queryKey: ReadonlyArray<string>, channelId: ChannelId | undefined) =>
   queryOptions({
     queryKey,
     ...followsEvents,
     queryFn: async ({ client }: QueryFunctionContext): Promise<Summaries> => {
       for (;;) {
         const before = mark(client);
-        const read = await call((c) => c.tasks.questSummaries({ query: threadId === undefined ? {} : { threadId } }));
+        const read = await call((c) => c.tasks.questSummaries({ query: channelId === undefined ? {} : { channelId } }));
         if (mark(client) === before) {
           noteRead(client, queryKey);
           return merged(client.getQueryData<Summaries>(queryKey), read.summaries);
@@ -54,7 +54,7 @@ const summariesQuery = (queryKey: ReadonlyArray<string>, threadId: ThreadId | un
 export const activeSummariesQuery = summariesQuery(questSummaryKeys.active, undefined);
 
 /** Every Quest followed in a chat or camp, ended ones included. */
-const threadSummariesQuery = (threadId: ThreadId) => summariesQuery(questSummaryKeys.of(threadId), threadId);
+const channelSummariesQuery = (channelId: ChannelId) => summariesQuery(questSummaryKeys.of(channelId), channelId);
 
 /**
  * A Quest's summary changed: every loaded set that holds the Quest, or would, takes it when it is
@@ -64,7 +64,7 @@ export const questSummaryChanged = (queryClient: QueryClient, summary: QuestSumm
   changes.set(queryClient, (changes.get(queryClient) ?? 0) + 1);
   const take = (old: Summaries | undefined) => (old === undefined ? old : merged(old, [summary]));
   queryClient.setQueryData<Summaries>(questSummaryKeys.active, take);
-  if (summary.threadId !== null) queryClient.setQueryData<Summaries>(questSummaryKeys.of(summary.threadId), take);
+  if (summary.channelId !== null) queryClient.setQueryData<Summaries>(questSummaryKeys.of(summary.channelId), take);
 };
 
 const byQuest = (summaries: Summaries): ReadonlyMap<QuestId, QuestSummary> =>
@@ -79,16 +79,16 @@ export const useSummariesByQuest = (): ReadonlyMap<QuestId, QuestSummary> =>
  * A Quest's summary, read with the Quests of the chat or camp it is followed in; undefined until
  * read, and for no Quest, as for a Task that works alone.
  */
-export const useQuestSummary = (quest: Pick<Quest, "id" | "threadId"> | null): QuestSummary | undefined =>
+export const useQuestSummary = (quest: Pick<Quest, "id" | "channelId"> | null): QuestSummary | undefined =>
   useQuery({
-    ...(quest?.threadId == null ? activeSummariesQuery : threadSummariesQuery(quest.threadId)),
+    ...(quest?.channelId == null ? activeSummariesQuery : channelSummariesQuery(quest.channelId)),
     enabled: quest !== null,
     select: (summaries: Summaries) => (quest === null ? undefined : summaries[quest.id]),
   }).data;
 
-const NO_THREAD_SUMMARIES: ReadonlyArray<QuestSummary> = [];
+const NO_CHANNEL_SUMMARIES: ReadonlyArray<QuestSummary> = [];
 
 /** Every Quest followed in a chat or camp, ended ones included, as the hub published them. */
-export const useThreadSummaries = (threadId: ThreadId): ReadonlyArray<QuestSummary> =>
-  useQuery({ ...threadSummariesQuery(threadId), select: (summaries: Summaries) => Object.values(summaries) }).data ??
-  NO_THREAD_SUMMARIES;
+export const useChannelSummaries = (channelId: ChannelId): ReadonlyArray<QuestSummary> =>
+  useQuery({ ...channelSummariesQuery(channelId), select: (summaries: Summaries) => Object.values(summaries) }).data ??
+  NO_CHANNEL_SUMMARIES;

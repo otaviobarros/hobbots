@@ -1,17 +1,17 @@
-import { ChatService, HobAdmission, HobbotsRepository, HobTools, ThreadMemberRepository } from "@hobbots/agents";
+import { ChannelMemberRepository, ChatService, HobAdmission, HobbotsRepository, HobTools } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   HOB_RELAY_BUDGET,
   hobActor,
   isInProgress,
   type Message,
   OWNER_ACTOR,
-  Thread,
-  ThreadId,
   TurnRequests,
 } from "@hobbots/domain";
-import { HobbotsRepositoryLive, ThreadMemberRepositoryLive } from "@hobbots/persistence";
+import { ChannelMemberRepositoryLive, HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
 import { Context, Effect, Layer, PubSub, Schedule } from "effect";
@@ -29,7 +29,7 @@ import { EventBus } from "../src/event-bus.ts";
 
 const QUILL = AgentId.make("quill");
 const PIP = AgentId.make("pip");
-const CAMP = ThreadId.make("camp");
+const CAMP = ChannelId.make("camp");
 const NOW = "2026-11-14T10:00:00.000Z";
 
 const hob = (id: AgentId) =>
@@ -50,10 +50,10 @@ const hob = (id: AgentId) =>
 /** Quill's camp, which Pip joined. */
 const campOfTwo = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
-  const members = yield* ThreadMemberRepository;
+  const members = yield* ChannelMemberRepository;
   for (const id of [QUILL, PIP]) yield* repo.insertAgent(hob(id));
-  yield* repo.upsertThread(
-    new Thread({ id: CAMP, agentId: QUILL, title: "Launch", kind: "camp", createdAt: NOW, updatedAt: NOW }),
+  yield* repo.upsertChannel(
+    new Channel({ id: CAMP, ownerHobId: QUILL, title: "Launch", kind: "camp", createdAt: NOW, updatedAt: NOW }),
   );
   yield* members.add(CAMP, hobActor(PIP), OWNER_ACTOR);
 });
@@ -61,7 +61,7 @@ const campOfTwo = Effect.gen(function* () {
 const camp = Layer.mergeAll(
   Layer.effectDiscard(Effect.orDie(campOfTwo)).pipe(
     Layer.provideMerge(
-      Layer.mergeAll(HobbotsRepositoryLive, ThreadMemberRepositoryLive).pipe(Layer.provideMerge(TestDatabase)),
+      Layer.mergeAll(HobbotsRepositoryLive, ChannelMemberRepositoryLive).pipe(Layer.provideMerge(TestDatabase)),
     ),
   ),
   EventBus.layer,
@@ -108,7 +108,7 @@ const lateHub = ChatService.layer.pipe(
 
 /** The camp's line as the hub publishes it now; null when it publishes none. */
 const line = Effect.flatMap(ChatService, (chat) =>
-  chat.threadRuns.pipe(Effect.map(({ runs }) => runs.find((run) => run.threadId === CAMP) ?? null)),
+  chat.channelRuns.pipe(Effect.map(({ runs }) => runs.find((run) => run.channelId === CAMP) ?? null)),
 );
 
 /** Waits until no turn runs or waits in the camp: what is still owed is paused, if anything. */
@@ -117,8 +117,8 @@ const settled = Effect.gen(function* () {
   const chat = yield* ChatService;
   yield* Effect.gen(function* () {
     const messages = yield* repo.listMessages(CAMP);
-    const owed = yield* repo.openTurnRequests({ threadId: CAMP, rootMessageId: null });
-    const running = yield* chat.activeThreads;
+    const owed = yield* repo.openTurnRequests({ channelId: CAMP, rootMessageId: null });
+    const running = yield* chat.activeChannels;
     // The line rests once the last turn's end has moved the floor on.
     const run = (yield* line)?.run ?? "idle";
     const busy =
@@ -140,7 +140,7 @@ const allRequests = Effect.flatMap(SqlClient.SqlClient, (sql) =>
     readonly state: string;
     readonly droppedById: string | null;
   }>`SELECT hob_id, caused_by_id, relay_depth, state, dropped_by_id FROM turn_requests
-    WHERE thread_id = ${CAMP} ORDER BY queued_at, position`.pipe(
+    WHERE channel_id = ${CAMP} ORDER BY queued_at, position`.pipe(
     Effect.map((rows) => rows.map((row) => ({ ...row, relayDepth: Number(row.relayDepth) }))),
     Effect.orDie,
   ),
@@ -206,7 +206,7 @@ describe("the relay budget", () => {
     expect(paused.map((r) => r.relayDepth)).toEqual([4, 4]);
     expect(result.requests.filter((r) => r.state !== "answered" && r.state !== "paused")).toEqual([]);
     expect(result.resets).toHaveLength(1);
-    expect(result.resets[0]).toMatchObject({ threadId: CAMP, rootMessageId: null, by: OWNER_ACTOR });
+    expect(result.resets[0]).toMatchObject({ channelId: CAMP, rootMessageId: null, by: OWNER_ACTOR });
     expect((result.resets[0] as { readonly requests: ReadonlyArray<string> }).requests).toHaveLength(2);
     expect(result.line?.paused).toHaveLength(2);
   }, 30_000);

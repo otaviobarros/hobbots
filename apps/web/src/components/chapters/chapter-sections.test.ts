@@ -1,4 +1,4 @@
-import { Chapter, ChapterId, Message, MessageId, ThreadId } from "@hobbots/domain";
+import { ChannelId, Chapter, ChapterId, Message, MessageId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
   chapterFocus,
@@ -10,13 +10,13 @@ import {
   showsChapters,
 } from "./chapter-sections.ts";
 
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 const at = "2026-11-12T10:00:00.000Z";
 
 const chapter = (id: string, number: number, state: Chapter["state"], title: string | null = null) =>
   new Chapter({
     id: ChapterId.make(id),
-    threadId,
+    channelId,
     number,
     title,
     summary: null,
@@ -29,7 +29,7 @@ const chapter = (id: string, number: number, state: Chapter["state"], title: str
 const message = (id: string, chapterId: string | null) =>
   new Message({
     id: MessageId.make(id),
-    threadId,
+    channelId,
     role: "user",
     content: id,
     status: "complete",
@@ -61,7 +61,7 @@ describe("chapterSections", () => {
   });
 
   it("puts a message of a chapter it does not hold yet in the live one, and leaves out moved and empty ones", () => {
-    const moved = new Chapter({ ...chapter("c2", 2, "moved"), movedTo: ThreadId.make("camp") });
+    const moved = new Chapter({ ...chapter("c2", 2, "moved"), movedTo: ChannelId.make("camp") });
     const transcript = [message("a", "c1"), message("b", "c9"), message("c", null)];
     const chapters = [one, moved, chapter("c4", 3, "resting"), chapter("c5", 4, "live")];
     expect(ids(chapterSections(transcript, chapters))).toEqual([

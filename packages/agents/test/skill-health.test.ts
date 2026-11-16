@@ -217,7 +217,7 @@ describe("a chat that tries a draft (ADR 029, Try in a chat)", () => {
   it("shows a use of the draft under the reply and records nothing in the library (#1099)", async () => {
     const used = await Effect.runPromise(
       Effect.gen(function* () {
-        const uses = yield* skillUseRecorder({ agentId: PIP, threadId: null, messageId: null });
+        const uses = yield* skillUseRecorder({ agentId: PIP, channelId: null, messageId: null });
         uses.given([], trial);
         return [
           yield* uses.resolve({ source: "library", name: "changelog", explicit: true }),

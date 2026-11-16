@@ -1031,7 +1031,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
             kind,
             tool,
             call: { scope: context.turn.scope(), key: context.key ?? "" },
-            threadId: context.turn.threadId,
+            channelId: context.turn.channelId,
             messageId: context.turn.messageId,
             taskId: taskOf(context),
             stepId: asked.stepId,
@@ -1413,7 +1413,7 @@ export const makeSummoningCharm = (options: { readonly decide: DecideSummoning; 
         const context: HubPlanContext = {
           turn: {
             agentId: proposal.agentId,
-            threadId: proposal.threadId,
+            channelId: proposal.channelId,
             messageId: proposal.messageId,
             scope: () => proposal.call.scope,
             ...(proposal.taskId === null ? {} : { taskId: proposal.taskId }),

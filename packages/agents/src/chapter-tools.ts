@@ -1,5 +1,7 @@
 import {
   type AgentId,
+  type Channel,
+  ChannelMembers,
   ChapterId,
   type ChapterRefusal,
   hobActor,
@@ -18,15 +20,13 @@ import {
   START_CHAPTER_TOOL,
   StartChapterInput,
   startChapterJsonSchema,
-  type Thread,
-  ThreadMembers,
 } from "@hobbots/domain";
 import { Effect, Layer, Option, Schema } from "effect";
+import { ChannelMemberRepository } from "./channel-members.ts";
 import { ChapterService } from "./chapters.ts";
 import { ChapterTools, type CharmTurn, hubAnswer } from "./charms.ts";
 import { HobbotsRepository } from "./repository.ts";
 import type { HubTool, HubToolAnswer, HubTools } from "./runtime.ts";
-import { ThreadMemberRepository } from "./thread-members.ts";
 import { pageParts } from "./web-fetch.ts";
 
 /** Why a Chapter tool call did not run, in words for the hob. */
@@ -50,12 +50,12 @@ const READ_MESSAGE: HubTool = {
 export const START_CHAPTER_OUTSIDE_CHAT =
   "start_chapter works only from a chat turn: this session runs a Task's step, outside the conversation. A chapter starts between steps, from the chat, and its open Tasks carry over.";
 
-/** What `read_message` answers for a message it does not find in the hob's own threads. */
+/** What `read_message` answers for a message it does not find in the hob's own channels. */
 export const unknownMessageText = (id: string): string =>
   `There is no message ${id.slice(0, 200)} in your conversations.`;
 
 const REFUSALS: Partial<Record<ChapterRefusal, string>> = {
-  "thread-closed": "This conversation is archived, so its chapters stay as they are.",
+  "channel-closed": "This conversation is archived, so its chapters stay as they are.",
   "empty-title": "Give the new chapter a title with some text.",
   "live-chapter-empty": "The current chapter has no message yet, so there is nothing to end.",
   moved: "The current chapter moved to a camp, so there is no chapter here to end.",
@@ -94,42 +94,41 @@ const decodeRead = Schema.decodeUnknownEffect(ReadMessageInput);
 
 /**
  * The Chapter tools' layer (ADR 037, #1381): `start_chapter` runs through `ChapterService`, and
- * `read_message` reads only messages of the hob's own threads.
+ * `read_message` reads only messages of the hob's own channels.
  */
 export const ChapterToolsLive = Layer.effect(
   ChapterTools,
   Effect.gen(function* () {
     const chapters = yield* ChapterService;
     const repo = yield* HobbotsRepository;
-    const members = yield* Effect.serviceOption(ThreadMemberRepository);
-    // A hob reads the messages of its own threads and of the camps it is an active member of (ADR 039).
-    const readsIn = (thread: Thread, turn: CharmTurn) =>
-      // standards-allow STD-ARCH-021: the hob a thread belongs to reads it, as its owner
-      thread.agentId === turn.agentId
+    const members = yield* Effect.serviceOption(ChannelMemberRepository);
+    // A hob reads the messages of its own channels and of the camps it is an active member of (ADR 039).
+    const readsIn = (channel: Channel, turn: CharmTurn) =>
+      channel.ownerHobId === turn.agentId
         ? Effect.succeed(true)
         : Option.isNone(members)
           ? Effect.succeed(false)
           : members.value
-              .find(thread.id, hobActor(turn.agentId))
-              .pipe(Effect.map((member) => Option.isSome(member) && ThreadMembers.isActive(member.value)));
+              .find(channel.id, hobActor(turn.agentId))
+              .pipe(Effect.map((member) => Option.isSome(member) && ChannelMembers.isActive(member.value)));
     // A runtime runs each call on its own, so it carries the hub's services, its logger included.
     const context = yield* Effect.context<never>();
 
     const startChapter = (turn: CharmTurn, raw: unknown) =>
       Effect.gen(function* () {
-        if (turn.threadId === null || turn.messageId === null) {
+        if (turn.channelId === null || turn.messageId === null) {
           return yield* new Refused({ message: START_CHAPTER_OUTSIDE_CHAT });
         }
-        const threadId = turn.threadId;
+        const channelId = turn.channelId;
         const input = yield* decodeStart(raw).pipe(
           Effect.mapError(() => new Refused({ message: "Give the new chapter's topic as `title`." })),
         );
         const id = turnChapterId(turn.messageId);
-        const plan = yield* chapters.startChapter(threadId, { id, title: input.title }).pipe(
+        const plan = yield* chapters.startChapter(channelId, { id, title: input.title }).pipe(
           Effect.catchTags({
             ChapterRefused: (refused) =>
               Effect.fail(new Refused({ message: REFUSALS[refused.reason] ?? "The chapter could not start." })),
-            ThreadNotFound: () => Effect.fail(new Refused({ message: "This conversation is gone." })),
+            ChannelNotFound: () => Effect.fail(new Refused({ message: "This conversation is gone." })),
             ChapterNotFound: () => Effect.fail(new Refused({ message: "The chapter could not start." })),
             IllegalChapterTransition: () => Effect.fail(new Refused({ message: "The chapter could not start." })),
           }),
@@ -156,14 +155,14 @@ export const ChapterToolsLive = Layer.effect(
           ),
         );
         const found = yield* repo.findMessage(MessageId.make(input.message_id));
-        const thread = Option.isNone(found) ? Option.none() : yield* repo.findThread(found.value.threadId);
-        // A message of a thread the hob is not in, and a note to self, which only you read (ADR 037),
+        const channel = Option.isNone(found) ? Option.none() : yield* repo.findChannel(found.value.channelId);
+        // A message of a channel the hob is not in, and a note to self, which only you read (ADR 037),
         // read as one that does not exist, so its id says nothing.
         if (
           Option.isNone(found) ||
           !hobReads(found.value) ||
-          Option.isNone(thread) ||
-          !(yield* readsIn(thread.value, turn))
+          Option.isNone(channel) ||
+          !(yield* readsIn(channel.value, turn))
         ) {
           return yield* new Refused({ message: unknownMessageText(input.message_id) });
         }
@@ -176,7 +175,7 @@ export const ChapterToolsLive = Layer.effect(
             message: `Message ${input.message_id} has ${parts === 1 ? "1 part" : `${parts} parts`}, so there is no part ${part}.`,
           });
         }
-        const writer = replyHobOf(found.value, thread.value);
+        const writer = replyHobOf(found.value, channel.value);
         const name =
           writer === null
             ? "a hob"

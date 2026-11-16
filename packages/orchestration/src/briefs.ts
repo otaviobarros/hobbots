@@ -50,7 +50,7 @@ export const CHECKPOINT_RULE = `Keep each checkpoint's summary to about ${CHECKP
  * member's, gets nothing.
  */
 export const planNote = (task: Task): string =>
-  task.parentId !== null || task.threadId === null
+  task.parentId !== null || task.channelId === null
     ? ""
     : " Delegate first: writing the plan starts nothing. Then tell the user the plan in a line or two, who does what, after your tool calls. Then stay quiet until a question no lead can answer, or the finish.";
 

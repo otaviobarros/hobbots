@@ -57,8 +57,8 @@ const send = async (page: Page, text: string) => {
 };
 
 const replies = async (current: Hub, page: Page, role = "assistant") => {
-  const thread = page.url().match(/threads\/([^/?#]+)/)?.[1];
-  const messages = await api<ReadonlyArray<Reply>>(current, "GET", `/api/threads/${thread}/messages`);
+  const channel = page.url().match(/channels\/([^/?#]+)/)?.[1];
+  const messages = await api<ReadonlyArray<Reply>>(current, "GET", `/api/channels/${channel}/messages`);
   return messages.filter((m) => m.role === role);
 };
 
@@ -100,7 +100,7 @@ test("a reply shows the tools it used, a refused one with its reason, and still 
         "fake:tool Write /etc/hobbots-e2e.txt",
       ].join("\n"),
     );
-    await expect(page).toHaveURL(/threads\//);
+    await expect(page).toHaveURL(/channels\//);
     await expect.poll(async () => (await replies(current, page)).map((r) => r.status)).toEqual(["complete"]);
 
     const shows = async () => {
@@ -235,7 +235,7 @@ test("messages sent while the hub is away all go out, in the order they were sen
   await expect(waiting.nth(2)).toContainText("three");
 
   hub = await startHub(dataDir);
-  // The first starts the thread; the rest follow it there.
+  // The first starts the channel; the rest follow it there.
   await expect(page.getByRole("main").getByText("Echo: three", { exact: true })).toBeVisible();
   await expect(waiting).toHaveCount(0);
   expect((await replies(hub, page, "user")).map((m) => m.content)).toEqual(["one", "two", "three"]);
@@ -253,7 +253,7 @@ test("a waiting message the hub refuses stays until it is sent again or edited",
   await send(page, "after");
   // The hub comes back but refuses the first resend.
   let refuse = true;
-  await page.route("**/api/threads/*/messages", (route) =>
+  await page.route("**/api/channels/*/messages", (route) =>
     refuse && route.request().method() === "POST"
       ? route.fulfill({ status: 503, contentType: "application/json", body: "{}" })
       : route.fallback(),
@@ -281,7 +281,7 @@ test("a refused waiting message can be edited back into the composer", async ({ 
   await current.stop();
   await expect(page.getByRole("status").filter({ hasText: "Reconnecting to Hobbots" })).toBeVisible();
   await send(page, "fix me");
-  await page.route("**/api/threads/*/messages", (route) =>
+  await page.route("**/api/channels/*/messages", (route) =>
     route.request().method() === "POST"
       ? route.fulfill({ status: 503, contentType: "application/json", body: "{}" })
       : route.fallback(),
@@ -316,7 +316,7 @@ const goOffline = async (current: Hub, page: Page) => {
   await expect(page.getByRole("status").filter({ hasText: "Reconnecting to Hobbots" })).toBeVisible();
 };
 
-test("a message edited while the one before it starts the thread stays edited", async ({ page }) => {
+test("a message edited while the one before it starts the channel stays edited", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await expect(page.getByText("Hello, I'm Pip!")).toBeVisible();
@@ -324,7 +324,7 @@ test("a message edited while the one before it starts the thread stays edited", 
   await goOffline(current, page);
   await send(page, "first");
   await send(page, "second");
-  const creating = await holdRequests(page, "**/api/agents/*/threads", "POST");
+  const creating = await holdRequests(page, "**/api/agents/*/channels", "POST");
   hub = await startHub(dataDir);
   await expect.poll(() => creating.held.length).toBe(1);
 
@@ -335,7 +335,7 @@ test("a message edited while the one before it starts the thread stays edited", 
   await composer.fill("second, edited");
   creating.release();
 
-  await expect(page).toHaveURL(/threads\//);
+  await expect(page).toHaveURL(/channels\//);
   await expect(page.getByRole("main").getByText("Echo: first", { exact: true })).toBeVisible();
   await expect(composer).toHaveValue("second, edited");
   await expect(waiting).toHaveCount(0);
@@ -362,7 +362,7 @@ test("waiting messages survive a full resync and still go out", async ({ page })
   await send(page, "after the resync");
   // The hub refuses the message, so it is still waiting when the client starts over.
   let refuse = true;
-  await page.route("**/api/threads/*/messages", (route) =>
+  await page.route("**/api/channels/*/messages", (route) =>
     refuse && route.request().method() === "POST"
       ? route.fulfill({ status: 503, contentType: "application/json", body: "{}" })
       : route.fallback(),
@@ -388,43 +388,43 @@ test("waiting messages survive a full resync and still go out", async ({ page })
   await expect(waiting).toHaveCount(0);
 });
 
-test("leaving a thread while its waiting message is on its way sends it only once", async ({ page }) => {
+test("leaving a channel while its waiting message is on its way sends it only once", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await send(page, "first");
   await expect(page.getByRole("main").getByText("Echo: first", { exact: true })).toBeVisible();
-  const threadUrl = page.url();
+  const channelUrl = page.url();
 
   await goOffline(current, page);
   await send(page, "only once");
-  const sending = await holdRequests(page, "**/api/threads/*/messages", "POST");
+  const sending = await holdRequests(page, "**/api/channels/*/messages", "POST");
   hub = await startHub(dataDir);
   await expect.poll(() => sending.held.length).toBe(1);
 
   // Moving to another page in the app closes this chat while the message is still on its way.
-  const threadHash = new URL(threadUrl).hash;
+  const channelHash = new URL(channelUrl).hash;
   await page.evaluate((hash) => {
     window.location.hash = hash;
   }, `#/hobs/${pip.id}/profile`);
   await expect(page.getByRole("main").getByText("Echo: first")).toBeHidden();
   sending.release();
-  const threadId = threadHash.match(/threads\/([^/?#]+)/)?.[1];
+  const channelId = channelHash.match(/channels\/([^/?#]+)/)?.[1];
   const userMessages = async () =>
-    (await api<ReadonlyArray<Reply>>(hub as Hub, "GET", `/api/threads/${threadId}/messages`))
+    (await api<ReadonlyArray<Reply>>(hub as Hub, "GET", `/api/channels/${channelId}/messages`))
       .filter((m) => m.role === "user")
       .map((m) => m.content);
   await expect.poll(userMessages).toEqual(["first", "only once"]);
 
   await page.evaluate((hash) => {
     window.location.hash = hash;
-  }, threadHash);
+  }, channelHash);
   await expect(page.getByRole("main").getByText("Echo: only once", { exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Waiting to send" })).toHaveCount(0);
   await page.waitForTimeout(500);
   expect(await userMessages()).toEqual(["first", "only once"]);
 });
 
-test("a new hob with no threads says hello", async ({ page }) => {
+test("a new hob with no channels says hello", async ({ page }) => {
   const { current, pip } = await hubWithPip();
   await page.goto(`${current.url}/#/hobs/${pip.id}/chat`);
   await expect(page.getByText("Hello, I'm Pip!")).toBeVisible();

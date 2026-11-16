@@ -398,7 +398,7 @@ export const messages = {
     editHob: "Edit hob",
     ideas: ["Plan a product launch", "Sum up this week's inbox", "Tidy my Downloads folder"],
     askWhat: "What are we making?",
-    newThread: "New thread",
+    newChannel: "New thread",
     openHob: ({ name }: { name: string }) => `Open ${name}'s page`,
     /** The back arrow at the start of the chat header, which opens the hob's page on its chats. */
     backToChats: ({ name }: { name: string }) => `Back to ${name}'s chats`,
@@ -451,12 +451,12 @@ export const messages = {
   },
   composer: {
     /**
-     * A message refused for mentioning hobs that are not in the thread (ADR 039, Who answers). A
+     * A message refused for mentioning hobs that are not in the channel (ADR 039, Who answers). A
      * direct message takes no one else, so it only says so.
      */
-    mentionRefused: ({ names, kind }: { names: ReadonlyArray<string>; kind: "chat" | "camp" }) => {
+    mentionRefused: ({ names, kind }: { names: ReadonlyArray<string>; kind: "direct" | "camp" }) => {
       const who = formatList(names);
-      if (kind === "chat") {
+      if (kind === "direct") {
         return pluralForm(names.length, {
           one: `${who} isn't in this direct message.`,
           other: `${who} aren't in this direct message.`,
@@ -514,7 +514,7 @@ export const messages = {
   reply: {
     /** Over your message: who sent it and when. */
     you: ({ time }: { time: string }) => `You · ${time}`,
-    /** The tag beside the name on a reply: the thread's hob leads its work. */
+    /** The tag beside the name on a reply: the channel's hob leads its work. */
     lead: "Lead",
     thinking: ({ name }: { name: string }) => `${name} is thinking`,
     writing: "writing…",

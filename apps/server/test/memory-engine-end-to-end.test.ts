@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   type Agent,
+  type Channel,
   type MemoryHit,
   type MemoryPage,
   type MemoryPageSummary,
@@ -12,7 +13,6 @@ import {
   type MemoryShare,
   type Message,
   memoryScopeKey,
-  type Thread,
 } from "@hobbots/domain";
 import { testEngine } from "@hobbots/memory/testing";
 import { FAKE_SAY_ANSWERS_DIRECTIVE } from "@hobbots/runtimes";
@@ -89,17 +89,17 @@ const eventually = async <A>(what: string, read: () => Promise<A | undefined>, s
   throw new Error(`Waited ${seconds}s for ${what}${last === undefined ? "" : `: ${String(last)}`}`);
 };
 
-const messages = (thread: Thread) => api<ReadonlyArray<Message>>("GET", `/threads/${thread.id}/messages`);
+const messages = (channel: Channel) => api<ReadonlyArray<Message>>("GET", `/channels/${channel.id}/messages`);
 
 /** Sends `lines` as one message and waits until its reply has ended. */
-const exchange = async (thread: Thread, ...lines: Array<string>) => {
-  const before = (await messages(thread)).length;
+const exchange = async (channel: Channel, ...lines: Array<string>) => {
+  const before = (await messages(channel)).length;
   // Each reply repeats the hub's answers: these tests check the words of the Memory tools' answers,
   // which a hob reads in the turn that made the call (#1560).
   const content = [...lines, FAKE_SAY_ANSWERS_DIRECTIVE].join("\n");
-  await api("POST", `/threads/${thread.id}/messages`, { content });
+  await api("POST", `/channels/${channel.id}/messages`, { content });
   return eventually("the reply", async () => {
-    const all = await messages(thread);
+    const all = await messages(channel);
     const last = all.at(-1);
     return all.length >= before + 2 && last?.role === "assistant" && last.status === "complete" ? last : undefined;
   });
@@ -148,7 +148,7 @@ const summon = (name: string, lookSeed: number) =>
     instructions: "",
   });
 
-const newThread = (hob: Agent) => api<Thread>("POST", `/agents/${hob.id}/threads`);
+const newChannel = (hob: Agent) => api<Channel>("POST", `/agents/${hob.id}/channels`);
 
 const ownScope = (hob: Agent) => memoryScopeKey({ _tag: "Hob", agentId: hob.id });
 
@@ -184,7 +184,7 @@ const LESSON = {
 
 describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled ai-memory", () => {
   // covers ADR 028 (The memory tools, The memory brief)
-  it("a lesson a hob learns in one thread is in its next thread's brief and search, and never another hob's", async () => {
+  it("a lesson a hob learns in one channel is in its next channel's brief and search, and never another hob's", async () => {
     const { project, dataDir } = prepare();
     hub = await start(dataDir);
     await engineRunning();
@@ -192,19 +192,19 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
     const pip = await summon("Pip", 9641);
     const quill = await summon("Quill", 9642);
 
-    const first = await newThread(pip);
+    const first = await newChannel(pip);
     const saved = await exchange(first, "Remember how the tests run", hubCall("memory_save", LESSON));
     expect(saved.content).toContain("memory_save: Saved notes/tests.md to your memory.");
 
-    // The next thread's first turn is briefed from what Pip learned: the fake echoes its briefing.
-    const next = await newThread(pip);
+    // The next channel's first turn is briefed from what Pip learned: the fake echoes its briefing.
+    const next = await newChannel(pip);
     const briefed = await exchange(next, "Run the tests.", hubCall("memory_search", { query: "pnpm" }));
     expect(briefed.content).toContain("## From your memory");
     expect(briefed.content).toContain("never `pnpm test`");
     expect(briefed.content).toContain("Tests (notes/tests.md, in your memory)");
 
     // Quill works in the same project and learned nothing: no brief from Pip's memory, no hit.
-    const theirs = await newThread(quill);
+    const theirs = await newChannel(quill);
     const unbriefed = await exchange(theirs, "Run the tests.", hubCall("memory_search", { query: "pnpm" }));
     expect(unbriefed.content).not.toContain("never `pnpm test`");
     expect(unbriefed.content).toContain('memory_search: Memory holds nothing that matches "pnpm".');
@@ -223,14 +223,14 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
       hubCall("memory_save", { key, scope: "mine", path, markdown });
     const undo = (saveId: string) => call("POST", `/memory-saves/${saveId}/undo`);
 
-    const thread = await newThread(pip);
-    await exchange(thread, "When is the launch?", save("monday", LAUNCH, "# Launch\n\nMonday."));
-    await exchange(thread, "It moved.", save("tuesday", LAUNCH, "# Launch\n\nTuesday at 9 AM."));
-    await exchange(await newThread(pip), "Elsewhere", save("other", "notes/other.md", "# Other\n\nElsewhere."));
+    const channel = await newChannel(pip);
+    await exchange(channel, "When is the launch?", save("monday", LAUNCH, "# Launch\n\nMonday."));
+    await exchange(channel, "It moved.", save("tuesday", LAUNCH, "# Launch\n\nTuesday at 9 AM."));
+    await exchange(await newChannel(pip), "Elsewhere", save("other", "notes/other.md", "# Other\n\nElsewhere."));
 
     // The chat lists only its own two saves, each under the reply that made it.
-    const replies = (await messages(thread)).filter((message) => message.role === "assistant");
-    const saves = await api<ReadonlyArray<MemorySave>>("GET", `/threads/${thread.id}/memory-saves`);
+    const replies = (await messages(channel)).filter((message) => message.role === "assistant");
+    const saves = await api<ReadonlyArray<MemorySave>>("GET", `/channels/${channel.id}/memory-saves`);
     expect(saves.map((each) => [each.messageId, each.path, each.state])).toEqual(
       replies.map((reply) => [reply.id, LAUNCH, "saved"]),
     );
@@ -245,8 +245,8 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
     expect(await (await undo(tuesday)).json()).toMatchObject({ _tag: "MemorySaveNotUndoable", reason: "undone" });
 
     // A save you changed the page after is never undone over your change.
-    await exchange(thread, "Moved again.", save("thursday", LAUNCH, "# Launch\n\nThursday."));
-    const thursday = (await api<ReadonlyArray<MemorySave>>("GET", `/threads/${thread.id}/memory-saves`)).at(-1);
+    await exchange(channel, "Moved again.", save("thursday", LAUNCH, "# Launch\n\nThursday."));
+    const thursday = (await api<ReadonlyArray<MemorySave>>("GET", `/channels/${channel.id}/memory-saves`)).at(-1);
     const theirs = await readPage(scope, LAUNCH);
     await api("POST", "/memory/page", {
       scope,
@@ -266,7 +266,7 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
     // Undo of a save that made a page removes it.
     const others = await api<ReadonlyArray<MemorySave>>(
       "GET",
-      `/threads/${(await api<ReadonlyArray<Thread>>("GET", `/agents/${pip.id}/threads`)).find((each) => each.id !== thread.id)?.id}/memory-saves`,
+      `/channels/${(await api<ReadonlyArray<Channel>>("GET", `/agents/${pip.id}/channels`)).find((each) => each.id !== channel.id)?.id}/memory-saves`,
     );
     expect((await undo(others[0]?.id ?? "")).status).toBe(200);
     expect(await readPage(scope, "notes/other.md")).toBeUndefined();
@@ -298,7 +298,7 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
       path: "howtos/deploy.md",
       markdown: "# Deploy\n\nRun `pnpm release:canary` before every deploy.",
     };
-    const asked = await exchange(await newThread(pip), "Teach the others to deploy", hubCall("memory_save", deploy));
+    const asked = await exchange(await newChannel(pip), "Teach the others to deploy", hubCall("memory_save", deploy));
     expect(asked.content).not.toContain("memory_save: Saved");
 
     // The Inbox lists it waiting for you, and nothing reached the project: Quill finds nothing.
@@ -308,7 +308,7 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
       ),
     );
     const before = await exchange(
-      await newThread(quill),
+      await newChannel(quill),
       "How do we deploy?",
       hubCall("memory_search", { query: "canary" }),
     );
@@ -324,9 +324,9 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
     const page = await readPage(memoryScopeKey(shared.scope), deploy.path);
     expect(page?.page.author).toMatchObject({ _tag: "Hob", agentId: pip.id });
 
-    // Quill's next thread is briefed from it and finds it.
+    // Quill's next channel is briefed from it and finds it.
     const after = await exchange(
-      await newThread(quill),
+      await newChannel(quill),
       "How do we deploy?",
       hubCall("memory_search", { query: "canary" }),
     );
@@ -342,14 +342,14 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
     await engineRunning();
     await setUp([project]);
     const pip = await summon("Pip", 9645);
-    const thread = await newThread(pip);
-    await exchange(thread, "Before the outage we spoke of apricots.");
+    const channel = await newChannel(pip);
+    await exchange(channel, "Before the outage we spoke of apricots.");
 
     // Mid-reply, ai-memory stops, and its binary is gone, so it stays stopped until the hub starts again.
     const long = Array.from({ length: 60 }, (_, index) => `word${index}`).join(" ");
-    await api("POST", `/threads/${thread.id}/messages`, { content: `While memory stops, blueberries. ${long}` });
+    await api("POST", `/channels/${channel.id}/messages`, { content: `While memory stops, blueberries. ${long}` });
     await eventually("the reply to stream", async () =>
-      (await messages(thread)).at(-1)?.status === "streaming" ? true : undefined,
+      (await messages(channel)).at(-1)?.status === "streaming" ? true : undefined,
     );
     renameSync(join(engine, "ai-memory"), join(engine, "ai-memory.away"));
     const pids = enginePids(engine);
@@ -357,19 +357,19 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
     for (const pid of pids) process.kill(pid, "SIGKILL");
     await eventually("memory to be off", async () => ((await engineHealth())?.state === "off" ? true : undefined));
 
-    // The hob keeps working: the reply ends, a save is kept, and a new thread is told memory is down.
+    // The hob keeps working: the reply ends, a save is kept, and a new channel is told memory is down.
     const streamed = await eventually("the reply to end", async () => {
-      const last = (await messages(thread)).at(-1);
+      const last = (await messages(channel)).at(-1);
       return last?.role === "assistant" && last.status === "complete" ? last : undefined;
     });
     expect(streamed.content).toContain("blueberries");
     const kept = await exchange(
-      thread,
+      channel,
       "During the outage, cherries.",
       hubCall("memory_save", { key: "fruit", scope: "mine", path: "notes/fruit.md", markdown: "# Fruit\n\nCherries." }),
     );
     expect(kept.content).toContain("Hobbots kept notes/fruit.md and saves it when memory is back.");
-    const told = await exchange(await newThread(pip), "Anything to recall?");
+    const told = await exchange(await newChannel(pip), "Anything to recall?");
     expect(told.content).toContain("Memory is unavailable right now, so nothing from it is included.");
 
     // The hub starts again with the engine back: the kept save arrives, and so does all of the chat.
@@ -380,9 +380,9 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
     const fruit = await eventually("the kept save", () => readPage(ownScope(pip), "notes/fruit.md"));
     expect(fruit.page.markdown).toContain("Cherries.");
     expect(fruit.history).toHaveLength(1);
-    // Archiving the thread ends its session, and memory writes one page of it from every turn.
-    await api("POST", `/threads/${thread.id}/archive`);
-    const session = await eventually("the thread's session page", async () => {
+    // Archiving the channel ends its session, and memory writes one page of it from every turn.
+    await api("POST", `/channels/${channel.id}/archive`);
+    const session = await eventually("the channel's session page", async () => {
       const page = (await pagesOf(ownScope(pip))).find((each) => each.path.startsWith("sessions/"));
       return page === undefined ? undefined : readPage(ownScope(pip), page.path);
     });
@@ -391,7 +391,7 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
   });
 
   // covers ADR 028 (Backups), OP-003, OP-004
-  it("an export holds memory, and a restored backup keeps it: the page, its history and the next thread's brief, with new keys", async () => {
+  it("an export holds memory, and a restored backup keeps it: the page, its history and the next channel's brief, with new keys", async () => {
     const { project, dataDir } = prepare();
     const backups = join(root, "backups");
     mkdirSync(backups);
@@ -399,7 +399,7 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
     await engineRunning();
     await setUp([project]);
     const pip = await summon("Pip", 9646);
-    await exchange(await newThread(pip), "Remember how the tests run", hubCall("memory_save", LESSON));
+    await exchange(await newChannel(pip), "Remember how the tests run", hubCall("memory_save", LESSON));
     // Your edit, a second version by you.
     const saved = await eventually("the lesson", () => readPage(ownScope(pip), LESSON.path));
     const edited = `${LESSON.markdown}\n\nRun them twice on CI.`;
@@ -448,7 +448,7 @@ describe.runIf(testEngine.enabled)("memory end to end on the hub and the bundled
     const restored = await eventually("the restored page", () => readPage(ownScope(pip), LESSON.path));
     expect(restored.page.markdown).toBe(edited);
     expect(restored.history).toHaveLength(2);
-    const briefed = await exchange(await newThread(pip), "Run the tests.");
+    const briefed = await exchange(await newChannel(pip), "Run the tests.");
     expect(briefed.content).toContain("Run them twice on CI.");
   });
 });

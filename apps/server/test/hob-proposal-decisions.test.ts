@@ -94,7 +94,7 @@ const proposed = Effect.gen(function* () {
     kind: "summon",
     tool: "summoning_summon",
     call: { scope: "reply:m1", key: crypto.randomUUID() },
-    threadId: null,
+    channelId: null,
     messageId: null,
     taskId: null,
     stepId: null,

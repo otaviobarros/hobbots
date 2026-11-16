@@ -20,7 +20,7 @@ const task = (id: string, state: TaskState, dependsOn: ReadonlyArray<string> = [
     ownerId: AgentId.make("frodo"),
     parentId: TaskId.make("top"),
     rootId: TaskId.make("top"),
-    threadId: null,
+    channelId: null,
     brief: id,
     state,
     dependsOn: dependsOn.map((each) => TaskId.make(each)),

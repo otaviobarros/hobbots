@@ -1,6 +1,7 @@
 import {
   AdditionalRuntimes,
   ApprovalService,
+  ChannelMemberRepository,
   ChapterService,
   ChatService,
   GrantService,
@@ -12,11 +13,12 @@ import {
   type PromptRequest,
   RuntimeAdapter,
   type RuntimeAdapterShape,
-  ThreadMemberRepository,
 } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
+  Channel,
+  type ChannelId,
   hobActor,
   isInProgress,
   liveSession,
@@ -26,19 +28,17 @@ import {
   OWNER_ACTOR,
   type RuntimeKind,
   roleFields,
-  Thread,
-  type ThreadId,
 } from "@hobbots/domain";
 import { makeMemoryStoreFake } from "@hobbots/memory/testing";
 import {
   ApprovalRepositoryLive,
+  ChannelMemberRepositoryLive,
   ChapterRepositoryLive,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   MemoryCaptureLive,
   TaskRepositoryLive,
-  ThreadMemberRepositoryLive,
   UserRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -52,7 +52,7 @@ import { NodeFolderChecks } from "../src/folders.ts";
 // Issue #1465 (ADR 039, The context pack with several hobs): in a camp two hobs speak in, a hob's
 // new session starts from a pack that says who is here and why it answers, names every speaker and
 // carries its own memory brief, never the other hob's; a resumed session hears only what others
-// said since it last spoke. Issue #1466 (ADR 039, Memory in a shared thread): each hob's memory keeps
+// said since it last spoke. Issue #1466 (ADR 039, Memory in a shared channel): each hob's memory keeps
 // its own turns and the messages it took, and a private camp none. On Claude Code and on Codex alike.
 // Until the floor runs the mentioned hob's turn (#1461), a test hands the camp from one hob to the other.
 
@@ -84,7 +84,7 @@ const hubLayer = (memory: MemoryStore["Service"]) =>
       Layer.mergeAll(
         Layer.mergeAll(
           HobbotsRepositoryLive,
-          ThreadMemberRepositoryLive,
+          ChannelMemberRepositoryLive,
           UserRepositoryLive,
           ChapterRepositoryLive,
           ApprovalRepositoryLive,
@@ -146,7 +146,7 @@ const lesson = (store: MemoryStore["Service"], scope: MemoryScope, text: string)
   );
 
 /** A hub with Wren and Quill, both thinking with `runtime`, each remembering its own lesson, and a camp of Wren's that Quill joined. */
-const start = async (runtime: RuntimeKind): Promise<ThreadId> => {
+const start = async (runtime: RuntimeKind): Promise<ChannelId> => {
   asked = { "claude-code": [], codex: [] };
   memory = makeMemoryStoreFake();
   await lesson(memory.store, { _tag: "Hob", agentId: WREN }, "Wren keeps the market's ledger.");
@@ -158,17 +158,17 @@ const start = async (runtime: RuntimeKind): Promise<ThreadId> => {
       yield* repo.insertAgent(hob(WREN, "Wren", runtime));
       yield* repo.insertAgent(hob(QUILL, "Quill", runtime));
       const chat = yield* ChatService;
-      // Wren's first thread is its direct message; the next one is a camp, which Quill joins.
-      yield* chat.createThread(WREN);
-      const camp = yield* chat.createThread(WREN);
-      yield* (yield* ThreadMemberRepository).add(camp.id, hobActor(QUILL), OWNER_ACTOR);
+      // Wren's first channel is its direct message; the next one is a camp, which Quill joins.
+      yield* chat.createChannel(WREN);
+      const camp = yield* chat.createChannel(WREN);
+      yield* (yield* ChannelMemberRepository).add(camp.id, hobActor(QUILL), OWNER_ACTOR);
       return camp.id;
     }),
   );
 };
 
 /** Sends `content` and waits for the turn to end. */
-const say = async (id: ThreadId, content: string): Promise<Message> => {
+const say = async (id: ChannelId, content: string): Promise<Message> => {
   await run(ChatService.use((chat) => chat.sendPrompt(id, content)));
   return vi.waitFor(async () => {
     const all = await run(HobbotsRepository.use((repo) => repo.listMessages(id)));
@@ -178,18 +178,18 @@ const say = async (id: ThreadId, content: string): Promise<Message> => {
 };
 
 /** Lets `agentId` answer the camp's next turns, as the floor will (#1461). */
-const handTo = (id: ThreadId, agentId: AgentId) =>
+const handTo = (id: ChannelId, agentId: AgentId) =>
   run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      yield* sql`UPDATE threads SET agent_id = ${agentId} WHERE id = ${id}`;
+      yield* sql`UPDATE channels SET agent_id = ${agentId} WHERE id = ${id}`;
     }),
   );
 
-const sessionOf = (id: ThreadId, runtime: RuntimeKind, agentId: AgentId) =>
+const sessionOf = (id: ChannelId, runtime: RuntimeKind, agentId: AgentId) =>
   run(
-    HobbotsRepository.use((repo) => repo.findThread(id)).pipe(
-      Effect.map((thread) => liveSession(Option.getOrThrow(thread), runtime, agentId)),
+    HobbotsRepository.use((repo) => repo.findChannel(id)).pipe(
+      Effect.map((channel) => liveSession(Option.getOrThrow(channel), runtime, agentId)),
     ),
   );
 
@@ -256,11 +256,11 @@ const captureRound = () =>
   );
 
 /** What `agentId`'s own memory keeps of the camp's session, as text. */
-const keptBy = (agentId: AgentId, id: ThreadId) =>
+const keptBy = (agentId: AgentId, id: ChannelId) =>
   memory.controls.captured({ _tag: "Hob", agentId }, id).map((item) => `${item.kind}: ${item.text}`);
 
-describe("memory in a shared thread", () => {
-  // covers ADR 039 (Memory in a shared thread), ADR 037 (A camp is a thread with a kind), RT-001
+describe("memory in a shared channel", () => {
+  // covers ADR 039 (Memory in a shared channel), ADR 037 (A camp is a channel with a kind), RT-001
   it.each<RuntimeKind>(["claude-code", "codex"])(
     "on %s, each hob's memory keeps its own turns and the messages it took, and a private camp none (#1466)",
     async (runtime) => {
@@ -284,8 +284,8 @@ describe("memory in a shared thread", () => {
       // Made private, the camp keeps every member hob's memory out.
       await run(
         HobbotsRepository.use((repo) =>
-          Effect.flatMap(repo.findThread(id), (thread) =>
-            repo.upsertThread(new Thread({ ...Option.getOrThrow(thread), kind: "camp", private: true })),
+          Effect.flatMap(repo.findChannel(id), (channel) =>
+            repo.upsertChannel(new Channel({ ...Option.getOrThrow(channel), kind: "camp", private: true })),
           ),
         ),
       );

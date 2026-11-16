@@ -1,23 +1,23 @@
-import { HobbotsRepository, ThreadMemberRepository } from "@hobbots/agents";
+import { ChannelMemberRepository, HobbotsRepository } from "@hobbots/agents";
 import { UserSession } from "@hobbots/api";
 import {
   type Actor,
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   DeviceId,
   hobActor,
   Message,
   MessageId,
   MessageTransitions,
   OWNER_ACTOR,
-  Thread,
-  ThreadId,
   UserId,
 } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
-import { EventJournal, HobbotsRepositoryLive, ThreadMemberRepositoryLive } from "../src/index.ts";
+import { ChannelMemberRepositoryLive, EventJournal, HobbotsRepositoryLive } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 
 // Issue #1455 (ADR 039, Who answers; Users as actors): a message's @mentions are parsed once, when
@@ -27,15 +27,15 @@ import { TestDatabase } from "../src/testing.ts";
 const NOW = "2026-11-13T10:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
 const ROOK = AgentId.make("rook");
-const CAMP = ThreadId.make("camp");
+const CAMP = ChannelId.make("camp");
 const BRUNA: Actor = { kind: "user", id: "bruna" };
 
-type Services = HobbotsRepository | ThreadMemberRepository | EventJournal | SqlClient.SqlClient;
+type Services = HobbotsRepository | ChannelMemberRepository | EventJournal | SqlClient.SqlClient;
 
 const run = <A, E>(effect: Effect.Effect<A, E, Services>) =>
   effect.pipe(
     Effect.provide(
-      Layer.mergeAll(HobbotsRepositoryLive, ThreadMemberRepositoryLive, EventJournal.layer).pipe(
+      Layer.mergeAll(HobbotsRepositoryLive, ChannelMemberRepositoryLive, EventJournal.layer).pipe(
         Layer.provideMerge(TestDatabase),
       ),
     ),
@@ -71,7 +71,7 @@ let next = 0;
 const message = (fields: Partial<Message> & Pick<Message, "role" | "content">) =>
   new Message({
     id: MessageId.make(`m${++next}`),
-    threadId: CAMP,
+    channelId: CAMP,
     actor: fields.role === "assistant" ? null : OWNER_ACTOR,
     status: "complete",
     error: null,
@@ -89,12 +89,12 @@ const seed = Effect.gen(function* () {
   yield* repo.insertAgent(hob(ROOK, "Rook"));
   yield* sql`INSERT INTO users ${sql.insert({ id: "bruna", name: "Bruna", initials: "B", color: "moss", state: "active" })}`;
   yield* repo.makeCamp(
-    new Thread({ id: CAMP, agentId: ALDRIC, title: "Camp", kind: "camp", createdAt: NOW, updatedAt: NOW }),
+    new Channel({ id: CAMP, ownerHobId: ALDRIC, title: "Camp", kind: "camp", createdAt: NOW, updatedAt: NOW }),
   );
-  yield* Effect.flatMap(ThreadMemberRepository, (members) => members.add(CAMP, BRUNA, OWNER_ACTOR));
+  yield* Effect.flatMap(ChannelMemberRepository, (members) => members.add(CAMP, BRUNA, OWNER_ACTOR));
 });
 
-const unread = (actor: Actor) => Effect.flatMap(ThreadMemberRepository, (members) => members.unreadMentions(actor));
+const unread = (actor: Actor) => Effect.flatMap(ChannelMemberRepository, (members) => members.unreadMentions(actor));
 
 describe("message mentions", () => {
   // covers ADR 039 (Who answers)
@@ -192,16 +192,16 @@ describe("message mentions", () => {
         const last = yield* repo.upsertMessage(message({ role: "assistant", content: "@Bruna and @Owner, done" }));
         const before = { bruna: yield* unread(BRUNA), owner: yield* unread(OWNER_ACTOR) };
         yield* repo
-          .markThreadRead(CAMP, last.value.id, last.value.revision)
+          .markChannelRead(CAMP, last.value.id, last.value.revision)
           .pipe(Effect.provideService(UserSession, brunaSession));
         const after = { bruna: yield* unread(BRUNA), owner: yield* unread(OWNER_ACTOR) };
         return { before, after };
       }),
     );
     expect(result.before).toEqual({
-      bruna: [{ threadId: CAMP, count: 2 }],
-      owner: [{ threadId: CAMP, count: 1 }],
+      bruna: [{ channelId: CAMP, count: 2 }],
+      owner: [{ channelId: CAMP, count: 1 }],
     });
-    expect(result.after).toEqual({ bruna: [], owner: [{ threadId: CAMP, count: 1 }] });
+    expect(result.after).toEqual({ bruna: [], owner: [{ channelId: CAMP, count: 1 }] });
   });
 });

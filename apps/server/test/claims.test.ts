@@ -18,6 +18,8 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  Channel,
+  ChannelId,
   type Claim,
   ClaimId,
   type ClaimScope,
@@ -28,8 +30,6 @@ import {
   TaskId as TaskIds,
   type TaskToolDone,
   TaskToolRefused,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import { MemoryProjectsLive } from "@hobbots/memory";
 import { makeTakenPlaces, TaskTools } from "@hobbots/orchestration";
@@ -165,9 +165,16 @@ const hub = () => {
     run(
       Effect.gen(function* () {
         const repo = yield* HobbotsRepository;
-        const threadId = ThreadId.make(`camp-${taskId}`);
-        yield* repo.upsertThread(
-          new Thread({ id: threadId, agentId, title: "Work", kind: "camp", createdAt: now, updatedAt: now }),
+        const channelId = ChannelId.make(`camp-${taskId}`);
+        yield* repo.upsertChannel(
+          new Channel({
+            id: channelId,
+            ownerHobId: agentId,
+            title: "Work",
+            kind: "camp",
+            createdAt: now,
+            updatedAt: now,
+          }),
         );
         const tasks = yield* TaskRepository;
         const created = yield* tasks.createTask({
@@ -175,7 +182,7 @@ const hub = () => {
             id: taskId,
             ownerId: agentId,
             parentId,
-            threadId,
+            channelId,
             brief: "Build",
             dependsOn: [],
             createdAt: now,
@@ -235,9 +242,9 @@ const hub = () => {
     );
   const claimsOf = (taskId: TaskId) => run(Effect.flatMap(Effect.service(ClaimRegister), (r) => r.ofTask(taskId)));
   /** The Heads-ups a camp shows: each open clash, by who holds each side and on what. */
-  const clashesIn = (threadId: string) =>
-    run(Effect.flatMap(Effect.service(ClaimRegister), (r) => r.clashesIn(ThreadId.make(threadId)))).then((clashes) =>
-      clashes.map((clash) => clash.sides.map((side) => [side.ownerId, side.claim.key, side.threadId])),
+  const clashesIn = (channelId: string) =>
+    run(Effect.flatMap(Effect.service(ClaimRegister), (r) => r.clashesIn(ChannelId.make(channelId)))).then((clashes) =>
+      clashes.map((clash) => clash.sides.map((side) => [side.ownerId, side.claim.key, side.channelId])),
     );
   /** Ends a Task that never started a turn: you cancelled it. */
   const end = (taskId: TaskId) =>
@@ -290,7 +297,7 @@ const hub = () => {
             id: taskId,
             ownerId: agentId,
             parentId,
-            threadId: null,
+            channelId: null,
             brief: "Help",
             dependsOn: [],
             createdAt: now,
@@ -333,7 +340,7 @@ const hub = () => {
         const tools = yield* TaskTools;
         const session = yield* tools.forSession(as, {
           attemptId: AttemptId.make(`${as.taskId}-1`),
-          threadId: null,
+          channelId: null,
           currentAccess: Effect.succeed(null),
           redactor: makeRedactor(),
           approvals: null,

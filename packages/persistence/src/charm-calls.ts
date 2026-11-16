@@ -18,7 +18,7 @@ interface Row {
   readonly appliedText: string;
   readonly state: string;
   readonly result: string | null;
-  readonly threadId: string | null;
+  readonly channelId: string | null;
   readonly messageId: string | null;
   readonly stepId: string | null;
   readonly createdAt: string;
@@ -41,7 +41,7 @@ const fromRow = (row: Row) =>
     appliedText: row.appliedText,
     state: row.state,
     result: row.result,
-    threadId: row.threadId,
+    channelId: row.channelId,
     messageId: row.messageId,
     stepId: row.stepId,
     createdAt: row.createdAt,
@@ -61,7 +61,7 @@ const toRow = (call: CharmCall) => ({
   applied_text: call.appliedText,
   state: call.state,
   result: call.result,
-  thread_id: call.threadId,
+  channel_id: call.channelId,
   message_id: call.messageId,
   step_id: call.stepId,
   created_at: call.createdAt,
@@ -120,16 +120,16 @@ export const CharmCallsLive = Layer.effect(
             Effect.flatMap(one),
           ),
         ),
-      findByStep: (threadId, messageId, stepId) =>
+      findByStep: (channelId, messageId, stepId) =>
         sqlOrDie(
           sql<Row>`
             SELECT * FROM charm_calls
-            WHERE thread_id = ${threadId} AND message_id = ${messageId} AND step_id = ${stepId}
+            WHERE channel_id = ${channelId} AND message_id = ${messageId} AND step_id = ${stepId}
             ORDER BY created_at DESC LIMIT 1`.pipe(Effect.flatMap(one)),
         ),
-      listForThread: (threadId) =>
+      listForChannel: (channelId) =>
         sqlOrDie(
-          sql<Row>`SELECT * FROM charm_calls WHERE thread_id = ${threadId} ORDER BY created_at`.pipe(
+          sql<Row>`SELECT * FROM charm_calls WHERE channel_id = ${channelId} ORDER BY created_at`.pipe(
             Effect.flatMap((rows) => Effect.forEach(rows, fromRow)),
           ),
         ),

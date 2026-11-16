@@ -157,12 +157,12 @@ describe("defineMachine", () => {
   describe("an event with several rules", () => {
     type Run = "idle" | "running";
     type RunEvent = { readonly _tag: "Start" } | { readonly _tag: "End"; readonly pending: boolean };
-    interface Thread {
+    interface Channel {
       readonly run: Run;
       readonly turns: number;
     }
-    const RunMachine = defineMachine<Run, RunEvent, Thread, string>({
-      name: "Thread",
+    const RunMachine = defineMachine<Run, RunEvent, Channel, string>({
+      name: "Channel",
       states: { idle: "No turn", running: "A turn runs" },
       field: "run",
       events: {
@@ -179,7 +179,7 @@ describe("defineMachine", () => {
       },
       illegal: (t, e, to) => `${e._tag}: ${t.run} to ${to}`,
     });
-    const running: Thread = { run: "running", turns: 1 };
+    const running: Channel = { run: "running", turns: 1 };
 
     it("takes the first rule whose state and guard hold", () => {
       expect(RunMachine.transition(running, { _tag: "End", pending: true })).toEqual({ run: "running", turns: 2 });
@@ -201,8 +201,8 @@ describe("defineMachine", () => {
 
     it("throws a defect when an unguarded rule hides a later one", () => {
       const define = () =>
-        defineMachine<Run, RunEvent, Thread, string>({
-          name: "Thread",
+        defineMachine<Run, RunEvent, Channel, string>({
+          name: "Channel",
           states: { idle: "No turn", running: "A turn runs" },
           field: "run",
           events: {
@@ -214,7 +214,7 @@ describe("defineMachine", () => {
           },
           illegal: (t, e, to) => `${e._tag}: ${t.run} to ${to}`,
         });
-      expect(define).toThrow(new MachineDefect("Thread: End has a rule earlier unguarded rules always take first"));
+      expect(define).toThrow(new MachineDefect("Channel: End has a rule earlier unguarded rules always take first"));
     });
   });
 

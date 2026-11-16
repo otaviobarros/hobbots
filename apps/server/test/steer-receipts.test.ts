@@ -5,6 +5,7 @@ import { EventJournal } from "@hobbots/persistence";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  channelId,
   FRODO,
   firstPending,
   hub,
@@ -15,7 +16,6 @@ import {
   partyHub,
   QUILL,
   send,
-  threadId,
   treeWhen,
 } from "./party-hub.ts";
 
@@ -52,7 +52,7 @@ const yours = (all: ReadonlyArray<Message>, text: string) => {
 };
 
 /**
- * The thread once the lead's turn on your message that starts with `text` has replied. A blocker
+ * The channel once the lead's turn on your message that starts with `text` has replied. A blocker
  * can start a turn of the lead's before yours, so a count of messages may end before that reply.
  */
 const answeredTo = (text: string) =>
@@ -62,12 +62,12 @@ const answeredTo = (text: string) =>
   });
 
 /**
- * Continue on the reply, once its turn has let go of the thread: until then Continue refuses it as
+ * Continue on the reply, once its turn has let go of the channel: until then Continue refuses it as
  * not resumable. Waits on that state with a time limit; any other failure ends the wait at once.
  */
 const resume = (replyId: MessageId) =>
   waitUntil(
-    ChatService.use((chat) => chat.continueReply(threadId, replyId)).pipe(
+    ChatService.use((chat) => chat.continueReply(channelId, replyId)).pipe(
       Effect.catchTag("ReplyNotResumable", () => Effect.succeed(null)),
     ),
     (continued) => continued !== null,
@@ -95,7 +95,7 @@ const noteEvents = EventJournal.use((journal) => journal.readAfter(0, 10_000)).p
               revision: entry.payload.note.revision,
               sequence: entry.sequence,
               messageId: entry.correlation.messageId,
-              threadId: entry.correlation.threadId,
+              channelId: entry.correlation.channelId,
             },
           ]
         : [],
@@ -149,12 +149,14 @@ describe("a steer receipt for a message you send the lead", () => {
     expect(passed.receipt.at).toBe(passed.note.pickedUpAt);
 
     // The journal says so too, each event correlated with your message (ADR 013).
-    // Each event carries the note at its own sequence, and is in the thread of your message.
+    // Each event carries the note at its own sequence, and is in the channel of your message.
     const events = await run(noteEvents);
-    expect(events.map(({ type, noteId, messageId, threadId: thread }) => [type, noteId, messageId, thread])).toEqual([
-      ["NoteLeft", passed.note.id, message.id, threadId],
-      ["NotePickedUp", passed.note.id, message.id, threadId],
-    ]);
+    expect(events.map(({ type, noteId, messageId, channelId: channel }) => [type, noteId, messageId, channel])).toEqual(
+      [
+        ["NoteLeft", passed.note.id, message.id, channelId],
+        ["NotePickedUp", passed.note.id, message.id, channelId],
+      ],
+    );
     expect(events.every((each) => each.revision === each.sequence)).toBe(true);
     expect(events.at(-1)?.revision).toBe(passed.note.revision);
   }, 30_000);

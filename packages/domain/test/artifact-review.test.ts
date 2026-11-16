@@ -9,6 +9,7 @@ import {
   ArtifactReviewMachine,
   ArtifactReviewRefused,
   ArtifactReviews,
+  ChannelId,
   ChapterId,
   carriedReview,
   GITHUB_ACTOR,
@@ -18,7 +19,6 @@ import {
   planReview,
   RegisteredArtifactId,
   type RegisteredArtifactKind,
-  ThreadId,
 } from "../src/index.ts";
 import { agreesWithModel } from "../testing/machine-model.ts";
 
@@ -32,7 +32,7 @@ const KINDS: ReadonlyArray<RegisteredArtifactKind> = ["code", "page", "doc", "em
 const artifact = (kind: RegisteredArtifactKind, review: ArtifactReview = "waiting") =>
   new Artifact({
     id: ID,
-    threadId: ThreadId.make("chat-1"),
+    channelId: ChannelId.make("chat-1"),
     chapterId: ChapterId.make("chapter-1"),
     kind,
     title: "Launch plan",

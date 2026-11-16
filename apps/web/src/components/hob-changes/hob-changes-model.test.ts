@@ -53,7 +53,7 @@ const version = (
   hobId: wren,
   at: `2026-11-0${number}T10:00:00.000Z`,
   actor,
-  origin: actor._tag === "You" ? null : { charm: "Summoning", taskId: null, threadId: null, messageId: null },
+  origin: actor._tag === "You" ? null : { charm: "Summoning", taskId: null, channelId: null, messageId: null },
   config: config(number, { ...fields, actor }),
   previous,
 });

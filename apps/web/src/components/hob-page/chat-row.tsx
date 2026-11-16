@@ -1,13 +1,13 @@
-import type { Agent, SnippetPart, Thread } from "@hobbots/domain";
+import type { Agent, Channel, SnippetPart } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@hobbots/ui/components/menu";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useUnreadThreads } from "../../api/thread-reads.ts";
-import { usePinThread, useRenameThread } from "../../api/thread-settings.ts";
+import { useUnreadChannels } from "../../api/channel-reads.ts";
+import { usePinChannel, useRenameChannel } from "../../api/channel-settings.ts";
 import { formatWhen } from "../../lib/time.ts";
-import { ArchiveItem } from "../archive/thread-menu.tsx";
+import { ArchiveItem } from "../archive/channel-menu.tsx";
 import { cleanTitle } from "./chats-model.ts";
 import { messages } from "./messages.ts";
 import { QuestChip } from "./quest-chip.tsx";
@@ -35,7 +35,7 @@ function Marked({ parts }: { parts: ReadonlyArray<SnippetPart> }) {
  */
 export function ChatRow({
   hob,
-  thread,
+  channel,
   live,
   needs,
   quests,
@@ -43,7 +43,7 @@ export function ChatRow({
   snippet,
 }: {
   hob: Agent;
-  thread: Thread;
+  channel: Channel;
   live: boolean;
   /** How many approvals wait for you in it. */
   needs: number;
@@ -55,17 +55,17 @@ export function ChatRow({
 }) {
   const [renaming, setRenaming] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const pinned = thread.pinnedAt !== null;
-  const unread = useUnreadThreads().has(thread.id);
-  const pin = usePinThread();
+  const pinned = channel.pinnedAt !== null;
+  const unread = useUnreadChannels().has(channel.id);
+  const pin = usePinChannel();
 
   return (
     <li className="group/row relative grid grid-cols-[16px_minmax(0,1fr)_auto] items-start gap-x-2.5 gap-y-1 border-t border-line py-3 ps-3 pe-3.5 transition-colors duration-(--dur-fade) first:border-t-0 hover:bg-hover">
       {!renaming && (
         <Link
-          to="/hobs/$hobId/threads/$threadId"
-          params={{ hobId: hob.id, threadId: thread.id }}
-          aria-label={copy.open({ title: thread.title })}
+          to="/hobs/$hobId/channels/$channelId"
+          params={{ hobId: hob.id, channelId: channel.id }}
+          aria-label={copy.open({ title: channel.title })}
           className="absolute inset-0 focus-ring focus-inset"
         />
       )}
@@ -82,13 +82,13 @@ export function ChatRow({
       <span className="pointer-events-none flex min-w-0 flex-col gap-0.5">
         {renaming ? (
           <RenameField
-            thread={thread}
+            channel={channel}
             onDone={() => setRenaming(false)}
             className="pointer-events-auto relative z-[1]"
           />
         ) : (
-          <span title={thread.title} className="truncate text-[15px] leading-[22px] font-semibold text-text-strong">
-            {title ? <Marked parts={title} /> : thread.title}
+          <span title={channel.title} className="truncate text-[15px] leading-[22px] font-semibold text-text-strong">
+            {title ? <Marked parts={title} /> : channel.title}
           </span>
         )}
         {/* While searching, where the words matched; otherwise the chat's last line. */}
@@ -97,9 +97,9 @@ export function ChatRow({
             <Marked parts={snippet} />
           </span>
         ) : (
-          thread.lastLine && (
-            <span title={thread.lastLine} className="truncate text-ui leading-5 text-text-secondary">
-              {thread.lastLine}
+          channel.lastLine && (
+            <span title={channel.lastLine} className="truncate text-ui leading-5 text-text-secondary">
+              {channel.lastLine}
             </span>
           )
         )}
@@ -122,15 +122,15 @@ export function ChatRow({
           menuOpen && "invisible",
         )}
       >
-        {formatWhen(thread.updatedAt)}
+        {formatWhen(channel.updatedAt)}
       </span>
       <DropdownMenu onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
             size="icon"
-            aria-label={copy.menu({ title: thread.title })}
-            title={copy.menu({ title: thread.title })}
+            aria-label={copy.menu({ title: channel.title })}
+            title={copy.menu({ title: channel.title })}
             className={cn(
               // It shows when the row is hovered, on the row's own hover fill; only hovering it fills it.
               "absolute end-2 top-2 text-text-secondary opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100 hover:bg-line hover:text-text-strong focus-visible:opacity-100 data-[state=open]:bg-line data-[state=open]:text-text-strong",
@@ -142,10 +142,10 @@ export function ChatRow({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={() => setRenaming(true)}>{copy.rename}</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => pin.mutate({ thread, value: !pinned })}>
+          <DropdownMenuItem onSelect={() => pin.mutate({ channel, value: !pinned })}>
             {pinned ? copy.unpin : copy.pin}
           </DropdownMenuItem>
-          <ArchiveItem Item={DropdownMenuItem} hob={hob} thread={thread} current={false} open={menuOpen} />
+          <ArchiveItem Item={DropdownMenuItem} hob={hob} channel={channel} current={false} open={menuOpen} />
         </DropdownMenuContent>
       </DropdownMenu>
     </li>
@@ -153,12 +153,20 @@ export function ChatRow({
 }
 
 /** The title as a field: Enter or leaving it saves, Esc keeps the old title. The chat header uses it too. */
-export function RenameField({ thread, onDone, className }: { thread: Thread; onDone: () => void; className?: string }) {
-  const [typed, setTyped] = useState(thread.title);
-  const rename = useRenameThread();
+export function RenameField({
+  channel,
+  onDone,
+  className,
+}: {
+  channel: Channel;
+  onDone: () => void;
+  className?: string;
+}) {
+  const [typed, setTyped] = useState(channel.title);
+  const rename = useRenameChannel();
   const save = () => {
     const title = cleanTitle(typed);
-    if (title !== null && title !== thread.title) rename.mutate({ thread, value: title });
+    if (title !== null && title !== channel.title) rename.mutate({ channel, value: title });
     onDone();
   };
   return (
@@ -166,7 +174,7 @@ export function RenameField({ thread, onDone, className }: { thread: Thread; onD
       // biome-ignore lint/a11y/noAutofocus: the field opens from the menu's Rename, to type in at once
       autoFocus
       value={typed}
-      aria-label={copy.renameLabel({ title: thread.title })}
+      aria-label={copy.renameLabel({ title: channel.title })}
       onChange={(event) => setTyped(event.target.value)}
       onFocus={(event) => event.currentTarget.select()}
       onBlur={save}
@@ -177,7 +185,7 @@ export function RenameField({ thread, onDone, className }: { thread: Thread; onD
         } else if (event.key === "Escape") {
           event.preventDefault();
           event.stopPropagation();
-          setTyped(thread.title);
+          setTyped(channel.title);
           onDone();
         }
       }}

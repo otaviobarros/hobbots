@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   type Actor,
   AgentId,
+  ChannelId,
   HOB_RELAY_BUDGET,
   IllegalTurnRequestTransition,
   lineKey,
@@ -11,7 +12,6 @@ import {
   RESUMED_RELAY_DEPTH,
   relayDepthAfter,
   relayStateFor,
-  ThreadId,
   TurnRequest,
   type TurnRequestEvent,
   TurnRequestId,
@@ -25,7 +25,7 @@ import { agreesWithModel } from "../testing/machine-model.ts";
 // conversation gives its floor to one at a time, the oldest waiting first.
 
 const at = "2026-11-14T10:00:00.000Z";
-const THREAD = ThreadId.make("camp");
+const CHANNEL = ChannelId.make("camp");
 const HOBS = ["quill", "pip", "rook"].map((id) => AgentId.make(id));
 const PEOPLE: ReadonlyArray<Actor> = [
   { kind: "user", id: "owner" },
@@ -35,7 +35,7 @@ const PEOPLE: ReadonlyArray<Actor> = [
 const request = (state: TurnRequestState, over: Partial<TurnRequest> = {}) =>
   new TurnRequest({
     id: TurnRequestId.make("r-1"),
-    threadId: THREAD,
+    channelId: CHANNEL,
     rootMessageId: null,
     hobId: HOBS[0] as AgentId,
     messageId: MessageId.make("m-1"),
@@ -115,9 +115,9 @@ describe("TurnRequestMachine", () => {
     });
   });
 
-  it("keys a reply thread apart from its thread's main line (#1461)", () => {
-    expect(lineKey(mainLine(THREAD))).toBe("camp");
-    expect(lineKey({ threadId: THREAD, rootMessageId: MessageId.make("m-9") })).toBe("camp/m-9");
+  it("keys a thread apart from its channel's main line (#1461)", () => {
+    expect(lineKey(mainLine(CHANNEL))).toBe("camp");
+    expect(lineKey({ channelId: CHANNEL, rootMessageId: MessageId.make("m-9") })).toBe("camp/m-9");
   });
 });
 
@@ -252,7 +252,7 @@ const floorStep = (records: ReadonlyArray<TurnRequest>, op: Op, n: number): Read
       (hobId, position) =>
         new TurnRequest({
           id: TurnRequestId.make(`r-${n}-${position}`),
-          threadId: THREAD,
+          channelId: CHANNEL,
           rootMessageId: null,
           hobId,
           messageId,

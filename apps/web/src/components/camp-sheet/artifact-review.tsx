@@ -1,4 +1,4 @@
-import type { Actor, Artifact, ThreadId } from "@hobbots/domain";
+import type { Actor, Artifact, ChannelId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { reviewArtifactError, useReviewArtifact } from "../../api/records.ts";
 import { formatAgo } from "../../lib/format.ts";
@@ -26,8 +26,8 @@ export const reviewLine = (artifact: Artifact, hobName: string): string => {
  * An artifact waiting for you, settled once (#1422): Mark reviewed, or Dismiss when you choose not
  * to review it. Either lowers what its Quest has ready for review.
  */
-export function ReviewActions({ threadId, artifact }: { threadId: ThreadId; artifact: Artifact }) {
-  const review = useReviewArtifact(threadId);
+export function ReviewActions({ channelId, artifact }: { channelId: ChannelId; artifact: Artifact }) {
+  const review = useReviewArtifact(channelId);
   if (artifact.review !== "waiting") return null;
   const settle = (outcome: "reviewed" | "dismissed") => review.mutate({ artifactId: artifact.id, outcome });
   return (

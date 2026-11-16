@@ -67,11 +67,11 @@ describe("event journal", () => {
       yield* Effect.yieldNow;
 
       const chat = Context.get(first, ChatService);
-      const thread = yield* chat.createThread(HOB_ID);
-      const { assistantMessage } = yield* chat.sendPrompt(thread.id, "hello");
+      const channel = yield* chat.createChannel(HOB_ID);
+      const { assistantMessage } = yield* chat.sendPrompt(channel.id, "hello");
       const replyId = assistantMessage?.id;
       // The text reaches the row within about a second while the reply still streams.
-      const checkpointed = yield* repo.listMessages(thread.id).pipe(
+      const checkpointed = yield* repo.listMessages(channel.id).pipe(
         Effect.flatMap((messages) => {
           const reply = messages.find((m) => m.id === replyId);
           return reply?.content === "Partial" ? Effect.succeed(reply) : Effect.fail("not yet" as const);
@@ -82,7 +82,7 @@ describe("event journal", () => {
 
       // The process dies without ending the turn; the next one recovers the reply on boot.
       yield* Layer.build(Layer.fresh(hub));
-      const recovered = (yield* repo.listMessages(thread.id)).find((m) => m.id === replyId);
+      const recovered = (yield* repo.listMessages(channel.id)).find((m) => m.id === replyId);
       const afterBoot = yield* journal.readAfter(beforeCrash.at(-1)?.sequence ?? 0);
       return { published, beforeCrash, checkpointed, recovered, afterBoot, assistantMessage };
     }).pipe(

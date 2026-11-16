@@ -10,14 +10,14 @@ import {
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   DECISION_TEXT_MAX,
   DecisionStates,
   Message,
   MessageId,
   RECORD_DECISION_TOOL,
   roleFields,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import { HobbotsRepositoryLive, RecordRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -46,13 +46,15 @@ const camp = (id: string) =>
   hub.runPromise(
     Effect.gen(function* () {
       const repo = yield* HobbotsRepository;
-      const threadId = ThreadId.make(`camp-${id}`);
+      const channelId = ChannelId.make(`camp-${id}`);
       const messageId = MessageId.make(`reply-${id}`);
-      yield* repo.upsertThread(new Thread({ id: threadId, agentId: ADA, title: id, createdAt: NOW, updatedAt: NOW }));
+      yield* repo.upsertChannel(
+        new Channel({ id: channelId, ownerHobId: ADA, title: id, createdAt: NOW, updatedAt: NOW }),
+      );
       yield* repo.upsertMessage(
         new Message({
           id: messageId,
-          threadId,
+          channelId,
           role: "assistant",
           content: "",
           status: "streaming",
@@ -64,7 +66,7 @@ const camp = (id: string) =>
       const tools = yield* RecordTools.use((service) =>
         service.forTurn({
           agentId: ADA,
-          threadId,
+          channelId,
           messageId,
           scope: () => `reply:${messageId}`,
           currentAccess: Effect.succeed(null),
@@ -80,7 +82,7 @@ const camp = (id: string) =>
         call: (name, input, step) =>
           Effect.tap(tools.call(name, input, step), (answer) => Effect.sync(() => answers.push(answer))),
       };
-      return { threadId, messageId, hubTools, answers };
+      return { channelId, messageId, hubTools, answers };
     }),
   );
 
@@ -130,7 +132,7 @@ const decide = async (runtime: HubCallRuntime) => {
     ],
   });
   expect(Exit.isSuccess(exit), String(exit)).toBe(true);
-  const decisions = await hub.runPromise(Records.use((records) => records.decisionsOf(turn.threadId)));
+  const decisions = await hub.runPromise(Records.use((records) => records.decisionsOf(turn.channelId)));
   return { ...turn, decisions };
 };
 

@@ -1,6 +1,7 @@
 import {
   AgentId,
   AttemptId,
+  ChannelId,
   DEFAULT_QUEST_LIMITS,
   Quest,
   QuestId,
@@ -8,7 +9,6 @@ import {
   TaskId,
   type TaskState,
   TaskTree,
-  ThreadId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { memberPrompt, memberReminder, ownerBriefing, RESULTS_RULE } from "../src/briefs.ts";
@@ -29,7 +29,7 @@ const task = (id: string, ownerId: AgentId, state: TaskState, dependsOn: string[
     ownerId,
     parentId: id === "app" ? null : TaskId.make("app"),
     rootId: TaskId.make("app"),
-    threadId: ThreadId.make("chat"),
+    channelId: ChannelId.make("chat"),
     brief: `Brief for ${id}\nMore detail`,
     state,
     dependsOn: dependsOn.map((each) => TaskId.make(each)),
@@ -45,7 +45,7 @@ const quest = new Quest({
   taskId: TaskId.make("app"),
   leadId: FRODO,
   parentQuestId: null,
-  threadId: ThreadId.make("chat"),
+  channelId: ChannelId.make("chat"),
   goal: "Build the app",
   acceptance: [],
   limits: DEFAULT_QUEST_LIMITS,

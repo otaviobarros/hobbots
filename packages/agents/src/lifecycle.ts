@@ -25,7 +25,7 @@ import { TaskRepository } from "./tasks.ts";
 /**
  * Pauses, wakes, retires and brings back hobs (AG-006), each journaled with who did it, you when
  * left out (ADR 034). A hob with open Tasks can also retire by handing them to another hob, or by
- * finishing them first (#408). Nothing here deletes a hob or its threads.
+ * finishing them first (#408). Nothing here deletes a hob or its channels.
  */
 export class HobLifecycle extends Context.Service<
   HobLifecycle,
@@ -63,7 +63,7 @@ export class HobLifecycle extends Context.Service<
      */
     readonly finishRetiring: (agentId: AgentId) => Effect.Effect<void>;
     /**
-     * Brings a retired hob back, active with all its threads. The rules and the GitHub app it lost
+     * Brings a retired hob back, active with all its channels. The rules and the GitHub app it lost
      * on retiring stay gone (ADR 015, ADR 022). Refused for a paused hob; an active one is unchanged.
      */
     readonly bringBack: (agentId: AgentId, actor?: ChangeActor) => Effect.Effect<Agent, AgentNotFound | HobUnavailable>;

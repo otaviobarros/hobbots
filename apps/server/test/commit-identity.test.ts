@@ -23,13 +23,13 @@ import { HubQuestionsRead } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   type GitHubUser,
   type GitIdentity,
   type HobGitHubApp,
   type HubQuestion,
   OWNER_ACTOR,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
@@ -86,7 +86,7 @@ const nettle = new Agent({
 });
 const fern = new Agent({ ...nettle, id: AgentId.make("fern"), name: "Fern", lookSeed: 2 });
 /** The Quest's chat, where the work was asked for. */
-const QUEST_CHAT = { agentId: nettle.id, threadId: ThreadId.make("tide-table") };
+const QUEST_CHAT = { agentId: nettle.id, channelId: ChannelId.make("tide-table") };
 const ME: GitHubUser = { login: "otaviobarros", id: 35647586, name: null };
 const NOREPLY = "35647586+otaviobarros@users.noreply.github.com";
 
@@ -216,10 +216,10 @@ const startHub = async (connected = true) => {
       const repo = yield* HobbotsRepository;
       yield* repo.insertAgent(nettle);
       yield* repo.insertAgent(fern);
-      yield* repo.upsertThread(
-        new Thread({
-          id: QUEST_CHAT.threadId,
-          agentId: nettle.id,
+      yield* repo.upsertChannel(
+        new Channel({
+          id: QUEST_CHAT.channelId,
+          ownerHobId: nettle.id,
           title: "Tide table",
           createdAt: NOW,
           updatedAt: NOW,

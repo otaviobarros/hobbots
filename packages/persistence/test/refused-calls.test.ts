@@ -1,5 +1,5 @@
 import { HobbotsRepository, TaskRepository, TaskToolCalls } from "@hobbots/agents";
-import { Agent, AgentId, TaskId, TaskToolRefused, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, Channel, ChannelId, TaskId, TaskToolRefused } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
@@ -19,7 +19,7 @@ const run = <A, E>(
 const now = "2026-11-01T00:00:00.000Z";
 const later = "2026-11-01T00:05:00.000Z";
 const FRODO = AgentId.make("frodo");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 const LEAD_TASK = TaskId.make("lead");
 
 const seed = Effect.gen(function* () {
@@ -39,8 +39,8 @@ const seed = Effect.gen(function* () {
       createdAt: now,
     }),
   );
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: FRODO, title: "Quest", createdAt: now, updatedAt: now }),
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, ownerHobId: FRODO, title: "Quest", createdAt: now, updatedAt: now }),
   );
   const tasks = yield* TaskRepository;
   yield* tasks.createTask({
@@ -48,7 +48,7 @@ const seed = Effect.gen(function* () {
       id: LEAD_TASK,
       ownerId: FRODO,
       parentId: null,
-      threadId,
+      channelId,
       brief: "Lead the Quest",
       dependsOn: [],
       createdAt: now,
@@ -101,11 +101,11 @@ describe("refused Task tool calls", () => {
           createdAt: now,
           refusedAt: now,
         });
-        // The refusal is journaled, correlated with its hob and Task's thread.
+        // The refusal is journaled, correlated with its hob and Task's channel.
         expect(first.entries).toHaveLength(1);
         expect(first.entries[0]).toMatchObject({
           type: "ToolCallRefused",
-          correlation: { agentId: FRODO, threadId },
+          correlation: { agentId: FRODO, channelId },
         });
         expect((yield* journal.head).sequence).toBe(before.sequence + 1);
 
@@ -168,7 +168,7 @@ describe("refused Task tool calls", () => {
         expect(one.value.input).toHaveLength(REFUSED_INPUT_LIMIT);
         expect(one.value).toMatchObject({ key: null, taskId: null, reason: "invalid-input", tries: 1 });
         // A record with no Task is journaled for its hob alone.
-        expect(one.entries[0]?.correlation).toMatchObject({ agentId: FRODO, threadId: null });
+        expect(one.entries[0]?.correlation).toMatchObject({ agentId: FRODO, channelId: null });
         expect(yield* rows).toHaveLength(2);
       }),
     );

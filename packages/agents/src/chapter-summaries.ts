@@ -1,5 +1,6 @@
 import {
   CHAPTER_SUMMARY_MAX,
+  type ChannelId,
   type Chapter,
   type ChapterId,
   ChapterStates,
@@ -8,7 +9,6 @@ import {
   hobReads,
   type JournaledEvent,
   type Message,
-  type ThreadId,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema } from "effect";
 import { clip, summaryLine } from "./briefing.ts";
@@ -56,36 +56,36 @@ export class ChapterSummaryLog extends Context.Service<
   }
 >()("@hobbots/agents/ChapterSummaryLog") {}
 
-/** The chapters an entry may have brought to rest without a summary, by their thread. */
-const restedBy = (event: JournaledEvent): ReadonlyArray<{ threadId: ThreadId; chapterId: ChapterId }> => {
+/** The chapters an entry may have brought to rest without a summary, by their channel. */
+const restedBy = (event: JournaledEvent): ReadonlyArray<{ channelId: ChannelId; chapterId: ChapterId }> => {
   switch (event._tag) {
     case "ChapterStarted":
-      return event.ended === null ? [] : [{ threadId: event.threadId, chapterId: event.ended.id }];
+      return event.ended === null ? [] : [{ channelId: event.channelId, chapterId: event.ended.id }];
     case "ChapterSplit":
     case "ChapterMerged":
       return event.chapters
-        .filter((chapter) => ChapterStates.isInThread(chapter) && !ChapterStates.isLive(chapter))
+        .filter((chapter) => ChapterStates.isInChannel(chapter) && !ChapterStates.isLive(chapter))
         .filter((chapter) => chapter.summary === null)
-        .map((chapter) => ({ threadId: event.threadId, chapterId: chapter.id }));
+        .map((chapter) => ({ channelId: event.channelId, chapterId: chapter.id }));
     default:
       return [];
   }
 };
 
-/** The chapters a page of the journal may have brought to rest, each once, by thread. */
-export const restedIn = (entries: ReadonlyArray<EventEnvelope>): ReadonlyMap<ThreadId, ReadonlySet<ChapterId>> => {
-  const byThread = new Map<ThreadId, Set<ChapterId>>();
+/** The chapters a page of the journal may have brought to rest, each once, by channel. */
+export const restedIn = (entries: ReadonlyArray<EventEnvelope>): ReadonlyMap<ChannelId, ReadonlySet<ChapterId>> => {
+  const byChannel = new Map<ChannelId, Set<ChapterId>>();
   for (const entry of entries) {
-    for (const { threadId, chapterId } of restedBy(entry.payload as JournaledEvent)) {
-      byThread.set(threadId, (byThread.get(threadId) ?? new Set()).add(chapterId));
+    for (const { channelId, chapterId } of restedBy(entry.payload as JournaledEvent)) {
+      byChannel.set(channelId, (byChannel.get(channelId) ?? new Set()).add(chapterId));
     }
   }
-  return byThread;
+  return byChannel;
 };
 
 /** Whether a chapter still rests with no summary, so the projector writes it one. */
 const awaitsSummary = (chapter: Chapter) =>
-  ChapterStates.isInThread(chapter) && !ChapterStates.isLive(chapter) && chapter.summary === null;
+  ChapterStates.isInChannel(chapter) && !ChapterStates.isLive(chapter) && chapter.summary === null;
 
 /** What the brain is shown of a chapter: one line per message, its start and its end when long. */
 export const summaryInput = (chapter: Chapter, messages: ReadonlyArray<Message>) => {
@@ -132,13 +132,13 @@ export class ChapterSummaries extends Context.Service<ChapterSummaries, ChapterS
         });
 
       // The summaries a page's chapters still need, read as they stand now.
-      const summariesFor = (rested: ReadonlyMap<ThreadId, ReadonlySet<ChapterId>>) =>
+      const summariesFor = (rested: ReadonlyMap<ChannelId, ReadonlySet<ChapterId>>) =>
         Effect.gen(function* () {
           const written: Array<ChapterSummaryWrite> = [];
-          for (const [threadId, ids] of rested) {
-            const waiting = (yield* chapters.listChapters(threadId)).filter((c) => ids.has(c.id) && awaitsSummary(c));
+          for (const [channelId, ids] of rested) {
+            const waiting = (yield* chapters.listChapters(channelId)).filter((c) => ids.has(c.id) && awaitsSummary(c));
             if (waiting.length === 0) continue;
-            const messages = yield* repo.listMessages(threadId);
+            const messages = yield* repo.listMessages(channelId);
             for (const chapter of waiting) {
               const own = messages.filter((m) => m.chapterId === chapter.id && m.status !== "queued" && hobReads(m));
               written.push({

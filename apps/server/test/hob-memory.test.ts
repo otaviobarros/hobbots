@@ -20,6 +20,7 @@ import {
 import {
   Agent,
   AgentId,
+  ChannelId,
   type EventEnvelope,
   type MemoryActor,
   MemoryPath,
@@ -27,7 +28,6 @@ import {
   type MemoryScope,
   MessageId,
   memoryProjectIdentity,
-  ThreadId,
 } from "@hobbots/domain";
 import { type MemoryStoreFakeControls, makeMemoryStoreFake } from "@hobbots/memory/testing";
 import {
@@ -63,7 +63,7 @@ let journaled: Array<EventEnvelope>;
 let folder = "";
 
 const pip = AgentId.make("0d6e2f0a-0000-4000-8000-000000000031");
-const thread = ThreadId.make("thread-1");
+const channel = ChannelId.make("channel-1");
 const reply = MessageId.make("reply-1");
 const asPip: MemoryActor = { _tag: "Hob", agentId: pip, projects: [] };
 const pipsOwn: MemoryScope = { _tag: "Hob", agentId: pip };
@@ -169,11 +169,11 @@ const undo = (id: string) => request("POST", `/api/memory-saves/${id}/undo`);
 
 const page = (markdown: string) => ({ path, markdown, tags: [], pinned: false });
 
-/** A save Pip made from `messageId` in `threadId`, recorded and, unless memory is down, written and settled. */
+/** A save Pip made from `messageId` in `channelId`, recorded and, unless memory is down, written and settled. */
 const saved = (
   id: string,
   markdown: string,
-  { threadId = thread, messageId = reply }: { threadId?: ThreadId; messageId?: MessageId } = {},
+  { channelId = channel, messageId = reply }: { channelId?: ChannelId; messageId?: MessageId } = {},
 ) =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -190,7 +190,7 @@ const saved = (
         tags: [],
         state: "sending",
         version: null,
-        threadId,
+        channelId,
         messageId,
         createdAt: now,
         updatedAt: now,
@@ -210,23 +210,23 @@ const current = () => Effect.runPromise(store.page({ _tag: "You" }, pipsOwn, pat
 
 describe("memory in a chat and on a hob's page", () => {
   // covers ADR 028 (The memory tools), #961
-  it("lists the saves a thread's replies made, and only that thread's (#961)", async () => {
-    await get("/api/threads/thread-1/memory-saves");
+  it("lists the saves a channel's replies made, and only that channel's (#961)", async () => {
+    await get("/api/channels/channel-1/memory-saves");
     await saved("s1", "# Launch emails go out Tuesday at 9 AM");
-    await saved("s2", "# Elsewhere", { threadId: ThreadId.make("thread-2"), messageId: MessageId.make("reply-2") });
+    await saved("s2", "# Elsewhere", { channelId: ChannelId.make("channel-2"), messageId: MessageId.make("reply-2") });
 
-    const listed = await get("/api/threads/thread-1/memory-saves");
+    const listed = await get("/api/channels/channel-1/memory-saves");
     expect(listed.status).toBe(200);
     expect(listed.body).toEqual([
       expect.objectContaining({ id: "s1", messageId: "reply-1", state: "saved", path: "decisions/tuesday.md" }),
     ]);
     expect(listed.body[0]).not.toHaveProperty("undoneAt");
-    expect((await get("/api/threads/thread-3/memory-saves")).body).toEqual([]);
+    expect((await get("/api/channels/channel-3/memory-saves")).body).toEqual([]);
   });
 
   // covers ADR 028 (Writes), #961
   it("Undo puts back the version a save replaced, marks it undone and announces it, once (#961)", async () => {
-    await get("/api/threads/thread-1/memory-saves");
+    await get("/api/channels/channel-1/memory-saves");
     await saved("s1", "# Launch emails go out Monday");
     await saved("s2", "# Launch emails go out Tuesday at 9 AM", { messageId: MessageId.make("reply-2") });
 
@@ -238,7 +238,7 @@ describe("memory in a chat and on a hob's page", () => {
     expect(journaled.map((entry) => entry.payload)).toContainEqual(
       expect.objectContaining({ _tag: "MemorySaveChanged", save: expect.objectContaining({ id: "s2" }) }),
     );
-    expect((await get("/api/threads/thread-1/memory-saves")).body[1]).toMatchObject({
+    expect((await get("/api/channels/channel-1/memory-saves")).body[1]).toMatchObject({
       id: "s2",
       undoneAt: undone.body.undoneAt,
     });
@@ -252,7 +252,7 @@ describe("memory in a chat and on a hob's page", () => {
 
   // covers ADR 028 (Writes), #961
   it("Undo of a save that made a page removes the page (#961)", async () => {
-    await get("/api/threads/thread-1/memory-saves");
+    await get("/api/channels/channel-1/memory-saves");
     await saved("s1", "# Launch emails go out Tuesday at 9 AM");
     expect((await undo("s1")).status).toBe(200);
     expect(await current()).toBeNull();
@@ -260,7 +260,7 @@ describe("memory in a chat and on a hob's page", () => {
 
   // covers ADR 028 (Writes, When memory is down), #961
   it("refuses Undo after a newer version, before memory has the save, and while memory is down (#961)", async () => {
-    await get("/api/threads/thread-1/memory-saves");
+    await get("/api/channels/channel-1/memory-saves");
     await saved("s1", "# Launch emails go out Tuesday at 9 AM");
     // You changed the page after the save: Undo would throw that away.
     await Effect.runPromise(
@@ -286,7 +286,7 @@ describe("memory in a chat and on a hob's page", () => {
 
   // covers ADR 028 (Writes), #961
   it("refuses Undo when a change lands after it read the page's history, and keeps that change (#961)", async () => {
-    await get("/api/threads/thread-1/memory-saves");
+    await get("/api/channels/channel-1/memory-saves");
     await saved("s1", "# Launch emails go out Monday");
     await saved("s2", "# Launch emails go out Tuesday at 9 AM", { messageId: MessageId.make("reply-2") });
     // You change the page just after Undo has checked that the save is still its latest version.
@@ -302,12 +302,12 @@ describe("memory in a chat and on a hob's page", () => {
     const refused = await Effect.runPromise(Effect.flip(undoMemorySave(racing, saves, "s2", now)));
     expect(refused).toMatchObject({ _tag: "MemoryUndoRefused", reason: "newer" });
     expect((await current())?.markdown).toBe("# Launch emails go out Wednesday");
-    expect((await get("/api/threads/thread-1/memory-saves")).body[1]).not.toHaveProperty("undoneAt");
+    expect((await get("/api/channels/channel-1/memory-saves")).body[1]).not.toHaveProperty("undoneAt");
   });
 
   // covers ADR 028 (Scopes), #961
   it("answers what a hob reads: its own memory, About you and the projects of its folders (#961)", async () => {
-    await get("/api/threads/thread-1/memory-saves");
+    await get("/api/channels/channel-1/memory-saves");
     await saved("s1", "# Launch emails go out Tuesday at 9 AM");
     const site: MemoryScope = { _tag: "Project", identity: memoryProjectIdentity(null, "site") };
     await Effect.runPromise(

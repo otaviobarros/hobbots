@@ -1,11 +1,11 @@
 import { DeviceRepository, HobbotsRepository } from "@hobbots/agents";
-import { DeviceId, Message, MessageId, OWNER_USER_ID, ThreadId, WINDOW_DEVICE_ID } from "@hobbots/domain";
+import { ChannelId, DeviceId, Message, MessageId, OWNER_USER_ID, WINDOW_DEVICE_ID } from "@hobbots/domain";
 import { Effect, Exit, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { DeviceRepositoryLive, EventJournal, HobbotsRepositoryLive, migrations } from "../src/index.ts";
 import deviceUsers from "../src/migrations/0112_device_users.ts";
-import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
+import { migrateAfter, TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1452 (ADR 039, Users as actors): every device belongs to a user, the owner until accounts
 // exist, and a person's message names them as it is stored. On SQLite and PostgreSQL alike (STD-TEST-006).
@@ -90,6 +90,8 @@ describe("devices and users", () => {
         })}`;
         yield* sql`UPDATE event_journal_head SET sequence = 1`;
         yield* deviceUsers;
+        // Today's journal reads it, so the rows go on to today's schema.
+        yield* migrateAfter("0112");
         return yield* (yield* EventJournal).readAfter(0);
       }),
       TestDatabaseAt(earlier),
@@ -141,7 +143,7 @@ describe("devices and users", () => {
           return yield* repo.upsertMessage(
             new Message({
               id: MessageId.make("m1"),
-              threadId: ThreadId.make("t1"),
+              channelId: ChannelId.make("t1"),
               role: "user",
               content: "hello",
               status: "complete",

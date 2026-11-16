@@ -1,6 +1,6 @@
 import { CatchUpRepository, PinRepository, sessionActor } from "@hobbots/agents";
 import { MessageNotFound } from "@hobbots/api";
-import { type JournaledEvent, MessageId, MessagePin, ThreadId } from "@hobbots/domain";
+import { ChannelId, type JournaledEvent, MessageId, MessagePin } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { SqlClient, type Statement } from "effect/sql";
 import { makeJournaledChange } from "./journal.ts";
@@ -8,11 +8,11 @@ import { readQuestSummaries } from "./quest-summary-rows.ts";
 import { sqlOrDie } from "./sql-errors.ts";
 
 // Pins (ADR 037, migration 0107) and what catch-up reads besides the transcript and the records: the
-// read marker and the Quests followed in the thread.
+// read marker and the Quests followed in the channel.
 
 interface PinRow {
   readonly messageId: string;
-  readonly threadId: string;
+  readonly channelId: string;
   readonly pinnedAt: string;
   readonly revision: unknown;
 }
@@ -20,7 +20,7 @@ interface PinRow {
 const pinFromRow = (row: PinRow) =>
   new MessagePin({
     messageId: MessageId.make(row.messageId),
-    threadId: ThreadId.make(row.threadId),
+    channelId: ChannelId.make(row.channelId),
     pinnedAt: row.pinnedAt,
     revision: Number(row.revision),
   });
@@ -31,43 +31,43 @@ export const PinRepositoryLive = Layer.effect(
     const sql = yield* SqlClient.SqlClient;
     const change = makeJournaledChange(sql);
 
-    // A pin's thread is its message's, wherever the message is now.
+    // A pin's channel is its message's, wherever the message is now.
     const pinsWhere = (where: Statement.Fragment) =>
-      sql<PinRow>`SELECT p.message_id, m.thread_id, p.pinned_at, p.revision
+      sql<PinRow>`SELECT p.message_id, m.channel_id, p.pinned_at, p.revision
         FROM message_pins p JOIN messages m ON m.id = p.message_id WHERE ${where}
         ORDER BY p.revision DESC`.pipe(Effect.map((rows) => rows.map(pinFromRow)));
 
-    const setPinned = (threadId: ThreadId, messageId: MessageId, pinned: boolean, at: string) =>
+    const setPinned = (channelId: ChannelId, messageId: MessageId, pinned: boolean, at: string) =>
       change<MessagePin | null, MessageNotFound>((first) =>
         Effect.gen(function* () {
-          const [message] = yield* sql`SELECT 1 FROM messages WHERE id = ${messageId} AND thread_id = ${threadId}`;
-          if (message === undefined) return yield* Effect.fail(new MessageNotFound({ threadId, messageId }));
+          const [message] = yield* sql`SELECT 1 FROM messages WHERE id = ${messageId} AND channel_id = ${channelId}`;
+          if (message === undefined) return yield* Effect.fail(new MessageNotFound({ channelId, messageId }));
           const [held] = yield* pinsWhere(sql`p.message_id = ${messageId}`);
           if (pinned) {
             if (held !== undefined) return { value: held, events: [] };
-            const pin = new MessagePin({ messageId, threadId, pinnedAt: at, revision: first });
+            const pin = new MessagePin({ messageId, channelId, pinnedAt: at, revision: first });
             yield* sql`INSERT INTO message_pins ${sql.insert({ message_id: messageId, pinned_at: at, revision: first })}`;
             const event: JournaledEvent = { _tag: "MessagePinned", pin };
             return { value: pin, events: [event] };
           }
           if (held === undefined) return { value: null, events: [] };
           yield* sql`DELETE FROM message_pins WHERE message_id = ${messageId}`;
-          const event: JournaledEvent = { _tag: "MessageUnpinned", threadId, messageId };
+          const event: JournaledEvent = { _tag: "MessageUnpinned", channelId, messageId };
           return { value: null, events: [event] };
         }),
       );
 
     return PinRepository.of({
       setPinned,
-      listPins: (threadId) => sqlOrDie(pinsWhere(sql`m.thread_id = ${threadId}`)),
+      listPins: (channelId) => sqlOrDie(pinsWhere(sql`m.channel_id = ${channelId}`)),
     });
   }),
 );
 
-/** The Quests followed in the thread, with their summaries and goals, as catch-up and For you read them. */
-export const threadQuests = (sql: SqlClient.SqlClient, threadId: ThreadId) =>
+/** The Quests followed in the channel, with their summaries and goals, as catch-up and For you read them. */
+export const channelQuests = (sql: SqlClient.SqlClient, channelId: ChannelId) =>
   Effect.gen(function* () {
-    const summaries = yield* readQuestSummaries(sql, threadId);
+    const summaries = yield* readQuestSummaries(sql, channelId);
     if (summaries.length === 0) return [];
     const goals = yield* sql<{ readonly id: string; readonly goal: string }>`SELECT id, goal FROM quests
       WHERE ${sql.in(
@@ -84,17 +84,17 @@ export const CatchUpRepositoryLive = Layer.effect(
     const sql = yield* SqlClient.SqlClient;
 
     // The read marker of the person asking (ADR 039, read markers per member).
-    const marker = (threadId: ThreadId) =>
+    const marker = (channelId: ChannelId) =>
       Effect.gen(function* () {
         const reader = yield* sessionActor;
-        const [row] = yield* sql<{ readonly readRevision: unknown }>`SELECT read_revision FROM thread_members
-          WHERE thread_id = ${threadId} AND actor_kind = ${reader.kind} AND actor_id = ${reader.id}`;
+        const [row] = yield* sql<{ readonly readRevision: unknown }>`SELECT read_revision FROM channel_members
+          WHERE channel_id = ${channelId} AND actor_kind = ${reader.kind} AND actor_id = ${reader.id}`;
         return row?.readRevision == null ? null : Number(row.readRevision);
       });
 
     return CatchUpRepository.of({
-      marker: (threadId) => sqlOrDie(marker(threadId)),
-      quests: (threadId) => sqlOrDie(threadQuests(sql, threadId)),
+      marker: (channelId) => sqlOrDie(marker(channelId)),
+      quests: (channelId) => sqlOrDie(channelQuests(sql, channelId)),
     });
   }),
 );

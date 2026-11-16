@@ -15,7 +15,7 @@ export const MemoryProjectIdentity = Schema.String.check(Schema.isNonEmpty()).pi
 );
 export type MemoryProjectIdentity = typeof MemoryProjectIdentity.Type;
 
-/** Whose memory a page is in: one hob's own, a project's, or everyone's. A thread is not a scope. */
+/** Whose memory a page is in: one hob's own, a project's, or everyone's. A channel is not a scope. */
 export const MemoryScope = Schema.Union([
   Schema.TaggedStruct("Hob", { agentId: AgentId }),
   Schema.TaggedStruct("Project", { identity: MemoryProjectIdentity }),
@@ -270,7 +270,7 @@ const remoteIdentity = (origin: string): string | null => {
 };
 
 /**
- * A memory session's id (ADR 028, Capture and summaries): a thread's id for a chat, or an Attempt's
+ * A memory session's id (ADR 028, Capture and summaries): a channel's id for a chat, or an Attempt's
  * id for a Task's work outside any chat, a party member's or a step's. Memory writes its summary to
  * `sessions/<id>.md` in the hob's own memory.
  */

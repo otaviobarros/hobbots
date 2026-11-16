@@ -138,7 +138,7 @@ const scopedHere = (scope: InboxIn | undefined) => scope?.scope === "here";
 
 /** The chat or camp the Inbox opened on, with its name, for the scope picker. */
 const placeOf = (scope: InboxIn | undefined, directory: InboxDirectory) =>
-  scope === undefined ? undefined : { scope, name: directory.threadTitle(scope.threadId) };
+  scope === undefined ? undefined : { scope, name: directory.channelTitle(scope.channelId) };
 
 type Place = ReturnType<typeof placeOf>;
 

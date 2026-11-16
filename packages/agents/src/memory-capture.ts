@@ -5,6 +5,7 @@ import {
   answerHow,
   type BackpackItem,
   type BackpackPayload,
+  type ChannelId,
   checkpointText,
   choicesText,
   claimClashText,
@@ -30,7 +31,6 @@ import {
   skillProposalText,
   type Task,
   type TaskId,
-  type ThreadId,
 } from "@hobbots/domain";
 import { Context, DateTime, Duration, Effect, Layer, Option, Schedule } from "effect";
 import {
@@ -49,15 +49,15 @@ import { makeRedactor, type Redactor, SecretRedaction } from "./secrets.ts";
 
 /**
  * Memory capture (ADR 028, Capture and summaries, When memory is down). The event journal is the
- * outbox: the worker reads it after its cursor and sends what happened in each thread to that
- * thread's session in each hob's own memory (ADR 039, Memory in a shared thread): a hob's replies and
+ * outbox: the worker reads it after its cursor and sends what happened in each channel to that
+ * channel's session in each hob's own memory (ADR 039, Memory in a shared channel): a hob's replies and
  * their tool steps, the person's messages it took a turn on, with the person as their source, and the
  * Quests it led. Another hob's replies are never sent to a hob's memory, nor a person's message no turn
  * of its took. What a hob did on a Task outside any chat, as a party member or in a
  * step (the Task's goal, its finished tool steps and each turn's reply), to its Attempt's session in
  * that hob's memory (#1012). The work that wakes a hob, such as an answer to its question, goes to
  * the session of the turn that took it in, either one (#1028). It moves the cursor once memory
- * acknowledged all of it. A session quiet for 30 minutes, or whose thread was archived or whose Task
+ * acknowledged all of it. A session quiet for 30 minutes, or whose channel was archived or whose Task
  * ended, is ended, so memory writes its summary page; no runtime turn is spent on it. The same worker
  * sends the `memory_save` calls memory could not take at once. While memory does not answer, nothing
  * moves and nothing is lost: journal compaction keeps every entry after the cursor. A private camp's
@@ -108,7 +108,7 @@ const stepItem = (key: string, step: ReplyStep): MemoryCaptureItem => ({
   ...(step.startedAt === undefined ? {} : { at: step.startedAt }),
 });
 
-/** What a reply that ended adds to its thread's session: its tool steps, then its text. */
+/** What a reply that ended adds to its channel's session: its tool steps, then its text. */
 const replyItems = (entry: EventEnvelope, message: Message): Array<MemoryCaptureItem> => {
   if (!ENDED_REPLY.has(message.status)) return [];
   const steps = message.steps
@@ -119,12 +119,12 @@ const replyItems = (entry: EventEnvelope, message: Message): Array<MemoryCapture
   return text.trim() === "" ? steps : [...steps, { key: `entry:${entry.id}`, kind: "reply", text }];
 };
 
-/** What one journal entry adds to a memory session, a thread's or an Attempt's, in its hob's memory. */
+/** What one journal entry adds to a memory session, a channel's or an Attempt's, in its hob's memory. */
 export interface CapturedEntry {
   readonly sessionId: MemorySessionId;
   /**
-   * The hob whose memory the session is in. Null for an entry that only ends the thread's session in
-   * every hob's memory, as an archive does: a thread with several hobs has a session in each one's.
+   * The hob whose memory the session is in. Null for an entry that only ends the channel's session in
+   * every hob's memory, as an archive does: a channel with several hobs has a session in each one's.
    */
   readonly agentId: AgentId | null;
   /**
@@ -133,26 +133,26 @@ export interface CapturedEntry {
    */
   readonly opening: ReadonlyArray<MemoryCaptureItem> | null;
   readonly items: ReadonlyArray<MemoryCaptureItem>;
-  /** The session ends: its thread was archived or made a private camp, or its Task ended. */
+  /** The session ends: its channel was archived or made a private camp, or its Task ended. */
   readonly ends: boolean;
 }
 
-const threadStart = (threadId: ThreadId): MemoryCaptureItem => ({
-  key: `start:${threadId}`,
+const channelStart = (channelId: ChannelId): MemoryCaptureItem => ({
+  key: `start:${channelId}`,
   kind: "start",
-  text: `thread:${threadId}`,
+  text: `thread:${channelId}`,
 });
 
-/** An Attempt's session start, tagged with the Attempt, its Task and the thread its Quest started in. */
-const attemptStart = (attemptId: AttemptId, taskId: TaskId, threadId: ThreadId | null): MemoryCaptureItem => ({
+/** An Attempt's session start, tagged with the Attempt, its Task and the channel its Quest started in. */
+const attemptStart = (attemptId: AttemptId, taskId: TaskId, channelId: ChannelId | null): MemoryCaptureItem => ({
   key: `start:${attemptId}`,
   kind: "start",
-  text: [`attempt:${attemptId}`, `task:${taskId}`, ...(threadId === null ? [] : [`thread:${threadId}`])].join("\n"),
+  text: [`attempt:${attemptId}`, `task:${taskId}`, ...(channelId === null ? [] : [`thread:${channelId}`])].join("\n"),
 });
 
 /** What starts an Attempt's session: its start, then the Task's goal, as the prompt the hob worked on. */
 const attemptOpening = (task: Task, attempt: Attempt, redacted: Redacting): Array<MemoryCaptureItem> => [
-  attemptStart(attempt.id, task.id, task.threadId),
+  attemptStart(attempt.id, task.id, task.channelId),
   ...redacted([{ key: `goal:${attempt.id}`, kind: "message", text: task.brief }]),
 ];
 
@@ -235,7 +235,7 @@ const hobProposalText = (proposal: HobProposal) =>
 
 /**
  * What a backpack item adds once the runtime accepted the turn it was put into (#1028): the work, to
- * that turn's session in its recipient's memory, a thread's or a member's Attempt's, as a prompt.
+ * that turn's session in its recipient's memory, a channel's or a member's Attempt's, as a prompt.
  * Kept by the item's own id, so a redelivery or a retry of the turn writes it once.
  */
 const arrivalOf = (
@@ -253,12 +253,12 @@ const arrivalOf = (
   const items = redacted([{ key: `arrival:${item.id}`, kind: "message", text }]);
   const [target, id] = splitTarget(delivery.target);
   if (target === "thread") {
-    const threadId = id as ThreadId;
-    return { sessionId: threadId, agentId: item.recipientId, opening: [threadStart(threadId)], items, ends: false };
+    const channelId = id as ChannelId;
+    return { sessionId: channelId, agentId: item.recipientId, opening: [channelStart(channelId)], items, ends: false };
   }
   if (target === "task") {
     const attemptId = delivery.turnId as AttemptId;
-    const opening = [attemptStart(attemptId, id as TaskId, item.threadId)];
+    const opening = [attemptStart(attemptId, id as TaskId, item.channelId)];
     return { sessionId: attemptId, agentId: item.recipientId, opening, items, ends: false };
   }
   return null;
@@ -272,7 +272,7 @@ const splitTarget = (target: string): readonly [string, string] => {
 
 /**
  * What a Task's change adds to its Attempt's session (#1012). Only a Task below the top one works
- * outside any chat, a party member's or a step's: the top Task's turns are its thread's. A live
+ * outside any chat, a party member's or a step's: the top Task's turns are its channel's. A live
  * Attempt opens its session, a turn's reply goes into it when the Attempt ends, and the session ends
  * with its Task, whose current Attempt it is.
  */
@@ -322,7 +322,7 @@ const attemptStepsOf = (
     : {
         sessionId: event.attemptId,
         agentId,
-        opening: [attemptStart(event.attemptId, event.taskId, entry.correlation.threadId)],
+        opening: [attemptStart(event.attemptId, event.taskId, entry.correlation.channelId)],
         items: redacted(steps),
         ends: false,
       };
@@ -331,7 +331,7 @@ const attemptStepsOf = (
 /** The people's messages hobs took a turn on, by id, as capture reads them with the replies to them. */
 export type CapturedPrompts = ReadonlyMap<MessageId, Message>;
 
-/** The hob that wrote a reply: its author, or the thread's hob for a reply stored before authors were. */
+/** The hob that wrote a reply: its author, or the channel's hob for a reply stored before authors were. */
 const replyHob = (entry: EventEnvelope, message: Message): AgentId | null =>
   message.actor?.kind === "hob" ? AgentId.make(message.actor.id) : entry.correlation.agentId;
 
@@ -351,8 +351,8 @@ const promptItems = (reply: Message, prompts: CapturedPrompts): Array<MemoryCapt
 };
 
 /**
- * What a message adds to its thread's session in its hob's memory: a reply once its turn ends, after
- * the person's message the turn took (ADR 039, Memory in a shared thread). A person's message adds
+ * What a message adds to its channel's session in its hob's memory: a reply once its turn ends, after
+ * the person's message the turn took (ADR 039, Memory in a shared channel). A person's message adds
  * nothing by itself: only the hobs that take a turn on it keep it, each in its own memory.
  */
 const messageOf = (
@@ -369,9 +369,9 @@ const messageOf = (
   return items.length === 0
     ? null
     : {
-        sessionId: message.threadId,
+        sessionId: message.channelId,
         agentId,
-        opening: [threadStart(message.threadId)],
+        opening: [channelStart(message.channelId)],
         items: redacted(items),
         ends: false,
       };
@@ -401,11 +401,11 @@ const settledSaveOf = (
   const { save } = event;
   if ((save.state !== "saved" && save.state !== "refused") || save.undoneAt !== undefined) return null;
   const items = redacted([{ key: `save:${save.id}`, kind: "tool", text: settledSaveText(save) }]);
-  if (save.threadId !== null) {
+  if (save.channelId !== null) {
     return {
-      sessionId: save.threadId,
+      sessionId: save.channelId,
       agentId: save.agentId,
-      opening: [threadStart(save.threadId)],
+      opening: [channelStart(save.channelId)],
       items,
       ends: false,
     };
@@ -440,25 +440,25 @@ export const capturedEntryOf = (
     case "MessageUpserted":
       return messageOf(entry, event.message, redacted, prompts);
     case "QuestStarted": {
-      // A top Quest started in a thread is led by the thread's hob. A member's own Quest is in its
+      // A top Quest started in a channel is led by the channel's hob. A member's own Quest is in its
       // Attempt's session already, by the tool step that started it.
       const { quest } = event;
-      if (quest.threadId === null || quest.parentQuestId !== null) return null;
+      if (quest.channelId === null || quest.parentQuestId !== null) return null;
       const text = `quest:${quest.id}\n${quest.goal}`;
       return {
-        sessionId: quest.threadId,
+        sessionId: quest.channelId,
         agentId: quest.leadId,
-        opening: [threadStart(quest.threadId)],
+        opening: [channelStart(quest.channelId)],
         items: redacted([{ key: `quest:${quest.id}`, kind: "quest", text }]),
         ends: false,
       };
     }
-    case "ThreadUpserted": {
+    case "ChannelUpserted": {
       // Archived, or made a private camp (ADR 037): either ends the session in every hob's memory.
-      const { thread } = event;
-      return thread.archivedAt === null && !thread.private
+      const { channel } = event;
+      return channel.archivedAt === null && !channel.private
         ? null
-        : { sessionId: thread.id, agentId: null, opening: null, items: [], ends: true };
+        : { sessionId: channel.id, agentId: null, opening: null, items: [], ends: true };
     }
     // A chat started fresh ends its sessions; the new chat opens its own with its first reply.
     case "ChatStartedFresh":
@@ -481,7 +481,7 @@ const ownScope = (agentId: AgentId) => ({ _tag: "Hob", agentId }) as const;
 const endKey = (session: MemoryCaptureSession) => `end:${session.sessionId}:${session.lastKey}`;
 
 /**
- * What names a session among the open ones: its hob and its id, since a thread with several hobs has
+ * What names a session among the open ones: its hob and its id, since a channel with several hobs has
  * a session of the same id in each one's memory (ADR 039).
  */
 export type SessionKey = string;
@@ -513,35 +513,36 @@ interface Round {
 }
 
 /**
- * Where an entry belongs, to keep a private camp's out of memory (ADR 037): its thread or its Task,
+ * Where an entry belongs, to keep a private camp's out of memory (ADR 037): its channel or its Task,
  * and what its items come from (`unit`): a message, an Attempt, a Quest, a backpack item or a save.
  * A unit with any entry written in a private camp is kept out for good, since a later entry carries
  * all of it again, as a reply's text or an Attempt's steps do.
  */
 export interface EntryMarks {
-  readonly threadId: ThreadId | null;
+  readonly channelId: ChannelId | null;
   readonly taskId: TaskId | null;
   readonly unit: string | null;
 }
 
 const attemptUnit = (attemptId: string) => `attempt:${attemptId}`;
 
-/** Where a backpack item belongs: the Attempt it was put into, or the thread. */
+/** Where a backpack item belongs: the Attempt it was put into, or the channel. */
 const backpackMarks = (item: BackpackItem): EntryMarks => {
   const delivery = item.deliveries.at(-1);
   const [target, id] = delivery === undefined ? ["", ""] : splitTarget(delivery.target);
   if (delivery !== undefined && target === "task") {
-    return { threadId: item.threadId, taskId: id as TaskId, unit: attemptUnit(delivery.turnId) };
+    return { channelId: item.channelId, taskId: id as TaskId, unit: attemptUnit(delivery.turnId) };
   }
-  const threadId = target === "thread" ? (id as ThreadId) : item.threadId;
-  return { threadId, taskId: item.taskId, unit: `arrival:${item.id}` };
+  const channelId = target === "thread" ? (id as ChannelId) : item.channelId;
+  return { channelId, taskId: item.taskId, unit: `arrival:${item.id}` };
 };
 
-/** Where a settled save belongs: the Attempt outside any chat it was made in, or itself in its thread. */
+/** Where a settled save belongs: the Attempt outside any chat it was made in, or itself in its channel. */
 const saveMarks = (save: MemorySave): EntryMarks => {
   const taskId = saveTaskOf(save);
-  const unit = save.threadId === null && save.attemptId !== undefined ? attemptUnit(save.attemptId) : `save:${save.id}`;
-  return { threadId: save.threadId, taskId, unit };
+  const unit =
+    save.channelId === null && save.attemptId !== undefined ? attemptUnit(save.attemptId) : `save:${save.id}`;
+  return { channelId: save.channelId, taskId, unit };
 };
 
 /** Where an entry memory may keep something of belongs, or null for one it never keeps anything of. */
@@ -549,21 +550,21 @@ export const entryMarksOf = (entry: EventEnvelope): EntryMarks | null => {
   const event = entry.payload;
   switch (event._tag) {
     case "MessageUpserted":
-      return { threadId: event.message.threadId, taskId: null, unit: `message:${event.message.id}` };
+      return { channelId: event.message.channelId, taskId: null, unit: `message:${event.message.id}` };
     case "QuestStarted":
-      return { threadId: event.quest.threadId, taskId: null, unit: `quest:${event.quest.id}` };
-    case "ThreadUpserted":
+      return { channelId: event.quest.channelId, taskId: null, unit: `quest:${event.quest.id}` };
+    case "ChannelUpserted":
     case "CampMade":
-      return { threadId: event.thread.id, taskId: null, unit: null };
+      return { channelId: event.channel.id, taskId: null, unit: null };
     case "ChatStartedFresh":
-      return { threadId: event.superseded.id, taskId: null, unit: null };
+      return { channelId: event.superseded.id, taskId: null, unit: null };
     case "TaskStateChanged": {
       const { task, attempt } = event;
       const attemptId = attempt !== null && attempt.taskId === task.id ? attempt.id : task.currentAttemptId;
-      return { threadId: task.threadId, taskId: task.id, unit: attemptId === null ? null : attemptUnit(attemptId) };
+      return { channelId: task.channelId, taskId: task.id, unit: attemptId === null ? null : attemptUnit(attemptId) };
     }
     case "AttemptStepsRecorded":
-      return { threadId: entry.correlation.threadId, taskId: event.taskId, unit: attemptUnit(event.attemptId) };
+      return { channelId: entry.correlation.channelId, taskId: event.taskId, unit: attemptUnit(event.attemptId) };
     case "BackpackItemChanged":
       return backpackMarks(event.item);
     case "MemorySaveChanged":
@@ -604,16 +605,16 @@ const capturePage = (
   marks: entries.map(entryMarksOf),
 });
 
-/** The threads and Tasks a page's entries belong to, to ask which are private camps. */
+/** The channels and Tasks a page's entries belong to, to ask which are private camps. */
 const workOfPage = (page: CapturedPage): MemoryCaptureWork => {
-  const threadIds = new Set<ThreadId>();
+  const channelIds = new Set<ChannelId>();
   const taskIds = new Set<TaskId>();
   for (const marks of page.marks) {
     if (marks === null) continue;
-    if (marks.threadId !== null) threadIds.add(marks.threadId);
+    if (marks.channelId !== null) channelIds.add(marks.channelId);
     if (marks.taskId !== null) taskIds.add(marks.taskId);
   }
-  return { threadIds, taskIds };
+  return { channelIds, taskIds };
 };
 
 /** What capture keeps of private camps where it stands, and what it reads of the page's work now. */
@@ -623,31 +624,31 @@ export interface PagePrivacy {
 }
 
 const NO_PRIVACY: PagePrivacy = {
-  atCursor: { privateThreads: [], excluded: [] },
-  now: { privateNow: new Set(), taskThreads: new Map() },
+  atCursor: { privateChannels: [], excluded: [] },
+  now: { privateNow: new Set(), taskChannels: new Map() },
 };
 
-/** The thread an entry belongs to: its own, or its Task's. */
-const threadOf = (marks: EntryMarks, now: MemoryCapturePrivacy): ThreadId | null =>
-  marks.threadId ?? (marks.taskId === null ? null : (now.taskThreads.get(marks.taskId) ?? null));
+/** The channel an entry belongs to: its own, or its Task's. */
+const channelOf = (marks: EntryMarks, now: MemoryCapturePrivacy): ChannelId | null =>
+  marks.channelId ?? (marks.taskId === null ? null : (now.taskChannels.get(marks.taskId) ?? null));
 
 /**
  * Follows a camp's privacy along the journal: a camp is made with it (`CampMade`), and every later
- * change of it is a `ThreadUpserted` entry.
+ * change of it is a `ChannelUpserted` entry.
  */
-const followPrivacy = (entry: EventEnvelope, privateThreads: Set<ThreadId>) => {
-  if (entry.payload._tag !== "ThreadUpserted" && entry.payload._tag !== "CampMade") return;
-  const { thread } = entry.payload;
-  if (thread.private) privateThreads.add(thread.id);
-  else privateThreads.delete(thread.id);
+const followPrivacy = (entry: EventEnvelope, privateChannels: Set<ChannelId>) => {
+  if (entry.payload._tag !== "ChannelUpserted" && entry.payload._tag !== "CampMade") return;
+  const { channel } = entry.payload;
+  if (channel.private) privateChannels.add(channel.id);
+  else privateChannels.delete(channel.id);
 };
 
 /**
  * Plans what a page of entries sends, from the sessions open before it and the keys already sent to
  * them. An entry that only ends a session, as an archive does, does nothing when its session is not
  * open; any other entry opens its session again, which memory continues. Each entry goes to its own
- * hob's session only (ADR 039): a thread with several hobs has a session in each one's memory, and an
- * end of the thread's ends them all. Nothing of a private camp is sent (ADR 037): an entry is skipped
+ * hob's session only (ADR 039): a channel with several hobs has a session in each one's memory, and an
+ * end of the channel's ends them all. Nothing of a private camp is sent (ADR 037): an entry is skipped
  * when its camp was private when it was written, as the journal says, or is private now, and so is
  * every later entry of its unit, and a person's message once its own unit is kept out. A session of
  * it still open from before the camp was made private ends, in every hob's memory, so what memory has
@@ -660,14 +661,14 @@ export const planRound = (
   sent: SentKeys = new Map(),
   privacy: PagePrivacy = NO_PRIVACY,
 ): Round => {
-  const privateThreads = new Set(privacy.atCursor.privateThreads);
+  const privateChannels = new Set(privacy.atCursor.privateChannels);
   const excluded = new Set(privacy.atCursor.excluded);
   const excludedNow: Array<string> = [];
   /** Whether the entry is a private camp's; one that is keeps its unit out for good. */
   const keepsOut = (marks: EntryMarks | null) => {
     if (marks === null) return false;
-    const threadId = threadOf(marks, privacy.now);
-    const isPrivate = threadId !== null && (privateThreads.has(threadId) || privacy.now.privateNow.has(threadId));
+    const channelId = channelOf(marks, privacy.now);
+    const isPrivate = channelId !== null && (privateChannels.has(channelId) || privacy.now.privateNow.has(channelId));
     if (isPrivate && marks.unit !== null && !excluded.has(marks.unit)) {
       excluded.add(marks.unit);
       excludedNow.push(marks.unit);
@@ -712,7 +713,7 @@ export const planRound = (
     for (const [key, session] of openOf(found)) ending.set(key, session);
   };
   page.entries.forEach((entry, at) => {
-    followPrivacy(entry, privateThreads);
+    followPrivacy(entry, privateChannels);
     const marks = page.marks[at] ?? null;
     const isPrivate = keepsOut(marks);
     const found = page.found[at] ?? null;
@@ -750,7 +751,7 @@ export const planRound = (
     ended: [...ending.values()],
     stale,
     sent: planned,
-    exclusions: { privateThreads: [...privateThreads], excluded: excludedNow },
+    exclusions: { privateChannels: [...privateChannels], excluded: excludedNow },
     excluded: [...excluded],
   };
 };
@@ -894,7 +895,7 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
             sequence: round.sequence,
             since: current.since,
             sessions: [...round.sessions.values()],
-            exclusions: { privateThreads: round.exclusions.privateThreads, excluded: round.excluded },
+            exclusions: { privateChannels: round.exclusions.privateChannels, excluded: round.excluded },
           };
           for (const [key, keys] of round.sent) {
             if (round.sessions.has(key)) sent.set(key, keys);
@@ -914,7 +915,7 @@ export class MemoryCapture extends Context.Service<MemoryCapture, MemoryCaptureS
           for (const session of quiet) if (yield* endSession(session)) ended.set(sessionKeyOf(session), session);
           if (ended.size === 0) return;
           yield* log.save(current.sequence, [], [...ended.values()], {
-            privateThreads: current.exclusions.privateThreads,
+            privateChannels: current.exclusions.privateChannels,
             excluded: [],
           });
           state = { ...current, sessions: current.sessions.filter((session) => !ended.has(sessionKeyOf(session))) };

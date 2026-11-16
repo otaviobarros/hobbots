@@ -14,11 +14,11 @@ import {
 } from "@hobbots/agents";
 import {
   AgentId,
+  ChannelId,
   EMPTY_HOB_POLICY,
   MEMORY_SAVE_TOOL,
   MEMORY_SEARCH_TOOL,
   memoryProjectIdentity,
-  ThreadId,
 } from "@hobbots/domain";
 import { MemoryToolsLive, PRIVATE_CAMP_SAVE } from "@hobbots/memory";
 import { makeMemorySavesFake, makeMemoryStoreFake } from "@hobbots/memory/testing";
@@ -49,10 +49,10 @@ const access: ToolAccess = {
 };
 
 /** A private camp (ADR 037): nothing from it is saved to memory. */
-const camp = ThreadId.make("camp");
+const camp = ChannelId.make("camp");
 
-/** One hub's memory tools for a turn in `threadId`, over the in-memory store, with every record and store call in `order`. */
-const memoryHub = (threadId: ThreadId | null = null) => {
+/** One hub's memory tools for a turn in `channelId`, over the in-memory store, with every record and store call in `order`. */
+const memoryHub = (channelId: ChannelId | null = null) => {
   const memory = makeMemoryStoreFake();
   const saves = makeMemorySavesFake();
   const order: Array<string> = [];
@@ -82,13 +82,13 @@ const memoryHub = (threadId: ThreadId | null = null) => {
           }),
         ),
         PolicyEngine.node,
-        Layer.succeed(PrivateCamps, { holds: (work) => Effect.succeed(work.threadId === camp) }),
+        Layer.succeed(PrivateCamps, { holds: (work) => Effect.succeed(work.channelId === camp) }),
       ),
     ),
   );
   const turn: CharmTurn = {
     agentId: AgentId.make("0d6e2f0a-0000-4000-8000-000000000001"),
-    threadId,
+    channelId,
     messageId: null,
     scope: () => "reply:m1",
     also: "reply:m1",
@@ -123,9 +123,9 @@ afterAll(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-/** Runs a turn on `runtime` in `threadId` that saves the lesson and searches for it, with a recorder answering `records`. */
-const saveAndSearch = async (runtime: HubCallRuntime, records: boolean, threadId: ThreadId | null = null) => {
-  const hub = memoryHub(threadId);
+/** Runs a turn on `runtime` in `channelId` that saves the lesson and searches for it, with a recorder answering `records`. */
+const saveAndSearch = async (runtime: HubCallRuntime, records: boolean, channelId: ChannelId | null = null) => {
+  const hub = memoryHub(channelId);
   const hubTools = await hub.tools;
   if (hubTools === null) throw new Error("No memory tools");
   // What the hub answered each call, in order, as the hob's model reads it.
@@ -173,7 +173,7 @@ describe("the Memory tools on every runtime", () => {
     }
   });
 
-  // covers ADR 037 (A camp is a thread with a kind), ADR 028 (The memory tools)
+  // covers ADR 037 (A camp is a channel with a kind), ADR 028 (The memory tools)
   it("each runtime's save from a private camp is refused before memory is reached, and its search still runs (#1377)", {
     timeout: 240_000,
   }, async () => {

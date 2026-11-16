@@ -3,12 +3,12 @@ import { UserSession } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  ChannelId,
   CharmCall,
   MessageId,
   OWNER_ACTOR,
   OWNER_USER_ID,
   TaskId,
-  ThreadId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
@@ -16,7 +16,7 @@ import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { CharmCallsLive, EventJournal, HobbotsRepositoryLive, migrations, TaskRepositoryLive } from "../src/index.ts";
 import charmCallValues from "../src/migrations/0075_charm_call_values.ts";
-import { TestDatabase, TestDatabaseAt } from "../src/testing.ts";
+import { migrateAfter, TestDatabase, TestDatabaseAt } from "../src/testing.ts";
 
 const TestLayer = CharmCallService.layer.pipe(
   Layer.provideMerge(Layer.mergeAll(HobbotsRepositoryLive, CharmCallsLive, TaskRepositoryLive, EventJournal.layer)),
@@ -62,7 +62,7 @@ const call = (key: string, overrides: Partial<CharmCall> = {}) =>
     appliedText: "Pushed.",
     state: "sending",
     result: null,
-    threadId: ThreadId.make("t1"),
+    channelId: ChannelId.make("t1"),
     messageId: MessageId.make("m1"),
     stepId: "toolu_1",
     createdAt: now,
@@ -82,7 +82,7 @@ describe("Charm call records", () => {
         // A late outcome never overwrites a settled call.
         const late = yield* calls.settle(call("k1"), "uncertain", null, later);
         const stored = yield* calls.find(agentId, ["reply:m1"], "k1");
-        const byStep = yield* calls.findByStep(ThreadId.make("t1"), MessageId.make("m1"), "toolu_1");
+        const byStep = yield* calls.findByStep(ChannelId.make("t1"), MessageId.make("m1"), "toolu_1");
         return { first, again, applied, late, stored, byStep };
       }),
     );
@@ -182,7 +182,7 @@ describe("Charm call records", () => {
         const calls = yield* CharmCalls;
         const service = yield* CharmCallService;
         const step = (stepId: string) =>
-          ({ _tag: "Step", threadId: ThreadId.make("t1"), messageId: MessageId.make("m1"), stepId }) as const;
+          ({ _tag: "Step", channelId: ChannelId.make("t1"), messageId: MessageId.make("m1"), stepId }) as const;
         yield* calls.begin(call("k1"));
         const sending = yield* service.settle(step("toolu_1"), "applied").pipe(Effect.flip, Effect.provide(user));
         yield* calls.settle(call("k1"), "uncertain", "Unclear.", later);
@@ -191,7 +191,14 @@ describe("Charm call records", () => {
         const missing = yield* service.settle(step("toolu_9"), "applied").pipe(Effect.flip, Effect.provide(user));
         // Not sent frees the key: the same call may be made again.
         const retried = yield* calls.begin(call("k1"));
-        return { sending, settled, again, missing, retried, listed: yield* service.listForThread(ThreadId.make("t1")) };
+        return {
+          sending,
+          settled,
+          again,
+          missing,
+          retried,
+          listed: yield* service.listForChannel(ChannelId.make("t1")),
+        };
       }),
     );
     expect(result.sending).toMatchObject({ _tag: "CharmCallSettled", state: "sending" });
@@ -213,7 +220,7 @@ describe("Charm call records", () => {
       whileApproved: (write) => write,
     });
     const onTask = (key: string, overrides: Partial<CharmCall> = {}) =>
-      call(key, { scope: "task:t1", threadId: null, messageId: null, site: `site ${key}`, ...overrides });
+      call(key, { scope: "task:t1", channelId: null, messageId: null, site: `site ${key}`, ...overrides });
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
@@ -270,27 +277,19 @@ describe("Charm call records", () => {
 
   // covers ADR 031
   it("0075 names every stored call's Charm and moves its applied text out of its plan, readable after", async () => {
-    // Keeps 0076, 0079, 0080, 0082 and 0083 too: the repository that seeds the hob writes its Charms, whether
-    // other hobs see it, its good at and who made and summoned it, and its Summoning scope;
-    // 0053 and 0114 too: the journal moves a retired hob's thread members (ADR 039), which need both.
-    const earlier = Object.fromEntries(
-      Object.entries(migrations).filter(
-        ([id]) =>
-          id < "0075" ||
-          [
-            "0076_charm_grants",
-            "0079_hob_visibility",
-            "0080_hob_good_at",
-            "0082_hob_actors",
-            "0083_summoning",
-            "0053_thread_reads",
-            "0114_thread_members",
-          ].includes(id),
-      ),
-    ) as typeof migrations;
+    const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0075")) as typeof migrations;
     const stored = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      yield* seed;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: agentId,
+        name: "Aldric",
+        runtime: "claude-code",
+        roleTitle: "Lead",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: now,
+      })}`;
       for (const [key, plan] of [
         ["push", `{"commit":"abc","appliedText":"Pushed feat/x."}`],
         ["old", `{"commit":"def"}`],
@@ -314,6 +313,8 @@ describe("Charm call records", () => {
         })}`;
       }
       yield* charmCallValues;
+      // Today's calls read them, so the rows go on to today's schema.
+      yield* migrateAfter("0075");
       return yield* (yield* CharmCalls).unsettled;
     }).pipe(
       Effect.provide(

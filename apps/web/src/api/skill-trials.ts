@@ -1,5 +1,5 @@
 import type { SkillHealth, SkillTrialDraftPayload, SkillTrialText } from "@hobbots/api";
-import type { AgentId, Thread, ThreadId } from "@hobbots/domain";
+import type { AgentId, Channel, ChannelId } from "@hobbots/domain";
 import { queryOptions, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, call } from "./client.ts";
 import { queryKeys } from "./queries.ts";
@@ -15,9 +15,9 @@ export const useStartTrial = () => {
   return useMutation({
     mutationFn: (input: { readonly agentId: AgentId; readonly draft: SkillTrialDraftPayload }) =>
       call((c) => c.skillTrials.start({ payload: input })),
-    onSuccess: (thread: Thread) => {
-      queryClient.setQueryData<ReadonlyArray<Thread>>(queryKeys.threads(thread.agentId), (old) =>
-        old === undefined || old.some((one) => one.id === thread.id) ? old : [thread, ...old],
+    onSuccess: (channel: Channel) => {
+      queryClient.setQueryData<ReadonlyArray<Channel>>(queryKeys.channels(channel.ownerHobId), (old) =>
+        old === undefined || old.some((one) => one.id === channel.id) ? old : [channel, ...old],
       );
     },
   });
@@ -37,10 +37,10 @@ export const skillHealthQuery = queryOptions({
  * The draft a chat tries, as it was tried, so its editor opens on it again. A draft never changes, so
  * it is read once; gone when the hub no longer has it, as after a restore.
  */
-export const skillTrialDraftQuery = (threadId: ThreadId) =>
+export const skillTrialDraftQuery = (channelId: ChannelId) =>
   queryOptions({
-    queryKey: ["skills", "trial", threadId] as const,
-    queryFn: (): Promise<SkillTrialText> => call((c) => c.skillTrials.draft({ params: { threadId } })),
+    queryKey: ["skills", "trial", channelId] as const,
+    queryFn: (): Promise<SkillTrialText> => call((c) => c.skillTrials.draft({ params: { channelId } })),
     staleTime: Number.POSITIVE_INFINITY,
     // A draft the hub no longer has stays gone; any other failure is tried again.
     retry: (count, error) => !draftGone(error) && count < 2,

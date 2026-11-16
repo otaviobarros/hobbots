@@ -7,6 +7,7 @@ import {
   type ArtifactSighting,
   AttemptId,
   artifactSightings,
+  ChannelId,
   ChapterId,
   canonicalPath,
   FileChange,
@@ -22,13 +23,12 @@ import {
   registeredArtifact,
   resolvedSighting,
   TaskId,
-  ThreadId,
 } from "../src/index.ts";
 
 const at = "2026-11-12T00:00:00.000Z";
 const TASK = TaskId.make("task-1");
 const ATTEMPT = AttemptId.make("attempt-1");
-const THREAD = ThreadId.make("thread-1");
+const CHANNEL = ChannelId.make("channel-1");
 const CHAPTER = ChapterId.make("chapter-1");
 const HOB = AgentId.make("hob-1");
 
@@ -63,7 +63,7 @@ const change = (path: string, fields: Partial<FileChange> = {}) =>
 const reply = (fields: Partial<Message> = {}) =>
   new Message({
     id: MessageId.make("reply-1"),
-    threadId: THREAD,
+    channelId: CHANNEL,
     chapterId: CHAPTER,
     actor: hobActor(HOB),
     role: "assistant",
@@ -204,7 +204,7 @@ describe("artifactSightings", () => {
     expect(done[0]).toMatchObject({
       locator: "/work/app/launch.md",
       origin: { kind: "message", id: "reply-1" },
-      from: { _tag: "Message", threadId: THREAD, chapterId: CHAPTER, actor: hobActor(HOB) },
+      from: { _tag: "Message", channelId: CHANNEL, chapterId: CHAPTER, actor: hobActor(HOB) },
     });
     expect(artifactSightings([{ _tag: "MessageUpserted", message: reply({ status: "streaming" }) }])).toEqual([]);
     expect(
@@ -224,7 +224,7 @@ describe("registeredArtifact", () => {
     relativeTo: null,
     from: { _tag: "Task", taskId: TASK },
   });
-  const placed = (s: ArtifactSighting) => placedFromTask(s, { threadId: THREAD, chapterId: CHAPTER, ownerId: HOB });
+  const placed = (s: ArtifactSighting) => placedFromTask(s, { channelId: CHANNEL, chapterId: CHAPTER, ownerId: HOB });
   const id = RegisteredArtifactId.make("artifact-1");
 
   it("starts an artifact at version 1, named by its record or its file", () => {
@@ -236,7 +236,7 @@ describe("registeredArtifact", () => {
       id,
       at,
     });
-    expect(made).toMatchObject({ latestVersion: 1, title: "launch.md", actor: hobActor(HOB), threadId: THREAD });
+    expect(made).toMatchObject({ latestVersion: 1, title: "launch.md", actor: hobActor(HOB), channelId: CHANNEL });
   });
 
   it("moves to the next version for a new record, keeping its name unless the record gives one", () => {

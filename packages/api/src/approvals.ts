@@ -5,10 +5,10 @@ import {
   ApprovalLifetime,
   ApprovalRequest,
   ApprovalSurface,
+  ChannelId,
   Grant,
   GrantId,
   GrantRule,
-  ThreadId,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
@@ -18,9 +18,9 @@ import {
   ApprovalNotConfirmed,
   ApprovalNotFound,
   ApprovalNotGrantable,
+  ChannelNotFound,
   GrantNotFound,
   GrantRuleRefused,
-  ThreadNotFound,
 } from "./errors.ts";
 import { DeviceSession } from "./user-session.ts";
 
@@ -50,11 +50,11 @@ export type DecideApprovalPayload = typeof DecideApprovalPayload.Type;
 /** Approval requests and the user's decisions. Only a user session reaches it (PE-006). */
 export class ApprovalsGroup extends HttpApiGroup.make("approvals")
   .add(
-    // The thread's approval requests, oldest first, whatever their state.
-    HttpApiEndpoint.get("forThread", "/threads/:threadId/approvals", {
-      params: { threadId: ThreadId },
+    // The channel's approval requests, oldest first, whatever their state.
+    HttpApiEndpoint.get("forChannel", "/channels/:channelId/approvals", {
+      params: { channelId: ChannelId },
       success: Schema.Array(ApprovalRequest),
-      error: ThreadNotFound,
+      error: ChannelNotFound,
     }),
     // The Inbox's requests (PE-003): every pending one and the most recent decided and expired ones, oldest first.
     HttpApiEndpoint.get("list", "/approvals", {

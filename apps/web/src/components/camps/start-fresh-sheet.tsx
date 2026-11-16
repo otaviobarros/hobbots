@@ -1,4 +1,4 @@
-import { type Agent, type CarriedOverEntry, carriedOverRefId, type Thread, ThreadId } from "@hobbots/domain";
+import { type Agent, type CarriedOverEntry, type Channel, ChannelId, carriedOverRefId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@hobbots/ui/components/dialog";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
@@ -16,7 +16,7 @@ const copy = messages.fresh;
  * Start fresh on the hob's chat (ADR 037): the hob's memory and every open item come along, and
  * the sheet lists them first. The chat goes to the Archive and the new one opens; a refusal says why.
  */
-export function StartFreshSheet({ hob, chat, onClose }: { hob: Agent; chat: Thread; onClose: () => void }) {
+export function StartFreshSheet({ hob, chat, onClose }: { hob: Agent; chat: Channel; onClose: () => void }) {
   const [state, dispatch] = useReducer(startFreshStep, ASKING);
   const carried = useQuery(carryOverQuery(chat.id));
   const start = useStartFresh();
@@ -26,18 +26,18 @@ export function StartFreshSheet({ hob, chat, onClose }: { hob: Agent; chat: Thre
 
   const send = () => {
     // The reducer decides the key: a try again keeps the one it sent.
-    const event: StartFreshEvent = { _tag: "Start", key: ThreadId.make(crypto.randomUUID()) };
+    const event: StartFreshEvent = { _tag: "Start", key: ChannelId.make(crypto.randomUUID()) };
     const next = startFreshStep(state, event);
     dispatch(event);
     if (next.step !== "starting") return;
     start.mutate(
-      { thread: chat, key: next.key },
+      { channel: chat, key: next.key },
       {
         onSuccess: (started) => {
           onClose();
           void navigate({
-            to: "/hobs/$hobId/threads/$threadId",
-            params: { hobId: hob.id, threadId: started.chat.id },
+            to: "/hobs/$hobId/channels/$channelId",
+            params: { hobId: hob.id, channelId: started.chat.id },
           });
         },
         onError: (error) => dispatch({ _tag: "Failed", error: startFreshError(error) }),

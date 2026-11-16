@@ -13,14 +13,14 @@ import {
   Agent,
   AgentId,
   type BackpackItem,
+  Channel,
+  ChannelId,
   CheckpointId,
   type CheckpointKind,
   DEFAULT_QUEST_LIMITS,
   DelegationId,
   QuestId,
   TaskId,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import { DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
@@ -50,7 +50,7 @@ const FRODO = AgentId.make("frodo");
 const SAM = AgentId.make("sam");
 const PIPPIN = AgentId.make("pippin");
 const MERRY = AgentId.make("merry");
-const threadId = ThreadId.make("shire");
+const channelId = ChannelId.make("shire");
 const top = TaskId.make("quest");
 
 /** Every prompt the fake runtime was sent, so a test counts the continuations. */
@@ -86,7 +86,7 @@ const hob = (id: AgentId, name: string, lookSeed: number) =>
     createdAt: now,
   });
 
-/** Frodo, his thread and his party, stored before the hub starts. */
+/** Frodo, his channel and his party, stored before the hub starts. */
 const Party = Layer.effectDiscard(
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
@@ -100,8 +100,8 @@ const Party = Layer.effectDiscard(
     ).entries()) {
       yield* repo.insertAgent(hob(id, name, index + 1));
     }
-    yield* repo.upsertThread(
-      new Thread({ id: threadId, agentId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
+    yield* repo.upsertChannel(
+      new Channel({ id: channelId, ownerHobId: FRODO, title: "The quest", createdAt: now, updatedAt: now }),
     );
   }),
 );
@@ -151,7 +151,7 @@ const setUp = () => {
   const app = ManagedRuntime.make(makeApp(requests));
   runtime = app;
   const run = <A, E>(effect: Effect.Effect<A, E, Layer.Success<App>>) => app.runPromise(effect);
-  /** The continuations Hobbots started in Frodo's thread so far. */
+  /** The continuations Hobbots started in Frodo's channel so far. */
   const continuations = () => requests.filter((request) => request.prompt.startsWith("Hobbots wrote this"));
   return { run, continuations };
 };
@@ -166,7 +166,7 @@ const party = Effect.gen(function* () {
     id: TaskId.make(id),
     ownerId,
     parentId: parentId === null ? null : TaskId.make(parentId),
-    threadId,
+    channelId,
     brief: `Brief for ${id}`,
     dependsOn: [],
     createdAt: now,
@@ -231,11 +231,11 @@ const settledAttempts = retry(
   }),
 );
 
-/** Waits until `count` continuations have run in Frodo's thread and their replies have ended. */
+/** Waits until `count` continuations have run in Frodo's channel and their replies have ended. */
 const replies = (count: number) =>
   retry(
     Effect.gen(function* () {
-      const all = yield* HobbotsRepository.use((repo) => repo.listMessages(threadId));
+      const all = yield* HobbotsRepository.use((repo) => repo.listMessages(channelId));
       const ended = all.every((m) => m.status !== "streaming" && m.status !== "stopping");
       return ended && all.length >= count ? all : yield* Effect.fail("not yet" as const);
     }),
@@ -252,14 +252,14 @@ describe("a lead's continuations and its Task's Attempts", () => {
 
     // Thirty routine updates across the party: nothing wakes Frodo.
     for (let round = 0; round < 10; round++) await run(everyoneReports("progress"));
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     await run(Effect.sleep("150 millis"));
     expect(continuations()).toHaveLength(0);
 
     // Three findings recorded together: one continuation reads all three, the progress riding along.
     const findings = await run(everyoneReports("finding"));
     expect(findings.every((item) => item.recipientId === FRODO && item.actionable)).toBe(true);
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     await run(replies(1));
     await run(Effect.sleep("150 millis"));
     expect(continuations()).toHaveLength(1);
@@ -270,7 +270,7 @@ describe("a lead's continuations and its Task's Attempts", () => {
 
     // Another batch is another turn, of the same Attempt.
     await run(everyoneReports("finding"));
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     await run(replies(2));
     expect(continuations()).toHaveLength(2);
     expect(await run(settledAttempts)).toEqual([{ number: 1, agentId: FRODO, state: "completed" }]);
@@ -280,7 +280,7 @@ describe("a lead's continuations and its Task's Attempts", () => {
     const { run, continuations } = setUp();
     await run(party);
     await run(everyoneReports("finding"));
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     await run(replies(1));
     expect(await run(settledAttempts)).toEqual([{ number: 1, agentId: FRODO, state: "completed" }]);
 
@@ -294,7 +294,7 @@ describe("a lead's continuations and its Task's Attempts", () => {
       ),
     );
     await run(everyoneReports("finding"));
-    await run(ChatService.use((chat) => chat.wake(threadId)));
+    await run(ChatService.use((chat) => chat.wake(channelId)));
     await run(replies(2));
     expect(continuations()).toHaveLength(2);
     expect(await run(settledAttempts)).toEqual([

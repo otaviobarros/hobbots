@@ -2,6 +2,8 @@ import {
   AgentId,
   Artifact,
   type ArtifactOrigin,
+  Channel,
+  ChannelId,
   ChapterId,
   Decision,
   DecisionId,
@@ -10,8 +12,6 @@ import {
   RegisteredArtifactId,
   Task,
   TaskId,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -19,21 +19,21 @@ import { BRIEF_INPUT_MAX, briefInput, briefTriggers, plainBrief } from "../src/c
 import { buildPack, CAMP_BRIEF_MAX } from "../src/context-pack.ts";
 
 // Issue #1384 (ADR 037, Records): the brief projector's pure parts. Its plain brief, the rule under
-// No AI, is written from the thread's decisions and artifacts and always fits its share of the pack;
+// No AI, is written from the channel's decisions and artifacts and always fits its share of the pack;
 // chapter ends and Quest steps are what ask for a new one.
 
 const NOW = "2026-11-12T00:00:00.000Z";
-const THREAD = ThreadId.make("camp-1");
+const CHANNEL = ChannelId.make("camp-1");
 const CHAPTER = ChapterId.make("chapter-1");
 const WREN = AgentId.make("wren");
 
 const camp = (goal: string | null = "Ship the launch emails") =>
-  new Thread({ id: THREAD, agentId: WREN, title: "Launch", kind: "camp", goal, createdAt: NOW, updatedAt: NOW });
+  new Channel({ id: CHANNEL, ownerHobId: WREN, title: "Launch", kind: "camp", goal, createdAt: NOW, updatedAt: NOW });
 
 const decision = (id: string, text: string, state: Decision["state"] = "active") =>
   new Decision({
     id: DecisionId.make(id),
-    threadId: THREAD,
+    channelId: CHANNEL,
     chapterId: CHAPTER,
     sourceMessageId: null,
     text,
@@ -48,7 +48,7 @@ const origin: ArtifactOrigin = { kind: "message", id: "reply-1" };
 const artifact = (id: string, title: string, latestVersion = 1) =>
   new Artifact({
     id: RegisteredArtifactId.make(id),
-    threadId: THREAD,
+    channelId: CHANNEL,
     chapterId: CHAPTER,
     kind: "doc",
     title,
@@ -134,7 +134,7 @@ describe("what asks for a brief", () => {
       ownerId: WREN,
       parentId: null,
       rootId: TaskId.make("t1"),
-      threadId: THREAD,
+      channelId: CHANNEL,
       brief: "Write the emails",
       state: "completed",
       dependsOn: [],
@@ -143,9 +143,9 @@ describe("what asks for a brief", () => {
       createdAt: NOW,
       updatedAt: NOW,
     });
-    const other = ThreadId.make("chat-1");
-    const failedIn = ThreadId.make("camp-2");
-    const cancelledIn = ThreadId.make("camp-3");
+    const other = ChannelId.make("chat-1");
+    const failedIn = ChannelId.make("camp-2");
+    const cancelledIn = ChannelId.make("camp-3");
     const triggers = briefTriggers([
       entry(1, { _tag: "TaskCompleted", task, artifacts: [] }),
       entry(2, {
@@ -159,29 +159,34 @@ describe("what asks for a brief", () => {
         checkpoint: { taskId: TaskId.make("t8"), kind: "progress" },
         milestone: null,
       }),
-      entry(4, { _tag: "ChapterSummarized", threadId: other, chapter: {} }),
-      entry(5, { _tag: "MessageUpserted", message: { threadId: other } }),
-      entry(6, { _tag: "ChapterStarted", threadId: other, chapter: {}, ended: null }),
+      entry(4, { _tag: "ChapterSummarized", channelId: other, chapter: {} }),
+      entry(5, { _tag: "MessageUpserted", message: { channelId: other } }),
+      entry(6, { _tag: "ChapterStarted", channelId: other, chapter: {}, ended: null }),
       // A step or member's Task with no Quest of its own that failed or was cancelled asks for one;
       // one that only started asks for none.
-      entry(7, { _tag: "TaskStateChanged", task: { state: "failed", threadId: failedIn }, attempt: null, quest: null }),
-      entry(8, {
+      entry(7, {
         _tag: "TaskStateChanged",
-        task: { state: "cancelled", threadId: cancelledIn },
+        task: { state: "failed", channelId: failedIn },
         attempt: null,
         quest: null,
       }),
-      entry(9, { _tag: "TaskStateChanged", task: { state: "running", threadId: other }, attempt: null, quest: null }),
+      entry(8, {
+        _tag: "TaskStateChanged",
+        task: { state: "cancelled", channelId: cancelledIn },
+        attempt: null,
+        quest: null,
+      }),
+      entry(9, { _tag: "TaskStateChanged", task: { state: "running", channelId: other }, attempt: null, quest: null }),
     ]);
-    expect([...triggers.threads]).toEqual([THREAD, failedIn, cancelledIn]);
+    expect([...triggers.channels]).toEqual([CHANNEL, failedIn, cancelledIn]);
     expect([...triggers.tasks]).toEqual(["t9"]);
   });
 });
 
 describe("what the brain reads", () => {
-  it("the thread's name, goal and records, never more than its limit (#1384)", () => {
+  it("the channel's name, goal and records, never more than its limit (#1384)", () => {
     const input = briefInput({
-      thread: camp(),
+      channel: camp(),
       decisions: [decision("d1", "Emails go out on Wednesdays.")],
       artifacts: [artifact("a1", "launch.md")],
       chapters: [{ number: 1, title: "Dates", summary: "Settled the send day." }],
@@ -194,7 +199,7 @@ describe("what the brain reads", () => {
     expect(input).toContain("- Chapter 1 (Dates): Settled the send day.");
     expect(input).toContain("- Write the emails (running)");
     const long = briefInput({
-      thread: camp(),
+      channel: camp(),
       decisions: Array.from({ length: 200 }, (_, i) => decision(`d${i}`, "x".repeat(300))),
       artifacts: [],
       chapters: [],

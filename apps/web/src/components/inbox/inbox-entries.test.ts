@@ -2,13 +2,13 @@ import type { WaitingDevice } from "@hobbots/api";
 import {
   type AgentId,
   ApprovalRequest,
+  ChannelId,
   CharmCall,
   HobProposal,
   HobProposalId,
   PairingRequest,
   Revision,
   type TaskId,
-  ThreadId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
@@ -16,13 +16,13 @@ import {
   ALDRIC,
   BUILD,
   CAMPAIGN,
+  CHANNEL,
   COPY,
   memberApproval,
   QUILL,
   quest,
   question,
   stuckItem,
-  THREAD,
   task,
   tree,
 } from "../../test/quests.ts";
@@ -32,9 +32,9 @@ import {
   charmCallEntry,
   deviceEntry,
   entryAsker,
+  entryChannel,
   entryPlace,
   entryRow,
-  entryThread,
   failedEntry,
   groupByPlace,
   namesRequest,
@@ -94,7 +94,7 @@ const lostComment = {
     appliedText: "Commented.",
     state: "uncertain",
     result: null,
-    threadId: null,
+    channelId: null,
     messageId: null,
     stepId: null,
     createdAt: at,
@@ -144,7 +144,7 @@ describe("entryRow", () => {
   });
 
   it("shows stuck work in rose with how many tries it took, or that its hob retired", () => {
-    const row = entryRow(stuckEntry(stuck(THREAD)), names, ALDRIC, now);
+    const row = entryRow(stuckEntry(stuck(CHANNEL)), names, ALDRIC, now);
     expect(row).toEqual({
       chain: ["Aldric", "Quill"],
       kind: "Stuck",
@@ -153,7 +153,7 @@ describe("entryRow", () => {
       when: "Stuck after 3 tries",
       tone: "stuck",
     });
-    expect(entryRow(stuckEntry(stuck(THREAD, true)), names, undefined, now).when).toBe("Quill retired");
+    expect(entryRow(stuckEntry(stuck(CHANNEL, true)), names, undefined, now).when).toBe("Quill retired");
   });
 
   it("shows a member's failed Task in rose under its lead, by the Task's first line", () => {
@@ -185,7 +185,7 @@ describe("entryRow", () => {
       tone: "plain",
     });
     expect(entryAsker(entry)).toBe(QUILL);
-    expect(entryThread(entry)).toBe(lostComment.task.threadId);
+    expect(entryChannel(entry)).toBe(lostComment.task.channelId);
     const top = quest();
     expect(entryPlace(entry, (taskId) => (taskId === COPY ? top : undefined))).toEqual({ kind: "quest", quest: top });
     const listed = needsEntries({
@@ -236,7 +236,7 @@ describe("byUrgency", () => {
 });
 
 describe("entries", () => {
-  const other = ThreadId.make("other");
+  const other = ChannelId.make("other");
   const entries = needsEntries({
     devices: [device("2026-11-01T10:08:00.000Z")],
     questions: [asked],
@@ -263,7 +263,7 @@ describe("entries", () => {
     expect(all.map((entry) => namesRequest(entry.key))).toEqual([false, false, false, false, true]);
   });
 
-  it("groups by quest, or by thread outside one, with this hub's devices apart, the most urgent first", () => {
+  it("groups by quest, or by channel outside one, with this hub's devices apart, the most urgent first", () => {
     const top = quest();
     const questOf = (taskId: TaskId) => (taskId === COPY ? top : undefined);
     expect(
@@ -273,7 +273,7 @@ describe("entries", () => {
       ["quest:quest-bf", ["stuck", "approval", "question"]],
     ]);
     const outside = groupByPlace(entries, () => undefined).map((group) => group.key);
-    expect(outside).toEqual(["hub", "thread:other", `thread:${THREAD}`]);
+    expect(outside).toEqual(["hub", "channel:other", `channel:${CHANNEL}`]);
   });
 
   it("shows the entry the address names when the list has it, otherwise the first", () => {
@@ -291,7 +291,7 @@ describe("hob proposals", () => {
       kind: "summon",
       tool: "summoning_summon",
       call: { scope: "reply:m1", key: "k1" },
-      threadId: THREAD,
+      channelId: CHANNEL,
       messageId: null,
       taskId: COPY,
       stepId: null,

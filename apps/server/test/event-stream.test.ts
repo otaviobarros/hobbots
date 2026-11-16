@@ -6,7 +6,7 @@ import {
   RuntimeAdapter,
   type RuntimeEvent,
 } from "@hobbots/agents";
-import { Agent, AgentId, Message, MessageId, OWNER_ACTOR, Thread, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, Channel, ChannelId, Message, MessageId, OWNER_ACTOR } from "@hobbots/domain";
 import { EventJournal, HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Queue, Schedule, type Scope, Stream } from "effect";
@@ -122,8 +122,8 @@ describe("event stream", () => {
         const first = yield* connect(undefined);
         yield* waitFor(() => first.frames.length > 0);
 
-        const thread = yield* chat.createThread(HOB_ID);
-        const { assistantMessage } = yield* chat.sendPrompt(thread.id, "hello");
+        const channel = yield* chat.createChannel(HOB_ID);
+        const { assistantMessage } = yield* chat.sendPrompt(channel.id, "hello");
         yield* Queue.offerAll(turn, [
           { _tag: "SessionStarted", sessionId: "s1", billing: "fake" },
           { _tag: "TextDelta", text: "Hel" },
@@ -131,10 +131,10 @@ describe("event stream", () => {
         yield* waitFor(() => deltas(first.frames).length === 1);
         const cursor = lastCursor(first.frames) ?? "";
 
-        // The client goes away mid-reply; the reply streams on and another thread starts meanwhile.
+        // The client goes away mid-reply; the reply streams on and another channel starts meanwhile.
         yield* Fiber.interrupt(first.fiber);
         yield* Queue.offer(turn, { _tag: "TextDelta", text: "lo" });
-        yield* chat.createThread(HOB_ID);
+        yield* chat.createChannel(HOB_ID);
         const missed = yield* journal.readAfter(parseCursor(cursor)?.sequence ?? 0);
 
         const second = yield* connect(cursor);
@@ -174,8 +174,8 @@ describe("event stream", () => {
         const chat = yield* ChatService;
         const first = yield* connect(undefined);
         yield* waitFor(() => first.frames.length > 0);
-        const thread = yield* chat.createThread(HOB_ID);
-        const { assistantMessage } = yield* chat.sendPrompt(thread.id, "Fix the cart and run the tests");
+        const channel = yield* chat.createChannel(HOB_ID);
+        const { assistantMessage } = yield* chat.sendPrompt(channel.id, "Fix the cart and run the tests");
         yield* waitFor(() => entries(first.frames).some((e) => e.payload._tag === "MessageUpserted"));
         const cursor = lastCursor(first.frames) ?? "";
 
@@ -198,7 +198,7 @@ describe("event stream", () => {
           { _tag: "Completed", sessionId: "s1", text: "Fixed; one test still fails." },
         ]);
         const repo = yield* HobbotsRepository;
-        yield* repo.listMessages(thread.id).pipe(
+        yield* repo.listMessages(channel.id).pipe(
           Effect.flatMap((messages) => (messages.at(-1)?.status === "complete" ? Effect.void : Effect.fail("busy"))),
           Effect.retry(Schedule.spaced("5 millis")),
         );
@@ -227,9 +227,9 @@ describe("event stream", () => {
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const repo = yield* HobbotsRepository;
-        const thread = yield* chat.createThread(HOB_ID);
-        const { assistantMessage } = yield* chat.sendPrompt(thread.id, "Run the tests");
-        const reply = repo.listMessages(thread.id).pipe(Effect.map((messages) => messages.at(-1)));
+        const channel = yield* chat.createChannel(HOB_ID);
+        const { assistantMessage } = yield* chat.sendPrompt(channel.id, "Run the tests");
+        const reply = repo.listMessages(channel.id).pipe(Effect.map((messages) => messages.at(-1)));
         const until = (check: (status: string | undefined) => boolean) =>
           reply.pipe(
             Effect.flatMap((m) => (check(m?.status) && m?.steps.length ? Effect.succeed(m) : Effect.fail("busy"))),
@@ -251,9 +251,9 @@ describe("event stream", () => {
         yield* chat.interruptAgent(HOB_ID);
         const interrupted = yield* until((status) => status === "interrupted");
 
-        // The thread is free once the ended turn's drain has run.
+        // The channel is free once the ended turn's drain has run.
         yield* chat
-          .continueReply(thread.id, assistantMessage?.id ?? MessageId.make(""))
+          .continueReply(channel.id, assistantMessage?.id ?? MessageId.make(""))
           .pipe(Effect.retry(Schedule.spaced("5 millis")));
         yield* Queue.offerAll(turn, [
           { _tag: "ToolStarted", id: "t1", ...tests },
@@ -277,7 +277,7 @@ describe("event stream", () => {
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const journal = yield* EventJournal;
-        yield* chat.createThread(HOB_ID);
+        yield* chat.createChannel(HOB_ID);
         const head = yield* journal.head;
         const readies: Array<StreamFrame | undefined> = [];
         for (const cursor of [
@@ -312,29 +312,29 @@ describe("event stream", () => {
         yield* waitFor(() => connection.frames.length > 0);
         // Committed but never published, as when the process dies between commit and publish.
         const now = "2026-01-02T00:00:00.000Z";
-        const silent = yield* repo.upsertThread(
-          new Thread({
-            id: ThreadId.make("silent"),
-            agentId: HOB_ID,
+        const silent = yield* repo.upsertChannel(
+          new Channel({
+            id: ChannelId.make("silent"),
+            ownerHobId: HOB_ID,
             title: "Quiet",
             createdAt: now,
             updatedAt: now,
           }),
         );
-        const announced = yield* chat.createThread(HOB_ID);
-        // Each new thread journals itself, its first chapter (ADR 037) and its first two members (ADR 039).
+        const announced = yield* chat.createChannel(HOB_ID);
+        // Each new channel journals itself, its first chapter (ADR 037) and its first two members (ADR 039).
         yield* waitFor(() => entries(connection.frames).length === 8);
         return { frames: connection.frames, silent: silent.entries, announced };
       }),
     );
     const sent = entries(result.frames);
     expect(sent.slice(0, 4)).toEqual(result.silent);
-    expect(sent[4]?.payload).toMatchObject({ _tag: "ThreadUpserted", thread: { id: result.announced.id } });
+    expect(sent[4]?.payload).toMatchObject({ _tag: "ChannelUpserted", channel: { id: result.announced.id } });
     expect(sent[4]?.sequence).toBe((sent[3]?.sequence ?? 0) + 1);
-    expect(sent[5]?.payload).toMatchObject({ _tag: "ChapterStarted", threadId: result.announced.id });
+    expect(sent[5]?.payload).toMatchObject({ _tag: "ChapterStarted", channelId: result.announced.id });
     expect(sent.slice(6).map((entry) => entry.payload)).toMatchObject([
-      { _tag: "ThreadMemberAdded", member: { threadId: result.announced.id, role: "owner" } },
-      { _tag: "ThreadMemberAdded", member: { threadId: result.announced.id, role: "member" } },
+      { _tag: "ChannelMemberAdded", member: { channelId: result.announced.id, role: "owner" } },
+      { _tag: "ChannelMemberAdded", member: { channelId: result.announced.id, role: "member" } },
     ]);
   });
 
@@ -354,7 +354,7 @@ describe("event stream", () => {
         while (fiber.pollUnsafe() === undefined && published < 3 * CONNECTION_BUFFER) {
           yield* bus.publishTransient({
             _tag: "MessageDelta",
-            threadId: ThreadId.make("t"),
+            channelId: ChannelId.make("t"),
             messageId: MessageId.make("m"),
             offset: published++,
             delta: "x",
@@ -381,7 +381,7 @@ describe("reliable chat (#118)", () => {
         const journal = yield* EventJournal;
         const sql = yield* SqlClient.SqlClient;
         const expired = (yield* journal.head).sequence;
-        for (let i = 0; i < 3; i++) yield* chat.createThread(HOB_ID);
+        for (let i = 0; i < 3; i++) yield* chat.createChannel(HOB_ID);
         // Compaction keeps the latest entries; here the client's cursor and the one after it are gone.
         yield* sql`DELETE FROM event_journal WHERE sequence <= ${expired + 1}`;
         const head = yield* journal.head;
@@ -422,11 +422,11 @@ describe("reliable chat (#118)", () => {
         // What a hub that dies mid-reply leaves behind: the prompt, and a reply still streaming
         // with the text it last checkpointed. Each write was journaled as it happened.
         const now = "2026-01-02T00:00:00.000Z";
-        const threadId = ThreadId.make("crashed");
-        yield* repo.upsertThread(
-          new Thread({
-            id: threadId,
-            agentId: HOB_ID,
+        const channelId = ChannelId.make("crashed");
+        yield* repo.upsertChannel(
+          new Channel({
+            id: channelId,
+            ownerHobId: HOB_ID,
             title: "Crash",
             createdAt: now,
             updatedAt: now,
@@ -435,7 +435,7 @@ describe("reliable chat (#118)", () => {
         const message = (id: string, role: "user" | "assistant", content: string, status: Message["status"]) =>
           new Message({
             id: MessageId.make(id),
-            threadId,
+            channelId,
             actor: role === "assistant" ? null : OWNER_ACTOR,
             role,
             content,
@@ -474,7 +474,7 @@ describe("reliable chat (#118)", () => {
         const after = yield* connect(cursor, Context.get(restarted, EventStream));
         yield* waitFor(() => entries(after.frames).length === missed.length);
         yield* Effect.sleep("20 millis");
-        return { cursor, missed, frames: after.frames, messages: yield* repo.listMessages(threadId) };
+        return { cursor, missed, frames: after.frames, messages: yield* repo.listMessages(channelId) };
       }),
     );
     const { cursor, missed, frames, messages } = result;
@@ -524,13 +524,15 @@ describe("cursors", () => {
         _tag: "Transient",
         event: {
           _tag: "MessageDelta",
-          threadId: ThreadId.make("t"),
+          channelId: ChannelId.make("t"),
           messageId: MessageId.make("m"),
           offset: 2,
           delta: "a\nb",
         },
       }),
-    ).toBe('event: delta\ndata: {"_tag":"MessageDelta","threadId":"t","messageId":"m","offset":2,"delta":"a\\nb"}\n\n');
+    ).toBe(
+      'event: delta\ndata: {"_tag":"MessageDelta","channelId":"t","messageId":"m","offset":2,"delta":"a\\nb"}\n\n',
+    );
     expect(encodeFrame({ _tag: "KeepAlive" })).toBe(": keep-alive\n\n");
   });
 });

@@ -1,5 +1,6 @@
 import {
   AgentId,
+  ChannelId,
   ChapterId,
   DecisionId,
   type FindResult,
@@ -8,15 +9,14 @@ import {
   MessageId,
   OWNER_ACTOR,
   RegisteredArtifactId,
-  ThreadId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { findGroups, foundNothing, rowOf } from "./find-model.ts";
 
 const place = {
-  threadId: ThreadId.make("t1"),
-  threadTitle: "Spring sale",
-  threadKind: "chat",
+  channelId: ChannelId.make("t1"),
+  channelTitle: "Spring sale",
+  channelKind: "direct",
   hobId: AgentId.make("aldric"),
   at: "2026-11-04T09:00:00.000Z",
 } as const;
@@ -86,7 +86,7 @@ describe("what Find shows (ADR 037, Find)", () => {
     const holds = rowOf(decision("d1", "active"), false);
     const out = rowOf(decision("d2", "superseded"), false);
     expect([holds.crossedOut, out.crossedOut]).toEqual([false, true]);
-    expect(out.target).toEqual({ hobId: "aldric", threadId: "t1", messageId: "m-d2" });
+    expect(out.target).toEqual({ hobId: "aldric", channelId: "t1", messageId: "m-d2" });
     expect(rowOf(artifact("doc"), false).target.messageId).toBeNull();
     expect(rowOf(chapter, false)).toMatchObject({ glyph: "chapter", chapterNumber: 2, actor: null });
   });

@@ -1,9 +1,9 @@
-import type { AgentId, Thread } from "@hobbots/domain";
+import type { AgentId, Channel } from "@hobbots/domain";
 import { Context, type Effect, Layer, Semaphore } from "effect";
 
 /**
  * One lock per hob, held while anything reads a hob's status and acts on it: starting a turn or
- * a thread, changing its status, editing it. A retirement therefore sees every turn admitted
+ * a channel, changing its status, editing it. A retirement therefore sees every turn admitted
  * before it, no turn is admitted after it, and the hob's AgentUpserted events go out in the order
  * its changes were stored. The lock is in-process, as the turns it guards are.
  */
@@ -26,13 +26,11 @@ export class HobAdmission extends Context.Service<
 }
 
 /**
- * Runs `effect` under the lock of the hob `thread` belongs to, which every turn and message there is
- * admitted under (ADR 039), whichever hob speaks. The one place a thread's lock is named.
+ * Runs `effect` under the lock of the hob `channel` belongs to, which every turn and message there is
+ * admitted under (ADR 039), whichever hob speaks. The one place a channel's lock is named.
  */
-export const withThreadLock = <A, E, R>(
+export const withChannelLock = <A, E, R>(
   admission: HobAdmission["Service"],
-  thread: Pick<Thread, "agentId">,
+  channel: Pick<Channel, "ownerHobId">,
   effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
-  // standards-allow STD-ARCH-021: a thread's lock is the hob's it belongs to
-  admission.withHob(thread.agentId, effect);
+): Effect.Effect<A, E, R> => admission.withHob(channel.ownerHobId, effect);

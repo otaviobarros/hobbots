@@ -10,17 +10,17 @@ import {
   TaskControls,
   TaskRepository,
 } from "@hobbots/agents";
-import { StartFreshRefused, ThreadKeyReused, UserSession } from "@hobbots/api";
+import { ChannelKeyReused, StartFreshRefused, UserSession } from "@hobbots/api";
 import {
   Agent,
   AgentId,
   type BackpackItem,
+  Channel,
+  ChannelId,
   type Message,
   OWNER_ACTOR,
   OWNER_USER_ID,
   TaskId,
-  Thread,
-  ThreadId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Backpack, DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
@@ -49,8 +49,8 @@ import { NodeFolderChecks } from "../src/folders.ts";
 
 const now = "2026-11-11T00:00:00.000Z";
 const FRODO = AgentId.make("frodo");
-const SHIRE = ThreadId.make("shire");
-const FRESH = ThreadId.make("shire-fresh");
+const SHIRE = ChannelId.make("shire");
+const FRESH = ChannelId.make("shire-fresh");
 
 /** A prompt with this line keeps its turn running until it is stopped. */
 const HOLD = "hold:";
@@ -92,8 +92,8 @@ const Frodo = Layer.effectDiscard(
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
     yield* repo.insertAgent(frodo);
-    yield* repo.upsertThread(
-      new Thread({ id: SHIRE, agentId: FRODO, title: "The quest", kind: "chat", createdAt: now, updatedAt: now }),
+    yield* repo.upsertChannel(
+      new Channel({ id: SHIRE, ownerHobId: FRODO, title: "The quest", kind: "direct", createdAt: now, updatedAt: now }),
     );
   }),
 );
@@ -155,7 +155,7 @@ const setUp = () => {
 const waitFor = <A, E, R>(effect: Effect.Effect<A, E | "not yet", R>) =>
   effect.pipe(Effect.retry({ schedule: Schedule.spaced("10 millis"), times: 500 }));
 
-const messagesOf = (threadId: ThreadId) => HobbotsRepository.use((repo) => repo.listMessages(threadId));
+const messagesOf = (channelId: ChannelId) => HobbotsRepository.use((repo) => repo.listMessages(channelId));
 
 /** Frodo's Task in his chat, with one step that failed: returns the failure that waits for him there. */
 const failedStep = Effect.gen(function* () {
@@ -164,7 +164,7 @@ const failedStep = Effect.gen(function* () {
     id: TaskId.make(id),
     ownerId: FRODO,
     parentId: parentId === null ? null : TaskId.make(parentId),
-    threadId: SHIRE,
+    channelId: SHIRE,
     brief: `Brief for ${id}`,
     dependsOn: [],
     createdAt: now,
@@ -213,7 +213,7 @@ describe("Start fresh", () => {
       }),
     );
 
-    expect(result.started.chat).toMatchObject({ id: FRESH, kind: "chat", origin: { threadId: SHIRE } });
+    expect(result.started.chat).toMatchObject({ id: FRESH, kind: "direct", origin: { channelId: SHIRE } });
     expect(result.started.carried.map((item) => item.ref._tag)).toEqual(["task", "backpack-item"]);
     // The same request sent again returns what it did and changes nothing.
     expect(result.again).toEqual(result.started);
@@ -259,36 +259,36 @@ describe("Start fresh", () => {
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const camp = yield* chat.makeCamp(FRODO, {
-          key: ThreadId.make("camp"),
+          key: ChannelId.make("camp"),
           title: "Mordor",
           goal: "Destroy the ring",
           private: false,
         });
-        const onCamp = yield* Effect.exit(chat.startFresh(camp.id, ThreadId.make("k1")));
+        const onCamp = yield* Effect.exit(chat.startFresh(camp.id, ChannelId.make("k1")));
         const reusedKey = yield* Effect.exit(chat.startFresh(SHIRE, camp.id));
         // A reply running in the chat stops it, as it stops an archive.
         yield* chat.sendPrompt(SHIRE, `${HOLD} a long reply`);
-        const running = yield* Effect.exit(chat.startFresh(SHIRE, ThreadId.make("k2")));
+        const running = yield* Effect.exit(chat.startFresh(SHIRE, ChannelId.make("k2")));
         yield* chat.stop(SHIRE);
         yield* waitFor(
           messagesOf(SHIRE).pipe(
             Effect.flatMap((all) => (ended(all) ? Effect.succeed(all) : Effect.fail("not yet" as const))),
           ),
         );
-        const started = yield* chat.startFresh(SHIRE, ThreadId.make("k3"));
-        const superseded = yield* Effect.exit(chat.startFresh(SHIRE, ThreadId.make("k4")));
+        const started = yield* chat.startFresh(SHIRE, ChannelId.make("k3"));
+        const superseded = yield* Effect.exit(chat.startFresh(SHIRE, ChannelId.make("k4")));
         const sent = yield* Effect.exit(chat.sendPrompt(SHIRE, "Still there?"));
         return { onCamp, reusedKey, running, started, superseded, sent };
       }),
     );
     expect(refusal(result.onCamp)).toEqual(
-      new StartFreshRefused({ threadId: ThreadId.make("camp"), reason: "not-open-chat" }),
+      new StartFreshRefused({ channelId: ChannelId.make("camp"), reason: "not-open-chat" }),
     );
-    expect(refusal(result.reusedKey)).toEqual(new ThreadKeyReused({ threadId: ThreadId.make("camp") }));
-    expect(refusal(result.running)).toEqual(new StartFreshRefused({ threadId: SHIRE, reason: "reply-running" }));
+    expect(refusal(result.reusedKey)).toEqual(new ChannelKeyReused({ channelId: ChannelId.make("camp") }));
+    expect(refusal(result.running)).toEqual(new StartFreshRefused({ channelId: SHIRE, reason: "reply-running" }));
     expect(result.started.carried).toEqual([]);
-    expect(refusal(result.superseded)).toEqual(new StartFreshRefused({ threadId: SHIRE, reason: "not-open-chat" }));
+    expect(refusal(result.superseded)).toEqual(new StartFreshRefused({ channelId: SHIRE, reason: "not-open-chat" }));
     // The chat it replaced is read-only for good.
-    expect(refusal(result.sent)).toMatchObject({ _tag: "ThreadArchived", threadId: SHIRE });
+    expect(refusal(result.sent)).toMatchObject({ _tag: "ChannelArchived", channelId: SHIRE });
   });
 });

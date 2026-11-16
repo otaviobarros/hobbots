@@ -502,7 +502,7 @@ export const makeDelegating = ({
                 id: TaskId.make(newId()),
                 ownerId: member.id,
                 parentId: task.id,
-                threadId: null,
+                channelId: null,
                 brief: input.brief,
                 dependsOn: (input.depends_on ?? []).map((id) => TaskId.make(id)),
                 createdAt: scope.at,

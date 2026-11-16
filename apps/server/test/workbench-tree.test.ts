@@ -27,6 +27,8 @@ import {
   ArtifactId,
   AttemptFiles,
   AttemptId,
+  Channel,
+  ChannelId,
   CommandId,
   type Committed,
   ContentId,
@@ -40,8 +42,6 @@ import {
   OWNER_ACTOR,
   QuestId,
   TaskId,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import {
   ActivityRepositoryLive,
@@ -72,7 +72,7 @@ import { AS_WINDOW, TestDevices } from "./window-device.ts";
 // Issue #899: one read and one live stream for a Quest's whole Workbench, over the HTTP API and on
 // SQLite or PostgreSQL (TestDatabase). Aldric leads a campaign: Quill drafts the copy, fails and is
 // retried; Ada builds the campaign as a nested Quest with Pip on the keywords. Another request of
-// Aldric's sits beside it in the same thread and never shows in the campaign's Workbench.
+// Aldric's sits beside it in the same channel and never shows in the campaign's Workbench.
 
 /** The campaign's project folder, where Pip leaves the keywords. */
 const project = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-workbench-tree-")));
@@ -158,7 +158,7 @@ const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
 const ADA = AgentId.make("ada");
 const PIP = AgentId.make("pip");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 
 let clock = 0;
 /** Each Task a second younger than the last, so a tree lists them in the order they were made. */
@@ -166,7 +166,7 @@ const task = (id: string, ownerId: AgentId, parentId: string | null) => ({
   id: TaskId.make(id),
   ownerId,
   parentId: parentId === null ? null : TaskId.make(parentId),
-  threadId,
+  channelId,
   brief: id,
   dependsOn: [],
   createdAt: new Date(Date.parse(now) + 1000 * ++clock).toISOString(),
@@ -250,8 +250,8 @@ const campaign = Effect.gen(function* () {
       }),
     );
   }
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, ownerHobId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
   );
   const tasks = yield* TaskRepository;
   const activity = yield* ActivityRepository;
@@ -319,7 +319,7 @@ const campaign = Effect.gen(function* () {
       recordedAt: later,
     },
   ]);
-  // Another request in the same thread: its own tree.
+  // Another request in the same channel: its own tree.
   yield* tasks.createTask({ task: task("other", ALDRIC, null), delegation: null, milestones: [] });
   yield* start("other", "a-other");
   yield* activity.saveCommand(command("a-other", "c-other", "ls"));

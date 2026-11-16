@@ -132,10 +132,10 @@ describe("lifecycle changes that overlap other requests", () => {
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const repo = yield* HobbotsRepository;
-        const thread = yield* chat.createThread(HOB_ID);
+        const channel = yield* chat.createChannel(HOB_ID);
 
         gate.arm("sendMessage");
-        const send = yield* Effect.forkChild(chat.sendPrompt(thread.id, "hello"));
+        const send = yield* Effect.forkChild(chat.sendPrompt(channel.id, "hello"));
         yield* gate.reached;
         const queued = yield* gate.nextAdmission;
         const retire = yield* Effect.forkChild((yield* HobLifecycle).retire(HOB_ID, "stop"));
@@ -148,8 +148,8 @@ describe("lifecycle changes that overlap other requests", () => {
         return {
           statusWhileAdmitting,
           sent: sent.assistantMessage?.id,
-          messages: yield* repo.listMessages(thread.id),
-          running: yield* chat.activeThreads,
+          messages: yield* repo.listMessages(channel.id),
+          running: yield* chat.activeChannels,
           status: yield* status,
         };
       }),
@@ -166,35 +166,35 @@ describe("lifecycle changes that overlap other requests", () => {
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const repo = yield* HobbotsRepository;
-        const thread = yield* chat.createThread(HOB_ID);
+        const channel = yield* chat.createChannel(HOB_ID);
 
         gate.arm("setAgentStatus");
         const retire = yield* Effect.forkChild((yield* HobLifecycle).retire(HOB_ID, "stop"));
         yield* gate.reached;
         const sendQueued = yield* gate.nextAdmission;
-        const send = yield* Effect.forkChild(chat.sendPrompt(thread.id, "hello"));
+        const send = yield* Effect.forkChild(chat.sendPrompt(channel.id, "hello"));
         yield* sendQueued;
-        const threadQueued = yield* gate.nextAdmission;
-        const newThread = yield* Effect.forkChild(chat.createThread(HOB_ID));
-        yield* threadQueued;
+        const channelQueued = yield* gate.nextAdmission;
+        const newChannel = yield* Effect.forkChild(chat.createChannel(HOB_ID));
+        yield* channelQueued;
         yield* gate.release;
         yield* Fiber.join(retire);
         return {
           send: yield* Fiber.await(send),
-          newThread: yield* Fiber.await(newThread),
-          messages: yield* repo.listMessages(thread.id),
-          threads: yield* repo.listThreads(HOB_ID),
+          newChannel: yield* Fiber.await(newChannel),
+          messages: yield* repo.listMessages(channel.id),
+          channels: yield* repo.listChannels(HOB_ID),
         };
       }),
     );
 
     const refusal = (exit: Exit.Exit<unknown, { readonly _tag: string }>) =>
       Exit.isFailure(exit) ? Exit.findErrorOption(exit) : Option.none();
-    for (const exit of [refusal(result.send), refusal(result.newThread)]) {
+    for (const exit of [refusal(result.send), refusal(result.newChannel)]) {
       expect(exit).toEqual(Option.some(expect.objectContaining({ _tag: "HobUnavailable", status: "retired" })));
     }
     expect(result.messages).toEqual([]);
-    expect(result.threads).toHaveLength(1);
+    expect(result.channels).toHaveLength(1);
   });
 
   it("keeps a hob retired when a wake read it as paused before the retirement", async () => {

@@ -16,6 +16,7 @@ import {
   isInside,
   type ManifestFile,
   MEMORY_PART,
+  manifestCounts,
   SKILLS_PART,
   sizeOf,
   writeManifest,
@@ -263,7 +264,7 @@ export const writeBackup = (options: WriteBackupOptions) =>
       schemaVersion: finished.schemaVersion,
       migrations: finished.migrations,
       installationId: options.installationId,
-      counts: finished.counts,
+      counts: manifestCounts(finished.counts),
       hobFolders: finished.hobFolders,
       files,
     };

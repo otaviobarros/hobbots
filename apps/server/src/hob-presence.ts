@@ -3,12 +3,12 @@ import {
   type AgentId,
   type ApprovalRequest,
   type BackpackItem,
+  type ChannelId,
   type FailedTask,
   type HobPresence,
   hobPresenceState,
   leadsNeedingYou,
   type ReplyActivity,
-  type ThreadId,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
 import { Context, Effect, HashMap, Layer, Option, PubSub, Ref, Schedule } from "effect";
@@ -34,7 +34,9 @@ const CHANGES_PRESENCE: ReadonlySet<string> = new Set([
 ]);
 
 const changesPresence = (event: BusEvent) =>
-  event._tag === "Journaled" ? CHANGES_PRESENCE.has(event.entry.payload._tag) : event.event._tag === "ThreadRunChanged";
+  event._tag === "Journaled"
+    ? CHANGES_PRESENCE.has(event.entry.payload._tag)
+    : event.event._tag === "ChannelRunChanged";
 
 /** The chats whose hob a presence needs to know: those something waits on you in. */
 const chatsToOwn = ({
@@ -42,12 +44,12 @@ const chatsToOwn = ({
   blockers,
   failed,
 }: {
-  readonly pending: ReadonlyArray<Pick<ApprovalRequest, "threadId">>;
-  readonly blockers: ReadonlyArray<Pick<BackpackItem, "threadId">>;
+  readonly pending: ReadonlyArray<Pick<ApprovalRequest, "channelId">>;
+  readonly blockers: ReadonlyArray<Pick<BackpackItem, "channelId">>;
   readonly failed: ReadonlyArray<FailedTask>;
-}): ReadonlyArray<ThreadId> => {
+}): ReadonlyArray<ChannelId> => {
   const ids = [...pending, ...blockers, ...failed.map(({ task }) => task)].flatMap((each) =>
-    each.threadId === null ? [] : [each.threadId],
+    each.channelId === null ? [] : [each.channelId],
   );
   return [...new Set(ids)];
 };
@@ -93,7 +95,7 @@ const nextPresences = (
 
 /**
  * Every hob's presence, decided by the hub and published as `HobPresenceChanged` whenever it changes
- * (ADR 037): its lifecycle first, then whether something waits on you, then what its threads' running
+ * (ADR 037): its lifecycle first, then whether something waits on you, then what its channels' running
  * replies are doing. Retired hobs have none.
  */
 export class HobPresences extends Context.Service<
@@ -121,7 +123,7 @@ export class HobPresences extends Context.Service<
       const decide = Effect.gen(function* () {
         const hobs = yield* repo.listAgentsWithStatus(["active", "paused"]);
         const [{ runs }, pending, blockers, questions, failed] = yield* Effect.all([
-          chat.threadRuns,
+          chat.channelRuns,
           approvals.listPending,
           backpack.listBlocked({ _tag: "Workspace" }),
           tasks.listWaitingQuestions,
@@ -129,12 +131,12 @@ export class HobPresences extends Context.Service<
         ]);
         const chats = chatsToOwn({ pending, blockers, failed });
         const owners = new Map(
-          yield* Effect.forEach(chats, (threadId) =>
-            Effect.map(repo.findThread(threadId), (thread) =>
-              Option.match(thread, {
+          yield* Effect.forEach(chats, (channelId) =>
+            Effect.map(repo.findChannel(channelId), (channel) =>
+              Option.match(channel, {
                 onNone: () => [],
                 // What waits in a chat on you asks for the hob the chat belongs to.
-                onSome: (owned) => [[threadId, owned.agentId] as const],
+                onSome: (owned) => [[channelId, owned.ownerHobId] as const],
               }),
             ),
           ).pipe(Effect.map((pairs) => pairs.flat())),
@@ -144,7 +146,7 @@ export class HobPresences extends Context.Service<
           blockers,
           questions,
           failed,
-          leadOf: (threadId) => owners.get(threadId),
+          leadOf: (channelId) => owners.get(channelId),
         });
         // A running reply is the hob's that holds the floor, in a camp it joined too (ADR 039): a run
         // with a reply always names its speaker.

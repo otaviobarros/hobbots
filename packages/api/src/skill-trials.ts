@@ -1,4 +1,4 @@
-import { AgentId, SkillDescription, SkillId, SkillRevisionHash, SkillTrial, Thread, ThreadId } from "@hobbots/domain";
+import { AgentId, Channel, ChannelId, SkillDescription, SkillId, SkillRevisionHash, SkillTrial } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { AgentNotFound, HobUnavailable } from "./errors.ts";
@@ -37,7 +37,7 @@ export type SkillTrialDraftPayload = typeof SkillTrialDraftPayload.Type;
  */
 export class SkillDraftGone extends Schema.TaggedError<SkillDraftGone>()(
   "SkillDraftGone",
-  { threadId: ThreadId },
+  { channelId: ChannelId },
   { httpApiStatus: 404 },
 ) {}
 
@@ -50,14 +50,14 @@ export class SkillTrialsGroup extends HttpApiGroup.make("skillTrials")
     // Checks the draft and opens a new chat with the hob that loads only it: the chat comes back.
     HttpApiEndpoint.post("start", "/skill-trials", {
       payload: Schema.Struct({ agentId: AgentId, draft: SkillTrialDraftPayload }),
-      success: Thread,
+      success: Channel,
       error: [...importErrors, SkillProposalMissing, AgentNotFound, HobUnavailable],
     }),
   )
   .add(
     // The draft a chat tries, as it was tried, to edit further and save from where it came.
-    HttpApiEndpoint.get("draft", "/skill-trials/:threadId", {
-      params: { threadId: ThreadId },
+    HttpApiEndpoint.get("draft", "/skill-trials/:channelId", {
+      params: { channelId: ChannelId },
       success: SkillTrialText,
       error: SkillDraftGone,
     }),

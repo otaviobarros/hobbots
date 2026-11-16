@@ -3,11 +3,11 @@ import {
   ApprovalId,
   BackpackItemId,
   BackpackItemKind,
+  ChannelId,
   RetireWork,
   TaskId,
   TaskRefusal,
   TaskState,
-  ThreadId,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 
@@ -29,7 +29,7 @@ export const OpenTask = Schema.Struct({
 export type OpenTask = typeof OpenTask.Type;
 
 /** An approval the hob's work waits on. Retiring it in any way but "finish first" expires it. */
-export const OpenApproval = Schema.Struct({ id: ApprovalId, label: Schema.String, threadId: ThreadId });
+export const OpenApproval = Schema.Struct({ id: ApprovalId, label: Schema.String, channelId: ChannelId });
 export type OpenApproval = typeof OpenApproval.Type;
 
 /** An item still open in the hob's backpack. Retiring it fails what nobody else takes, as a blocker. */

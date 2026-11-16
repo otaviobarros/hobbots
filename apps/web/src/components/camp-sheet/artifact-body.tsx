@@ -1,4 +1,4 @@
-import type { Artifact, ArtifactShow, ArtifactVersion, ThreadId } from "@hobbots/domain";
+import type { Artifact, ArtifactShow, ArtifactVersion, ChannelId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { SegmentedControl, SegmentedControlItem } from "@hobbots/ui/components/segmented-control";
 import { useState } from "react";
@@ -12,7 +12,7 @@ const copy = messages.artifacts;
 
 /** What one shown version is drawn from: the artifact, how it is shown, the version and the one before it. */
 interface Shown {
-  readonly threadId: ThreadId;
+  readonly channelId: ChannelId;
   readonly artifact: Artifact;
   readonly show: ArtifactShow;
   readonly version: ArtifactVersion;
@@ -40,10 +40,10 @@ export function ArtifactBody(props: Shown) {
 
 type View = "rendered" | "source";
 
-function TextVersion({ threadId, artifact, show, version, before }: Shown) {
+function TextVersion({ channelId, artifact, show, version, before }: Shown) {
   const [view, setView] = useState<View>("rendered");
-  const now = useVersionText(threadId, artifact.id, version);
-  const was = useVersionText(threadId, artifact.id, before);
+  const now = useVersionText(channelId, artifact.id, version);
+  const was = useVersionText(channelId, artifact.id, before);
   if (now.kind !== "read") return <ReadNote read={now} />;
   const source = show === "diff" || view === "source";
   return (
@@ -123,8 +123,8 @@ function ReadNote({ read }: { read: VersionRead<unknown> }) {
 }
 
 /** An image version, drawn once its bytes are read, or what its read says instead. */
-function ImageVersion({ threadId, artifact, version }: Shown) {
-  const image = useVersionImage(threadId, artifact.id, artifact.locator, version);
+function ImageVersion({ channelId, artifact, version }: Shown) {
+  const image = useVersionImage(channelId, artifact.id, artifact.locator, version);
   if (image.kind !== "read") return <ReadNote read={image} />;
   return (
     <img

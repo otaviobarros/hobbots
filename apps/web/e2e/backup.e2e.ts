@@ -58,7 +58,7 @@ test("backs up from Settings, and Welcome restores it after the data folder is d
   const party = await partyHub(dataDir);
   hub = party.hub;
 
-  // Aldric's Quest runs until Ada asks a question, and the thread and its Tasks are saved.
+  // Aldric's Quest runs until Ada asks a question, and the channel and its Tasks are saved.
   await page.goto(`${hub.url}/#/hobs/${party.aldric}/chat`);
   const composer = page.getByRole("textbox", { name: /^Message Aldric/ });
   await composer.fill("Plan a Black Friday campaign for the shop");
@@ -118,7 +118,7 @@ test("backs up from Settings, and Welcome restores it after the data folder is d
   await admit(context, { ...hub, headers: { authorization: `Bearer ${key}` } });
   await page.goto(hub.url);
 
-  // Home holds the work from the backup until it is resumed, and the thread and its Quest are back.
+  // Home holds the work from the backup until it is resumed, and the channel and its Quest are back.
   const held = page.getByRole("region", { name: "Work is held after a restore" });
   await expect(held).toBeVisible({ timeout: 20_000 });
   await page.goto(`${hub.url}/#/settings/data`);

@@ -2,6 +2,7 @@ import {
   AgentId,
   type BackpackItem,
   BackpackItemId,
+  ChannelId,
   Checkpoint,
   CheckpointId,
   DEFAULT_QUEST_LIMITS,
@@ -16,7 +17,6 @@ import {
   TaskId,
   TaskTree,
   TaskWait,
-  ThreadId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { emptyQuestFinding, idleQuestOf } from "../src/empty-quests.ts";
@@ -35,7 +35,7 @@ const task = (id: string, ownerId: AgentId, parentId: string | null) =>
     ownerId,
     parentId: parentId === null ? null : TaskId.make(parentId),
     rootId: TaskId.make("release"),
-    threadId: ThreadId.make("chat"),
+    channelId: ChannelId.make("chat"),
     brief: `Brief for ${id}`,
     state: "active",
     dependsOn: [],
@@ -55,7 +55,7 @@ const quest = (taskId: TaskId, leadId: AgentId, state: QuestState = "active") =>
     taskId,
     leadId,
     parentQuestId: null,
-    threadId: ThreadId.make("chat"),
+    channelId: ChannelId.make("chat"),
     goal: "Review the release",
     acceptance: [],
     limits: DEFAULT_QUEST_LIMITS,

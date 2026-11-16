@@ -1,12 +1,12 @@
 import type { HobPermissions } from "@hobbots/api";
 import {
   type AgentId,
+  Channel,
+  ChannelId,
   Message,
   MessageId,
   type MessageStatus,
   PRESET_DECISIONS,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
@@ -60,11 +60,11 @@ describe("storeSavedPermissions", () => {
 });
 
 describe("showLastLine", () => {
-  const threadId = ThreadId.make("chat");
+  const channelId = ChannelId.make("chat");
   const reply = (content: string, quiet: boolean, status: MessageStatus = "complete") =>
     new Message({
       id: MessageId.make("reply"),
-      threadId,
+      channelId,
       role: "assistant",
       content,
       status,
@@ -75,9 +75,9 @@ describe("showLastLine", () => {
       quiet,
     });
   const withLine = (lastLine: string) => [
-    new Thread({
-      id: threadId,
-      agentId,
+    new Channel({
+      id: channelId,
+      ownerHobId: agentId,
       title: "Black Friday",
       createdAt: "2026-11-04T00:00:00.000Z",
       updatedAt: "2026-11-04T00:00:00.000Z",
@@ -87,29 +87,29 @@ describe("showLastLine", () => {
 
   it("reads the list again when a reply it already shows as the last line completes quiet (#1006)", async () => {
     const client = new QueryClient();
-    client.setQueryData(queryKeys.threads(agentId), withLine("Ada is building the page"));
+    client.setQueryData(queryKeys.channels(agentId), withLine("Ada is building the page"));
     showLastLine(client, reply("Ada is building the page", false, "streaming"));
-    expect(client.getQueryState(queryKeys.threads(agentId))?.isInvalidated).toBe(false);
+    expect(client.getQueryState(queryKeys.channels(agentId))?.isInvalidated).toBe(false);
 
     showLastLine(client, reply("Ada is building the page", true));
 
-    expect(client.getQueryState(queryKeys.threads(agentId))?.isInvalidated).toBe(true);
+    expect(client.getQueryState(queryKeys.channels(agentId))?.isInvalidated).toBe(true);
   });
 
   it("shows a reply that is not quiet as the last line without reading again", () => {
     const client = new QueryClient();
-    client.setQueryData(queryKeys.threads(agentId), withLine("The plan"));
+    client.setQueryData(queryKeys.channels(agentId), withLine("The plan"));
     showLastLine(client, reply("Ada failed to deploy", false));
-    expect(client.getQueryData<ReadonlyArray<Thread>>(queryKeys.threads(agentId))?.[0]?.lastLine).toBe(
+    expect(client.getQueryData<ReadonlyArray<Channel>>(queryKeys.channels(agentId))?.[0]?.lastLine).toBe(
       "Ada failed to deploy",
     );
-    expect(client.getQueryState(queryKeys.threads(agentId))?.isInvalidated).toBe(false);
+    expect(client.getQueryState(queryKeys.channels(agentId))?.isInvalidated).toBe(false);
   });
 
-  it("names who wrote the last line with it: the message's own actor, else the thread's hob (#1563)", () => {
+  it("names who wrote the last line with it: the message's own actor, else the channel's hob (#1563)", () => {
     const client = new QueryClient();
-    client.setQueryData(queryKeys.threads(agentId), withLine("The plan"));
-    const author = () => client.getQueryData<ReadonlyArray<Thread>>(queryKeys.threads(agentId))?.[0]?.lastAuthor;
+    client.setQueryData(queryKeys.channels(agentId), withLine("The plan"));
+    const author = () => client.getQueryData<ReadonlyArray<Channel>>(queryKeys.channels(agentId))?.[0]?.lastAuthor;
 
     showLastLine(client, new Message({ ...reply("On it", false), actor: { kind: "hob", id: "ada" } }));
     expect(author()).toEqual({ kind: "hob", id: "ada" });

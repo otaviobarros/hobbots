@@ -1,4 +1,4 @@
-import type { ThreadId } from "@hobbots/domain";
+import type { ChannelId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { messages } from "./messages.ts";
 import { type Pins, useFollowedTrees } from "./use-work.ts";
@@ -9,8 +9,8 @@ const copy = messages.room;
  * Under the chat header, a line for each pinned Quest the chat cannot show: one the hub no longer
  * has, with Unpin, and one it could not read right now, with Try again.
  */
-export function PinNotes({ threadId, pins }: { threadId: ThreadId; pins: Pins }) {
-  const { missing, failed } = useFollowedTrees(threadId, pins.pinned);
+export function PinNotes({ channelId, pins }: { channelId: ChannelId; pins: Pins }) {
+  const { missing, failed } = useFollowedTrees(channelId, pins.pinned);
   if (missing.length + failed.length === 0) return null;
   return (
     <div className="flex flex-col border-b-(length:--edge) border-line">

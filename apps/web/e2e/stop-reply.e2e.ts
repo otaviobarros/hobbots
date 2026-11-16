@@ -52,12 +52,12 @@ test("Stop shows Stopping, then Stopped with the partial reply kept, and a secon
   await composer.press("Enter");
   await expect(page.getByRole("main").getByText(/Echo: word0 word1 word2/)).toBeVisible();
 
-  const thread = page.url().match(/threads\/([^/?#]+)/)?.[1];
+  const channel = page.url().match(/channels\/([^/?#]+)/)?.[1];
   await page.getByRole("button", { name: "■ Stop" }).click();
   await expect(page.getByRole("button", { name: "Stopping…" })).toBeDisabled();
   await expect(page.getByText("Stopping this reply…")).toBeVisible();
   // Asking again while stopping, as a second client would, changes nothing.
-  const again = await fetch(`${hub.url}/api/threads/${thread}/interrupt`, { method: "POST", headers: hub.headers });
+  const again = await fetch(`${hub.url}/api/channels/${channel}/interrupt`, { method: "POST", headers: hub.headers });
   expect(again.ok).toBe(true);
 
   await expect(page.getByText("■ You stopped this reply. Pip kept what it wrote so far.")).toBeVisible();
@@ -66,7 +66,7 @@ test("Stop shows Stopping, then Stopped with the partial reply kept, and a secon
   const messages = await api<ReadonlyArray<{ role: string; content: string; status: string }>>(
     hub,
     "GET",
-    `/api/threads/${thread}/messages`,
+    `/api/channels/${channel}/messages`,
   );
   const reply = messages.find((m) => m.role === "assistant");
   expect(reply?.status).toBe("stopped");
@@ -74,7 +74,7 @@ test("Stop shows Stopping, then Stopped with the partial reply kept, and a secon
   expect(reply?.content.length).toBeLessThan(`Echo: ${LONG_PROMPT}`.length);
   await expect(page.getByRole("main").getByText(reply?.content.trimEnd() ?? "")).toBeVisible();
 
-  // The thread and Pip take the next message as usual.
+  // The channel and Pip take the next message as usual.
   await composer.fill("next");
   await composer.press("Enter");
   await expect(page.getByRole("main").getByText("Echo: next", { exact: true })).toBeVisible();

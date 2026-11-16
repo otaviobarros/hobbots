@@ -5,6 +5,7 @@ import {
   type ArtifactContentRefusal,
   type ArtifactVersions,
   artifactVersions,
+  type ChannelId,
   isFileLocator,
   isImageFile,
   isSecretFile,
@@ -13,7 +14,6 @@ import {
   type RegisteredArtifactId,
   SERVED_FILE_BYTES,
   type StoredVersion,
-  type ThreadId,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
 import { ActivityStore } from "./activity.ts";
@@ -36,11 +36,11 @@ export class ArtifactContents extends Context.Service<
   ArtifactContents,
   {
     readonly versions: (
-      threadId: ThreadId,
+      channelId: ChannelId,
       artifactId: RegisteredArtifactId,
     ) => Effect.Effect<ArtifactVersions, ArtifactNotFound>;
     readonly content: (
-      threadId: ThreadId,
+      channelId: ChannelId,
       artifactId: RegisteredArtifactId,
       version: number,
     ) => Effect.Effect<Uint8Array, ArtifactNotFound | ArtifactContentUnavailable>;
@@ -60,10 +60,10 @@ export class ArtifactContents extends Context.Service<
       const encoder = new TextEncoder();
       const decoder = new TextDecoder();
 
-      const stored = (threadId: ThreadId, artifactId: RegisteredArtifactId) =>
-        Effect.flatMap(records.artifactVersions(threadId, artifactId), (found) =>
+      const stored = (channelId: ChannelId, artifactId: RegisteredArtifactId) =>
+        Effect.flatMap(records.artifactVersions(channelId, artifactId), (found) =>
           Option.match(found, {
-            onNone: () => Effect.fail(new ArtifactNotFound({ threadId, artifactId })),
+            onNone: () => Effect.fail(new ArtifactNotFound({ channelId, artifactId })),
             onSome: Effect.succeed,
           }),
         );
@@ -72,13 +72,12 @@ export class ArtifactContents extends Context.Service<
        * The folders, now and canonical, of the hob whose chat or camp it is and of the hob that made
        * the artifact's latest version there, such as a member of a camp; none for a hob that is gone.
        */
-      const foldersOf = (threadId: ThreadId, artifact: Artifact) =>
+      const foldersOf = (channelId: ChannelId, artifact: Artifact) =>
         Effect.gen(function* () {
-          const thread = yield* repo.findThread(threadId);
-          if (Option.isNone(thread)) return [];
+          const channel = yield* repo.findChannel(channelId);
+          if (Option.isNone(channel)) return [];
           const maker = artifact.actor.kind === "hob" ? [AgentId.make(artifact.actor.id)] : [];
-          // standards-allow STD-ARCH-021: an artifact may sit in the folders of the hob the thread belongs to
-          const hobs = yield* Effect.forEach([...new Set([thread.value.agentId, ...maker])], (id) =>
+          const hobs = yield* Effect.forEach([...new Set([channel.value.ownerHobId, ...maker])], (id) =>
             repo.findAgent(id),
           );
           const { approvedFolders } = yield* setup.get;
@@ -110,11 +109,11 @@ export class ArtifactContents extends Context.Service<
         });
 
       /** A file's version: refused outside the hob's folders or by a secret's name, else read. */
-      const fileVersion = (threadId: ThreadId, artifact: Artifact, version: StoredVersion, latest: boolean) =>
+      const fileVersion = (channelId: ChannelId, artifact: Artifact, version: StoredVersion, latest: boolean) =>
         Effect.gen(function* () {
           if (isSecretFile(artifact.locator)) return "secret" as const;
           if (!isImageFile(artifact.locator) && previewOf(artifact.locator) === "none") return "no-contents" as const;
-          const folder = (yield* foldersOf(threadId, artifact)).find((each) => within(artifact.locator, each));
+          const folder = (yield* foldersOf(channelId, artifact)).find((each) => within(artifact.locator, each));
           if (folder === undefined) return "outside-folders" as const;
           if (version.source._tag === "kept") {
             const bytes = yield* store.get(version.source.contentId);
@@ -123,14 +122,14 @@ export class ArtifactContents extends Context.Service<
           return latest ? yield* fileNow(artifact, folder) : ("not-kept" as const);
         });
 
-      const content = (threadId: ThreadId, artifactId: RegisteredArtifactId, version: number) =>
+      const content = (channelId: ChannelId, artifactId: RegisteredArtifactId, version: number) =>
         Effect.gen(function* () {
-          const { artifact, versions } = yield* stored(threadId, artifactId);
+          const { artifact, versions } = yield* stored(channelId, artifactId);
           const asked = versions.find((each) => each.version === version);
-          if (asked === undefined) return yield* new ArtifactNotFound({ threadId, artifactId });
+          if (asked === undefined) return yield* new ArtifactNotFound({ channelId, artifactId });
           const latest = Math.max(...versions.map((each) => each.version)) === version;
           const served: Uint8Array | ArtifactContentRefusal = isFileLocator(artifact.locator)
-            ? yield* fileVersion(threadId, artifact, asked, latest)
+            ? yield* fileVersion(channelId, artifact, asked, latest)
             : asked.source._tag === "text"
               ? encoder.encode(previewText(redactor.text(asked.source.text)))
               : "no-contents";
@@ -141,8 +140,8 @@ export class ArtifactContents extends Context.Service<
         });
 
       return ArtifactContents.of({
-        versions: (threadId, artifactId) =>
-          Effect.map(stored(threadId, artifactId), ({ artifact, versions }) => artifactVersions(artifact, versions)),
+        versions: (channelId, artifactId) =>
+          Effect.map(stored(channelId, artifactId), ({ artifact, versions }) => artifactVersions(artifact, versions)),
         content,
       });
     }),

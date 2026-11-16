@@ -3,13 +3,13 @@ import {
   type AgentId,
   type ApprovalRequest,
   type BackpackItem,
+  type Channel,
+  type ChannelId,
   type Chapter,
   leavesUnread,
   Message,
   openBlocker,
-  type Thread,
-  type ThreadId,
-  type UnreadThreads,
+  type UnreadChannels,
 } from "@hobbots/domain";
 import type { QueryClient, QueryFunctionContext } from "@tanstack/react-query";
 import { inboxWindow } from "./inbox-window.ts";
@@ -30,7 +30,7 @@ interface SyncState {
 
 interface Values {
   readonly agent: Agent;
-  readonly thread: Thread;
+  readonly channel: Channel;
   readonly message: Message;
   readonly approval: ApprovalRequest;
   readonly backpack: BackpackItem;
@@ -72,8 +72,8 @@ export const startGeneration = (client: QueryClient) => {
 
 export const recordAgent = (client: QueryClient, agent: Agent) =>
   record(client, `agent:${agent.id}`, { kind: "agent", revision: agent.revision, value: agent });
-export const recordThread = (client: QueryClient, thread: Thread) =>
-  record(client, `thread:${thread.id}`, { kind: "thread", revision: thread.revision, value: thread });
+export const recordChannel = (client: QueryClient, channel: Channel) =>
+  record(client, `channel:${channel.id}`, { kind: "channel", revision: channel.revision, value: channel });
 export const recordMessage = (client: QueryClient, message: Message) =>
   record(client, `message:${message.id}`, { kind: "message", revision: message.revision, value: message });
 export const recordApproval = (client: QueryClient, approval: ApprovalRequest) =>
@@ -82,22 +82,22 @@ export const recordBackpackItem = (client: QueryClient, item: BackpackItem) =>
   record(client, `backpack:${item.id}`, { kind: "backpack", revision: item.revision, value: item });
 /**
  * A chapter moved into a camp (ADR 037): every message of it the overlay holds now belongs to the
- * camp's chapter it landed as, at the move's revision, so a read of either thread places it where it
- * is and never adds it back to the thread it left.
+ * camp's chapter it landed as, at the move's revision, so a read of either channel places it where it
+ * is and never adds it back to the channel it left.
  */
 export const recordMovedMessages = (
   client: QueryClient,
   { stub, chapter }: { readonly stub: Chapter; readonly chapter: Chapter },
 ) => {
   const moved = [...syncState(client).overlay.values()].flatMap((entry) =>
-    isEntry(entry, "message") && entry.value.threadId === stub.threadId && entry.value.chapterId === stub.id
+    isEntry(entry, "message") && entry.value.channelId === stub.channelId && entry.value.chapterId === stub.id
       ? [entry.value]
       : [],
   );
   for (const message of moved) {
     recordMessage(
       client,
-      new Message({ ...message, threadId: chapter.threadId, chapterId: chapter.id, revision: chapter.revision }),
+      new Message({ ...message, channelId: chapter.channelId, chapterId: chapter.id, revision: chapter.revision }),
     );
   }
 };
@@ -223,45 +223,50 @@ export const syncedAgents = (
 ) => synced(fetch, "agent", (agent) => (agent.status === "retired") === retired, order);
 
 /**
- * Your unread threads as the hub read them (ADR 039), with every thread a reply that ended this
+ * Your unread channels as the hub read them (ADR 039), with every channel a reply that ended this
  * generation after `through` landed in: the hub's list could not hold it yet. A reply you read since
  * is in it or before it, since reading it moves your marker, journaled after the reply (ADR 027).
  */
 export const syncedUnread =
-  (fetch: () => Promise<UnreadThreads>) =>
-  async ({ client }: QueryFunctionContext): Promise<ReadonlyArray<ThreadId>> => {
+  (fetch: () => Promise<UnreadChannels>) =>
+  async ({ client }: QueryFunctionContext): Promise<ReadonlyArray<ChannelId>> => {
     const state = syncState(client);
     for (;;) {
       const generation = state.generation;
       const read = await fetch();
       if (state.generation !== generation) continue;
-      const unread = new Set(read.threadIds);
+      const unread = new Set(read.channelIds);
       for (const entry of state.overlay.values()) {
         if (isEntry(entry, "message") && leavesUnread(entry.value) && entry.value.revision > read.through) {
-          unread.add(entry.value.threadId);
+          unread.add(entry.value.channelId);
         }
       }
       return [...unread];
     }
   };
 
-/** A hob's live threads, or with `archived` its archived ones; a thread moves between them by its `archivedAt`. */
-export const syncedThreads = (
+/** A hob's live channels, or with `archived` its archived ones; a channel moves between them by its `archivedAt`. */
+export const syncedChannels = (
   agentId: AgentId,
-  fetch: () => Promise<ReadonlyArray<Thread>>,
-  order: (items: Array<Thread>) => Array<Thread>,
+  fetch: () => Promise<ReadonlyArray<Channel>>,
+  order: (items: Array<Channel>) => Array<Channel>,
   archived: boolean,
 ) =>
-  synced(fetch, "thread", (thread) => thread.agentId === agentId && (thread.archivedAt !== null) === archived, order);
+  synced(
+    fetch,
+    "channel",
+    (channel) => channel.ownerHobId === agentId && (channel.archivedAt !== null) === archived,
+    order,
+  );
 
 export const syncedMessages = (
-  threadId: ThreadId,
+  channelId: ChannelId,
   fetch: () => Promise<ReadonlyArray<Message>>,
   upsert: (list: ReadonlyArray<Message>, message: Message) => Array<Message>,
-) => synced(fetch, "message", (message) => message.threadId === threadId, undefined, upsert);
+) => synced(fetch, "message", (message) => message.channelId === channelId, undefined, upsert);
 
-export const syncedApprovals = (threadId: ThreadId, fetch: () => Promise<ReadonlyArray<ApprovalRequest>>) =>
-  synced(fetch, "approval", (approval) => approval.threadId === threadId);
+export const syncedApprovals = (channelId: ChannelId, fetch: () => Promise<ReadonlyArray<ApprovalRequest>>) =>
+  synced(fetch, "approval", (approval) => approval.channelId === channelId);
 
 /**
  * One request, as the hub has it now, unless an event this generation brought a newer version. A
@@ -280,7 +285,7 @@ export const syncedApproval =
     }
   };
 
-/** The Inbox's requests from every thread, kept to the hub's window and order. */
+/** The Inbox's requests from every channel, kept to the hub's window and order. */
 export const syncedInbox = (fetch: () => Promise<ReadonlyArray<ApprovalRequest>>) =>
   synced(fetch, "approval", () => true, inboxWindow);
 

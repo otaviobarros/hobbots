@@ -1,33 +1,33 @@
 import { Worker } from "node:worker_threads";
 import { FindIndex } from "@hobbots/agents";
 import {
+  Channel,
   type MessageMatch,
   MessageRole,
   type SearchHit,
   searchTerms,
   searchWords,
   snippetOf,
-  Thread,
 } from "@hobbots/domain";
 import { Context, Effect, Layer, Schema, String as Str } from "effect";
 import { SqlClient } from "effect/sql";
 import { type FindReader, makeFind } from "./find.ts";
-import { threadRows } from "./repositories.ts";
+import { channelRows } from "./repositories.ts";
 
-// Search over thread titles and settled messages (CH-006), on SQLite FTS5 or PostgreSQL full-text
+// Search over channel titles and settled messages (CH-006), on SQLite FTS5 or PostgreSQL full-text
 // search (migration 0011). Hobs that retired are left out, and so are private camps, which are found
 // only from inside them (ADR 037). Its layers also give find (#1386), on the same connection. On a
 // SQLite file the queries run in a worker thread with its own read-only connection, so a long
 // search never blocks the server (ADR 011).
 
-/** The most threads one search returns, and the newest matching messages shown for each. */
-export const SEARCH_THREADS = 30;
-export const MATCHES_PER_THREAD = 3;
+/** The most channels one search returns, and the newest matching messages shown for each. */
+export const SEARCH_CHANNELS = 30;
+export const MATCHES_PER_CHANNEL = 3;
 
 export class SearchIndex extends Context.Service<
   SearchIndex,
   {
-    /** Threads whose title or messages contain every word of the query, most recently active first. */
+    /** Channels whose title or messages contain every word of the query, most recently active first. */
     readonly search: (query: string) => Effect.Effect<ReadonlyArray<SearchHit>>;
   }
 >()("@hobbots/persistence/SearchIndex") {
@@ -73,42 +73,42 @@ type Row = Record<string, unknown>;
 type Run = (terms: ReadonlyArray<string>, words: ReadonlyArray<string>) => Effect.Effect<ReadonlyArray<Row>, unknown>;
 
 /**
- * After `titled` (threads whose title matches) and `matched` (finished messages that match), both
- * dialects pick the threads first and only then their newest matches, so a thread with many
+ * After `titled` (channels whose title matches) and `matched` (finished messages that match), both
+ * dialects pick the channels first and only then their newest matches, so a channel with many
  * matches never crowds another out and every count is complete.
  */
-const THREADS_THEN_MATCHES = `
-  counts AS (SELECT thread_id, CAST(COUNT(*) AS INTEGER) AS match_count FROM matched GROUP BY thread_id),
+const CHANNELS_THEN_MATCHES = `
+  counts AS (SELECT channel_id, CAST(COUNT(*) AS INTEGER) AS match_count FROM matched GROUP BY channel_id),
   found AS (
     SELECT t.*, t.id IN (SELECT id FROM titled) AS title_match, COALESCE(c.match_count, 0) AS match_count
-    FROM threads t JOIN agents a ON a.id = t.agent_id LEFT JOIN counts c ON c.thread_id = t.id
-    WHERE a.status <> 'retired' AND t.private = 0 AND (c.thread_id IS NOT NULL OR t.id IN (SELECT id FROM titled))
-    ORDER BY t.updated_at DESC LIMIT ${SEARCH_THREADS}),
+    FROM channels t JOIN agents a ON a.id = t.agent_id LEFT JOIN counts c ON c.channel_id = t.id
+    WHERE a.status <> 'retired' AND t.private = 0 AND (c.channel_id IS NOT NULL OR t.id IN (SELECT id FROM titled))
+    ORDER BY t.updated_at DESC LIMIT ${SEARCH_CHANNELS}),
   ranked AS (
-    SELECT matched.*, ROW_NUMBER() OVER (PARTITION BY thread_id ORDER BY created_at DESC, seq DESC) AS match_rank
-    FROM matched WHERE thread_id IN (SELECT id FROM found))
+    SELECT matched.*, ROW_NUMBER() OVER (PARTITION BY channel_id ORDER BY created_at DESC, seq DESC) AS match_rank
+    FROM matched WHERE channel_id IN (SELECT id FROM found))
 SELECT f.*, r.id AS message_id, r.role AS message_role, r.content AS message_content,
   r.created_at AS message_created_at
-FROM found f LEFT JOIN ranked r ON r.thread_id = f.id AND r.match_rank <= ${MATCHES_PER_THREAD}
+FROM found f LEFT JOIN ranked r ON r.channel_id = f.id AND r.match_rank <= ${MATCHES_PER_CHANNEL}
 ORDER BY f.updated_at DESC, f.id, r.match_rank`;
 
 /** Messages the index leaves out: still queued, or a reply still streaming or stopping. */
 const UNSETTLED = "NOT IN ('queued', 'streaming', 'stopping')";
-const MATCHED_COLUMNS = "m.thread_id, m.id, m.role, m.content, m.created_at, m.seq";
+const MATCHED_COLUMNS = "m.channel_id, m.id, m.role, m.content, m.created_at, m.seq";
 
 /** SQLite's query, shared by the in-process and worker connections. */
 const SQLITE_QUERY = `WITH
-  titled AS (SELECT t.id FROM threads_search s JOIN threads t ON t.rowid = s.rowid WHERE threads_search MATCH ?1),
+  titled AS (SELECT t.id FROM channels_search s JOIN channels t ON t.rowid = s.rowid WHERE channels_search MATCH ?1),
   matched AS (
     SELECT ${MATCHED_COLUMNS} FROM messages_search s JOIN messages m ON m.rowid = s.rowid
-    WHERE messages_search MATCH ?1 AND m.status ${UNSETTLED}),${THREADS_THEN_MATCHES}`;
+    WHERE messages_search MATCH ?1 AND m.status ${UNSETTLED}),${CHANNELS_THEN_MATCHES}`;
 
 /** PostgreSQL's query, on its language-neutral configuration, which keeps accents. */
 const PG_QUERY = `WITH
-  titled AS (SELECT id FROM threads WHERE to_tsvector('simple', title) @@ to_tsquery('simple', $1)),
+  titled AS (SELECT id FROM channels WHERE to_tsvector('simple', title) @@ to_tsquery('simple', $1)),
   matched AS (
     SELECT ${MATCHED_COLUMNS} FROM messages m
-    WHERE to_tsvector('simple', m.content) @@ to_tsquery('simple', $1) AND m.status ${UNSETTLED}),${THREADS_THEN_MATCHES}`;
+    WHERE to_tsvector('simple', m.content) @@ to_tsquery('simple', $1) AND m.status ${UNSETTLED}),${CHANNELS_THEN_MATCHES}`;
 
 /** Every term as a quoted prefix; terms hold only letters and digits, so nothing needs escaping. */
 const ftsQuery = (terms: ReadonlyArray<string>) => terms.map((term) => `"${term}"*`).join(" ");
@@ -117,7 +117,7 @@ const tsQuery = (words: ReadonlyArray<string>) => words.map((word) => `${word}:*
 const camelCaseRow = (row: Row): Row =>
   Object.fromEntries(Object.entries(row).map(([key, value]) => [Str.snakeToCamel(key), value]));
 
-const decodeThread = Schema.decodeUnknownSync(Thread);
+const decodeChannel = Schema.decodeUnknownSync(Channel);
 const decodeRole = Schema.decodeUnknownSync(MessageRole);
 
 const makeSearch = (run: Run) =>
@@ -132,17 +132,20 @@ const makeSearch = (run: Run) =>
     },
   });
 
-/** One hit per thread, in the query's order, with its newest matching messages. */
+/** One hit per channel, in the query's order, with its newest matching messages. */
 const groupHits = (rows: ReadonlyArray<Row>, terms: ReadonlyArray<string>): Array<SearchHit> => {
-  const hits = new Map<string, { thread: Thread; titleMatch: boolean; matchCount: number; matches: MessageMatch[] }>();
+  const hits = new Map<
+    string,
+    { channel: Channel; titleMatch: boolean; matchCount: number; matches: MessageMatch[] }
+  >();
   for (const row of rows) {
     // PostgreSQL reads BIGINT as a bigint and SQLite as a number; every revision fits a number.
-    const thread = decodeThread(threadRows([row])[0]);
-    let hit = hits.get(thread.id);
+    const channel = decodeChannel(channelRows([row])[0]);
+    let hit = hits.get(channel.id);
     if (!hit) {
       // SQLite answers 0 or 1 where PostgreSQL answers a boolean.
-      hit = { thread, titleMatch: Boolean(row.titleMatch), matchCount: Number(row.matchCount), matches: [] };
-      hits.set(thread.id, hit);
+      hit = { channel, titleMatch: Boolean(row.titleMatch), matchCount: Number(row.matchCount), matches: [] };
+      hits.set(channel.id, hit);
     }
     if (row.messageId != null)
       hit.matches.push({

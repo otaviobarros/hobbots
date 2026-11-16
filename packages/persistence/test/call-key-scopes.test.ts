@@ -1,5 +1,5 @@
 import { CharmCalls, HobbotsRepository, TaskToolCalls } from "@hobbots/agents";
-import { Agent, AgentId, CharmCall, MessageId, TaskToolRefused, ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, ChannelId, CharmCall, MessageId, TaskToolRefused } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
@@ -151,7 +151,7 @@ describe("tool call keys per Task", () => {
         appliedText: "Pushed.",
         state: "sending",
         result: null,
-        threadId: ThreadId.make("t1"),
+        channelId: ChannelId.make("t1"),
         messageId: MessageId.make(messageId),
         stepId: null,
         createdAt: now,
@@ -193,7 +193,7 @@ describe("tool call keys per Task", () => {
           appliedText: "Pushed.",
           state: "sending",
           result: null,
-          threadId: ThreadId.make("t1"),
+          channelId: ChannelId.make("t1"),
           messageId: MessageId.make("m1"),
           stepId: null,
           createdAt: now,
@@ -215,28 +215,19 @@ describe("tool call keys per Task", () => {
   });
 
   it("0045 keeps every stored call and refusal readable, each in the work its input names, compared without its turn", async () => {
-    // Keeps 0047, 0076, 0079, 0080, 0082 and 0083 too: the repository that seeds the hob writes its name with
-    // each version, its Charms, whether other hobs see it, its good at and who made and summoned it, and its Summoning scope;
-    // 0053 and 0114 too: the journal moves a retired hob's thread members (ADR 039), which need both.
-    const earlier = Object.fromEntries(
-      Object.entries(migrations).filter(
-        ([id]) =>
-          id < "0045" ||
-          [
-            "0047_versioned_name",
-            "0076_charm_grants",
-            "0079_hob_visibility",
-            "0080_hob_good_at",
-            "0082_hob_actors",
-            "0083_summoning",
-            "0053_thread_reads",
-            "0114_thread_members",
-          ].includes(id),
-      ),
-    ) as typeof migrations;
+    const earlier = Object.fromEntries(Object.entries(migrations).filter(([id]) => id < "0045")) as typeof migrations;
     const rows = await Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      yield* seed;
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: FRODO,
+        name: "Frodo",
+        runtime: "claude-code",
+        roleTitle: "Lead",
+        instructions: "",
+        lookSeed: 1,
+        lookColor: "moss",
+        createdAt: now,
+      })}`;
       yield* sql`INSERT INTO task_tool_calls ${sql.insert({
         agentId: FRODO,
         callKey: "chat",
@@ -288,10 +279,7 @@ describe("tool call keys per Task", () => {
         refusals: yield* sql`SELECT call_key, scope FROM task_tool_refusals`,
         charms: yield* sql`SELECT call_key, scope FROM charm_calls`,
       };
-    }).pipe(
-      Effect.provide(Layer.mergeAll(HobbotsRepositoryLive).pipe(Layer.provideMerge(TestDatabaseAt(earlier)))),
-      Effect.runPromise,
-    );
+    }).pipe(Effect.provide(TestDatabaseAt(earlier)), Effect.runPromise);
 
     expect(rows).toEqual({
       calls: [

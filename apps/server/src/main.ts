@@ -100,6 +100,7 @@ import {
   BriefLogLive,
   CampSuggestionRepositoryLive,
   CatchUpRepositoryLive,
+  ChannelMemberRepositoryLive,
   ChapterBreakRepositoryLive,
   ChapterRepositoryLive,
   ChapterSummaryLogLive,
@@ -134,7 +135,6 @@ import {
   SupervisionRecordsLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
-  ThreadMemberRepositoryLive,
   UserRepositoryLive,
   WebFoundUrlsLive,
   WebRecordsLive,
@@ -303,7 +303,7 @@ const fakePlays = (config: {
       );
 
 /**
- * Memory capture (ADR 028): with memory on, the worker sends what happens in each thread to the
+ * Memory capture (ADR 028): with memory on, the worker sends what happens in each channel to the
  * engine, and the journal keeps every entry it has still to send. With memory turned off, or no
  * engine in this copy of Hobbots, nothing is captured and compaction keeps nothing for it.
  */
@@ -400,7 +400,7 @@ const ServerLive = Layer.unwrap(
       // The people the hub serves; the owner is always one of them (ADR 039).
       UserRepositoryLive,
       // Who is in each direct message and camp (ADR 039).
-      ThreadMemberRepositoryLive,
+      ChannelMemberRepositoryLive,
       // The supervisor's record of each Task it acted on (#1447).
       SupervisionRecordsLive,
       HubQuestionRepositoryLive,
@@ -414,7 +414,7 @@ const ServerLive = Layer.unwrap(
       SearchIndex.sqliteWorker(database),
     ).pipe(Layer.provideMerge(Sqlite));
     // One policy engine for the hub, so its index of the folders' Git repositories is built once.
-    // The fake answers for Claude Code and Codex, so a thread can switch brains (ADR 017). Its
+    // The fake answers for Claude Code and Codex, so a channel can switch brains (ADR 017). Its
     // sandbox and web tools never reach the hub's own tailnet names (ADR 021).
     // Playing a scripted Quest, the fake lead stays quiet between the plan and the finish (#901).
     const fake = {
@@ -567,7 +567,7 @@ const ServerLive = Layer.unwrap(
             SkillRepositoriesLive.pipe(
               Layer.provide(Layer.mergeAll(RepositorySkillFinderLive, PermissionSummary.layer)),
             ),
-            // What happens in each thread goes to its hob's memory (ADR 028).
+            // What happens in each channel goes to its hob's memory (ADR 028).
             memoryCaptureLayer(config),
             // The Workbench's heavy details are cleared past their retention window (ADR 023).
             ActivityRetention,
@@ -575,7 +575,7 @@ const ServerLive = Layer.unwrap(
             OverlappingChanges,
             // Delegation deadlines and recovery by fixed rules, with no model call (#1447).
             Supervisor.layer({ limits: config.taskLimits }),
-            // Work that arrives for a hob wakes its thread (ADR 019).
+            // Work that arrives for a hob wakes its channel (ADR 019).
             WakeOnArrival,
             // A retired hob's work fails as blockers that wait for you (IN-007).
             BlockOnRetirement,
@@ -608,7 +608,7 @@ const ServerLive = Layer.unwrap(
       // floor a hob taken out leaves.
       .pipe(Layer.provideMerge(CampMembers.layer))
       .pipe(Layer.provideMerge(ChatService.layer))
-      // Before the chat service: the report of the context pack each thread's last new session read (ADR 037).
+      // Before the chat service: the report of the context pack each channel's last new session read (ADR 037).
       .pipe(Layer.provideMerge(PackReports.layer))
       // Before the chat service: every turn you did not start with Send starts from the backpack, and
       // at start the dispatcher expires the claims an earlier process held (ADR 019).
@@ -635,7 +635,7 @@ const ServerLive = Layer.unwrap(
             TaskFiles.layer,
             // An artifact's versions and contents for the camp sheet (#1434), read like the Files tab.
             ArtifactContents.layer,
-            // Exports of your threads and work history (ADR 026), never inside a hob's folder.
+            // Exports of your channels and work history (ADR 026), never inside a hob's folder.
             DataExport.layer(config.version).pipe(
               Layer.provide(
                 Layer.mergeAll(ExportFoldersLive, SaveDestinationsLive(join(config.dataDir, "workspaces", "default"))),
@@ -701,7 +701,7 @@ const ServerLive = Layer.unwrap(
       .pipe(
         Layer.provideMerge(Layer.mergeAll(RecordToolsLive, RecordPackSource).pipe(Layer.provideMerge(Records.layer))),
       )
-      // A thread's chapters: start, split and merge (ADR 037), and the Chapter tools a turn offers,
+      // A channel's chapters: start, split and merge (ADR 037), and the Chapter tools a turn offers,
       // `start_chapter` and `read_message`, before the chat service and the sessions of Tasks.
       .pipe(Layer.provideMerge(ChapterToolsLive.pipe(Layer.provideMerge(ChapterService.layer))))
       // Keep in chat and the chat's camp suggestions (ADR 037).
@@ -791,7 +791,7 @@ const ServerLive = Layer.unwrap(
             EventStreamRoute,
             WorkbenchStreamRoute,
             TaskFileRoute,
-            // The pack a thread's next new session would read, in a checkout only (ADR 037).
+            // The pack a channel's next new session would read, in a checkout only (ADR 037).
             DevRoutes(config.version),
             HobGitHubAppPages,
             WebClientRoutes(config.webDir),

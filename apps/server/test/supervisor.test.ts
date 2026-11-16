@@ -7,7 +7,7 @@ import { Supervisor } from "@hobbots/supervision";
 import { Effect, Layer, ManagedRuntime, Option } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
-import { hub, isLive, NETTLE, ownedBy, PIP, partyHub, send, threadId, treeWhen } from "./party-hub.ts";
+import { channelId, hub, isLive, NETTLE, ownedBy, PIP, partyHub, send, treeWhen } from "./party-hub.ts";
 
 // Issue #1447: the supervisor stops a member past its deadline and tells its lead, and fails a
 // member whose runtime ran out of allowance, ending the work under it first, with no model call.
@@ -29,7 +29,7 @@ const idle = (tree: TaskTree) => {
 
 /** Pip's Task in the request's tree as it is now. */
 const pipTask = Effect.map(
-  TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)),
+  TaskRepository.use((tasks) => tasks.readChannelTrees(channelId)),
   ([tree]) => (tree === undefined ? undefined : ownedBy(tree, PIP)),
 );
 
@@ -228,7 +228,7 @@ describe("the supervisor's retries", () => {
     yield* repo.insertAgent(hob(FRODO, "Frodo"));
     const task = (id: TaskId, ownerId: AgentId, parentId: TaskId | null) =>
       tasks.createTask({
-        task: { id, ownerId, parentId, threadId: null, brief: id, dependsOn: [], createdAt: now },
+        task: { id, ownerId, parentId, channelId: null, brief: id, dependsOn: [], createdAt: now },
         delegation: null,
         milestones: [],
       });

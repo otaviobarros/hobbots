@@ -14,7 +14,7 @@ interface UseRow {
   readonly number: unknown;
   readonly explicit: unknown;
   readonly agentId: string;
-  readonly threadId: string | null;
+  readonly channelId: string | null;
   readonly messageId: string | null;
   readonly usedAt: string;
   readonly setName?: string | null;
@@ -23,11 +23,11 @@ interface UseRow {
 const decodeUse = Schema.decodeUnknownEffect(SkillUse);
 const decodeCounts = Schema.decodeUnknownEffect(SkillUseCounts);
 
-/** One row of a skill's counts: its total, a hob's, or a thread's. */
+/** One row of a skill's counts: its total, a hob's, or a channel's. */
 interface CountRow {
   readonly kind: string;
   readonly agentId: string | null;
-  readonly threadId: string | null;
+  readonly channelId: string | null;
   readonly count: unknown;
   readonly recent: unknown;
   readonly lastAt: string | null;
@@ -48,7 +48,7 @@ const useOf = (row: UseRow) =>
     number: row.number === null ? null : Number(row.number),
     explicit: Boolean(Number(row.explicit)),
     agentId: row.agentId,
-    threadId: row.threadId,
+    channelId: row.channelId,
     messageId: row.messageId,
     at: row.usedAt,
     set: row.setName ?? null,
@@ -65,7 +65,7 @@ export const insertSkillUse = (sql: SqlClient.SqlClient, use: SkillUse) =>
     number: use.number,
     explicit: use.explicit ? 1 : 0,
     agent_id: use.agentId,
-    thread_id: use.threadId,
+    channel_id: use.channelId,
     message_id: use.messageId,
     used_at: use.at,
     set_name: use.set,
@@ -100,13 +100,13 @@ export const skillUses = (
         Effect.flatMap((rows) => Effect.forEach(rows, useOf)),
       ),
     ),
-  // One statement, so the total, the week and each hob's and thread's counts come from the same
+  // One statement, so the total, the week and each hob's and channel's counts come from the same
   // snapshot: a use recorded meanwhile is in all of them or in none, on SQLite and PostgreSQL alike.
   useCounts: (skillId, since) =>
     sqlOrDie(
       Effect.gen(function* () {
         const rows = yield* sql<CountRow>`
-          SELECT 'total' AS kind, NULL AS agent_id, NULL AS thread_id, COUNT(*) AS count,
+          SELECT 'total' AS kind, NULL AS agent_id, NULL AS channel_id, COUNT(*) AS count,
             COALESCE(SUM(CASE WHEN used_at > ${since} THEN 1 ELSE 0 END), 0) AS recent, MAX(used_at) AS last_at,
             NULL AS name
           FROM skill_uses WHERE skill_id = ${skillId}
@@ -114,8 +114,8 @@ export const skillUses = (
           SELECT 'hob', agent_id, NULL, COUNT(*), 0, MAX(used_at), NULL
           FROM skill_uses WHERE skill_id = ${skillId} GROUP BY agent_id
           UNION ALL
-          SELECT 'thread', agent_id, thread_id, COUNT(*), 0, MAX(used_at), NULL
-          FROM skill_uses WHERE skill_id = ${skillId} AND thread_id IS NOT NULL GROUP BY thread_id, agent_id
+          SELECT 'channel', agent_id, channel_id, COUNT(*), 0, MAX(used_at), NULL
+          FROM skill_uses WHERE skill_id = ${skillId} AND channel_id IS NOT NULL GROUP BY channel_id, agent_id
           UNION ALL
           SELECT 'member', NULL, NULL, COUNT(*), COALESCE(SUM(CASE WHEN used_at > ${since} THEN 1 ELSE 0 END), 0),
             MAX(used_at), name
@@ -123,7 +123,7 @@ export const skillUses = (
         const total = rows.find((row) => row.kind === "total");
         const newest = (a: CountRow, b: CountRow) =>
           String(b.lastAt).localeCompare(String(a.lastAt)) ||
-          String(a.threadId ?? a.agentId).localeCompare(String(b.threadId ?? b.agentId));
+          String(a.channelId ?? a.agentId).localeCompare(String(b.channelId ?? b.agentId));
         return yield* decodeCounts({
           skillId,
           total: Number(total?.count ?? 0),
@@ -132,11 +132,11 @@ export const skillUses = (
             .filter((row) => row.kind === "hob")
             .sort(newest)
             .map((row) => ({ agentId: row.agentId, count: Number(row.count), lastAt: row.lastAt })),
-          threads: rows
-            .filter((row) => row.kind === "thread")
+          channels: rows
+            .filter((row) => row.kind === "channel")
             .sort(newest)
             .map((row) => ({
-              threadId: row.threadId,
+              channelId: row.channelId,
               agentId: row.agentId,
               count: Number(row.count),
               lastAt: row.lastAt,

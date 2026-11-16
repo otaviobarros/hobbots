@@ -74,7 +74,7 @@ const directoryHub = () => {
   );
   const turn: CharmTurn = {
     agentId: AgentId.make("0d6e2f0a-0000-4000-8000-000000000001"),
-    threadId: null,
+    channelId: null,
     messageId: null,
     scope: () => "reply:m1",
     also: "reply:m1",

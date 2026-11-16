@@ -2,12 +2,12 @@ import { HobbotsRepository, MemoryShareLog } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
+  ChannelId,
   MemoryPath,
   MemoryProjectIdentity,
   MemoryShare,
   MemoryVersion,
   MessageId,
-  ThreadId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -65,7 +65,7 @@ const share = (key: string, overrides: Partial<MemoryShare> = {}) =>
     version: null,
     previous: null,
     replaced: null,
-    threadId: ThreadId.make("t1"),
+    channelId: ChannelId.make("t1"),
     messageId: MessageId.make("m1"),
     createdAt: now,
     updatedAt: now,
@@ -84,7 +84,7 @@ describe("memory share records", () => {
         expect(started._tag).toBe("Started");
         if (started._tag !== "Started") return;
         expect(started.entries.map((entry) => entry.type)).toEqual(["MemoryShareRequested"]);
-        expect(started.entries[0]?.correlation).toMatchObject({ agentId: ada, threadId: "t1", messageId: "m1" });
+        expect(started.entries[0]?.correlation).toMatchObject({ agentId: ada, channelId: "t1", messageId: "m1" });
         // A retry, with a fresh id, finds the first share; so does one from the Task the reply started.
         expect(yield* log.begin(share("deploy", { id: "again" }))).toMatchObject({
           _tag: "Existing",

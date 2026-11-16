@@ -1,4 +1,4 @@
-import { type Artifact, artifactShow, type ThreadId } from "@hobbots/domain";
+import { type Artifact, artifactShow, type ChannelId } from "@hobbots/domain";
 import { useState } from "react";
 import { artifactContentUrl } from "../../api/records.ts";
 import { firstLines } from "./artifact-flow.ts";
@@ -15,12 +15,12 @@ const KIND_ICON: Readonly<Record<Artifact["kind"], string>> = {
 };
 
 /** A row's mark: a thumbnail of an image's latest version, else the glyph of its kind. */
-export function RowMark({ threadId, artifact }: { threadId: ThreadId; artifact: Artifact }) {
+export function RowMark({ channelId, artifact }: { channelId: ChannelId; artifact: Artifact }) {
   const [broken, setBroken] = useState(false);
   if (artifactShow(artifact) === "image" && !broken) {
     return (
       <img
-        src={artifactContentUrl(threadId, artifact.id, artifact.latestVersion)}
+        src={artifactContentUrl(channelId, artifact.id, artifact.latestVersion)}
         alt=""
         onError={() => setBroken(true)}
         className="size-10 shrink-0 rounded-control border border-line bg-card object-cover"
@@ -38,11 +38,11 @@ export function RowMark({ threadId, artifact }: { threadId: ThreadId; artifact: 
 }
 
 /** A row's short preview (#1434): the first lines of a document, code or page at its latest version. */
-export function RowPreview({ threadId, artifact }: { threadId: ThreadId; artifact: Artifact }) {
+export function RowPreview({ channelId, artifact }: { channelId: ChannelId; artifact: Artifact }) {
   const show = artifactShow(artifact);
   const text = show === "document" || show === "diff" || show === "page";
   const read = useVersionText(
-    threadId,
+    channelId,
     artifact.id,
     text ? { version: artifact.latestVersion, content: "unknown" } : null,
   );

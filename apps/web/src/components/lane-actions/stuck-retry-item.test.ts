@@ -1,6 +1,6 @@
 import { BackpackItem, BackpackItemId, TaskId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { blackFriday, COPY, QUILL, stuckItem, THREAD, task, tree } from "../../test/quests.ts";
+import { blackFriday, CHANNEL, COPY, QUILL, stuckItem, task, tree } from "../../test/quests.ts";
 import type { HobLookup } from "../quest/use-work.ts";
 import { stuckRetries } from "./stuck-retry-item.tsx";
 
@@ -17,7 +17,7 @@ const twoTasks = () => {
 };
 
 const stuckOn = (taskId: TaskId, id = `stuck-${taskId}`) =>
-  new BackpackItem({ ...stuckItem(THREAD), id: BackpackItemId.make(id), taskId });
+  new BackpackItem({ ...stuckItem(CHANNEL), id: BackpackItemId.make(id), taskId });
 
 describe("Retry on a lane's stuck work", () => {
   it("offers Retry for stuck work on any of the hob's unfinished Tasks, the header's first (#1087)", () => {
@@ -30,7 +30,7 @@ describe("Retry on a lane's stuck work", () => {
       LATER,
     ]);
     // A retired hob's work is dismissed, never retried, and nothing about other hobs' Tasks shows.
-    expect(stuckRetries(lane, header, [stuckItem(THREAD, true)], hobs)).toEqual([]);
+    expect(stuckRetries(lane, header, [stuckItem(CHANNEL, true)], hobs)).toEqual([]);
     expect(stuckRetries(lane, header, [stuckOn(TaskId.make("build"))], hobs)).toEqual([]);
   });
 });

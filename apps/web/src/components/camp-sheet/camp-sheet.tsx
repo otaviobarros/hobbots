@@ -1,4 +1,4 @@
-import { type Agent, isNote, type MessageId, type TaskId, type Thread } from "@hobbots/domain";
+import { type Agent, type Channel, isNote, type MessageId, type TaskId } from "@hobbots/domain";
 import { Sheet, SheetCloseButton, SheetContent, SheetHeader, SheetTitle } from "@hobbots/ui/components/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@hobbots/ui/components/tabs";
 import { useQuery } from "@tanstack/react-query";
@@ -21,11 +21,11 @@ type CampTab = (typeof TABS)[number];
 const isCampTab = (value: string): value is CampTab => (TABS as ReadonlyArray<string>).includes(value);
 
 /** How many rows each tab holds, beside its name, once read. */
-const useTabCounts = (thread: Thread): Partial<Record<CampTab, number>> => {
-  const decisions = useQuery(decisionsQuery(thread.id)).data;
-  const artifacts = useQuery(artifactsQuery(thread.id)).data;
-  const pins = useQuery(pinsQuery(thread.id)).data;
-  const notes = useQuery({ ...messagesQuery(thread.id), select: (all) => all.filter(isNote).length }).data;
+const useTabCounts = (channel: Channel): Partial<Record<CampTab, number>> => {
+  const decisions = useQuery(decisionsQuery(channel.id)).data;
+  const artifacts = useQuery(artifactsQuery(channel.id)).data;
+  const pins = useQuery(pinsQuery(channel.id)).data;
+  const notes = useQuery({ ...messagesQuery(channel.id), select: (all) => all.filter(isNote).length }).data;
   return {
     ...(decisions !== undefined && { decisions: decisions.length }),
     ...(artifacts !== undefined && { artifacts: artifacts.length }),
@@ -49,7 +49,7 @@ export function CampSheet({
   onClose,
 }: {
   hob: Agent;
-  camp: Thread;
+  camp: Channel;
   pins: Pins;
   /** The quest the sheet shows, by one of its Tasks, in place of the camp's tabs. */
   quest: TaskId | undefined;
@@ -66,7 +66,7 @@ export function CampSheet({
         ) : (
           <QuestPane
             hobId={hob.id}
-            threadId={camp.id}
+            channelId={camp.id}
             taskId={quest}
             back={{ title: camp.title, go: onBack }}
             pins={pins}
@@ -84,7 +84,7 @@ function CampTabs({
   onClose,
 }: {
   hob: Agent;
-  camp: Thread;
+  camp: Channel;
   onOpenQuest: (taskId: TaskId) => void;
   onClose: () => void;
 }) {
@@ -94,8 +94,8 @@ function CampTabs({
   const jump = (messageId: MessageId) => {
     onClose();
     void navigate({
-      to: "/hobs/$hobId/threads/$threadId",
-      params: { hobId: hob.id, threadId: camp.id },
+      to: "/hobs/$hobId/channels/$channelId",
+      params: { hobId: hob.id, channelId: camp.id },
       search: { message: messageId },
     });
   };
@@ -124,16 +124,16 @@ function CampTabs({
           ))}
         </TabsList>
         <TabsContent value="overview">
-          <OverviewTab thread={camp} hobName={hob.name} onOpenQuest={onOpenQuest} />
+          <OverviewTab channel={camp} hobName={hob.name} onOpenQuest={onOpenQuest} />
         </TabsContent>
         <TabsContent value="decisions">
-          <DecisionsTab thread={camp} hobName={hob.name} />
+          <DecisionsTab channel={camp} hobName={hob.name} />
         </TabsContent>
         <TabsContent value="artifacts">
-          <ArtifactsTab thread={camp} hobName={hob.name} onJump={jump} />
+          <ArtifactsTab channel={camp} hobName={hob.name} onJump={jump} />
         </TabsContent>
         <TabsContent value="mine">
-          <MineTab thread={camp} onJump={jump} />
+          <MineTab channel={camp} onJump={jump} />
         </TabsContent>
       </Tabs>
     </>

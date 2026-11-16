@@ -1,14 +1,14 @@
-import { AgentId, ApprovalId, ApprovalRequest, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
+import { AgentId, ApprovalId, ApprovalRequest, Channel, ChannelId, Message, MessageId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
-import { archiveBlock, isArchiveKey, isUndoKey, nextThread } from "./archive-rules.ts";
+import { archiveBlock, isArchiveKey, isUndoKey, nextChannel } from "./archive-rules.ts";
 
 const now = "2026-11-01T12:00:00.000Z";
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 
 const message = (status: Message["status"]) =>
   new Message({
     id: MessageId.make(`m-${status}`),
-    threadId,
+    channelId,
     role: "assistant",
     content: "",
     status,
@@ -21,7 +21,7 @@ const approval = (state: ApprovalRequest["state"]) =>
   new ApprovalRequest({
     id: ApprovalId.make("a1"),
     agentId: AgentId.make("pip"),
-    threadId,
+    channelId,
     messageId: MessageId.make("m1"),
     stepId: "s1",
     tool: "Bash",
@@ -41,10 +41,10 @@ const approval = (state: ApprovalRequest["state"]) =>
     revision: 1,
   });
 
-const thread = (id: string) =>
-  new Thread({
-    id: ThreadId.make(id),
-    agentId: AgentId.make("pip"),
+const channel = (id: string) =>
+  new Channel({
+    id: ChannelId.make(id),
+    ownerHobId: AgentId.make("pip"),
     title: id,
     createdAt: now,
     updatedAt: now,
@@ -52,7 +52,7 @@ const thread = (id: string) =>
   });
 
 describe("archiveBlock", () => {
-  it("allows a thread that is quiet", () => {
+  it("allows a channel that is quiet", () => {
     expect(
       archiveBlock({ messages: [message("complete")], approvals: [approval("approved")], live: false }),
     ).toBeNull();
@@ -72,15 +72,15 @@ describe("archiveBlock", () => {
   });
 });
 
-describe("nextThread", () => {
-  const list = [thread("a"), thread("b"), thread("c")];
+describe("nextChannel", () => {
+  const list = [channel("a"), channel("b"), channel("c")];
 
-  it("opens the thread below, else the one above, else none", () => {
-    expect(nextThread(list, ThreadId.make("a"))?.id).toBe("b");
-    expect(nextThread(list, ThreadId.make("b"))?.id).toBe("c");
-    expect(nextThread(list, ThreadId.make("c"))?.id).toBe("b");
-    expect(nextThread([thread("a")], ThreadId.make("a"))).toBeUndefined();
-    expect(nextThread(list, ThreadId.make("missing"))).toBeUndefined();
+  it("opens the channel below, else the one above, else none", () => {
+    expect(nextChannel(list, ChannelId.make("a"))?.id).toBe("b");
+    expect(nextChannel(list, ChannelId.make("b"))?.id).toBe("c");
+    expect(nextChannel(list, ChannelId.make("c"))?.id).toBe("b");
+    expect(nextChannel([channel("a")], ChannelId.make("a"))).toBeUndefined();
+    expect(nextChannel(list, ChannelId.make("missing"))).toBeUndefined();
   });
 });
 

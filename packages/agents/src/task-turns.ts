@@ -2,21 +2,21 @@ import type {
   AgentId,
   AttemptId,
   CarriedItem,
+  ChannelId,
   MessageId,
   RuntimeKind,
   TaskBriefMark,
   TaskId,
-  ThreadId,
   TurnEnding,
   WebReadMark,
 } from "@hobbots/domain";
 import { Context, type Effect } from "effect";
 import type { CallWrites, HubOffer, HubTools } from "./runtime.ts";
 
-/** A chat turn that may work on a Task: the hob, its thread, the prompt and the brain it runs on. */
+/** A chat turn that may work on a Task: the hob, its channel, the prompt and the brain it runs on. */
 export interface ChatTurn {
   readonly agentId: AgentId;
-  readonly threadId: ThreadId;
+  readonly channelId: ChannelId;
   /** The reply the turn writes. A key is idempotent within it, Continue included. */
   readonly messageId: MessageId;
   /** The message of yours the turn answers; null for a continuation (ADR 019). */
@@ -47,7 +47,7 @@ export interface ChatTurn {
   readonly webMark?: Effect.Effect<WebReadMark | null>;
 }
 
-/** What a chat turn gets for the Task its hob works on in the thread. */
+/** What a chat turn gets for the Task its hob works on in the channel. */
 export interface ChatTaskTurn {
   /** The Task tools the turn offers its runtime; the hub checks every call. */
   readonly hubTools: HubTools;

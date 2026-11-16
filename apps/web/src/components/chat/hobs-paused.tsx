@@ -1,13 +1,13 @@
 import {
   type Agent,
   type AgentId,
+  type Channel,
+  type ChannelId,
+  ChannelLifecycle,
   HOB_RELAY_BUDGET,
-  type Thread,
-  type ThreadId,
-  ThreadLifecycle,
 } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
-import { useThreadRuns } from "../../api/hub-status.ts";
+import { useChannelRuns } from "../../api/hub-status.ts";
 import { useLetHobsGoOn } from "../../api/queries.ts";
 import { formatList } from "../../lib/format.ts";
 import { messages } from "../messages.ts";
@@ -24,21 +24,21 @@ const pausedNames = (paused: ReadonlyArray<AgentId>, hobs: ReadonlyArray<Agent>)
  * "Hobs paused, waiting for a person" (ADR 039, Hobs talking to hobs; #1463): the hub stopped the
  * hobs that kept answering each other after `HOB_RELAY_BUDGET` turns. Let them go on gives them that
  * many turns again; your next message takes over instead. It shows while the hub publishes the
- * open thread's run with paused hobs, and never works that out from the messages.
+ * open channel's run with paused hobs, and never works that out from the messages.
  */
 export function HobsPaused({
-  thread,
+  channel,
   hobs,
 }: {
-  /** The thread shown, once it is known. */
-  thread: Thread | undefined;
+  /** The channel shown, once it is known. */
+  channel: Channel | undefined;
   /** The hobs whose names the card can say, once they are loaded. */
   hobs: ReadonlyArray<Agent> | undefined;
 }) {
-  const threadId = thread?.id ?? ("" as ThreadId);
-  const paused = useThreadRuns()[threadId]?.paused ?? [];
-  const goOn = useLetHobsGoOn(threadId);
-  if (thread === undefined || paused.length === 0 || !ThreadLifecycle.isOpen(thread)) return null;
+  const channelId = channel?.id ?? ("" as ChannelId);
+  const paused = useChannelRuns()[channelId]?.paused ?? [];
+  const goOn = useLetHobsGoOn(channelId);
+  if (channel === undefined || paused.length === 0 || !ChannelLifecycle.isOpen(channel)) return null;
   return (
     <section
       aria-label={copy.title}

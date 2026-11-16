@@ -75,9 +75,9 @@ export const MemorySavesLive = Layer.effect(
             Effect.flatMap(([row]) => (row === undefined ? Effect.succeed(null) : fromRow(row))),
           ),
         ),
-      inThread: (threadId) =>
+      inChannel: (channelId) =>
         sqlOrDie(
-          sql<Row>`SELECT * FROM memory_saves WHERE thread_id = ${threadId} ORDER BY created_at, id`.pipe(
+          sql<Row>`SELECT * FROM memory_saves WHERE channel_id = ${channelId} ORDER BY created_at, id`.pipe(
             Effect.flatMap((rows) => Effect.forEach(rows, fromRow)),
           ),
         ),

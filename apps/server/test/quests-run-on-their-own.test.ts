@@ -42,6 +42,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { EventBus } from "../src/event-bus.ts";
 import {
   ALDRIC,
+  channelId,
   givePolicy,
   hub,
   memberTask,
@@ -52,7 +53,6 @@ import {
   send,
   sharedDatabase,
   startHub,
-  threadId,
   treeWhen,
 } from "./dependency-hub.ts";
 
@@ -220,7 +220,7 @@ const journal = EventJournal.use((events) => events.readAfter(0, 10_000)).pipe(
   ),
 );
 
-const allCards = ApprovalService.use((approvals) => approvals.listForThread(threadId));
+const allCards = ApprovalService.use((approvals) => approvals.listForChannel(channelId));
 
 const pendingIn = (cards: ReadonlyArray<ApprovalRequest>) => cards.find((each) => each.state === "pending");
 
@@ -299,7 +299,7 @@ const scenario = async (runtime: RuntimeKind) => {
   open("read");
 
   // 3. Rook ran git diff and the tests as read-only commands, and was refused nothing.
-  // His comment asks: one card, under Aldric's thread, for Rook.
+  // His comment asks: one card, under Aldric's channel, for Rook.
   const asked = await run(
     waitUntil(allCards, (cards) => pendingIn(cards) !== undefined, { what: "the comment's approval card" }),
   );

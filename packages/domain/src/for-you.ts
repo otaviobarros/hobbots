@@ -4,12 +4,12 @@ import { ApprovalRequest } from "./approval.ts";
 import { Artifact, ArtifactReviews } from "./artifact.ts";
 import { type AwayInput, awayItems, awaySummaryOf, CatchUpItem } from "./catch-up.ts";
 import { HubQuestion } from "./hub-question.ts";
-import { MessageId, ThreadId } from "./ids.ts";
+import { ChannelId, MessageId } from "./ids.ts";
 import { Question } from "./quest.ts";
 import { Task } from "./task.ts";
 
 /**
- * For you (ADR 039, Cards every thread shares): one list per person of what is theirs to act on,
+ * For you (ADR 039, Cards every channel shares): one list per person of what is theirs to act on,
  * topped by "While you were away". It is a projection the hub works out from its records and each
  * member's read marker, with no model call, so every device of a person shows the same. It replaces
  * the Needs-you tray, the Inbox and catch-up as separate sources.
@@ -31,7 +31,7 @@ export const ForYouItem = Schema.Union([
   Schema.TaggedStruct("Mention", {
     for: Actor,
     at: Schema.String,
-    threadId: ThreadId,
+    channelId: ChannelId,
     messageId: MessageId,
     author: Schema.NullOr(Actor),
     excerpt: Schema.String,
@@ -43,9 +43,9 @@ export const ForYouItem = Schema.Union([
 ]);
 export type ForYouItem = typeof ForYouItem.Type;
 
-/** One thread's part of "While you were away": what changed in it since your read marker. */
-export class ThreadAway extends Schema.Class<ThreadAway>("ThreadAway")({
-  threadId: ThreadId,
+/** One channel's part of "While you were away": what changed in it since your read marker. */
+export class ChannelAway extends Schema.Class<ChannelAway>("ChannelAway")({
+  channelId: ChannelId,
   /** Your read marker in it, or null when you never read it. */
   readRevision: Schema.NullOr(Schema.Number),
   /** The changes, mentions of you and what waits on you first; at most `CATCH_UP_MAX`. */
@@ -59,13 +59,13 @@ export class ForYou extends Schema.Class<ForYou>("ForYou")({
   for: Actor,
   /** What is yours to act on, oldest first. */
   items: Schema.Array(ForYouItem),
-  /** While you were away: each thread with changes since your read marker, the latest change first. */
-  away: Schema.Array(ThreadAway),
+  /** While you were away: each channel with changes since your read marker, the latest change first. */
+  away: Schema.Array(ChannelAway),
 }) {}
 
 /**
- * Who decides what a hob asks in a thread (ADR 039, the decider): the person who asked for the
- * work, else the thread's owner, else the hub's owner, as for work no person caused.
+ * Who decides what a hob asks in a channel (ADR 039, the decider): the person who asked for the
+ * work, else the channel's owner, else the hub's owner, as for work no person caused.
  */
 export const deciderOf = (from: {
   readonly requester: Actor | null;
@@ -73,9 +73,9 @@ export const deciderOf = (from: {
   readonly hubOwner: Actor;
 }): Actor => from.requester ?? from.owner ?? from.hubOwner;
 
-/** A thread you are an active member of, as For you reads it: your marker and its records since. */
-export interface ForYouThread extends Omit<AwayInput, "you" | "decides"> {
-  readonly threadId: ThreadId;
+/** A channel you are an active member of, as For you reads it: your marker and its records since. */
+export interface ForYouChannel extends Omit<AwayInput, "you" | "decides"> {
+  readonly channelId: ChannelId;
 }
 
 /** What For you reads for one person. */
@@ -83,10 +83,10 @@ export interface ForYouInput {
   readonly you: Actor;
   /** The hub's owner, who decides what no person caused and answers the hub's own questions. */
   readonly hubOwner: Actor;
-  /** The threads you are an active member of, with your read marker and their records. */
-  readonly threads: ReadonlyArray<ForYouThread>;
-  /** Each thread's owner, who decides what nobody else asked for. */
-  readonly owners: ReadonlyMap<ThreadId, Actor>;
+  /** The channels you are an active member of, with your read marker and their records. */
+  readonly channels: ReadonlyArray<ForYouChannel>;
+  /** Each channel's owner, who decides what nobody else asked for. */
+  readonly owners: ReadonlyMap<ChannelId, Actor>;
   /** The hub's pending approvals, every decider's. */
   readonly approvals: ReadonlyArray<ApprovalRequest>;
   /** The questions waiting for a person, every decider's, with their Tasks. */
@@ -97,12 +97,17 @@ export interface ForYouInput {
   readonly reviews: ReadonlyArray<Artifact>;
 }
 
-/** The newest revision past your marker among a thread's records, or 0 when there is none. */
-const latestChange = (thread: ForYouThread): number => {
-  const since = thread.marker ?? 0;
+/** The newest revision past your marker among a channel's records, or 0 when there is none. */
+const latestChange = (channel: ForYouChannel): number => {
+  const since = channel.marker ?? 0;
   return Math.max(
     0,
-    ...[...thread.messages, ...thread.decisions, ...thread.artifacts, ...thread.quests.map((quest) => quest.summary)]
+    ...[
+      ...channel.messages,
+      ...channel.decisions,
+      ...channel.artifacts,
+      ...channel.quests.map((quest) => quest.summary),
+    ]
       .map((record) => record.revision)
       .filter((revision) => revision > since),
   );
@@ -116,24 +121,24 @@ const latestChange = (thread: ForYouThread): number => {
  */
 export const forYouOf = (input: ForYouInput): ForYou => {
   const { you } = input;
-  const decider = (threadId: ThreadId | null): Actor =>
+  const decider = (channelId: ChannelId | null): Actor =>
     deciderOf({
       requester: null,
-      owner: threadId === null ? null : (input.owners.get(threadId) ?? null),
+      owner: channelId === null ? null : (input.owners.get(channelId) ?? null),
       hubOwner: input.hubOwner,
     });
-  const decides = (threadId: ThreadId) => sameActor(decider(threadId), you);
-  const mentions: ReadonlyArray<ForYouItem> = input.threads.flatMap((thread) =>
-    awayItems({ ...thread, you, decides: decides(thread.threadId) }).flatMap((item): ReadonlyArray<ForYouItem> => {
+  const decides = (channelId: ChannelId) => sameActor(decider(channelId), you);
+  const mentions: ReadonlyArray<ForYouItem> = input.channels.flatMap((channel) =>
+    awayItems({ ...channel, you, decides: decides(channel.channelId) }).flatMap((item): ReadonlyArray<ForYouItem> => {
       if (item._tag !== "Mentioned") return [];
-      const message = thread.messages.find((each) => each.id === item.messageId);
+      const message = channel.messages.find((each) => each.id === item.messageId);
       if (message === undefined) return [];
       return [
         {
           _tag: "Mention",
           for: you,
           at: message.createdAt,
-          threadId: thread.threadId,
+          channelId: channel.channelId,
           messageId: item.messageId,
           author: item.author,
           excerpt: item.excerpt,
@@ -147,7 +152,7 @@ export const forYouOf = (input: ForYouInput): ForYou => {
       .map(
         (approval): ForYouItem => ({
           _tag: "Approval",
-          for: decider(approval.threadId),
+          for: decider(approval.channelId),
           at: approval.createdAt,
           approval,
         }),
@@ -157,7 +162,7 @@ export const forYouOf = (input: ForYouInput): ForYou => {
       .map(
         ({ question, task }): ForYouItem => ({
           _tag: "Question",
-          for: decider(task.threadId),
+          for: decider(task.channelId),
           at: question.createdAt,
           question,
           task,
@@ -169,25 +174,25 @@ export const forYouOf = (input: ForYouInput): ForYou => {
     ...input.reviews.filter(ArtifactReviews.awaitsReview).map(
       (artifact): ForYouItem => ({
         _tag: "Review",
-        for: decider(artifact.threadId),
+        for: decider(artifact.channelId),
         at: artifact.updatedAt,
         artifact,
       }),
     ),
   ];
-  const away = input.threads
-    .map((thread) => ({
-      thread,
-      summary: awaySummaryOf({ ...thread, you, decides: decides(thread.threadId) }),
-      latest: latestChange(thread),
+  const away = input.channels
+    .map((channel) => ({
+      channel,
+      summary: awaySummaryOf({ ...channel, you, decides: decides(channel.channelId) }),
+      latest: latestChange(channel),
     }))
     .filter(({ summary }) => summary.items.length > 0)
     .sort((a, b) => b.latest - a.latest)
     .map(
-      ({ thread, summary }) =>
-        new ThreadAway({
-          threadId: thread.threadId,
-          readRevision: thread.marker,
+      ({ channel, summary }) =>
+        new ChannelAway({
+          channelId: channel.channelId,
+          readRevision: channel.marker,
           items: summary.items,
           more: summary.more,
         }),

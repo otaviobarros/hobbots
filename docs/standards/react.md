@@ -52,7 +52,7 @@ React's [You Might Not Need an Effect](https://react.dev/learn/you-might-not-nee
 
 ### STD-REACT-028 Clients show the hub's records, never derive a status
 
-Show a hob's, thread's and quest's status from the hub's durable records and projections, such as `ThreadRunChanged`, `HobPresence` and `QuestSummary`. A client never works one out from messages or Task states, and text from a model never sets a status. Only view state, such as a label or tone for a state, is local.
+Show a hob's, channel's and quest's status from the hub's durable records and projections, such as `ChannelRunChanged`, `HobPresence` and `QuestSummary`. A client never works one out from messages or Task states, and text from a model never sets a status. Only view state, such as a label or tone for a state, is local.
 
 - **Why:** two devices then always agree, a rule is not copied into every screen, and a model cannot claim a success that did not happen. See [ADR 037](../decisions/037-chat-and-camps.md).
 - **Enforced by:** review, and browser tests that check two devices show the same status.
@@ -220,7 +220,7 @@ Load each route's component lazily with TanStack Router's lazy route loading. Lo
 
 A list that can grow without bound, such as a chat transcript, a hob's history or the archive, renders only the rows near the viewport. Start with CSS `content-visibility: auto` on each row. Add a virtualizer only when a measurement shows that is not enough.
 
-- **Why:** a long thread must scroll and type as smoothly as a new one.
+- **Why:** a long channel must scroll and type as smoothly as a new one.
 - **Enforced by:** review.
 - **Applies to:** `apps/web`.
 

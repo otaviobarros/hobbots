@@ -263,7 +263,7 @@ const save = (
     Effect.gen(function* () {
       const turn: CharmTurn = {
         agentId: ada,
-        threadId: null,
+        channelId: null,
         messageId: null,
         scope: () => options.work ?? "reply:m1",
         also: options.work ?? "reply:m1",

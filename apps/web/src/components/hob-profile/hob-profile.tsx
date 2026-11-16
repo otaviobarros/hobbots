@@ -12,7 +12,7 @@ import { Schema } from "effect";
 import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import { settleBrain } from "../../api/first-hob.ts";
-import { useHobPresence, useThreadReplies } from "../../api/hub-status.ts";
+import { useChannelReplies, useHobPresence } from "../../api/hub-status.ts";
 import {
   changeCount,
   draftProblem,
@@ -28,9 +28,9 @@ import {
 import {
   agentsQuery,
   archivedAgentsQuery,
+  channelsQuery,
   modelsQuery,
   runtimesQuery,
-  threadsQuery,
   usePauseHob,
   useUpdateHob,
 } from "../../api/queries.ts";
@@ -167,10 +167,10 @@ function Profile({
   onRetiring: (hob: Agent) => void;
   onRetired: (retired: Retired) => void;
 }) {
-  const threads = useQuery(threadsQuery(hob.id));
-  const replies = useThreadReplies();
+  const channels = useQuery(channelsQuery(hob.id));
+  const replies = useChannelReplies();
   const state = presenceState(useHobPresence()[hob.id], hob.status);
-  const running = (threads.data ?? []).filter((t) => replies[t.id] !== undefined);
+  const running = (channels.data ?? []).filter((t) => replies[t.id] !== undefined);
   const [tab, setTab] = useState<Tab>(opened);
   const [retireOpen, setRetireOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);

@@ -15,12 +15,12 @@ import {
 import {
   Agent,
   AgentId,
+  ChannelId,
   ChapterId,
   EMPTY_HOB_POLICY,
   Message,
   MessageId,
   roleFields,
-  ThreadId,
   WEB_FETCH_DESCRIPTION,
   WEB_FETCH_LABEL,
   WEB_FETCH_TOOL,
@@ -389,7 +389,7 @@ export const CONTRACT_ROSTER = ((): string => {
 })();
 
 /**
- * Two hobs' prompts in one thread (ADR 039, #1464): each hob's session is started with its own and
+ * Two hobs' prompts in one channel (ADR 039, #1464): each hob's session is started with its own and
  * resumed by its own id, so a resumed session's history holds its own marker and never the other's.
  */
 export const HOB_SESSION_PROMPTS = {
@@ -411,7 +411,7 @@ export const CONTRACT_PACK = ((): string => {
   const said = (n: number, role: "user" | "assistant", kind: "user" | "hob", id: string, content: string) =>
     new Message({
       id: MessageId.make(`m${n}`),
-      threadId: ThreadId.make("market"),
+      channelId: ChannelId.make("market"),
       actor: { kind, id },
       role,
       content,

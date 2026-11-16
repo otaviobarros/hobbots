@@ -3,7 +3,7 @@ import { baseName, extensionOf, isImageFile } from "./activity.ts";
 import { Actor, GITHUB_ACTOR, hobActor } from "./actor.ts";
 import type { JournaledEvent } from "./events.ts";
 import { pullRequestOf } from "./github.ts";
-import { type AgentId, ChapterId, type MessageId, RegisteredArtifactId, ThreadId } from "./ids.ts";
+import { type AgentId, ChannelId, ChapterId, type MessageId, RegisteredArtifactId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { isInProgress, type Message } from "./message.ts";
 import type { ArtifactRef } from "./quest.ts";
@@ -43,7 +43,7 @@ export type ArtifactOrigin = typeof ArtifactOrigin.Type;
 export class Artifact extends Schema.Class<Artifact>("Artifact")({
   id: RegisteredArtifactId,
   /** The chat or camp it belongs to, and the chapter it was first made in. */
-  threadId: ThreadId,
+  channelId: ChannelId,
   chapterId: ChapterId,
   kind: RegisteredArtifactKind,
   title: Schema.String,
@@ -210,8 +210,8 @@ export const planPullRequestEnded = (artifact: Artifact, at: string): Artifact |
 
 /**
  * One record's word that it made or changed an artifact, before the registry places it. A sighting
- * from a Task names the Task, whose thread and owner the repository reads; one from a reply names
- * its thread, chapter and author itself.
+ * from a Task names the Task, whose channel and owner the repository reads; one from a reply names
+ * its channel, chapter and author itself.
  */
 export interface ArtifactSighting {
   /**
@@ -241,7 +241,7 @@ export interface ArtifactSighting {
     | {
         readonly _tag: "Message";
         readonly messageId: MessageId;
-        readonly threadId: ThreadId;
+        readonly channelId: ChannelId;
         readonly chapterId: ChapterId;
         readonly actor: Actor;
       };
@@ -380,7 +380,7 @@ const replySightings = (message: Message): ReadonlyArray<ArtifactSighting> => {
   const from = {
     _tag: "Message",
     messageId: message.id,
-    threadId: message.threadId,
+    channelId: message.channelId,
     chapterId: message.chapterId,
     actor: message.actor,
   } as const;
@@ -426,16 +426,21 @@ export const artifactSightings = (events: ReadonlyArray<JournaledEvent>): Readon
 /** Where a sighting lands, once the repository read it: its chat or camp, chapter and author. */
 export interface PlacedSighting {
   readonly sighting: ArtifactSighting;
-  readonly threadId: ThreadId;
+  readonly channelId: ChannelId;
   readonly chapterId: ChapterId;
   readonly actor: Actor;
 }
 
-/** A sighting from a Task, placed in the Task's thread and live chapter, made by the Task's owner. */
+/** A sighting from a Task, placed in the Task's channel and live chapter, made by the Task's owner. */
 export const placedFromTask = (
   sighting: ArtifactSighting,
-  task: { readonly threadId: ThreadId; readonly chapterId: ChapterId; readonly ownerId: AgentId },
-): PlacedSighting => ({ sighting, threadId: task.threadId, chapterId: task.chapterId, actor: hobActor(task.ownerId) });
+  task: { readonly channelId: ChannelId; readonly chapterId: ChapterId; readonly ownerId: AgentId },
+): PlacedSighting => ({
+  sighting,
+  channelId: task.channelId,
+  chapterId: task.chapterId,
+  actor: hobActor(task.ownerId),
+});
 
 /**
  * The registry's row after `placed`, or null when it changes nothing: a record that already saw the
@@ -461,7 +466,7 @@ export const registeredArtifact = (input: {
   if (existing === null) {
     return new Artifact({
       id: input.id,
-      threadId: placed.threadId,
+      channelId: placed.channelId,
       chapterId: placed.chapterId,
       kind: sighting.kind,
       title: sighting.label ?? sighting.fallbackTitle,

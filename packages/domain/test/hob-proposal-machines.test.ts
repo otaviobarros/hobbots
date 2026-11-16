@@ -90,7 +90,7 @@ const proposal = (state: HobProposalState, rows: ReadonlyArray<HobProposalRow>) 
     kind: "summon",
     tool: "summoning_summon",
     call: { scope: "task:task-1", key: "key" },
-    threadId: null,
+    channelId: null,
     messageId: null,
     taskId: null,
     stepId: null,

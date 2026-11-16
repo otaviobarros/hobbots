@@ -54,7 +54,7 @@ const transientFrame = (event: HubTransientEvent) => {
       return STREAM_FRAME.commandOutput;
     case "MemoryChanged":
       return STREAM_FRAME.memory;
-    case "ThreadRunChanged":
+    case "ChannelRunChanged":
     case "HobPresenceChanged":
     case "HobPresenceRemoved":
       return STREAM_FRAME.status;
@@ -178,7 +178,7 @@ export class EventStream extends Context.Service<
                   _tag: "Transient",
                   event: {
                     _tag: "MessageDelta",
-                    threadId: message.threadId,
+                    channelId: message.channelId,
                     messageId: message.id,
                     offset: 0,
                     delta: message.content,

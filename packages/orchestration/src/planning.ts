@@ -340,7 +340,7 @@ export const makePlanning = ({
                 id: ids[index] as TaskId,
                 ownerId: scope.caller.agentId,
                 parentId: task.id,
-                threadId: null,
+                channelId: null,
                 brief: step.brief,
                 dependsOn: (step.after ?? []).map((n) => ids[n - 1] as TaskId),
                 createdAt: scope.at,

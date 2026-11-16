@@ -20,6 +20,7 @@ import { moveApproval, storeApproval } from "./approvals.ts";
 import { storeBackpackItem } from "./backpack.ts";
 import { applySuggestionEvent, isSuggestionEvent } from "./camp-suggestions.ts";
 import { chapterMoved, chatStartedFresh } from "./camps.ts";
+import { showUnread, unreadChanged } from "./channel-reads.ts";
 import { applyChapterEvent } from "./chapters.ts";
 import { applyClaimEvent, type ClaimEvent, isClaimEvent } from "./clashes.ts";
 import { API_URL } from "./client.ts";
@@ -41,7 +42,7 @@ import { memorySharesChanged } from "./memory-shares.ts";
 import { applyPinEvent, isPinEvent } from "./notes.ts";
 import { attachOutbox, connectionChanged } from "./outbox.ts";
 import { pairingChanged } from "./pairing.ts";
-import { placeThread, queryKeys, showLastLine, sortArchived, upsertById, upsertMessage } from "./queries.ts";
+import { placeChannel, queryKeys, showLastLine, sortArchived, upsertById, upsertMessage } from "./queries.ts";
 import { questSummaryChanged } from "./quest-summaries.ts";
 import { applyQuestWork } from "./quest-work.ts";
 import { questionChanged, workEnded } from "./questions.ts";
@@ -55,15 +56,14 @@ import { refreshSkillFeedback, refreshSkills, refreshSkillUses } from "./skills.
 import {
   newer,
   recordAgent,
+  recordChannel,
   recordMessage,
   recordRemovedMessage,
-  recordThread,
   startGeneration,
   syncState,
 } from "./sync.ts";
 import type { TaskEvent } from "./task-trees.ts";
 import { applyTaskEvent } from "./tasks.ts";
-import { showUnread, unreadChanged } from "./thread-reads.ts";
 import { webChanged } from "./web.ts";
 import { applyCommandOutput } from "./workbench.ts";
 
@@ -90,11 +90,11 @@ const upsertNewer = <T extends { readonly id: string; readonly revision: number 
 
 /**
  * Applies a reply chunk by its offset, so a repeated chunk changes nothing. A chunk that starts past
- * the end of the text means some were missed: the thread's messages are fetched again.
+ * the end of the text means some were missed: the channel's messages are fetched again.
  */
 const applyDelta = (queryClient: QueryClient, event: MessageDelta) => {
   let missed = false;
-  queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(event.threadId), (old) =>
+  queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(event.channelId), (old) =>
     old?.map((message) => {
       if (message.id !== event.messageId || !isInProgress(message.status)) return message;
       const known = message.content.length;
@@ -106,7 +106,7 @@ const applyDelta = (queryClient: QueryClient, event: MessageDelta) => {
       return fresh.length === 0 ? message : ({ ...message, content: message.content + fresh } as Message);
     }),
   );
-  if (missed) void queryClient.invalidateQueries({ queryKey: queryKeys.messages(event.threadId), exact: true });
+  if (missed) void queryClient.invalidateQueries({ queryKey: queryKeys.messages(event.channelId), exact: true });
 };
 
 const applyAgent = (queryClient: QueryClient, hob: Agent) => {
@@ -212,15 +212,15 @@ const UNAPPLIED: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "TurnStarted",
   "TurnEnded",
   // The status the hub decides comes on `status` frames, never as journal entries (ADR 037).
-  "ThreadRunChanged",
+  "ChannelRunChanged",
   "HobPresenceChanged",
   "HobPresenceRemoved",
   // The sidebar and the members sheet show members (ADR 039), and read them again; a new member has
   // read nothing.
-  "ThreadMemberAdded",
+  "ChannelMemberAdded",
   // What the supervisor did reaches you as the failure, retry or note it made (#1447), not its record.
   "TaskSupervised",
-  // Let them go on reaches the chat as the thread's run, published on `status` frames (ADR 039).
+  // Let them go on reaches the chat as the channel's run, published on `status` frames (ADR 039).
   "RelayBudgetReset",
 ]);
 type UnappliedEvent = Extract<
@@ -231,10 +231,10 @@ type UnappliedEvent = Extract<
       | "TurnStopped"
       | "TurnStarted"
       | "TurnEnded"
-      | "ThreadRunChanged"
+      | "ChannelRunChanged"
       | "HobPresenceChanged"
       | "HobPresenceRemoved"
-      | "ThreadMemberAdded"
+      | "ChannelMemberAdded"
       | "TaskSupervised"
       | "RelayBudgetReset";
   }
@@ -278,21 +278,21 @@ const readAgain = (
   | Parameters<typeof applySuggestionEvent>[1]
   | Parameters<typeof applyPinEvent>[1]
   | ClaimEvent
-  | Extract<HobbotsEvent, { readonly _tag: "ThreadMemberChanged" }> => {
-  // A split or a merge moves messages between chapters (ADR 037): the thread's transcript is read
-  // again, and which threads are unread, since a read thread stays read. A started or summarized
+  | Extract<HobbotsEvent, { readonly _tag: "ChannelMemberChanged" }> => {
+  // A split or a merge moves messages between chapters (ADR 037): the channel's transcript is read
+  // again, and which channels are unread, since a read channel stays read. A started or summarized
   // chapter moves none.
   if (isChapterEvent(event)) {
     void applyChapterEvent(queryClient, event);
     if (event._tag === "ChapterSplit" || event._tag === "ChapterMerged") {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.messages(event.threadId), exact: true });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.messages(event.channelId), exact: true });
       void unreadChanged(queryClient);
     }
     return true;
   }
-  // A person read a thread, or a member left or came back (ADR 039): which threads are unread for
+  // A person read a channel, or a member left or came back (ADR 039): which channels are unread for
   // you is read again, from your own markers. A hob reads nothing.
-  if (event._tag === "ThreadMemberChanged") {
+  if (event._tag === "ChannelMemberChanged") {
     if (event.member.actor.kind === "user") {
       void unreadChanged(queryClient);
     }
@@ -335,20 +335,20 @@ const readAgain = (
   return false;
 };
 
-type ThreadEvent = Extract<
+type ChannelEvent = Extract<
   HobbotsEvent,
-  { readonly _tag: "ThreadUpserted" | "CampMade" | "ChatStartedFresh" | "ChapterMoved" }
+  { readonly _tag: "ChannelUpserted" | "CampMade" | "ChatStartedFresh" | "ChapterMoved" }
 >;
-const THREAD_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
-  "ThreadUpserted",
+const CHANNEL_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
+  "ChannelUpserted",
   "CampMade",
   "ChatStartedFresh",
   "ChapterMoved",
 ]);
-const isThreadEvent = (event: HobbotsEvent): event is ThreadEvent => THREAD_EVENTS.has(event._tag);
+const isChannelEvent = (event: HobbotsEvent): event is ChannelEvent => CHANNEL_EVENTS.has(event._tag);
 
-/** A thread changed, a camp was made, a chat was started fresh or a chapter moved into a camp (ADR 037). */
-const applyThreadEvent = (queryClient: QueryClient, event: ThreadEvent) => {
+/** A channel changed, a camp was made, a chat was started fresh or a chapter moved into a camp (ADR 037). */
+const applyChannelEvent = (queryClient: QueryClient, event: ChannelEvent) => {
   // The quests a fresh chat or a moved chapter took along take their clashes with them (#1390).
   if (event._tag === "ChatStartedFresh") {
     chatStartedFresh(queryClient, event);
@@ -358,13 +358,13 @@ const applyThreadEvent = (queryClient: QueryClient, event: ThreadEvent) => {
   if (event._tag === "ChapterMoved") {
     void chapterMoved(queryClient, event);
     void applyClaimEvent(queryClient);
-    // A thread you had read stays read, and a camp just made starts read (ADR 039).
+    // A channel you had read stays read, and a camp just made starts read (ADR 039).
     void unreadChanged(queryClient);
     return;
   }
-  // A thread archived or restored elsewhere moves between the hob's two lists.
-  recordThread(queryClient, event.thread);
-  placeThread(queryClient, event.thread);
+  // A channel archived or restored elsewhere moves between the hob's two lists.
+  recordChannel(queryClient, event.channel);
+  placeChannel(queryClient, event.channel);
 };
 
 /**
@@ -390,8 +390,8 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
     applyMemoryEvent(queryClient, event);
     return;
   }
-  if (isThreadEvent(event)) {
-    applyThreadEvent(queryClient, event);
+  if (isChannelEvent(event)) {
+    applyChannelEvent(queryClient, event);
     return;
   }
   switch (event._tag) {
@@ -402,7 +402,7 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
       recordMessage(queryClient, event.message);
       // Before the transcript takes the new copy, so the copy it held tells a reply that just ended.
       showUnread(queryClient, event.message);
-      queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(event.message.threadId), (old) =>
+      queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(event.message.channelId), (old) =>
         old ? upsertNewer(old, event.message, upsertMessage) : old,
       );
       showLastLine(queryClient, event.message);
@@ -428,7 +428,7 @@ export const applyEvent = (queryClient: QueryClient, event: HobbotsEvent) => {
 };
 
 /**
- * Takes a message that is gone out of its thread's transcript: a queued one you removed, or the
+ * Takes a message that is gone out of its channel's transcript: a queued one you removed, or the
  * reply of a hob that passed, whose turn leaves no message (ADR 039). A queued message that started
  * moves with its own upsert, sent just before.
  */
@@ -438,7 +438,7 @@ const removeGone = (
 ) => {
   if (event._tag === "MessageDequeued" && event.reason !== "removed") return;
   recordRemovedMessage(queryClient, event.messageId);
-  queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(event.threadId), (old) =>
+  queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(event.channelId), (old) =>
     old?.filter((message) => message.id !== event.messageId),
   );
   // A passed reply that already ended may have left its camp unread: the hub works out again
@@ -554,7 +554,7 @@ const applyWorkEvent = (
       storeApproval(queryClient, event.approval);
       return;
     case "ApprovalMoved":
-      moveApproval(queryClient, event.fromThreadId, event.approval);
+      moveApproval(queryClient, event.fromChannelId, event.approval);
       return;
     case "GrantCreated":
     case "GrantRevoked":

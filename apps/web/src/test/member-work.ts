@@ -1,5 +1,6 @@
 import {
   AgentId,
+  ChannelId,
   DEFAULT_QUEST_LIMITS,
   Delegation,
   DelegationId,
@@ -9,7 +10,6 @@ import {
   Task,
   TaskId,
   type TaskState,
-  ThreadId,
 } from "@hobbots/domain";
 
 const at = (second: number) => new Date(Date.UTC(2026, 10, 1, 0, 0, second)).toISOString();
@@ -21,7 +21,7 @@ export const quest = (id: string, lead: string, second = 0) =>
     taskId: TaskId.make(`${id}-top`),
     leadId: AgentId.make(lead),
     parentQuestId: null,
-    threadId: ThreadId.make(`${id}-thread`),
+    channelId: ChannelId.make(`${id}-channel`),
     goal: `Goal of ${id}`,
     acceptance: [],
     limits: DEFAULT_QUEST_LIMITS,
@@ -40,7 +40,7 @@ export const memberWork = (taskId: string, member: string, on: Quest, state: Tas
       ownerId: AgentId.make(member),
       parentId: on.taskId,
       rootId: on.taskId,
-      threadId: on.threadId,
+      channelId: on.channelId,
       brief: `Brief for ${taskId}`,
       state,
       dependsOn: [],
@@ -64,5 +64,5 @@ export const memberWork = (taskId: string, member: string, on: Quest, state: Tas
       createdAt: at(second),
     }),
     quest: on,
-    threadAgentId: on.leadId,
+    channelAgentId: on.leadId,
   });

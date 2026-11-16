@@ -185,7 +185,7 @@ const offered = (
   Effect.gen(function* () {
     return yield* charmToolsFor({
       agentId: AgentId.make("hob"),
-      threadId: null,
+      channelId: null,
       messageId: null,
       scope: () => "",
       currentAccess: Effect.succeed(atStart),
@@ -206,7 +206,7 @@ const callWith = (
     let now: ToolAccess | null = access([project]);
     const turn = {
       agentId: AgentId.make("hob"),
-      threadId: null,
+      channelId: null,
       messageId: null,
       scope: () => "",
       currentAccess: Effect.sync(() => now),
@@ -327,7 +327,7 @@ describe("GitHub Charm", () => {
     const answers = await Effect.gen(function* () {
       const tools = yield* charmToolsFor({
         agentId: AgentId.make("hob"),
-        threadId: null,
+        channelId: null,
         messageId: null,
         scope: () => "",
         currentAccess: Effect.succeed(now),

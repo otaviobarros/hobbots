@@ -577,7 +577,7 @@ export class SkillsGroup extends HttpApiGroup.make("skills")
     HttpApiEndpoint.get("changes", "/skills/changes", { success: SkillChanges }),
   )
   .add(
-    // How often hobs used a skill, per hob and per thread, as its Activity counts them.
+    // How often hobs used a skill, per hob and per channel, as its Activity counts them.
     HttpApiEndpoint.get("uses", "/skills/:skillId/uses", {
       params: skillParams,
       success: SkillUseCounts,

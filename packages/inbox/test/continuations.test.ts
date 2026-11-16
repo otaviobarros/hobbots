@@ -9,6 +9,7 @@ import {
   BackpackItemId,
   type BackpackItemKind,
   type BackpackPayload,
+  ChannelId,
   Checkpoint,
   CheckpointId,
   CONTINUATION_HEADER,
@@ -19,16 +20,15 @@ import {
   Task,
   TaskId,
   type TaskState,
-  ThreadId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
   arrivalsText,
   backpackItemsFor,
+  carryingChannel,
   carryingTask,
-  carryingThread,
+  continuationChannel,
   continuationTask,
-  continuationThread,
   lateness,
   RESULT_IN_BRIEFING,
 } from "../src/index.ts";
@@ -37,7 +37,7 @@ const at = "2026-11-02T00:00:00.000Z";
 const FRODO = AgentId.make("frodo");
 const SAM = AgentId.make("sam");
 const ROSIE = AgentId.make("rosie");
-const threadId = ThreadId.make("shire");
+const channelId = ChannelId.make("shire");
 
 const task = (id: string, ownerId: AgentId, parentId: string | null, state: TaskState = "active") =>
   new Task({
@@ -45,7 +45,7 @@ const task = (id: string, ownerId: AgentId, parentId: string | null, state: Task
     ownerId,
     parentId: parentId === null ? null : TaskId.make(parentId),
     rootId: TaskId.make("quest"),
-    threadId,
+    channelId,
     brief: `Brief for ${id}`,
     state,
     dependsOn: [],
@@ -88,7 +88,7 @@ const item = (recipientId: AgentId, taskId: string | null, kind: BackpackItemKin
     taskId: taskId === null ? null : TaskId.make(taskId),
     questId: null,
     attemptId: null,
-    threadId,
+    channelId,
     dedupeKey: kind,
     payload,
     notBefore: null,
@@ -109,28 +109,28 @@ const step = task("pass", FRODO, "quest", "completed");
 const sams = task("cook", SAM, "quest", "completed");
 const tree = [quest, step, sams];
 
-describe("which thread a backpack item continues", () => {
-  it("continues the request's thread with a result for the Task you asked for, from a step of its own owner too", () => {
+describe("which channel a backpack item continues", () => {
+  it("continues the request's channel with a result for the Task you asked for, from a step of its own owner too", () => {
     const fromStep = item(FRODO, "pass", "result", { _tag: "result", task: step, artifacts: [] });
-    expect(continuationThread(fromStep, tree)).toBe(threadId);
+    expect(continuationChannel(fromStep, tree)).toBe(channelId);
     // A single hob's step result is checked against the request, which still runs, so it is not late.
     expect(lateness(fromStep, tree)).toBeNull();
-    expect(continuationThread(item(FRODO, "cook", "result", { _tag: "result", task: sams, artifacts: [] }), tree)).toBe(
-      threadId,
-    );
+    expect(
+      continuationChannel(item(FRODO, "cook", "result", { _tag: "result", task: sams, artifacts: [] }), tree),
+    ).toBe(channelId);
   });
 
   it("leaves a Task's own item, and work held under a step or a member's Task, to the session that works it", () => {
     const queued = task("next", FRODO, "quest", "queued");
     expect(
-      continuationThread(item(FRODO, "next", "task", { _tag: "task", task: queued, delegation: null }), [
+      continuationChannel(item(FRODO, "next", "task", { _tag: "task", task: queued, delegation: null }), [
         ...tree,
         queued,
       ]),
     ).toBeNull();
     const samsWork = task("stew", SAM, "quest");
     expect(
-      continuationThread(item(SAM, "stew", "message", { _tag: "message", senderId: FRODO, text: "Hurry" }), [
+      continuationChannel(item(SAM, "stew", "message", { _tag: "message", senderId: FRODO, text: "Hurry" }), [
         ...tree,
         samsWork,
       ]),
@@ -158,7 +158,7 @@ describe("which thread a backpack item continues", () => {
     // His own step's result comes back to the Task he was given, in the same session.
     const fromStep = item(SAM, "chop", "result", { _tag: "result", task: samsStep, artifacts: [] });
     expect(continuationTask(fromStep, all)?.id).toBe("stew");
-    // A step's own Task item is the step's, which starts from its brief; Frodo's work goes to his thread.
+    // A step's own Task item is the step's, which starts from its brief; Frodo's work goes to his channel.
     expect(continuationTask(item(SAM, "chop", "task", { _tag: "task", task: samsStep, delegation: null }), all)).toBe(
       undefined,
     );
@@ -167,13 +167,13 @@ describe("which thread a backpack item continues", () => {
     );
   });
 
-  it("never wakes a hob for routine progress, and continues the thread of work outside any Task", () => {
+  it("never wakes a hob for routine progress, and continues the channel of work outside any Task", () => {
     const progress = progressOn("cook", "Stirring", 1);
-    expect(continuationThread(progress, tree)).toBeNull();
-    // It still rides along the next turn in the lead's thread.
-    expect(carryingThread(progress, tree)).toBe(threadId);
-    expect(continuationThread(item(FRODO, null, "message", { _tag: "message", senderId: null, text: "Hi" }), [])).toBe(
-      threadId,
+    expect(continuationChannel(progress, tree)).toBeNull();
+    // It still rides along the next turn in the lead's channel.
+    expect(carryingChannel(progress, tree)).toBe(channelId);
+    expect(continuationChannel(item(FRODO, null, "message", { _tag: "message", senderId: null, text: "Hi" }), [])).toBe(
+      channelId,
     );
   });
 
@@ -185,8 +185,8 @@ describe("which thread a backpack item continues", () => {
     const progress = new BackpackItem({ ...progressOn("herbs", "Picked the thyme", 1), recipientId: SAM });
     expect(carryingTask(progress, all)?.id).toBe("stew");
     expect(continuationTask(progress, all)).toBeUndefined();
-    expect(carryingThread(progress, all)).toBeNull();
-    // Frodo's own routine progress still rides along his thread, never a member's session.
+    expect(carryingChannel(progress, all)).toBeNull();
+    // Frodo's own routine progress still rides along his channel, never a member's session.
     expect(carryingTask(progressOn("cook", "Stirring", 2), tree)).toBeUndefined();
   });
 
@@ -349,7 +349,7 @@ describe("an approval outcome no live turn waits for", () => {
   const expired = new ApprovalRequest({
     id: ApprovalId.make("push"),
     agentId: FRODO,
-    threadId,
+    channelId,
     messageId: MessageId.make("m1"),
     stepId: "tool-1",
     tool: "Bash",
@@ -368,7 +368,7 @@ describe("an approval outcome no live turn waits for", () => {
   });
   const events = [{ _tag: "ApprovalResolved", approval: expired } as const];
 
-  it("goes to the hob that asked, in its thread, only when the change says no turn waits", () => {
+  it("goes to the hob that asked, in its channel, only when the change says no turn waits", () => {
     expect(backpackItemsFor(events, { tasks: [], quests: [], toolCall: null })).toEqual([]);
     expect(backpackItemsFor(events, { tasks: [], quests: [], toolCall: null, approvalOutcomes: true })).toEqual([
       {
@@ -376,7 +376,7 @@ describe("an approval outcome no live turn waits for", () => {
         taskId: null,
         questId: null,
         attemptId: null,
-        threadId,
+        channelId,
         dedupeKey: "approval:push:approval-outcome",
         payload: { _tag: "approval-outcome", approval: expired },
         notBefore: null,

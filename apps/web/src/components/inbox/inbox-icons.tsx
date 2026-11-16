@@ -2,7 +2,7 @@
 const PATHS = {
   /** A clock, before when a row expires or how long it waited. */
   clock: "M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zM8 4.5V8l2.5 1.5",
-  /** A speech bubble, for a chat: a thread outside a quest, and Open in the chat. */
+  /** A speech bubble, for a chat: a channel outside a quest, and Open in the chat. */
   chat: "M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z",
   /** A screen on a stand, for this hub's devices. */
   screen: "M2 3h12v8H2zM5.5 14h5M8 11v3",

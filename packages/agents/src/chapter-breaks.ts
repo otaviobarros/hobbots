@@ -2,6 +2,7 @@ import {
   breakChapterId,
   breakTitle,
   CHAPTER_BREAK_CONFIDENCE,
+  ChannelLifecycle,
   ChapterStates,
   chapterTitle,
   type EventEnvelope,
@@ -10,7 +11,6 @@ import {
   isInProgress,
   type JournaledEvent,
   type Message,
-  ThreadLifecycle,
 } from "@hobbots/domain";
 import { Array as Arr, Context, Effect, Layer, Option, Schema } from "effect";
 import { summaryLine } from "./briefing.ts";
@@ -25,7 +25,7 @@ import { HobbotsRepository } from "./repository.ts";
 // keyed by chapter. The hub's brain judges each message a person sends to an open chat; under No AI,
 // or when its answer does not decode, the idle rule decides: a message after the chat sat idle starts
 // a new chapter. The chapter starts at that message, by the same split you make with Split here,
-// under the thread's hob lock, so a hob's own `start_chapter` and yours stay as they are.
+// under the channel's hob lock, so a hob's own `start_chapter` and yours stay as they are.
 
 /** The most of the chapter's lines before the message the brain is shown, in characters: its end. */
 export const BREAK_INPUT_MAX = 6_000;
@@ -126,12 +126,12 @@ export class ChapterBreaks extends Context.Service<ChapterBreaks, ChapterBreaksS
       // lands only on the chapter as it was judged, and fails as `chapter-changed` otherwise.
       const judgedOnce = (sent: Message) =>
         Effect.gen(function* () {
-          const thread = yield* repo.findThread(sent.threadId);
-          if (Option.isNone(thread) || !ThreadLifecycle.isOpenChat(thread.value)) return;
-          const messages = yield* repo.listMessages(sent.threadId);
+          const channel = yield* repo.findChannel(sent.channelId);
+          if (Option.isNone(channel) || !ChannelLifecycle.isOpenChat(channel.value)) return;
+          const messages = yield* repo.listMessages(sent.channelId);
           const message = messages.find((each) => each.id === sent.id);
           if (message === undefined) return;
-          const chapter = (yield* chapters.listChapters(sent.threadId)).find((each) => each.id === message.chapterId);
+          const chapter = (yield* chapters.listChapters(sent.channelId)).find((each) => each.id === message.chapterId);
           if (chapter === undefined || !ChapterStates.isLive(chapter)) return;
           const own = messages.filter((m) => m.chapterId === chapter.id && m.status !== "queued" && hobReads(m));
           const earlier = own.slice(0, own.indexOf(message));
@@ -140,7 +140,7 @@ export class ChapterBreaks extends Context.Service<ChapterBreaks, ChapterBreaksS
           if (decided.choice.topic !== "new" || decided.confidence < CHAPTER_BREAK_CONFIDENCE) return;
           const title = chapterTitle(decided.choice.title) ?? breakTitle(message.content);
           const judged = { chapterId: chapter.id, revision: chapter.revision };
-          yield* commands.splitChapter(sent.threadId, {
+          yield* commands.splitChapter(sent.channelId, {
             id: breakChapterId(message.id),
             messageId: message.id,
             title,

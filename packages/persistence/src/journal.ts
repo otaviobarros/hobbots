@@ -1,6 +1,8 @@
 import type { TraceEntry } from "@hobbots/api";
 import {
   AgentId,
+  ChannelId,
+  type ChannelMember,
   type Committed,
   EVENT_SCHEMA_VERSIONS,
   type EventCorrelation,
@@ -9,8 +11,6 @@ import {
   JournaledEvent,
   type JournaledEvent as JournaledEventType,
   type QuestSummary,
-  ThreadId,
-  type ThreadMember,
   type WebFetchRecord,
   type WebSearchRecord,
 } from "@hobbots/domain";
@@ -19,10 +19,10 @@ import { SqlClient, SqlError } from "effect/sql";
 import { registerArtifacts } from "./artifact-rows.ts";
 import { recordBackpackItems } from "./backpack-rows.ts";
 import { expireCampSuggestions, raiseCampSuggestions } from "./camp-suggestion-rows.ts";
+import { settleHobMembers } from "./channel-member-rows.ts";
 import { releaseEndedClaims } from "./claim-rows.ts";
 import { refreshQuestSummaries } from "./quest-summary-rows.ts";
 import { endTaskGrants } from "./task-grants.ts";
-import { settleHobMembers } from "./thread-member-rows.ts";
 
 /** Where the journal stands: its epoch (new for every fresh database) and the last committed sequence. */
 export interface JournalHead {
@@ -37,19 +37,19 @@ const encodePayload = Schema.encodeSync(JournaledEvent);
 const decodeEnvelope = Schema.decodeUnknownEffect(EventEnvelope);
 
 // What the journal row is correlated with. A Task's records name only their Task, so the row takes
-// the Task's owner and thread from the tasks table, as a message event takes its hob from its thread.
+// the Task's owner and channel from the tasks table, as a message event takes its hob from its channel.
 interface RowCorrelation extends EventCorrelation {
   readonly taskId: string | null;
 }
 
-const byTask = (task: { readonly ownerId: AgentId; readonly threadId: ThreadId | null; readonly id: string }) => ({
+const byTask = (task: { readonly ownerId: AgentId; readonly channelId: ChannelId | null; readonly id: string }) => ({
   agentId: task.ownerId,
-  threadId: task.threadId,
+  channelId: task.channelId,
   messageId: null,
   taskId: task.id,
 });
 
-const NONE: RowCorrelation = { agentId: null, threadId: null, messageId: null, taskId: null };
+const NONE: RowCorrelation = { agentId: null, channelId: null, messageId: null, taskId: null };
 
 type TaskEvent = Extract<
   JournaledEventType,
@@ -83,7 +83,7 @@ const isTaskEvent = (event: JournaledEventType): event is TaskEvent =>
 const taskCorrelationOf = (event: TaskEvent): RowCorrelation => {
   if ("task" in event) return byTask(event.task);
   if ("quest" in event)
-    return { ...NONE, agentId: event.quest.leadId, threadId: event.quest.threadId, taskId: event.quest.taskId };
+    return { ...NONE, agentId: event.quest.leadId, channelId: event.quest.channelId, taskId: event.quest.taskId };
   if ("question" in event) return { ...NONE, agentId: event.question.askerId, taskId: event.question.taskId };
   // A note is correlated with the chat message of yours it traces back to, when there is one (#900).
   if ("note" in event)
@@ -91,14 +91,14 @@ const taskCorrelationOf = (event: TaskEvent): RowCorrelation => {
   return { ...NONE, taskId: "checkpoint" in event ? event.checkpoint.taskId : event.handOff.toTaskId };
 };
 
-type ThreadEvent = Extract<JournaledEventType, { readonly _tag: "ThreadUpserted" | "CampMade" | "ChatStartedFresh" }>;
-const THREAD_EVENTS: ReadonlySet<string> = new Set(["ThreadUpserted", "CampMade", "ChatStartedFresh"]);
-const isThreadEvent = (event: JournaledEventType): event is ThreadEvent => THREAD_EVENTS.has(event._tag);
+type ChannelEvent = Extract<JournaledEventType, { readonly _tag: "ChannelUpserted" | "CampMade" | "ChatStartedFresh" }>;
+const CHANNEL_EVENTS: ReadonlySet<string> = new Set(["ChannelUpserted", "CampMade", "ChatStartedFresh"]);
+const isChannelEvent = (event: JournaledEventType): event is ChannelEvent => CHANNEL_EVENTS.has(event._tag);
 
-/** A thread's own events; Start fresh is journaled in the new chat, whose origin names the chat it replaced. */
-const threadCorrelationOf = (event: ThreadEvent): RowCorrelation => {
-  const thread = event._tag === "ChatStartedFresh" ? event.chat : event.thread;
-  return { ...NONE, agentId: thread.agentId, threadId: thread.id };
+/** A channel's own events; Start fresh is journaled in the new chat, whose origin names the chat it replaced. */
+const channelCorrelationOf = (event: ChannelEvent): RowCorrelation => {
+  const channel = event._tag === "ChatStartedFresh" ? event.chat : event.channel;
+  return { ...NONE, agentId: channel.ownerHobId, channelId: channel.id };
 };
 
 type ApprovalEvent = Extract<
@@ -108,24 +108,24 @@ type ApprovalEvent = Extract<
 const APPROVAL_EVENTS: ReadonlySet<string> = new Set(["ApprovalRequested", "ApprovalResolved", "ApprovalMoved"]);
 const isApprovalEvent = (event: JournaledEventType): event is ApprovalEvent => APPROVAL_EVENTS.has(event._tag);
 
-/** A request names its hob, thread, reply and Task: where it is now, for one that moved with its quest. */
+/** A request names its hob, channel, reply and Task: where it is now, for one that moved with its quest. */
 const approvalCorrelationOf = (approval: ApprovalEvent["approval"]): RowCorrelation => ({
   ...NONE,
   agentId: approval.agentId,
-  threadId: approval.threadId,
+  channelId: approval.channelId,
   messageId: approval.messageId,
   taskId: approval.taskId,
 });
 
-const memberCorrelation = (member: ThreadMember): RowCorrelation => ({
+const memberCorrelation = (member: ChannelMember): RowCorrelation => ({
   ...NONE,
-  threadId: member.threadId,
+  channelId: member.channelId,
   agentId: member.actor.kind === "hob" ? AgentId.make(member.actor.id) : null,
 });
 
 const correlationOf = (event: JournaledEventType): RowCorrelation => {
   if (isWebEvent(event)) return webCorrelationOf(event);
-  if (isThreadEvent(event)) return threadCorrelationOf(event);
+  if (isChannelEvent(event)) return channelCorrelationOf(event);
   if (isApprovalEvent(event)) return approvalCorrelationOf(event.approval);
   switch (event._tag) {
     case "AgentUpserted":
@@ -135,13 +135,13 @@ const correlationOf = (event: JournaledEventType): RowCorrelation => {
       return { ...NONE, agentId: event.grant.agentId };
     case "BackpackItemRecorded":
     case "BackpackItemChanged":
-      return { ...NONE, agentId: event.item.recipientId, threadId: event.item.threadId, taskId: event.item.taskId };
+      return { ...NONE, agentId: event.item.recipientId, channelId: event.item.channelId, taskId: event.item.taskId };
     case "DeviceRevoked":
       return NONE;
     case "MessageUpserted":
     case "MessageQueued":
-      return { ...NONE, threadId: event.message.threadId, messageId: event.message.id };
-    // Pairing belongs to no hob or thread (ADR 021), nor does a hub setting (#1357).
+      return { ...NONE, channelId: event.message.channelId, messageId: event.message.id };
+    // Pairing belongs to no hob or channel (ADR 021), nor does a hub setting (#1357).
     case "PairingRequested":
     case "PairingChanged":
     case "SettingChanged":
@@ -168,7 +168,7 @@ const webCorrelationOf = (event: WebEvent): RowCorrelation => {
   const record: WebSearchRecord | WebFetchRecord | null =
     event._tag === "WebSearched" ? event.search : event._tag === "WebFetched" ? event.fetch : null;
   if (record !== null) {
-    return { agentId: record.agentId, threadId: record.threadId, messageId: record.messageId, taskId: record.taskId };
+    return { agentId: record.agentId, channelId: record.channelId, messageId: record.messageId, taskId: record.taskId };
   }
   return event._tag === "HobWebLimitsChanged" ? { ...NONE, agentId: event.agentId } : NONE;
 };
@@ -176,25 +176,25 @@ const webCorrelationOf = (event: WebEvent): RowCorrelation => {
 const questSummaryCorrelation = (summary: QuestSummary): RowCorrelation => ({
   ...NONE,
   agentId: summary.leadId,
-  threadId: summary.threadId,
+  channelId: summary.channelId,
   taskId: summary.taskId,
 });
 
 const hubQuestionCorrelation = (question: HubQuestion): RowCorrelation =>
-  question.chat === null ? NONE : { ...NONE, agentId: question.chat.agentId, threadId: question.chat.threadId };
+  question.chat === null ? NONE : { ...NONE, agentId: question.chat.agentId, channelId: question.chat.channelId };
 
 type SkillEvent = Extract<JournaledEventType, { readonly _tag: `Skill${string}` }>;
 const isSkillEvent = (event: JournaledEventType): event is SkillEvent => event._tag.startsWith("Skill");
 
 /** The library belongs to no hob; a hob's own assignment, its opt-outs, uses, proposals and notes name it (ADR 029). */
 const skillCorrelationOf = (event: SkillEvent): RowCorrelation => {
-  // A use names the hob that used it, and its thread and reply when it came from one.
+  // A use names the hob that used it, and its channel and reply when it came from one.
   if ("use" in event)
-    return { ...NONE, agentId: event.use.agentId, threadId: event.use.threadId, messageId: event.use.messageId };
+    return { ...NONE, agentId: event.use.agentId, channelId: event.use.channelId, messageId: event.use.messageId };
   if ("optOut" in event) return { ...NONE, agentId: event.optOut.agentId };
   // A proposal and a note name the hob, and the reply they came from.
   const call = "proposal" in event ? event.proposal : "feedback" in event ? event.feedback : null;
-  if (call !== null) return { ...NONE, agentId: call.agentId, threadId: call.threadId, messageId: call.messageId };
+  if (call !== null) return { ...NONE, agentId: call.agentId, channelId: call.channelId, messageId: call.messageId };
   if (!("assignment" in event)) return NONE;
   const { scope } = event.assignment;
   return scope._tag === "Hob" ? { ...NONE, agentId: scope.agentId } : NONE;
@@ -244,8 +244,8 @@ type RecordEvent = Extract<
       | "ArtifactReviewSettled"
       | "BriefWritten"
       | "MessagePinned"
-      | "ThreadMemberAdded"
-      | "ThreadMemberChanged";
+      | "ChannelMemberAdded"
+      | "ChannelMemberChanged";
   }
 >;
 const RECORD_EVENTS: ReadonlySet<string> = new Set([
@@ -261,27 +261,27 @@ const RECORD_EVENTS: ReadonlySet<string> = new Set([
   "ArtifactReviewSettled",
   "BriefWritten",
   "MessagePinned",
-  "ThreadMemberAdded",
-  "ThreadMemberChanged",
+  "ChannelMemberAdded",
+  "ChannelMemberChanged",
 ]);
 const isRecordEvent = (event: JournaledEventType): event is RecordEvent => RECORD_EVENTS.has(event._tag);
 
 /**
- * ADR 037's records: a claim names its Task, whose owner and thread the row takes; a decision its
- * thread and the reply that recorded it; an artifact its thread, and the hob that made its latest
- * version; a brief its thread; a pin the message it pins and its thread; a member its thread (ADR 039).
+ * ADR 037's records: a claim names its Task, whose owner and channel the row takes; a decision its
+ * channel and the reply that recorded it; an artifact its channel, and the hob that made its latest
+ * version; a brief its channel; a pin the message it pins and its channel; a member its channel (ADR 039).
  */
 const recordCorrelationOf = (event: RecordEvent): RowCorrelation => {
   if ("claim" in event) return { ...NONE, taskId: event.claim.taskId };
-  if ("pin" in event) return { ...NONE, threadId: event.pin.threadId, messageId: event.pin.messageId };
-  // A member names its thread, and its hob when it is one (ADR 039).
+  if ("pin" in event) return { ...NONE, channelId: event.pin.channelId, messageId: event.pin.messageId };
+  // A member names its channel, and its hob when it is one (ADR 039).
   if ("member" in event) return memberCorrelation(event.member);
-  if ("brief" in event) return { ...NONE, threadId: event.brief.threadId };
+  if ("brief" in event) return { ...NONE, channelId: event.brief.channelId };
   if ("decision" in event) {
-    return { ...NONE, threadId: event.decision.threadId, messageId: event.decision.sourceMessageId };
+    return { ...NONE, channelId: event.decision.channelId, messageId: event.decision.sourceMessageId };
   }
-  const { actor, threadId } = event.artifact;
-  return { ...NONE, threadId, agentId: actor.kind === "hob" ? AgentId.make(actor.id) : null };
+  const { actor, channelId } = event.artifact;
+  return { ...NONE, channelId, agentId: actor.kind === "hob" ? AgentId.make(actor.id) : null };
 };
 
 /** A record the hub keeps about a Task: a refused call names its hob too; the supervisor's, the Task alone (#1447). */
@@ -293,14 +293,14 @@ const taskRecordCorrelation = (event: TaskRecordEvent): RowCorrelation =>
     ? { ...NONE, agentId: event.refusal.agentId, taskId: event.refusal.taskId }
     : { ...NONE, taskId: event.supervision.taskId };
 
-/** Task and Workbench events, and the message events that name their thread and message. */
+/** Task and Workbench events, and the message events that name their channel and message. */
 const restCorrelationOf = (
   event: Exclude<
     JournaledEventType,
     {
       readonly _tag:
         | "AgentUpserted"
-        | "ThreadUpserted"
+        | "ChannelUpserted"
         | "CampMade"
         | "ChatStartedFresh"
         | "ApprovalRequested"
@@ -326,7 +326,7 @@ const restCorrelationOf = (
   // A hub question has no Task (#976): it names the chat it concerns, if any.
   if ("hubQuestion" in event) return hubQuestionCorrelation(event.hubQuestion);
   if (isTaskEvent(event)) return taskCorrelationOf(event);
-  // A Quest's summary is correlated as its Quest is: its lead, its thread and the Task it sits on.
+  // A Quest's summary is correlated as its Quest is: its lead, its channel and the Task it sits on.
   if (event._tag === "QuestSummaryChanged") return questSummaryCorrelation(event.summary);
   if (isRecordEvent(event)) return recordCorrelationOf(event);
   if (isSkillEvent(event)) return skillCorrelationOf(event);
@@ -337,14 +337,14 @@ const restCorrelationOf = (
     // A hob's save names its hob, and the reply it was made from when it came from a chat turn.
     case "MemorySaveRecorded":
     case "MemorySaveChanged":
-      return { ...NONE, agentId: event.save.agentId, threadId: event.save.threadId, messageId: event.save.messageId };
+      return { ...NONE, agentId: event.save.agentId, channelId: event.save.channelId, messageId: event.save.messageId };
     // A share names its hob, and the reply it was asked from when it came from a chat turn.
     case "MemoryShareRequested":
     case "MemoryShareChanged":
       return {
         ...NONE,
         agentId: event.share.agentId,
-        threadId: event.share.threadId,
+        channelId: event.share.channelId,
         messageId: event.share.messageId,
       };
     // A hob proposal names its manager, and the reply or Task it was proposed from (ADR 034).
@@ -353,16 +353,16 @@ const restCorrelationOf = (
       return {
         ...NONE,
         agentId: event.proposal.agentId,
-        threadId: event.proposal.threadId,
+        channelId: event.proposal.channelId,
         messageId: event.proposal.messageId,
         taskId: event.proposal.taskId,
       };
-    // A message event names its thread and message; a chapter change, its thread alone, and a
+    // A message event names its channel and message; a chapter change, its channel alone, and a
     // split the message it cut at (ADR 037).
     default:
       return "messageId" in event
-        ? { ...NONE, threadId: event.threadId, messageId: event.messageId }
-        : { ...NONE, threadId: event.threadId };
+        ? { ...NONE, channelId: event.channelId, messageId: event.messageId }
+        : { ...NONE, channelId: event.channelId };
   }
 };
 
@@ -377,7 +377,7 @@ const makeJournalWriter = (sql: SqlClient.SqlClient) => {
     sql<{ readonly sequence: unknown }>`UPDATE event_journal_head SET sequence = sequence + ${count}
       WHERE id = 1 RETURNING sequence`.pipe(Effect.map(([row]) => Number(row?.sequence) - count + 1));
 
-  /** Appends `events` at the sequences from `first` on; a message event's hob is read from its thread. */
+  /** Appends `events` at the sequences from `first` on; a message event's hob is read from its channel. */
   const append = (
     first: number,
     events: ReadonlyArray<JournaledEventType>,
@@ -390,26 +390,26 @@ const makeJournalWriter = (sql: SqlClient.SqlClient) => {
           const sequence = first + index;
           const type = payload._tag;
           const schemaVersion = EVENT_SCHEMA_VERSIONS[type];
-          const { agentId, threadId, messageId, taskId } = correlationOf(payload);
+          const { agentId, channelId, messageId, taskId } = correlationOf(payload);
           const agent =
             taskId === null
-              ? sql`COALESCE(${agentId}, (SELECT agent_id FROM threads WHERE id = ${threadId}))`
+              ? sql`COALESCE(${agentId}, (SELECT agent_id FROM channels WHERE id = ${channelId}))`
               : sql`COALESCE(${agentId}, (SELECT owner_id FROM tasks WHERE id = ${taskId}))`;
-          const thread =
+          const channel =
             taskId === null
-              ? sql`${threadId}`
-              : // A note on a member's Task is in the thread of the message of yours it traces back to (#900).
-                sql`COALESCE(${threadId}, (SELECT thread_id FROM messages WHERE id = ${messageId}),
-                  (SELECT thread_id FROM tasks WHERE id = ${taskId}))`;
+              ? sql`${channelId}`
+              : // A note on a member's Task is in the channel of the message of yours it traces back to (#900).
+                sql`COALESCE(${channelId}, (SELECT channel_id FROM messages WHERE id = ${messageId}),
+                  (SELECT channel_id FROM tasks WHERE id = ${taskId}))`;
           const [row] = yield* sql<{
             readonly agentId: string | null;
-            readonly threadId: string | null;
+            readonly channelId: string | null;
           }>`INSERT INTO event_journal
-              (sequence, id, type, schema_version, occurred_at, agent_id, thread_id, message_id, causation_id, payload)
+              (sequence, id, type, schema_version, occurred_at, agent_id, channel_id, message_id, causation_id, payload)
             VALUES (
-              ${sequence}, ${id}, ${type}, ${schemaVersion}, ${occurredAt}, ${agent}, ${thread}, ${messageId}, NULL, ${JSON.stringify(encodePayload(payload))}
+              ${sequence}, ${id}, ${type}, ${schemaVersion}, ${occurredAt}, ${agent}, ${channel}, ${messageId}, NULL, ${JSON.stringify(encodePayload(payload))}
             )
-            RETURNING agent_id, thread_id`;
+            RETURNING agent_id, channel_id`;
           return new EventEnvelope({
             id,
             sequence,
@@ -418,7 +418,7 @@ const makeJournalWriter = (sql: SqlClient.SqlClient) => {
             occurredAt,
             correlation: {
               agentId: row?.agentId == null ? null : AgentId.make(row.agentId),
-              threadId: row?.threadId == null ? null : ThreadId.make(row.threadId),
+              channelId: row?.channelId == null ? null : ChannelId.make(row.channelId),
               messageId,
             },
             causationId: null,
@@ -469,7 +469,7 @@ const derivedFrom = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEv
     const raised = yield* raiseCampSuggestions(sql, [...events, ...artifacts], first + summarized.length);
     const expired = yield* expireCampSuggestions(sql, events, first + summarized.length + raised.length);
     const settled = [...summarized, ...raised, ...expired];
-    // A hob that retired leaves its threads, and comes back to them when it returns (ADR 039).
+    // A hob that retired leaves its channels, and comes back to them when it returns (ADR 039).
     return [...settled, ...(yield* settleHobMembers(sql, events, first + settled.length))];
   });
 
@@ -554,7 +554,7 @@ interface JournalRow {
   readonly type: string;
   readonly occurredAt: string;
   readonly agentId: string | null;
-  readonly threadId: string | null;
+  readonly channelId: string | null;
   readonly messageId: string | null;
   readonly causationId: string | null;
   readonly payload: string;
@@ -568,7 +568,7 @@ const toEnvelope = (row: JournalRow) =>
     schemaVersion: Number(row.schemaVersion),
     type: row.type,
     occurredAt: row.occurredAt,
-    correlation: { agentId: row.agentId, threadId: row.threadId, messageId: row.messageId },
+    correlation: { agentId: row.agentId, channelId: row.channelId, messageId: row.messageId },
     causationId: row.causationId,
     payload: JSON.parse(row.payload),
   });
@@ -597,7 +597,7 @@ export const journalForTasks = (sql: SqlClient.SqlClient, taskIds: ReadonlyArray
         type: envelope.type,
         occurredAt: envelope.occurredAt,
         agentId: envelope.correlation.agentId,
-        threadId: envelope.correlation.threadId,
+        channelId: envelope.correlation.channelId,
         messageId: envelope.correlation.messageId,
         taskId: taskId as TraceEntry["taskId"],
         causationId: envelope.causationId,

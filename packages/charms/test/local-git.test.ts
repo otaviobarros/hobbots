@@ -104,7 +104,7 @@ const callInitIn = (
     let started = false;
     const tools = yield* (yield* LocalGitTools).forTurn({
       agentId: AgentId.make("hob"),
-      threadId: null,
+      channelId: null,
       messageId: null,
       scope: () => "",
       currentAccess: Effect.sync(() => {

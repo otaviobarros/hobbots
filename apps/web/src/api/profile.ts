@@ -317,9 +317,9 @@ export const retiredSummary = (
 ): string => {
   if (choice === "finish-first")
     return `${name} finishes its open Tasks, then retires. It takes no new work meanwhile.`;
-  if (choice === "hand-over") return `${name}'s open Tasks went to ${taker ?? "another hob"}. Its threads are kept.`;
-  if (!busy) return `${name} is asleep. Its threads are kept and stay readable.`;
+  if (choice === "hand-over") return `${name}'s open Tasks went to ${taker ?? "another hob"}. Its channels are kept.`;
+  if (!busy) return `${name} is asleep. Its channels are kept and stay readable.`;
   return choice === "finish"
-    ? `${name} finishes the replies it was writing, then sleeps. Its threads are kept.`
-    : `${name}'s running replies were stopped. Its threads are kept.`;
+    ? `${name} finishes the replies it was writing, then sleeps. Its channels are kept.`
+    : `${name}'s running replies were stopped. Its channels are kept.`;
 };

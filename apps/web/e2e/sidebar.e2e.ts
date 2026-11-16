@@ -12,7 +12,7 @@ test.afterEach(async () => {
   removeDataDir(dataDir);
 });
 
-/** A hub past setup with Aldric, who has two threads, Ada, and any `more` hobs named after them. */
+/** A hub past setup with Aldric, who has two channels, Ada, and any `more` hobs named after them. */
 const hubWithHobs = async (more: ReadonlyArray<string> = []) => {
   dataDir = emptyDataDir();
   hub = await startHub(dataDir);
@@ -47,13 +47,13 @@ const hubWithHobs = async (more: ReadonlyArray<string> = []) => {
     ids[name] = hob.id;
   }
   for (const title of ["Plan the spring launch", "Draft the release notes"]) {
-    const thread = await api("POST", `/agents/${ids.Aldric}/camps`, {
+    const channel = await api("POST", `/agents/${ids.Aldric}/camps`, {
       key: crypto.randomUUID(),
       title,
       goal: null,
       private: false,
     });
-    await api("POST", `/threads/${thread.id}/messages`, { content: title });
+    await api("POST", `/channels/${channel.id}/messages`, { content: title });
   }
   return { url: current.url, ids };
 };

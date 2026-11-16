@@ -20,12 +20,12 @@ import {
 } from "@hobbots/agents";
 import {
   type Agent,
+  type Channel,
   isInProgress,
   type Message,
   type RuntimeKind,
   roleFields,
   SKILL_PROPOSE_TOOL,
-  type Thread,
 } from "@hobbots/domain";
 import { MemoryProjectsLive } from "@hobbots/memory";
 import { PolicyEngine } from "@hobbots/permissions";
@@ -246,17 +246,17 @@ const summon = async (name: string, runtime: RuntimeKind, lookSeed: number): Pro
   return summoned.body;
 };
 
-const messages = async (thread: Thread): Promise<ReadonlyArray<Message>> =>
-  (await request("GET", `/api/threads/${thread.id}/messages`)).body;
+const messages = async (channel: Channel): Promise<ReadonlyArray<Message>> =>
+  (await request("GET", `/api/channels/${channel.id}/messages`)).body;
 
 /** Sends `content` and waits for its reply to end; returns the reply and what its turn was given. */
-const turn = async (thread: Thread, content: string) => {
-  const before = (await messages(thread)).filter((m) => m.role === "assistant").length;
+const turn = async (channel: Channel, content: string) => {
+  const before = (await messages(channel)).filter((m) => m.role === "assistant").length;
   const turns = given.length;
-  const sent = await request("POST", `/api/threads/${thread.id}/messages`, { content });
+  const sent = await request("POST", `/api/channels/${channel.id}/messages`, { content });
   expect(sent.status).toBe(200);
   const reply = await eventually(async () => {
-    const ended = (await messages(thread)).filter((m) => m.role === "assistant" && !isInProgress(m.status));
+    const ended = (await messages(channel)).filter((m) => m.role === "assistant" && !isInProgress(m.status));
     return ended.length > before ? ended.at(-1) : undefined;
   });
   const [one] = given.slice(turns);
@@ -362,10 +362,10 @@ describe("the skills library end to end", () => {
     expect(quillView.replaced.map((one: { by: { id: string } }) => one.by.id)).toEqual([toQuill.id, toQuill.id]);
 
     // Each runtime's turn gets exactly the skills its scopes give it, all served from the hub's own store.
-    const pipThread: Thread = (await request("POST", `/api/agents/${pip.id}/threads`)).body;
-    const quillThread: Thread = (await request("POST", `/api/agents/${quill.id}/threads`)).body;
+    const pipChannel: Channel = (await request("POST", `/api/agents/${pip.id}/channels`)).body;
+    const quillChannel: Channel = (await request("POST", `/api/agents/${quill.id}/channels`)).body;
     const r1 = release.revision.hash;
-    const pipFirst = await turn(pipThread, "/skills");
+    const pipFirst = await turn(pipChannel, "/skills");
     expect(pipFirst.runtime).toBe("claude-code");
     expect(pins(pipFirst.skills)).toEqual([
       ["house-style", houseStyle.latest],
@@ -376,7 +376,7 @@ describe("the skills library end to end", () => {
       ["playbook:deliver-change", playbook.revision.hash],
       ["playbook:plan-change", playbook.revision.hash],
     ]);
-    const quillFirst = await turn(quillThread, "/skills");
+    const quillFirst = await turn(quillChannel, "/skills");
     expect(quillFirst.runtime).toBe("codex");
     expect(pins(quillFirst.skills)).toEqual([
       ["house-style", houseStyle.latest],
@@ -420,12 +420,12 @@ describe("the skills library end to end", () => {
     expect(savedChange.scopes).toHaveLength(2);
 
     // The use line: the reply names the skill and the revision its turn used.
-    const pipUses = await turn(pipThread, "Cut the release.\nfake:skill release");
+    const pipUses = await turn(pipChannel, "Cut the release.\nfake:skill release");
     expect(pins(pipUses.skills).find(([name]) => name === "release")).toEqual(["release", r2]);
     expect(pipUses.reply.skillsUsed).toEqual([
       { source: "library", skillId: release.skill.id, name: "release", set: null, pin: r2, number: 2, explicit: false },
     ]);
-    const quillUses = await turn(quillThread, "Cut the release.\nfake:skill release");
+    const quillUses = await turn(quillChannel, "Cut the release.\nfake:skill release");
     expect(quillUses.reply.skillsUsed).toEqual([
       { source: "library", skillId: release.skill.id, name: "release", set: null, pin: r1, number: 1, explicit: false },
     ]);
@@ -447,12 +447,12 @@ describe("the skills library end to end", () => {
       number: 1,
       explicit: true,
     });
-    const pipPlan = await turn(pipThread, "/plan-change go");
+    const pipPlan = await turn(pipChannel, "/plan-change go");
     expect(pipPlan.reply.skillsUsed).toEqual([setUse("plan-change", playbook.revision.hash)]);
-    const quillDeliver = await turn(quillThread, "/playbook:deliver-change go");
+    const quillDeliver = await turn(quillChannel, "/playbook:deliver-change go");
     expect(quillDeliver.reply.skillsUsed).toEqual([setUse("deliver-change", playbook.revision.hash)]);
     // The skill Quill turned off is not handed to its turn, so naming it uses nothing.
-    const quillPlan = await turn(quillThread, "/playbook:plan-change go");
+    const quillPlan = await turn(quillChannel, "/playbook:plan-change go");
     expect(quillPlan.reply.skillsUsed).toEqual([]);
 
     // Roll back from What changed: back to r1 for everyone it moved, and the next turn is on r1.
@@ -460,7 +460,7 @@ describe("the skills library end to end", () => {
     expect(back.body.rolledOut.map((one: { id: string }) => one.id).sort()).toEqual(
       [toEveryone.id, toProject.id].sort(),
     );
-    const afterBack = await turn(pipThread, "/skills");
+    const afterBack = await turn(pipChannel, "/skills");
     expect(pins(afterBack.skills).find(([name]) => name === "release")).toEqual(["release", r1]);
 
     // `~/.agents/skills` is read-only in Hobbots: an edit is refused, and Make a copy gives Pip an editable one.
@@ -475,7 +475,7 @@ describe("the skills library end to end", () => {
       scope: { _tag: "Hob", agentId: pip.id },
     });
     expect(copied.body).toMatchObject({ added: true, skill: { name: "house-style-copy", sourceId: null } });
-    const afterCopy = await turn(pipThread, "/skills");
+    const afterCopy = await turn(pipChannel, "/skills");
     expect(pins(afterCopy.skills).map(([name]) => name)).toEqual(
       expect.arrayContaining(["house-style", "house-style-copy"]),
     );
@@ -487,17 +487,20 @@ describe("the skills library end to end", () => {
       instructions: skillMd("changelog", "Writes the changelog for a release."),
       why: "I write the changelog the same way every release.",
     };
-    const proposed = await turn(pipThread, `Propose it.\nfake:hub ${SKILL_PROPOSE_TOOL} ${JSON.stringify(proposal)}`);
+    const proposed = await turn(pipChannel, `Propose it.\nfake:hub ${SKILL_PROPOSE_TOOL} ${JSON.stringify(proposal)}`);
     expect(proposed.reply.content).toContain("waits for the user's review in their Inbox");
     const [waiting] = (await request("GET", "/api/skill-proposals")).body.proposals;
     expect(waiting.proposal).toMatchObject({ name: "changelog", state: "waiting", skillId: null, agentId: pip.id });
     expect((await request("GET", "/api/skills")).body.skills).toHaveLength(5);
-    expect(pins((await turn(pipThread, "/skills")).skills).map(([name]) => name)).not.toContain("changelog");
+    expect(pins((await turn(pipChannel, "/skills")).skills).map(([name]) => name)).not.toContain("changelog");
 
     const added = await request("POST", `/api/skill-proposals/${waiting.proposal.id}/add`, {});
     expect(added).toMatchObject({ status: 200, body: { state: "added", added: { number: 1 } } });
     // Added, it goes to the hob that proposed it, and to no other.
-    expect(pins((await turn(pipThread, "/skills")).skills).map(([name]) => name)).toContain("changelog");
-    expect(pins((await turn(quillThread, "/skills")).skills).map(([name]) => name)).toEqual(["house-style", "release"]);
+    expect(pins((await turn(pipChannel, "/skills")).skills).map(([name]) => name)).toContain("changelog");
+    expect(pins((await turn(quillChannel, "/skills")).skills).map(([name]) => name)).toEqual([
+      "house-style",
+      "release",
+    ]);
   });
 });

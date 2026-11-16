@@ -3,13 +3,13 @@ import { HobbotsRepository, HobTools, TaskRepository } from "@hobbots/agents";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   EMPTY_HOB_POLICY,
   MessageId,
   QuestionId,
   type TaskId,
   TaskId as TaskIdSchema,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import { TaskTools } from "@hobbots/orchestration";
 import { EventJournal, HobbotsRepositoryLive, TaskRepositoryLive, TaskToolCallsLive } from "@hobbots/persistence";
@@ -26,7 +26,7 @@ import { NodeFolderChecks } from "../src/folders.ts";
 const now = "2026-11-03T00:00:00.000Z";
 const FRODO = AgentId.make("frodo");
 const PIP = AgentId.make("pip");
-const threadId = ThreadId.make("first-run");
+const channelId = ChannelId.make("first-run");
 
 const NoTools = Layer.succeed(HobTools, HobTools.of({ access: () => Effect.succeed(null as never) }));
 
@@ -71,17 +71,17 @@ const seed = Effect.gen(function* () {
       }),
     );
   }
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: FRODO, title: "First run", createdAt: now, updatedAt: now }),
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, ownerHobId: FRODO, title: "First run", createdAt: now, updatedAt: now }),
   );
 });
 
-/** A chat turn of Frodo's, as a message in his thread starts one. */
+/** A chat turn of Frodo's, as a message in his channel starts one. */
 const chatTurn = (messageId: string) =>
   Effect.flatMap(Effect.service(TaskTools), (tools) =>
     tools.forChat({
       agentId: FRODO,
-      threadId,
+      channelId,
       messageId: MessageId.make(messageId),
       prompt: "Build the stdlib project with Pip",
       runtime: "claude-code",

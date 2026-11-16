@@ -190,11 +190,11 @@ describe("Hobbots.app as the hub's background service", { concurrency: false }, 
       const memory = await getJson<{ engine: { state: string } | null }>(`${api}/memory`);
       return memory.engine?.state === "running" ? true : undefined;
     });
-    const thread = await getJson<{ id: string }>(`${api}/agents/${hob.id}/threads`, { method: "POST" });
+    const channel = await getJson<{ id: string }>(`${api}/agents/${hob.id}/channels`, { method: "POST" });
     // The fake runtime streams one word every 40ms, so this reply takes about 8 seconds.
     const prompt = Array.from({ length: 200 }, (_, i) => `word${i}`).join(" ");
-    await getJson(`${api}/threads/${thread.id}/messages`, json("POST", { content: prompt }));
-    const messages = () => getJson<Message[]>(`${api}/threads/${thread.id}/messages`);
+    await getJson(`${api}/channels/${channel.id}/messages`, json("POST", { content: prompt }));
+    const messages = () => getJson<Message[]>(`${api}/channels/${channel.id}/messages`);
     const reply = async () => (await messages()).find((message) => message.role === "assistant");
     assert.equal((await reply())?.status, "streaming", "the reply is still streaming when the window closes");
 

@@ -8,12 +8,13 @@ import {
   Artifact,
   type AwayMessage,
   awayItems,
+  ChannelId,
   ChapterId,
   catchUpOf,
   Decision,
   DecisionId,
   deciderOf,
-  type ForYouThread,
+  type ForYouChannel,
   forYouOf,
   HubQuestion,
   HubQuestionId,
@@ -26,10 +27,9 @@ import {
   sameActor,
   Task,
   TaskId,
-  ThreadId,
 } from "../src/index.ts";
 
-// Issue #1456 (ADR 039, Cards every thread shares › For you): one list per person, built from the
+// Issue #1456 (ADR 039, Cards every channel shares › For you): one list per person, built from the
 // records and that person's read marker, topped by the same away summary catch-up shows.
 
 const BRUNA: Actor = { kind: "user", id: "bruna" };
@@ -41,8 +41,8 @@ const AUTHORS = [...PEOPLE, HOB] as const;
 const CHAPTER = ChapterId.make("chapter-1");
 const at = (revision: number) => new Date(Date.UTC(2026, 10, 14) + revision * 60_000).toISOString();
 
-const message = (threadId: string, id: string, revision: number, fields: Partial<AwayMessage> = {}): AwayMessage => ({
-  id: MessageId.make(`${threadId}-${id}`),
+const message = (channelId: string, id: string, revision: number, fields: Partial<AwayMessage> = {}): AwayMessage => ({
+  id: MessageId.make(`${channelId}-${id}`),
   role: "assistant",
   status: "complete",
   content: `Message ${id}`,
@@ -54,10 +54,10 @@ const message = (threadId: string, id: string, revision: number, fields: Partial
   ...fields,
 });
 
-const decision = (threadId: string, id: string, revision: number, actor: Actor, active: boolean) =>
+const decision = (channelId: string, id: string, revision: number, actor: Actor, active: boolean) =>
   new Decision({
-    id: DecisionId.make(`${threadId}-${id}`),
-    threadId: ThreadId.make(threadId),
+    id: DecisionId.make(`${channelId}-${id}`),
+    channelId: ChannelId.make(channelId),
     chapterId: CHAPTER,
     sourceMessageId: null,
     text: `Decision ${id}`,
@@ -69,10 +69,10 @@ const decision = (threadId: string, id: string, revision: number, actor: Actor, 
     revision,
   });
 
-const artifact = (threadId: string, id: string, revision: number, actor: Actor, fields: Partial<Artifact> = {}) =>
+const artifact = (channelId: string, id: string, revision: number, actor: Actor, fields: Partial<Artifact> = {}) =>
   new Artifact({
-    id: RegisteredArtifactId.make(`${threadId}-${id}`),
-    threadId: ThreadId.make(threadId),
+    id: RegisteredArtifactId.make(`${channelId}-${id}`),
+    channelId: ChannelId.make(channelId),
     chapterId: CHAPTER,
     kind: "doc",
     title: `${id}.md`,
@@ -86,11 +86,11 @@ const artifact = (threadId: string, id: string, revision: number, actor: Actor, 
     ...fields,
   });
 
-const approval = (id: string, threadId: string, revision: number) =>
+const approval = (id: string, channelId: string, revision: number) =>
   new ApprovalRequest({
     id: ApprovalId.make(id),
     agentId: AgentId.make("aldric"),
-    threadId: ThreadId.make(threadId),
+    channelId: ChannelId.make(channelId),
     messageId: null,
     stepId: `tool-${id}`,
     tool: "Bash",
@@ -107,13 +107,13 @@ const approval = (id: string, threadId: string, revision: number) =>
     decidedAt: null,
   });
 
-const task = (threadId: string | null) =>
+const task = (channelId: string | null) =>
   new Task({
-    id: TaskId.make(`task-${threadId}`),
+    id: TaskId.make(`task-${channelId}`),
     ownerId: AgentId.make("aldric"),
     parentId: null,
-    rootId: TaskId.make(`task-${threadId}`),
-    threadId: threadId === null ? null : ThreadId.make(threadId),
+    rootId: TaskId.make(`task-${channelId}`),
+    channelId: channelId === null ? null : ChannelId.make(channelId),
     brief: "Build the landing page",
     state: "waiting",
     dependsOn: [],
@@ -124,10 +124,10 @@ const task = (threadId: string | null) =>
     revision: 1,
   });
 
-const question = (id: string, threadId: string | null, revision: number) => ({
+const question = (id: string, channelId: string | null, revision: number) => ({
   question: new Question({
     id: QuestionId.make(id),
-    taskId: task(threadId).id,
+    taskId: task(channelId).id,
     askerId: AgentId.make("aldric"),
     recipientId: null,
     chain: [],
@@ -138,7 +138,7 @@ const question = (id: string, threadId: string | null, revision: number) => ({
     createdAt: at(revision),
     answeredAt: null,
   }),
-  task: task(threadId),
+  task: task(channelId),
 });
 
 const hubQuestion = (revision: number) =>
@@ -159,8 +159,8 @@ const hubQuestion = (revision: number) =>
     revision,
   });
 
-const thread = (threadId: string, fields: Partial<ForYouThread> = {}): ForYouThread => ({
-  threadId: ThreadId.make(threadId),
+const channel = (channelId: string, fields: Partial<ForYouChannel> = {}): ForYouChannel => ({
+  channelId: ChannelId.make(channelId),
   marker: 10,
   messages: [],
   decisions: [],
@@ -171,17 +171,17 @@ const thread = (threadId: string, fields: Partial<ForYouThread> = {}): ForYouThr
 
 const empty = {
   hubOwner: OWNER_ACTOR,
-  owners: new Map<ThreadId, Actor>(),
+  owners: new Map<ChannelId, Actor>(),
   approvals: [],
   questions: [],
   hubQuestions: [],
   reviews: [],
 };
 
-// Random records of one thread: messages by people and hobs that mention anyone, decisions and
+// Random records of one channel: messages by people and hobs that mention anyone, decisions and
 // artifacts by anyone, read up to a random marker.
 const actorArb = fc.constantFrom<Actor>(...AUTHORS);
-const threadArb = (threadId: string): fc.Arbitrary<ForYouThread> =>
+const channelArb = (channelId: string): fc.Arbitrary<ForYouChannel> =>
   fc
     .record({
       marker: fc.option(fc.integer({ min: 0, max: 40 }), { nil: null }),
@@ -204,55 +204,59 @@ const threadArb = (threadId: string): fc.Arbitrary<ForYouThread> =>
       artifacts: fc.array(fc.record({ revision: fc.integer({ min: 1, max: 40 }), actor: actorArb }), { maxLength: 6 }),
     })
     .map((drawn) =>
-      thread(threadId, {
+      channel(channelId, {
         marker: drawn.marker,
-        messages: drawn.messages.map((each, index) => message(threadId, `m${index}`, each.revision, each)),
+        messages: drawn.messages.map((each, index) => message(channelId, `m${index}`, each.revision, each)),
         decisions: drawn.decisions.map((each, index) =>
-          decision(threadId, `d${index}`, each.revision, each.actor, each.active),
+          decision(channelId, `d${index}`, each.revision, each.actor, each.active),
         ),
-        artifacts: drawn.artifacts.map((each, index) => artifact(threadId, `a${index}`, each.revision, each.actor)),
+        artifacts: drawn.artifacts.map((each, index) => artifact(channelId, `a${index}`, each.revision, each.actor)),
       }),
     );
 
 describe("forYouOf", () => {
-  // covers ADR 039 (Cards every thread shares › For you; Validation)
+  // covers ADR 039 (Cards every channel shares › For you; Validation)
   it("lists the same mentions, decisions and changed artifacts as catch-up, for the same records and read marker (#1456)", () => {
     fc.assert(
-      fc.property(fc.constantFrom<Actor>(...PEOPLE), fc.tuple(threadArb("camp"), threadArb("chat")), (you, threads) => {
-        const forYou = forYouOf({ you, threads, ...empty });
-        expect(forYou.for).toEqual(you);
-        for (const each of threads) {
-          // Its part of While you were away is exactly the catch-up of that thread.
-          // With no owner listed, the hub's owner decides each thread.
-          const decides = sameActor(you, OWNER_ACTOR);
-          const caught = catchUpOf({ ...each, you, decides });
-          const away = forYou.away.find((part) => part.threadId === each.threadId);
-          expect(away?.items ?? []).toEqual(caught.items);
-          expect(away?.more ?? 0).toBe(caught.more);
-          // And the list's mentions are every mention of you the away summary has, uncapped.
-          const mentioned = awayItems({ ...each, you, decides }).flatMap((item) =>
-            item._tag === "Mentioned" ? [item.messageId] : [],
-          );
-          const listed = forYou.items.flatMap((item) =>
-            item._tag === "Mention" && item.threadId === each.threadId ? [item.messageId] : [],
-          );
-          expect([...listed].sort()).toEqual([...mentioned].sort());
-        }
-        // Nothing in your list is for anyone else, and nothing in it is yours to have written.
-        for (const item of forYou.items) expect(item.for).toEqual(you);
-        for (const part of forYou.away)
-          for (const item of part.items) {
-            if (item._tag === "Decided" || item._tag === "CrossedOut") expect(item.decision.actor).not.toEqual(you);
-            if (item._tag === "Made") expect(item.artifact.actor).not.toEqual(you);
-            if (item._tag === "Mentioned") expect(item.author).not.toEqual(you);
+      fc.property(
+        fc.constantFrom<Actor>(...PEOPLE),
+        fc.tuple(channelArb("camp"), channelArb("direct")),
+        (you, channels) => {
+          const forYou = forYouOf({ you, channels, ...empty });
+          expect(forYou.for).toEqual(you);
+          for (const each of channels) {
+            // Its part of While you were away is exactly the catch-up of that channel.
+            // With no owner listed, the hub's owner decides each channel.
+            const decides = sameActor(you, OWNER_ACTOR);
+            const caught = catchUpOf({ ...each, you, decides });
+            const away = forYou.away.find((part) => part.channelId === each.channelId);
+            expect(away?.items ?? []).toEqual(caught.items);
+            expect(away?.more ?? 0).toBe(caught.more);
+            // And the list's mentions are every mention of you the away summary has, uncapped.
+            const mentioned = awayItems({ ...each, you, decides }).flatMap((item) =>
+              item._tag === "Mentioned" ? [item.messageId] : [],
+            );
+            const listed = forYou.items.flatMap((item) =>
+              item._tag === "Mention" && item.channelId === each.channelId ? [item.messageId] : [],
+            );
+            expect([...listed].sort()).toEqual([...mentioned].sort());
           }
-      }),
+          // Nothing in your list is for anyone else, and nothing in it is yours to have written.
+          for (const item of forYou.items) expect(item.for).toEqual(you);
+          for (const part of forYou.away)
+            for (const item of part.items) {
+              if (item._tag === "Decided" || item._tag === "CrossedOut") expect(item.decision.actor).not.toEqual(you);
+              if (item._tag === "Made") expect(item.artifact.actor).not.toEqual(you);
+              if (item._tag === "Mentioned") expect(item.author).not.toEqual(you);
+            }
+        },
+      ),
     );
   });
 
   // covers ADR 039 (Users as actors: mentions of you are per person)
   it("gives Bruna and Leo their own mentions in a camp they share (#1456)", () => {
-    const camp = thread("camp", {
+    const camp = channel("camp", {
       marker: 0,
       messages: [
         message("camp", "to-bruna", 11, {
@@ -266,7 +270,7 @@ describe("forYouOf", () => {
       ],
       decisions: [decision("camp", "price", 14, BRUNA, true)],
     });
-    const listFor = (you: Actor) => forYouOf({ you, threads: [camp], ...empty });
+    const listFor = (you: Actor) => forYouOf({ you, channels: [camp], ...empty });
     const mentionsOf = (you: Actor) =>
       listFor(you).items.flatMap((item) => (item._tag === "Mention" ? [item.messageId] : []));
     expect(mentionsOf(BRUNA)).toEqual(["camp-to-bruna", "camp-to-both"]);
@@ -283,12 +287,12 @@ describe("forYouOf", () => {
     expect(decided(LEO)).toHaveLength(1);
   });
 
-  // covers ADR 039 (Cards every thread shares › Approval: the decider)
-  it("gives approvals, questions and reviews to the thread's owner, else the hub's owner, oldest first (#1456)", () => {
+  // covers ADR 039 (Cards every channel shares › Approval: the decider)
+  it("gives approvals, questions and reviews to the channel's owner, else the hub's owner, oldest first (#1456)", () => {
     const input = {
       hubOwner: OWNER_ACTOR,
-      threads: [],
-      owners: new Map<ThreadId, Actor>([[ThreadId.make("brunas-camp"), BRUNA]]),
+      channels: [],
+      owners: new Map<ChannelId, Actor>([[ChannelId.make("brunas-camp"), BRUNA]]),
       approvals: [approval("brunas", "brunas-camp", 3), approval("owners", "owners-chat", 2)],
       questions: [question("q-brunas", "brunas-camp", 4), question("q-loose", null, 1)],
       hubQuestions: [hubQuestion(5)],
@@ -319,35 +323,35 @@ describe("forYouOf", () => {
     expect(deciderOf({ requester: null, owner: null, hubOwner })).toEqual(OWNER_ACTOR);
   });
 
-  it("lists in While you were away only threads with news, the latest change first (#1456)", () => {
+  it("lists in While you were away only channels with news, the latest change first (#1456)", () => {
     const forYou = forYouOf({
       you: OWNER_ACTOR,
-      threads: [
-        thread("quiet", { decisions: [decision("quiet", "old", 5, HOB, true)] }),
-        thread("earlier", { decisions: [decision("earlier", "d", 12, HOB, true)] }),
-        thread("later", { artifacts: [artifact("later", "a", 15, HOB)] }),
+      channels: [
+        channel("quiet", { decisions: [decision("quiet", "old", 5, HOB, true)] }),
+        channel("earlier", { decisions: [decision("earlier", "d", 12, HOB, true)] }),
+        channel("later", { artifacts: [artifact("later", "a", 15, HOB)] }),
       ],
       ...empty,
     });
-    expect(forYou.away.map((part) => part.threadId)).toEqual(["later", "earlier"]);
+    expect(forYou.away.map((part) => part.channelId)).toEqual(["later", "earlier"]);
     expect(forYou.away[0]).toMatchObject({ readRevision: 10, more: 0 });
   });
 
-  // covers ADR 039 (Cards every thread shares › Approval: the decider)
+  // covers ADR 039 (Cards every channel shares › Approval: the decider)
   it("says a Quest needs you only to its decider, and tells every member when it ends (#1456)", () => {
     const quest = (id: string, revision: number, state: "active" | "completed", needsYou: number) => ({
       summary: { questId: QuestId.make(id), parentQuestId: null, state, needsYou, revision },
       goal: `Goal ${id}`,
     });
-    const camp = thread("brunas-camp", {
+    const camp = channel("brunas-camp", {
       quests: [quest("waits", 12, "active", 2), quest("done", 11, "completed", 0)],
     });
     const awayOf = (you: Actor) =>
       forYouOf({
         you,
-        threads: [camp],
+        channels: [camp],
         ...empty,
-        owners: new Map<ThreadId, Actor>([[ThreadId.make("brunas-camp"), BRUNA]]),
+        owners: new Map<ChannelId, Actor>([[ChannelId.make("brunas-camp"), BRUNA]]),
       }).away.flatMap((part) => part.items.map((item) => item._tag));
     expect(awayOf(BRUNA)).toEqual(["NeedsYou", "QuestEnded"]);
     expect(awayOf(LEO)).toEqual(["QuestEnded"]);

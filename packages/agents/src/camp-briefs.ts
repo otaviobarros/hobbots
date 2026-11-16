@@ -1,6 +1,9 @@
 import {
   type Artifact,
   type BriefDraft,
+  type Channel,
+  type ChannelId,
+  ChannelLifecycle,
   type Decision,
   DecisionStates,
   type EventEnvelope,
@@ -9,9 +12,6 @@ import {
   type JournaledEvent,
   type Message,
   type TaskId,
-  type Thread,
-  type ThreadId,
-  ThreadLifecycle,
 } from "@hobbots/domain";
 import { Context, DateTime, Duration, Effect, Layer, Option, Schema } from "effect";
 import { BriefLog } from "./brief-log.ts";
@@ -26,7 +26,7 @@ import { HobbotsRepository } from "./repository.ts";
 
 // The brief projector (ADR 037, Records, #1384, STD-ARCH-016). It reads the journal after its
 // cursor, and rewrites the brief of each chat or camp where a chapter ended or a Quest took a step:
-// the hub's brain's "Where we are", or under No AI a plain one from the thread's decisions and
+// the hub's brain's "Where we are", or under No AI a plain one from the channel's decisions and
 // artifacts. A brief is written with its `BriefWritten` and the cursor in one transaction, so a
 // restart resumes from the cursor and writes nothing twice. A failed or slow brain leaves the last
 // brief in place, and no turn ever waits on it: a turn only reads the brief that is there.
@@ -34,7 +34,7 @@ import { HobbotsRepository } from "./repository.ts";
 /** How long the brain has to write one brief; after that the last brief stays. */
 export const BRIEF_JUDGMENT_TIMEOUT = Duration.minutes(2);
 
-/** The most of a thread's records the brain is shown, in characters. */
+/** The most of a channel's records the brain is shown, in characters. */
 export const BRIEF_INPUT_MAX = 12_000;
 
 /** The live chapter's last messages the brain is shown. */
@@ -43,34 +43,34 @@ const RECENT_MESSAGES = 12;
 /** The longest line a decision, an artifact or a Task takes in a plain brief. */
 const LINE_MAX = 200;
 
-/** What in a page of the journal asks for a brief: the threads it names, and Tasks whose thread it does not. */
+/** What in a page of the journal asks for a brief: the channels it names, and Tasks whose channel it does not. */
 export interface BriefTriggers {
-  readonly threads: ReadonlySet<ThreadId>;
+  readonly channels: ReadonlySet<ChannelId>;
   readonly tasks: ReadonlySet<TaskId>;
 }
 
-/** The thread an entry asks to brief again, or the Task whose thread it is, or nothing. */
-const triggerOf = (event: JournaledEvent): { thread: ThreadId | null } | { task: TaskId } | null => {
+/** The channel an entry asks to brief again, or the Task whose channel it is, or nothing. */
+const triggerOf = (event: JournaledEvent): { channel: ChannelId | null } | { task: TaskId } | null => {
   switch (event._tag) {
     // A chapter ended, or a split or a merge changed what the chapters hold.
     case "ChapterStarted":
-      return event.ended === null ? null : { thread: event.threadId };
+      return event.ended === null ? null : { channel: event.channelId };
     case "ChapterSplit":
     case "ChapterMerged":
-      return { thread: event.threadId };
-    // A Quest's steps: it started, its lead stopped it or it ended, a Task in a thread ended, or a
+      return { channel: event.channelId };
+    // A Quest's steps: it started, its lead stopped it or it ended, a Task in a channel ended, or a
     // milestone was reached.
     case "QuestStarted":
     case "QuestStopRequested":
     case "QuestCompleted":
-      return { thread: event.quest.threadId };
-    // Any Task in the thread that ended, completed or not, a step or a member's Task included, or
+      return { channel: event.quest.channelId };
+    // Any Task in the channel that ended, completed or not, a step or a member's Task included, or
     // one whose Quest ended or reopened with it.
     case "TaskStateChanged":
-      if (event.quest !== null) return { thread: event.quest.threadId };
-      return isTerminalTask(event.task.state) ? { thread: event.task.threadId } : null;
+      if (event.quest !== null) return { channel: event.quest.channelId };
+      return isTerminalTask(event.task.state) ? { channel: event.task.channelId } : null;
     case "TaskCompleted":
-      return { thread: event.task.threadId };
+      return { channel: event.task.channelId };
     case "CheckpointRecorded":
       return event.milestone === null ? null : { task: event.checkpoint.taskId };
     default:
@@ -78,17 +78,17 @@ const triggerOf = (event: JournaledEvent): { thread: ThreadId | null } | { task:
   }
 };
 
-/** The threads a page of the journal asks to brief again, and the Tasks whose thread must be read. */
+/** The channels a page of the journal asks to brief again, and the Tasks whose channel must be read. */
 export const briefTriggers = (entries: ReadonlyArray<EventEnvelope>): BriefTriggers => {
-  const threads = new Set<ThreadId>();
+  const channels = new Set<ChannelId>();
   const tasks = new Set<TaskId>();
   for (const entry of entries) {
     const trigger = triggerOf(entry.payload as JournaledEvent);
     if (trigger === null) continue;
     if ("task" in trigger) tasks.add(trigger.task);
-    else if (trigger.thread !== null) threads.add(trigger.thread);
+    else if (trigger.channel !== null) channels.add(trigger.channel);
   }
-  return { threads, tasks };
+  return { channels, tasks };
 };
 
 /**
@@ -113,14 +113,14 @@ const artifactLine = (artifact: Artifact) =>
  * newest first, within `CAMP_BRIEF_MAX` characters. Null when it has neither decisions nor artifacts.
  */
 export const plainBrief = (
-  thread: Thread,
+  channel: Channel,
   decisions: ReadonlyArray<Decision>,
   artifacts: ReadonlyArray<Artifact>,
 ): string | null => {
   const holding = decisions.filter(DecisionStates.isActive);
   if (holding.length === 0 && artifacts.length === 0) return null;
   const goal =
-    thread.goal === null || thread.goal.trim() === "" ? null : `Goal: ${clip(oneLine(thread.goal), LINE_MAX)}`;
+    channel.goal === null || channel.goal.trim() === "" ? null : `Goal: ${clip(oneLine(channel.goal), LINE_MAX)}`;
   const parts: Array<string> = goal === null ? [] : [goal];
   const used = () => parts.join("\n\n").length + (parts.length === 0 ? 0 : 2);
   // Decisions first, at most half the room while artifacts wait for theirs.
@@ -136,9 +136,9 @@ export const plainBrief = (
   return clip(parts.join("\n\n"), CAMP_BRIEF_MAX);
 };
 
-/** What the brain reads of a thread: its name and goal, its records, its chapters and its live chapter's last lines. */
+/** What the brain reads of a channel: its name and goal, its records, its chapters and its live chapter's last lines. */
 export interface BriefRecords {
-  readonly thread: Thread;
+  readonly channel: Channel;
   readonly decisions: ReadonlyArray<Decision>;
   readonly artifacts: ReadonlyArray<Artifact>;
   readonly chapters: ReadonlyArray<{
@@ -153,12 +153,12 @@ export interface BriefRecords {
 const section = (heading: string, lines: ReadonlyArray<string>) =>
   lines.length === 0 ? [] : [`${heading}\n${lines.join("\n")}`];
 
-/** The brain's input for a thread's brief, at most `BRIEF_INPUT_MAX` characters. */
+/** The brain's input for a channel's brief, at most `BRIEF_INPUT_MAX` characters. */
 export const briefInput = (records: BriefRecords): string => {
-  const { thread } = records;
+  const { channel } = records;
   const text = [
-    `${thread.kind === "camp" ? "Camp" : "Chat"}: ${oneLine(thread.title) || "(no title)"}`,
-    ...(thread.goal === null ? [] : [`Goal: ${oneLine(thread.goal)}`]),
+    `${channel.kind === "camp" ? "Camp" : "Chat"}: ${oneLine(channel.title) || "(no title)"}`,
+    ...(channel.goal === null ? [] : [`Goal: ${oneLine(channel.goal)}`]),
     ...section(
       "Decisions that hold, newest first:",
       records.decisions.filter(DecisionStates.isActive).map(decisionLine),
@@ -207,30 +207,30 @@ const makeProjector = (options: CampBriefsOptions) =>
     const decide = yield* hubDecide;
     const announce = announcer(yield* Effect.serviceOption(EventPublisher), "a camp's brief");
 
-    const recordsOf = (thread: Thread) =>
+    const recordsOf = (channel: Channel) =>
       Effect.gen(function* () {
-        const stored = Option.isNone(chapters) ? [] : yield* chapters.value.listChapters(thread.id);
-        const messages = (yield* repo.listMessages(thread.id)).filter((m) => m.status !== "queued" && hobReads(m));
-        const work = yield* repo.listOpenWork(thread.id);
+        const stored = Option.isNone(chapters) ? [] : yield* chapters.value.listChapters(channel.id);
+        const messages = (yield* repo.listMessages(channel.id)).filter((m) => m.status !== "queued" && hobReads(m));
+        const work = yield* repo.listOpenWork(channel.id);
         const briefRecords: BriefRecords = {
-          thread,
-          decisions: Option.isNone(records) ? [] : yield* records.value.listDecisions(thread.id),
-          artifacts: Option.isNone(records) ? [] : yield* records.value.listArtifacts(thread.id),
+          channel,
+          decisions: Option.isNone(records) ? [] : yield* records.value.listDecisions(channel.id),
+          artifacts: Option.isNone(records) ? [] : yield* records.value.listArtifacts(channel.id),
           chapters: packChapters(stored, messages),
           openTasks: work.tasks,
-          recent: messages.filter((m) => m.chapterId === thread.liveChapterId).slice(-RECENT_MESSAGES),
+          recent: messages.filter((m) => m.chapterId === channel.liveChapterId).slice(-RECENT_MESSAGES),
         };
         return briefRecords;
       });
 
-    // The thread's brief as the brain or the rule writes it now, or none when there is nothing to say.
-    const draftFor = (threadId: ThreadId, basis: number) =>
+    // The channel's brief as the brain or the rule writes it now, or none when there is nothing to say.
+    const draftFor = (channelId: ChannelId, basis: number) =>
       Effect.gen(function* () {
-        const found = yield* repo.findThread(threadId);
-        // An archived or superseded thread takes no new turn, so its brief stays as it was.
-        if (Option.isNone(found) || ThreadLifecycle.isArchived(found.value)) return null;
+        const found = yield* repo.findChannel(channelId);
+        // An archived or superseded channel takes no new turn, so its brief stays as it was.
+        if (Option.isNone(found) || ChannelLifecycle.isArchived(found.value)) return null;
         const read = yield* recordsOf(found.value);
-        const rule = plainBrief(read.thread, read.decisions, read.artifacts);
+        const rule = plainBrief(read.channel, read.decisions, read.artifacts);
         const judgment: Judgment<string> = {
           task: "brief",
           question: BRIEF_QUESTION,
@@ -243,18 +243,18 @@ const makeProjector = (options: CampBriefsOptions) =>
           Effect.map(Option.getOrElse(() => byFallback(judgment))),
         );
         // An empty draft says nothing holds any more: it clears a brief that said something.
-        const draft: BriefDraft = { threadId, basis, ...draftOf(decided) };
+        const draft: BriefDraft = { channelId, basis, ...draftOf(decided) };
         return draft;
       });
 
-    // A page's drafts, one per thread it asks to brief again, written with the cursor.
+    // A page's drafts, one per channel it asks to brief again, written with the cursor.
     const project = (entries: ReadonlyArray<EventEnvelope>, sequence: number) =>
       Effect.gen(function* () {
         const triggers = briefTriggers(entries);
-        const threads = new Set([...triggers.threads, ...(yield* log.threadsOfTasks([...triggers.tasks]))]);
+        const channels = new Set([...triggers.channels, ...(yield* log.channelsOfTasks([...triggers.tasks]))]);
         const drafts: Array<BriefDraft> = [];
-        for (const threadId of threads) {
-          const draft = yield* draftFor(threadId, sequence);
+        for (const channelId of channels) {
+          const draft = yield* draftFor(channelId, sequence);
           if (draft !== null) drafts.push(draft);
         }
         const at = DateTime.formatIso(yield* DateTime.now);

@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   type Actor,
   AgentId,
+  ChannelId,
+  ChannelMember,
+  ChannelMembers,
   IllegalMemberTransition,
   type MemberEvent,
   MemberMachine,
@@ -10,9 +13,6 @@ import {
   MemberState as MemberStates,
   planMemberAdd,
   planMemberRemove,
-  ThreadId,
-  ThreadMember,
-  ThreadMembers,
 } from "../src/index.ts";
 import { agreesWithModel } from "../testing/machine-model.ts";
 
@@ -22,8 +22,8 @@ import { agreesWithModel } from "../testing/machine-model.ts";
 const at = "2026-11-13T10:00:00.000Z";
 
 const member = (state: MemberState, actor: Actor = { kind: "hob", id: "aldric" }) =>
-  new ThreadMember({
-    threadId: ThreadId.make("camp"),
+  new ChannelMember({
+    channelId: ChannelId.make("camp"),
     actor,
     role: actor.kind === "user" ? "owner" : "member",
     state,
@@ -48,7 +48,7 @@ const stepModel = (state: MemberState, e: MemberEvent): MemberState | "refused" 
 };
 
 /** Everything a rule writes is the state; the rest of the member must stay as it was. */
-const view = (m: ThreadMember) => m.state;
+const view = (m: ChannelMember) => m.state;
 
 const events: fc.Arbitrary<MemberEvent> = fc.constantFrom<MemberEvent>(
   { _tag: "Leave" },
@@ -70,9 +70,9 @@ describe("MemberMachine", () => {
 
   // covers ADR 039 (Members)
   it("changes only the state, and names the member it refuses (#1453)", () => {
-    const left = ThreadMembers.transition(member("active"), { _tag: "Leave" });
-    expect(left).toEqual(new ThreadMember({ ...member("active"), state: "left" }));
-    const refused = ThreadMembers.transition(member("left"), { _tag: "Remove" });
+    const left = ChannelMembers.transition(member("active"), { _tag: "Leave" });
+    expect(left).toEqual(new ChannelMember({ ...member("active"), state: "left" }));
+    const refused = ChannelMembers.transition(member("left"), { _tag: "Remove" });
     expect(refused).toBeInstanceOf(IllegalMemberTransition);
     expect(refused).toMatchObject({ from: "left", to: "removed", actor: { kind: "hob", id: "aldric" } });
     expect(MemberMachine.table.map((row) => [row.event, row.from, row.to])).toEqual([
@@ -90,10 +90,13 @@ describe("planMemberAdd", () => {
 
   // covers ADR 039 (Members)
   it("refuses a third member in a direct message, and lets its own two come back (#1453)", () => {
-    expect(planMemberAdd({ kind: "chat" }, [owner, hob], rook)).toEqual({ _tag: "refused", reason: "direct-message" });
-    expect(planMemberAdd({ kind: "chat" }, [owner, hob], hob.actor)).toEqual({ _tag: "active", member: hob });
+    expect(planMemberAdd({ kind: "direct" }, [owner, hob], rook)).toEqual({
+      _tag: "refused",
+      reason: "direct-message",
+    });
+    expect(planMemberAdd({ kind: "direct" }, [owner, hob], hob.actor)).toEqual({ _tag: "active", member: hob });
     const away = member("left");
-    expect(planMemberAdd({ kind: "chat" }, [owner, away], away.actor)).toEqual({ _tag: "return", member: away });
+    expect(planMemberAdd({ kind: "direct" }, [owner, away], away.actor)).toEqual({ _tag: "return", member: away });
   });
 
   // covers ADR 039 (Members)
@@ -108,12 +111,12 @@ describe("planMemberRemove", () => {
   const owner = member("active", { kind: "user", id: "owner" });
   const lead = member("active");
   const rook = member("active", { kind: "hob", id: "rook" });
-  const camp = { kind: "camp" as const, agentId: AgentId.make("aldric") };
+  const camp = { kind: "camp" as const, ownerHobId: AgentId.make("aldric") };
 
   // covers ADR 039 (Members), #1467
   it("takes an active hob out of a camp, and keeps a direct message's two, the owner and the lead (#1467)", () => {
     expect(planMemberRemove(camp, [owner, lead, rook], rook.actor)).toEqual({ _tag: "remove", member: rook });
-    expect(planMemberRemove({ ...camp, kind: "chat" }, [owner, lead], lead.actor)).toEqual({
+    expect(planMemberRemove({ ...camp, kind: "direct" }, [owner, lead], lead.actor)).toEqual({
       _tag: "refused",
       reason: "direct-message",
     });

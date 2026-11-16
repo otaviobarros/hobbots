@@ -1,11 +1,11 @@
 import { HubQuestionRepository } from "@hobbots/agents";
-import { DeviceId, HubQuestionId } from "@hobbots/domain";
+import { DeviceId, EVENT_SCHEMA_VERSIONS, HubQuestionId } from "@hobbots/domain";
 import { Effect, Layer } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { EventJournal, HubQuestionRepositoryLive, migrations } from "../src/index.ts";
 import hubQuestionCodes from "../src/migrations/0078_hub_question_codes.ts";
-import { TestDatabaseAt } from "../src/testing.ts";
+import { migrateAfter, TestDatabaseAt } from "../src/testing.ts";
 
 // Issue #1045: hub questions stored before 0078 held English text and labels. The migration reads
 // them back into codes and keys, rows and journaled events alike, so an answer given before it is
@@ -150,6 +150,8 @@ describe("0078_hub_question_codes", () => {
         5,
       );
       yield* hubQuestionCodes;
+      // Today's repository and journal write them, so the rows go on to today's schema.
+      yield* migrateAfter("0078");
 
       const questions = yield* HubQuestionRepository;
       const unapplied = yield* questions.listUnapplied("commit-identity");
@@ -210,9 +212,11 @@ describe("0078_hub_question_codes", () => {
     expect(result.columns).not.toContain("text");
     expect(result.columns).not.toContain("subjectTitle");
 
-    // Every journaled entry reads back in the new shape, at version 2.
+    // Every journaled entry reads back in the new shape, at today's version.
     const raised = result.events.filter((event) => event.type === "HubQuestionRaised");
-    expect(raised.map((event) => event.schemaVersion)).toEqual([2, 2, 2, 2, 2]);
+    expect(raised.map((event) => event.schemaVersion)).toEqual(
+      raised.map(() => EVENT_SCHEMA_VERSIONS.HubQuestionRaised),
+    );
     expect(raised[4]?.payload).toMatchObject({
       hubQuestion: { id: "prototype", ask: { applied: { picked: null, answer: "constructor" } } },
     });

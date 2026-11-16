@@ -1,4 +1,4 @@
-import { AgentId, ApprovalId, ApprovalRequest, MessageId, ThreadId } from "@hobbots/domain";
+import { AgentId, ApprovalId, ApprovalRequest, ChannelId, MessageId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import {
   expiryText,
@@ -15,12 +15,12 @@ const now = new Date("2026-11-01T10:00:00.000Z");
 const request = (
   id: string,
   state: ApprovalRequest["state"],
-  { thread = "t1", lifetime = null }: { thread?: string; lifetime?: ApprovalRequest["lifetime"] } = {},
+  { channel = "t1", lifetime = null }: { channel?: string; lifetime?: ApprovalRequest["lifetime"] } = {},
 ) =>
   new ApprovalRequest({
     id: ApprovalId.make(id),
     agentId: AgentId.make("pip"),
-    threadId: ThreadId.make(thread),
+    channelId: ChannelId.make(channel),
     messageId: MessageId.make("m1"),
     stepId: "tool-1",
     tool: "Bash",

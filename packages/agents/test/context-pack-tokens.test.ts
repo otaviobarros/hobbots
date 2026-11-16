@@ -1,9 +1,9 @@
-import { ChapterId, Message, MessageId, ThreadId } from "@hobbots/domain";
+import { ChannelId, ChapterId, Message, MessageId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { buildPack, plainChapterSummary, tokensOf } from "../src/context-pack.ts";
 
 // Issue #1380: tokens per turn on the last topic of a scripted 200-message, 4-topic chat, before
-// and after chapters and the pack. Before, one session resumed across the whole thread, so each turn
+// and after chapters and the pack. Before, one session resumed across the whole channel, so each turn
 // carried the whole transcript so far. After, the last topic's chapter starts a new session from the
 // pack, and each turn carries the pack and the chapter so far.
 
@@ -17,7 +17,7 @@ const scripted = (n: number): Message => {
   const words = `Message ${n} about ${TOPICS[topic]}: `.concat("details and plans ".repeat(22 + ((n * 37) % 50)));
   return new Message({
     id: MessageId.make(`m${n}`),
-    threadId: ThreadId.make("chat"),
+    channelId: ChannelId.make("chat"),
     role,
     content: words,
     status: "complete",
@@ -33,7 +33,7 @@ const scripted = (n: number): Message => {
 const chat = Array.from({ length: TOPICS.length * PER_TOPIC }, (_, n) => scripted(n));
 const tokens = (messages: ReadonlyArray<Message>) => tokensOf(messages.reduce((sum, m) => sum + m.content.length, 0));
 
-/** Tokens each of the last topic's turns starts with: before (the whole thread) and after (pack plus chapter). */
+/** Tokens each of the last topic's turns starts with: before (the whole channel) and after (pack plus chapter). */
 const lastTopicCosts = () => {
   const first = (TOPICS.length - 1) * PER_TOPIC;
   const pack = buildPack({

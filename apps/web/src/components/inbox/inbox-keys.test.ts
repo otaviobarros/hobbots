@@ -56,7 +56,7 @@ describe("stepFrom", () => {
 describe("shownOrder", () => {
   it("follows the list: by urgency as one list, by quest group after group", () => {
     expect(shownOrder([later, soon, risky], "urgency", () => undefined)).toEqual([risky, soon, later]);
-    // Outside a quest the three share one thread, so they make one group, most urgent first.
+    // Outside a quest the three share one channel, so they make one group, most urgent first.
     expect(shownOrder([later, soon, risky], "quest", () => undefined)).toEqual([risky, soon, later]);
   });
 });

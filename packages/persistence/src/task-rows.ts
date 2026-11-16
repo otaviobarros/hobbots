@@ -3,6 +3,7 @@ import {
   ApprovalRequest,
   ArtifactRef,
   Attempt,
+  type ChannelId,
   Checkpoint,
   Delegation,
   descendantsOf,
@@ -18,7 +19,6 @@ import {
   TaskNote,
   TaskTree,
   TaskWait,
-  type ThreadId,
 } from "@hobbots/domain";
 import { Effect, Schema } from "effect";
 import type { SqlClient } from "effect/sql";
@@ -136,7 +136,7 @@ export const taskColumns = (task: Task) => ({
   owner_id: task.ownerId,
   parent_id: task.parentId,
   root_id: task.rootId,
-  thread_id: task.threadId,
+  channel_id: task.channelId,
   brief: task.brief,
   state: task.state,
   depends_on: JSON.stringify(task.dependsOn),
@@ -217,15 +217,15 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
       return task === undefined || !open(task.id) || !open(task.rootId) ? [] : [{ question, task }];
     });
   });
-  /** The hob each record's thread belongs to, by thread id. */
-  const threadOwners = (records: ReadonlyArray<{ readonly threadId: string | null }>) =>
+  /** The hob each record's channel belongs to, by channel id. */
+  const channelOwners = (records: ReadonlyArray<{ readonly channelId: string | null }>) =>
     Effect.gen(function* () {
-      const threadIds = [...new Set(records.flatMap((each) => (each.threadId === null ? [] : [each.threadId])))];
+      const channelIds = [...new Set(records.flatMap((each) => (each.channelId === null ? [] : [each.channelId])))];
       const owners =
-        threadIds.length === 0
+        channelIds.length === 0
           ? []
-          : yield* sql<{ readonly id: string; readonly agentId: string }>`SELECT id, agent_id FROM threads
-              WHERE ${sql.in("id", threadIds)}`;
+          : yield* sql<{ readonly id: string; readonly agentId: string }>`SELECT id, agent_id FROM channels
+              WHERE ${sql.in("id", channelIds)}`;
       return new Map(owners.map((each) => [each.id, AgentId.make(each.agentId)]));
     });
   /**
@@ -241,10 +241,10 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     ])}`.pipe(Effect.flatMap(decodeRows("task")));
     const open = new Set(roots.flatMap((root) => (isTerminalTask(root.state) ? [] : [root.id])));
     const waiting = failed.filter((each) => open.has(each.rootId));
-    const ownerOf = yield* threadOwners(waiting);
+    const ownerOf = yield* channelOwners(waiting);
     return waiting.map((task) => ({
       task,
-      leadId: task.threadId === null ? null : (ownerOf.get(task.threadId) ?? null),
+      leadId: task.channelId === null ? null : (ownerOf.get(task.channelId) ?? null),
     }));
   });
   const artifact = (id: string) =>
@@ -304,10 +304,10 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
       });
     });
 
-  /** The trees of the Tasks a thread's requests started, oldest first. */
-  const threadTrees = (threadId: ThreadId) =>
+  /** The trees of the Tasks a channel's requests started, oldest first. */
+  const channelTrees = (channelId: ChannelId) =>
     Effect.gen(function* () {
-      const tops = yield* sql<Row>`SELECT * FROM tasks WHERE thread_id = ${threadId} AND parent_id IS NULL
+      const tops = yield* sql<Row>`SELECT * FROM tasks WHERE channel_id = ${channelId} AND parent_id IS NULL
         ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("task")));
       const trees: Array<TaskTree> = [];
       for (const top of tops) {
@@ -336,14 +336,14 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
         open.map((each) => each.childTaskId),
       )} ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("task")));
       const byTask = new Map(open.map((each) => [each.childTaskId, each]));
-      // A nested Quest's lead is a member, but its thread belongs to the hob the request was made to.
-      const ownerOf = yield* threadOwners(quests);
+      // A nested Quest's lead is a member, but its channel belongs to the hob the request was made to.
+      const ownerOf = yield* channelOwners(quests);
       return tasks.flatMap((task) => {
         const delegation = byTask.get(task.id);
         const quest = delegation && active.get(delegation.questId);
         if (!delegation || !quest) return [];
-        const threadAgentId = quest.threadId === null ? null : (ownerOf.get(quest.threadId) ?? null);
-        return [new MemberWork({ task, delegation, quest, threadAgentId })];
+        const channelAgentId = quest.channelId === null ? null : (ownerOf.get(quest.channelId) ?? null);
+        return [new MemberWork({ task, delegation, quest, channelAgentId })];
       });
     });
 
@@ -395,8 +395,8 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
           ? []
           : yield* sql<Row>`SELECT * FROM questions WHERE recipient_id IS NULL AND ${sql.in("task_id", ids)}
               ORDER BY ${oldest}`.pipe(Effect.flatMap(decodeRows("question")));
-      const owners = yield* threadOwners([...tasks, ...quests, ...approvals]);
-      return { tasks, delegations, quests, attempts, approvals, questions, threadOwners: owners };
+      const owners = yield* channelOwners([...tasks, ...quests, ...approvals]);
+      return { tasks, delegations, quests, attempts, approvals, questions, channelOwners: owners };
     });
 
   /** Steps waiting to start: queued Tasks whose parent has the same owner and has not ended, oldest first. */
@@ -443,7 +443,7 @@ export const makeTaskReads = (sql: SqlClient.SqlClient) => {
     openQuestionsOn,
     artifact,
     readTree,
-    threadTrees,
+    channelTrees,
     memberWork,
     historyRecords,
     queuedSteps,

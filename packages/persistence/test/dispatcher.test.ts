@@ -4,6 +4,8 @@ import {
   AgentId,
   AttemptId,
   type BackpackItem,
+  Channel,
+  ChannelId,
   CheckpointId,
   type Committed,
   carriedFrom,
@@ -12,8 +14,6 @@ import {
   openBlocker,
   QuestId,
   TaskId,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import {
   Backpack,
@@ -83,13 +83,13 @@ const run = <A, E>(
 const now = "2026-11-01T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 
 const newTask = (id: string, ownerId: AgentId, parentId: string | null): NewTask => ({
   id: TaskId.make(id),
   ownerId,
   parentId: parentId === null ? null : TaskId.make(parentId),
-  threadId,
+  channelId,
   brief: `Brief for ${id}`,
   dependsOn: [],
   createdAt: now,
@@ -124,8 +124,8 @@ const campaign = Effect.gen(function* () {
       }),
     );
   }
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, ownerHobId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
   );
   const tasks = yield* TaskRepository;
   const root = yield* tasks.createTask({ task: newTask("campaign", ALDRIC, null), delegation: null, milestones: [] });
@@ -168,7 +168,7 @@ const reportingTurn =
     } = {},
   ) =>
   (item: BackpackItem): Turn => ({
-    target: `thread:${item.threadId}`,
+    target: `thread:${item.channelId}`,
     turnId: `turn-${runs.count + 1}`,
     run: (delivery) =>
       Effect.gen(function* () {
@@ -377,7 +377,7 @@ describe("The dispatcher", () => {
         // The transport fails once, before the runtime accepted anything; the next turn works.
         let tries = 0;
         const flaky = (each: BackpackItem): Turn => ({
-          target: `thread:${each.threadId}`,
+          target: `thread:${each.channelId}`,
           turnId: `turn-${tries + 1}`,
           run: (delivery) =>
             ++tries === 1
@@ -403,7 +403,7 @@ describe("The dispatcher", () => {
         );
         let silent = 0;
         const failed = yield* dispatcher.dispatch(other.id, (each) => ({
-          target: `thread:${each.threadId}`,
+          target: `thread:${each.channelId}`,
           turnId: `silent-${++silent}`,
           run: () => Effect.void,
         }));
@@ -504,7 +504,7 @@ describe("The dispatcher", () => {
         const cancelled = yield* tasks.moveTask(root.id, root.revision, "cancelled", now);
         let runs = 0;
         const late = yield* dispatcher.dispatch(recorded(done).id, (each) => ({
-          target: `thread:${each.threadId}`,
+          target: `thread:${each.channelId}`,
           turnId: "never",
           run: () => Effect.sync(() => runs++),
         }));
@@ -539,7 +539,7 @@ describe("The dispatcher", () => {
         const dispatcher = yield* Dispatcher;
         let runs = 0;
         // Quill's Task is cancelled while his turn reads the item, and the cancel stops the turn.
-        // Like a thread whose turn you stopped, the session then holds its work back: no turn is
+        // Like a channel whose turn you stopped, the session then holds its work back: no turn is
         // planned again, so only the stopped turn's own end can settle the item.
         const [outcome] = yield* dispatcher.dispatchAll([item.id], () =>
           Effect.succeed(
@@ -907,7 +907,7 @@ describe("Handing items to a running turn", () => {
 const silentTurn =
   (runs: { count: number }) =>
   (each: BackpackItem): Turn => ({
-    target: `thread:${each.threadId}`,
+    target: `thread:${each.channelId}`,
     turnId: `silent-${++runs.count}`,
     run: () => Effect.void,
   });
@@ -1074,7 +1074,7 @@ describe("Blockers", () => {
         const host = BlockersHost.of({
           isRetired: (agentId) => Effect.succeed(retired.has(agentId)),
           announce: () => Effect.void,
-          resume: (threadId) => Effect.sync(() => void resumed.push(threadId)),
+          resume: (channelId) => Effect.sync(() => void resumed.push(channelId)),
         });
         const decide = (blocker: number, action: "retry" | "dismiss") =>
           decideBlocker(item.id, blocker, action).pipe(Effect.provideService(BlockersHost, host));

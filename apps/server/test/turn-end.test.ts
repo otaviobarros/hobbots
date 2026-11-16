@@ -4,13 +4,13 @@ import {
   AgentId,
   AttemptId,
   CANCELLED_ATTEMPT,
+  Channel,
+  ChannelId,
   type Committed,
   carriedFrom,
   MilestoneId,
   type TaskId,
   TaskId as TaskIdSchema,
-  Thread,
-  ThreadId,
   type TurnRunner,
 } from "@hobbots/domain";
 import { endTurn } from "@hobbots/orchestration";
@@ -32,7 +32,7 @@ const run = <A, E>(effect: Effect.Effect<A, E, HobbotsRepository | TaskRepositor
 const now = "2026-11-03T00:00:00.000Z";
 const later = "2026-11-03T00:05:00.000Z";
 const PIP = AgentId.make("pip");
-const threadId = ThreadId.make("first-run");
+const channelId = ChannelId.make("first-run");
 const top = TaskIdSchema.make("review");
 const work = TaskIdSchema.make("commit");
 const attemptId = AttemptId.make("a-commit");
@@ -67,13 +67,13 @@ const turnRunning = (milestones: ReadonlyArray<string> = []) =>
         createdAt: now,
       }),
     );
-    yield* repo.upsertThread(
-      new Thread({ id: threadId, agentId: PIP, title: "First run", createdAt: now, updatedAt: now }),
+    yield* repo.upsertChannel(
+      new Channel({ id: channelId, ownerHobId: PIP, title: "First run", createdAt: now, updatedAt: now }),
     );
     const tasks = yield* TaskRepository;
     const task = (id: TaskId, parentId: TaskId | null, milestones: ReadonlyArray<string>) =>
       tasks.createTask({
-        task: { id, ownerId: PIP, parentId, threadId, brief: `Brief for ${id}`, dependsOn: [], createdAt: now },
+        task: { id, ownerId: PIP, parentId, channelId, brief: `Brief for ${id}`, dependsOn: [], createdAt: now },
         delegation: null,
         milestones: milestones.map((title) => ({ id: MilestoneId.make(`${id}-${title}`), title })),
       });

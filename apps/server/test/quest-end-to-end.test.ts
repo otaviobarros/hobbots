@@ -21,14 +21,14 @@ import {
   Agent,
   AgentId,
   type ApprovalRequest,
+  Channel,
+  ChannelId,
   EMPTY_HOB_POLICY,
   type Message,
   OWNER_ACTOR,
   OWNER_USER_ID,
   type Task,
   type TaskTree,
-  Thread,
-  ThreadId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Backpack, Dispatcher } from "@hobbots/inbox";
@@ -70,7 +70,7 @@ const QUILL = AgentId.make("quill");
 const ADA = AgentId.make("ada");
 const ROOK = AgentId.make("rook");
 const PIP = AgentId.make("pip");
-const threadId = ThreadId.make("black-friday");
+const channelId = ChannelId.make("black-friday");
 /** A prompt with this line of its own waits, before it does anything, until its hub lets it go on. */
 const HOLD = "fake:hold";
 /** A prompt with this line waits like HOLD once its session has started, so a restart can resume it. */
@@ -223,13 +223,13 @@ const scripted = (script: Script) =>
     }),
   ).pipe(Layer.provide(FakeRuntimeLayer().pipe(Layer.provide(PolicyEngine.node))));
 
-/** Aldric, his thread, and the hobs he can bring in, stored once in the shared database. */
+/** Aldric, his channel, and the hobs he can bring in, stored once in the shared database. */
 const party = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
   const all = [hob(ALDRIC, "Aldric"), hob(QUILL, "Quill"), hob(ADA, "Ada"), hob(ROOK, "Rook"), hob(PIP, "Pip")];
   for (const each of all) yield* repo.insertAgent(each);
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: ALDRIC, title: "Black Friday", createdAt: now, updatedAt: now }),
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, ownerHobId: ALDRIC, title: "Black Friday", createdAt: now, updatedAt: now }),
   );
 });
 
@@ -334,11 +334,12 @@ const retry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-const send = (prompt: ReadonlyArray<string>) => ChatService.use((chat) => chat.sendPrompt(threadId, prompt.join("\n")));
+const send = (prompt: ReadonlyArray<string>) =>
+  ChatService.use((chat) => chat.sendPrompt(channelId, prompt.join("\n")));
 
-const messages = () => HobbotsRepository.use((repo) => repo.listMessages(threadId));
+const messages = () => HobbotsRepository.use((repo) => repo.listMessages(channelId));
 
-/** The thread's messages once `ready` holds for them, every reply ended. */
+/** The channel's messages once `ready` holds for them, every reply ended. */
 const messagesWhen = (ready: (all: ReadonlyArray<Message>) => boolean) =>
   retry(
     Effect.gen(function* () {
@@ -352,7 +353,7 @@ const messagesWhen = (ready: (all: ReadonlyArray<Message>) => boolean) =>
 const treeWhen = (ready: (tree: TaskTree) => boolean) =>
   retry(
     Effect.gen(function* () {
-      const [tree] = yield* TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
+      const [tree] = yield* TaskRepository.use((tasks) => tasks.readChannelTrees(channelId));
       return tree !== undefined && ready(tree) ? tree : yield* Effect.fail("not yet" as const);
     }),
   );
@@ -933,7 +934,7 @@ describe("a hub that stops mid-Quest", () => {
     await first.run(messagesWhen((all) => all.length === 2));
     await first.run(send(["Push the branch", push]));
     const request = await first.run(pendingFrom(ALDRIC));
-    const [tree] = await first.run(TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)));
+    const [tree] = await first.run(TaskRepository.use((tasks) => tasks.readChannelTrees(channelId)));
     const top = tree?.tasks[0];
     expect(request).toMatchObject({ rootTaskId: top?.id, grantable: true });
     await first.run(
@@ -947,7 +948,7 @@ describe("a hub that stops mid-Quest", () => {
     // Hobbots stops while Quill works. Next start: Aldric pushes again without asking you.
     const second = await start(database, [{ on: `You work on Task `, lines: [push] }]);
     await second.run(send(["Push again", push]));
-    const asked = () => second.run(ApprovalService.use((approvals) => approvals.listForThread(threadId)));
+    const asked = () => second.run(ApprovalService.use((approvals) => approvals.listForChannel(channelId)));
     expect((await asked()).filter((each) => each.agentId === ALDRIC).map((each) => each.id)).toEqual([request.id]);
     const [grant] = await second.run(GrantService.use((grants) => grants.list({ agentId: ALDRIC })));
     expect(grant).toMatchObject({ lifetime: "task", taskId: top.id });

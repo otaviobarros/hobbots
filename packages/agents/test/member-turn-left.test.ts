@@ -1,7 +1,7 @@
 import { Agent, AgentId, OWNER_ACTOR } from "@hobbots/domain";
 import { Option } from "effect";
 import { describe, expect, it } from "vitest";
-import { memberTurnLeft } from "../src/thread-runner.ts";
+import { memberTurnLeft } from "../src/channel-runner.ts";
 
 const at = (iso: string) => Date.parse(iso);
 const launched = at("2026-11-14T10:00:00.000Z");

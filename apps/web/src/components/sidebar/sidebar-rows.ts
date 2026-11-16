@@ -1,14 +1,14 @@
-import type { Actor, Agent, SidebarPlace, Thread, ThreadId, User } from "@hobbots/domain";
+import type { Actor, Agent, Channel, ChannelId, SidebarPlace, User } from "@hobbots/domain";
 import { formatMonthDay, formatTime } from "../../lib/format.ts";
 import { messages as copy } from "./messages.ts";
 
 /** A face in a camp's stack: a hob's tile or a person's initials. */
 export type Face = { readonly _tag: "hob"; readonly hob: Agent } | { readonly _tag: "person"; readonly person: User };
 
-/** A camp's row: where the hub put it, the thread it shows and the hob whose camp it is. */
+/** A camp's row: where the hub put it, the channel it shows and the hob whose camp it is. */
 export interface CampRow {
   readonly place: SidebarPlace;
-  readonly thread: Thread;
+  readonly channel: Channel;
   readonly hob: Agent;
   /** The first two members other than you, for a shared camp's stack. */
   readonly faces: ReadonlyArray<Face>;
@@ -21,19 +21,19 @@ export interface CampRow {
 }
 
 /**
- * How many replies you have not read: the hub's count, kept in step with the unread threads the
- * event stream follows, so a reply that just landed counts and a thread you just read does not.
+ * How many replies you have not read: the hub's count, kept in step with the unread channels the
+ * event stream follows, so a reply that just landed counts and a channel you just read does not.
  */
-export const unreadCount = (place: SidebarPlace, unread: ReadonlySet<ThreadId> | undefined): number => {
+export const unreadCount = (place: SidebarPlace, unread: ReadonlySet<ChannelId> | undefined): number => {
   if (unread === undefined) return place.unread;
-  return unread.has(place.threadId) ? Math.max(place.unread, 1) : 0;
+  return unread.has(place.channelId) ? Math.max(place.unread, 1) : 0;
 };
 
 /** A direct message's row: every hob you can talk to, with its chat once it has one. */
 export interface DirectRow {
   readonly hob: Agent;
   readonly place: SidebarPlace | undefined;
-  readonly chat: Thread | undefined;
+  readonly chat: Channel | undefined;
 }
 
 const faceOf =
@@ -71,37 +71,37 @@ export const authorName = ({
 };
 
 /**
- * The camps' rows in the hub's order, each joined with its thread and hob. A camp whose thread or
+ * The camps' rows in the hub's order, each joined with its channel and hob. A camp whose channel or
  * hob this client has not loaded yet waits for them, so a row never shows half a camp.
  */
 export const campRows = ({
   places,
-  threads,
+  channels,
   hobs,
   you,
   people,
   unread,
 }: {
   readonly places: ReadonlyArray<SidebarPlace>;
-  readonly threads: ReadonlyMap<ThreadId, Thread>;
+  readonly channels: ReadonlyMap<ChannelId, Channel>;
   readonly hobs: ReadonlyArray<Agent>;
   readonly you: User | undefined;
   readonly people: ReadonlyArray<User>;
-  readonly unread: ReadonlySet<ThreadId> | undefined;
+  readonly unread: ReadonlySet<ChannelId> | undefined;
 }): ReadonlyArray<CampRow> =>
   places.flatMap((place) => {
-    const thread = threads.get(place.threadId);
+    const channel = channels.get(place.channelId);
     const hob = hobs.find((each) => each.id === place.agentId);
-    if (thread === undefined || hob === undefined) return [];
+    if (channel === undefined || hob === undefined) return [];
     return [
       {
         place,
-        thread,
+        channel,
         hob,
         faces: place.others.flatMap(faceOf(hobs, people)).slice(0, 2),
         needs: place.needsYou,
         unread: unreadCount(place, unread),
-        lastAuthor: authorName({ author: thread.lastAuthor, you, hobs, people }),
+        lastAuthor: authorName({ author: channel.lastAuthor, you, hobs, people }),
       },
     ];
   });
@@ -110,15 +110,15 @@ export const campRows = ({
 export const directRows = ({
   hobs,
   places,
-  threads,
+  channels,
 }: {
   readonly hobs: ReadonlyArray<Agent>;
   readonly places: ReadonlyArray<SidebarPlace>;
-  readonly threads: ReadonlyMap<ThreadId, Thread>;
+  readonly channels: ReadonlyMap<ChannelId, Channel>;
 }): ReadonlyArray<DirectRow> =>
   hobs.map((hob) => {
     const place = places.find((each) => each.agentId === hob.id);
-    return { hob, place, chat: place === undefined ? undefined : threads.get(place.threadId) };
+    return { hob, place, chat: place === undefined ? undefined : channels.get(place.channelId) };
   });
 
 /** A row's time: the time of day for today, else the day. */

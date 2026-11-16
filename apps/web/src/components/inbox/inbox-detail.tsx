@@ -11,13 +11,13 @@ import {
   type AnyOperation,
   type ApprovalRequest,
   type BackpackItem,
+  type ChannelId,
   exactAction,
   type FailedTask,
   type HubQuestion,
   type MemoryShare,
   type Quest,
   type TaskId,
-  type ThreadId,
 } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
@@ -57,7 +57,7 @@ import { ProposalDecision, ProposalDiff } from "../skill-review/proposal-card.ts
 import { proposalFoot } from "../skill-review/proposal-model.ts";
 import { webAskOf } from "../web/web-ask.ts";
 import { EntryPortrait } from "./entry-portrait.tsx";
-import { entryRow, entryThread, type InboxEntry, type InboxRow } from "./inbox-entries.ts";
+import { entryChannel, entryRow, type InboxEntry, type InboxRow } from "./inbox-entries.ts";
 import { InboxIcon } from "./inbox-icons.tsx";
 import { expiryText } from "./inbox-items.ts";
 import { messages } from "./messages.ts";
@@ -66,7 +66,7 @@ import type { InboxDirectory } from "./use-inbox-directory.ts";
 const copy = messages;
 
 /**
- * What the detail pane needs besides the entry: names for hobs and threads, each Task's quest, and
+ * What the detail pane needs besides the entry: names for hobs and channels, each Task's quest, and
  * where focus goes once an entry decided here leaves Needs you (#988).
  */
 interface DetailContext {
@@ -78,14 +78,14 @@ interface DetailContext {
 
 /**
  * One entry in full beside the list, the same shape for every kind: who asked as a chain with the
- * kind, what it asks as the title and why, then its facts (Quest, Thread, Asked by, When) and the
- * kind's own controls, with Open in the chat when it has a thread. A request shows its exact action
+ * kind, what it asks as the title and why, then its facts (Quest, Channel, Asked by, When) and the
+ * kind's own controls, with Open in the chat when it has a channel. A request shows its exact action
  * once, then decides with the chat's own buttons and high-risk check, so deciding here works exactly
  * as it does there (ADR 015); each fact shows once.
  */
 export function EntryDetail({ entry, hob, ...context }: { entry: InboxEntry; hob: Agent | undefined } & DetailContext) {
-  const thread = entryThread(entry);
-  const lead = thread === null ? undefined : context.directory.threadHob(thread);
+  const channel = entryChannel(entry);
+  const lead = channel === null ? undefined : context.directory.channelHob(channel);
   const row = entryRow(entry, context.directory.hobName, lead, context.now);
   switch (entry.kind) {
     case "approval":
@@ -126,8 +126,8 @@ function ApprovalDetail({
   now,
 }: { request: ApprovalRequest; hob: Agent; row: InboxRow } & DetailContext) {
   const pending = request.state === "pending";
-  // A party member asks in its lead's thread, whose hob is known only once the threads load.
-  const chatHob = directory.threadHob(request.threadId) ?? (request.messageId !== null ? request.agentId : undefined);
+  // A party member asks in its lead's channel, whose hob is known only once the channels load.
+  const chatHob = directory.channelHob(request.channelId) ?? (request.messageId !== null ? request.agentId : undefined);
   const task = request.taskId ?? request.rootTaskId;
   const expiry = pending ? expiryText(request.expiresAt, now) : "";
   const asked = formatWhen(request.createdAt, now);
@@ -141,14 +141,14 @@ function ApprovalDetail({
       chat={
         hob.status === "retired"
           ? undefined
-          : chatLink(chatHob, request.threadId, request.messageId === null ? null : { messageId: request.messageId })
+          : chatLink(chatHob, request.channelId, request.messageId === null ? null : { messageId: request.messageId })
       }
     >
       <ActionBlock action={exactAction(request)} command={COMMANDS.has(request.operation)} />
       <Facts
         rows={[
           [copy.detail.quest, questName(task === null ? undefined : questOf(task), directory)],
-          [copy.detail.thread, directory.threadTitle(request.threadId)],
+          [copy.detail.channel, directory.channelTitle(request.channelId)],
           [copy.detail.askedBy, row.chain.join(copy.row.arrow)],
           [copy.detail.when, expiry === "" ? asked : copy.detail.whenExpires({ asked, expiry }), row.tone === "urgent"],
           [copy.detail.decided, request.decidedAt === null ? undefined : formatWhen(request.decidedAt, now)],
@@ -220,7 +220,7 @@ function QuestionDetail({
           ? copy.question.passedBy({ names: question.chain.map(directory.hobName) })
           : copy.question.direct
       }
-      chat={chatLink(chatHob, task.threadId, { taskId: task.id }, copy.detail.openQuest)}
+      chat={chatLink(chatHob, task.channelId, { taskId: task.id }, copy.detail.openQuest)}
     >
       <div className="flex items-start gap-3">
         <EntryPortrait hob={hob} device={false} waiting={false} />
@@ -270,7 +270,7 @@ function HubQuestionDetail({
       portrait={<EntryPortrait hob={undefined} device={false} hub waiting large />}
       row={{ ...row, what: copy.question.title({ name: hub }) }}
       why={copy.question.fromHub}
-      chat={question.chat === null ? undefined : chatLink(question.chat.agentId, question.chat.threadId, null)}
+      chat={question.chat === null ? undefined : chatLink(question.chat.agentId, question.chat.channelId, null)}
     >
       <div className="flex items-start gap-3">
         <EntryPortrait hob={undefined} device={false} hub waiting={false} />
@@ -281,7 +281,7 @@ function HubQuestionDetail({
       <Facts
         rows={[
           [copy.detail.about, shown.title],
-          [copy.detail.thread, question.chat === null ? undefined : directory.threadTitle(question.chat.threadId)],
+          [copy.detail.channel, question.chat === null ? undefined : directory.channelTitle(question.chat.channelId)],
           [copy.detail.when, formatWhen(question.createdAt, now)],
         ]}
       />
@@ -315,7 +315,7 @@ function StuckDetail({
       why={blockerWhy(item, choice.blocker, hob.name)}
       chat={chatLink(
         item.recipientId,
-        item.threadId,
+        item.channelId,
         item.taskId === null ? null : { taskId: item.taskId },
         item.taskId === null ? copy.detail.openChat : copy.detail.openQuest,
       )}
@@ -329,7 +329,7 @@ function StuckDetail({
         rows={[
           [copy.detail.quest, questName(item.taskId === null ? undefined : questOf(item.taskId), directory)],
           [copy.detail.work, row.what],
-          [copy.detail.thread, item.threadId === null ? undefined : directory.threadTitle(item.threadId)],
+          [copy.detail.channel, item.channelId === null ? undefined : directory.channelTitle(item.channelId)],
           [copy.detail.tries, row.when],
         ]}
       />
@@ -376,13 +376,13 @@ function FailedDetail({
       portrait={<EntryPortrait hob={hob} device={false} waiting large />}
       row={{ ...row, what: copy.failedTask.title({ name: owner }) }}
       why={copy.failedTask.why({ lead: directory.hobName(leadId) })}
-      chat={chatLink(leadId, task.threadId, null)}
+      chat={chatLink(leadId, task.channelId, null)}
     >
       <Facts
         rows={[
           [copy.detail.quest, questName(questOf(task.id), directory)],
           [copy.detail.task, row.what],
-          [copy.detail.thread, task.threadId === null ? undefined : directory.threadTitle(task.threadId)],
+          [copy.detail.channel, task.channelId === null ? undefined : directory.channelTitle(task.channelId)],
           [copy.detail.when, formatWhen(task.updatedAt, now)],
         ]}
       />
@@ -390,11 +390,11 @@ function FailedDetail({
         <Button variant="default" disabled={retry.isPending || retry.isSuccess} onClick={send}>
           {retry.isPending ? copy.failedTask.retrying : copy.failedTask.retry}
         </Button>
-        {task.threadId !== null && (
+        {task.channelId !== null && (
           <Button variant="outline" asChild>
             <Link
-              to="/hobs/$hobId/threads/$threadId"
-              params={{ hobId: leadId, threadId: task.threadId }}
+              to="/hobs/$hobId/channels/$channelId"
+              params={{ hobId: leadId, channelId: task.channelId }}
               search={questSearch(task.id)}
               className="no-underline"
             >
@@ -428,14 +428,14 @@ function CharmCallDetail({
 }: { waiting: WaitingCharmCall; hob: Agent | undefined; row: InboxRow } & DetailContext) {
   const { call, task } = waiting;
   const name = directory.hobName(call.agentId);
-  const lead = task.threadId === null ? undefined : (directory.threadHob(task.threadId) ?? task.ownerId);
+  const lead = task.channelId === null ? undefined : (directory.channelHob(task.channelId) ?? task.ownerId);
   return (
     <DetailFrame
       label={copy.charmCall.label({ name, charm: call.charm })}
       portrait={<EntryPortrait hob={hob} device={false} waiting large />}
       row={row}
       why={lostWhat(waiting)}
-      chat={chatLink(lead, task.threadId, { taskId: task.id }, copy.detail.openQuest)}
+      chat={chatLink(lead, task.channelId, { taskId: task.id }, copy.detail.openQuest)}
     >
       <Facts
         rows={[
@@ -488,7 +488,7 @@ function ShareDetail({
       portrait={<EntryPortrait hob={hob} device={false} waiting={row.tag === "needs-you"} large />}
       row={row}
       why={memoryCopy.review.route({ who, destination: shareDestination(share, hobs) })}
-      chat={chatLink(share.agentId, share.threadId, share.messageId === null ? null : { messageId: share.messageId })}
+      chat={chatLink(share.agentId, share.channelId, share.messageId === null ? null : { messageId: share.messageId })}
       foot={
         share.scope._tag === "Project"
           ? memoryCopy.review.footProject({ name: scopeName(share.scope, hobs) })
@@ -529,7 +529,7 @@ function ProposalDetail({
       why={proposal.why}
       chat={chatLink(
         proposal.agentId,
-        proposal.threadId,
+        proposal.channelId,
         proposal.messageId === null ? null : { messageId: proposal.messageId },
       )}
       foot={proposal.state === "waiting" ? proposalFoot(view) : ""}
@@ -543,7 +543,7 @@ function ProposalDetail({
             skillCopy.learnedFrom,
             proposal.memoryPages.length > 0
               ? proposal.memoryPages.join(", ")
-              : proposal.threadId !== null
+              : proposal.channelId !== null
                 ? skillCopy.learnedChat
                 : undefined,
           ],
@@ -575,15 +575,15 @@ function HobProposalDetail({
       row={row}
       why={hobProposalCopy.why}
       chat={chatLink(
-        (proposal.threadId === null ? undefined : directory.threadHob(proposal.threadId)) ?? proposal.agentId,
-        proposal.threadId,
+        (proposal.channelId === null ? undefined : directory.channelHob(proposal.channelId)) ?? proposal.agentId,
+        proposal.channelId,
         proposal.messageId === null ? null : { messageId: proposal.messageId },
       )}
     >
       <Facts
         rows={[
           [copy.detail.quest, questName(proposal.taskId === null ? undefined : questOf(proposal.taskId), directory)],
-          [copy.detail.thread, proposal.threadId === null ? undefined : directory.threadTitle(proposal.threadId)],
+          [copy.detail.channel, proposal.channelId === null ? undefined : directory.channelTitle(proposal.channelId)],
           [copy.detail.askedBy, row.chain.join(copy.row.arrow)],
           [copy.detail.when, formatWhen(proposal.createdAt, now)],
           [copy.detail.decided, proposal.settledAt === null ? undefined : formatWhen(proposal.settledAt, now)],
@@ -705,19 +705,19 @@ function Facts({ rows }: { rows: ReadonlyArray<readonly [string, string | undefi
 }
 
 /**
- * Open in the chat, for an entry whose thread and chat are known. An entry about a Task opens the
+ * Open in the chat, for an entry whose channel and chat are known. An entry about a Task opens the
  * quest in that chat's sheet instead (ADR 027).
  */
 const chatLink = (
   hobId: AgentId | undefined,
-  threadId: ThreadId | null,
+  channelId: ChannelId | null,
   at: { readonly messageId: string } | { readonly taskId: string } | null,
   label: string = copy.detail.openChat,
 ): ReactNode =>
-  hobId === undefined || threadId === null ? undefined : (
+  hobId === undefined || channelId === null ? undefined : (
     <Link
-      to="/hobs/$hobId/threads/$threadId"
-      params={{ hobId, threadId }}
+      to="/hobs/$hobId/channels/$channelId"
+      params={{ hobId, channelId }}
       search={at === null ? {} : "taskId" in at ? questSearch(at.taskId) : { message: at.messageId }}
       className="-ms-2 inline-flex items-center gap-1.5 rounded-control px-2 py-1 text-link no-underline hover:bg-hover"
     >

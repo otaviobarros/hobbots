@@ -1,10 +1,10 @@
-import type { AgentId, ThreadId } from "@hobbots/domain";
+import type { AgentId, ChannelId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { OverflowTooltip } from "@hobbots/ui/components/overflow-tooltip";
 import { focusElement } from "@hobbots/ui/lib/restore-focus";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
-import { threadTasksQuery } from "../../api/tasks.ts";
+import { channelTasksQuery } from "../../api/tasks.ts";
 import { laneRoom } from "../lanes/lane-model.ts";
 import { FlagIcon } from "../quest/flag-icon.tsx";
 import { type Pins, useFollowedTrees, useHobLookup } from "../quest/use-work.ts";
@@ -22,22 +22,22 @@ import { type QuestView, useQuestMoves } from "./quest-search.ts";
  */
 export function QuestWorkbench({
   hobId,
-  threadId,
+  channelId,
   view,
   pins,
 }: {
   hobId: AgentId;
-  threadId: ThreadId;
+  channelId: ChannelId;
   view: QuestView;
   pins: Pins;
 }) {
-  const followed = useFollowedTrees(threadId, pins.pinned);
-  const read = useQuery(threadTasksQuery(threadId));
-  const found = findTask([...followed.thread, ...followed.elsewhere], view.taskId);
+  const followed = useFollowedTrees(channelId, pins.pinned);
+  const read = useQuery(channelTasksQuery(channelId));
+  const found = findTask([...followed.channel, ...followed.elsewhere], view.taskId);
   const hobs = useHobLookup();
   const tree = found?.tree;
   const top = tree?.tasks[0];
-  const moves = useQuestMoves(hobId, threadId, top?.id);
+  const moves = useQuestMoves(hobId, channelId, top?.id);
   const heading = useRef<HTMLHeadingElement>(null);
   // The heading takes focus once the quest is read, and again only for another quest.
   const topId = top?.id;

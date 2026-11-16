@@ -20,14 +20,14 @@ import { UserSession } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
   EMPTY_HOB_POLICY,
   type Message,
   OWNER_ACTOR,
   OWNER_USER_ID,
   type RuntimeKind,
   type TaskTree,
-  Thread,
-  ThreadId,
   WINDOW_DEVICE_ID,
 } from "@hobbots/domain";
 import { Dispatcher } from "@hobbots/inbox";
@@ -67,8 +67,8 @@ const now = "2026-11-03T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
 const PIP = AgentId.make("pip");
-const aldricThread = ThreadId.make("aldric-thread");
-const pipThread = ThreadId.make("pip-thread");
+const aldricChannel = ChannelId.make("aldric-channel");
+const pipChannel = ChannelId.make("pip-channel");
 
 const hob = (id: AgentId, name: string, runtime: RuntimeKind) =>
   new Agent({
@@ -129,10 +129,10 @@ const Party = Layer.effectDiscard(
     yield* repo.insertAgent(hob(QUILL, "Quill", "claude-code"));
     yield* repo.insertAgent(hob(PIP, "Pip", "codex"));
     for (const [id, agentId, title] of [
-      [aldricThread, ALDRIC, "Launch"],
-      [pipThread, PIP, "Copy"],
+      [aldricChannel, ALDRIC, "Launch"],
+      [pipChannel, PIP, "Copy"],
     ] as const) {
-      yield* repo.upsertThread(new Thread({ id, agentId, title, createdAt: now, updatedAt: now }));
+      yield* repo.upsertChannel(new Channel({ id, ownerHobId: agentId, title, createdAt: now, updatedAt: now }));
     }
   }),
 );
@@ -211,24 +211,24 @@ const eventually = (holds: () => boolean) =>
 
 const hubLine = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-const send = (threadId: ThreadId, prompt: ReadonlyArray<string>) =>
-  ChatService.use((chat) => chat.sendPrompt(threadId, prompt.join("\n")));
+const send = (channelId: ChannelId, prompt: ReadonlyArray<string>) =>
+  ChatService.use((chat) => chat.sendPrompt(channelId, prompt.join("\n")));
 
-/** The thread's Task tree once `ready` holds for it and no Attempt is live. */
-const settledTree = (threadId: ThreadId, ready: (tree: TaskTree) => boolean) =>
+/** The channel's Task tree once `ready` holds for it and no Attempt is live. */
+const settledTree = (channelId: ChannelId, ready: (tree: TaskTree) => boolean) =>
   retry(
     Effect.gen(function* () {
-      const [tree] = yield* TaskRepository.use((tasks) => tasks.readThreadTrees(threadId));
+      const [tree] = yield* TaskRepository.use((tasks) => tasks.readChannelTrees(channelId));
       const live = tree?.attempts.some((each) => each.state === "starting" || each.state === "running");
       return tree !== undefined && !live && ready(tree) ? tree : yield* Effect.fail("not yet" as const);
     }),
   );
 
-/** The thread's messages once `ready` holds for them, every reply ended. */
-const messagesWhen = (threadId: ThreadId, ready: (all: ReadonlyArray<Message>) => boolean) =>
+/** The channel's messages once `ready` holds for them, every reply ended. */
+const messagesWhen = (channelId: ChannelId, ready: (all: ReadonlyArray<Message>) => boolean) =>
   retry(
     Effect.gen(function* () {
-      const all = yield* HobbotsRepository.use((repo) => repo.listMessages(threadId));
+      const all = yield* HobbotsRepository.use((repo) => repo.listMessages(channelId));
       const ended = all.every((m) => m.status !== "streaming" && m.status !== "stopping");
       return ended && ready(all) ? all : yield* Effect.fail("not yet" as const);
     }),
@@ -241,7 +241,7 @@ describe("delegating between Codex and Claude hobs", () => {
   }, async () => {
     const run = await start();
     await run(
-      send(aldricThread, [
+      send(aldricChannel, [
         "Get the copy checked",
         hubLine("delegate_task", {
           key: "to-pip",
@@ -254,7 +254,7 @@ describe("delegating between Codex and Claude hobs", () => {
       ]),
     );
     const tree = await run(
-      settledTree(aldricThread, (each) =>
+      settledTree(aldricChannel, (each) =>
         each.tasks.some((task) => task.ownerId === PIP && task.state === "completed"),
       ),
     );
@@ -275,7 +275,7 @@ describe("delegating between Codex and Claude hobs", () => {
   }, async () => {
     const run = await start();
     await run(
-      send(pipThread, [
+      send(pipChannel, [
         "Get the copy drafted",
         hubLine("delegate_task", {
           key: "to-quill",
@@ -288,14 +288,16 @@ describe("delegating between Codex and Claude hobs", () => {
       ]),
     );
     const tree = await run(
-      settledTree(pipThread, (each) => each.tasks.some((task) => task.ownerId === QUILL && task.state === "completed")),
+      settledTree(pipChannel, (each) =>
+        each.tasks.some((task) => task.ownerId === QUILL && task.state === "completed"),
+      ),
     );
     expect(tree.tasks.find((task) => task.ownerId === QUILL)?.result?.summary).toBe("Quill drafted the copy");
 
     // Pip's call to delegate_task was answered by the hub, and showed as a step of its reply.
     const delegated = standInTurns(codexFolder).find((turn) => turn.input.includes("Get the copy drafted"));
     expect(delegated?.answers).toEqual([expect.objectContaining({ tool: "delegate_task", success: true })]);
-    const messages = await run(messagesWhen(pipThread, (all) => all.some((m) => m.role === "assistant")));
+    const messages = await run(messagesWhen(pipChannel, (all) => all.some((m) => m.role === "assistant")));
     const reply = messages.find((m) => m.role === "assistant");
     expect(reply?.steps).toContainEqual(expect.objectContaining({ kind: "tool", state: "done" }));
 

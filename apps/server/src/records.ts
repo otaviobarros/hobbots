@@ -1,12 +1,12 @@
 import { ArtifactContents, BriefLog, Records } from "@hobbots/agents";
 import { ArtifactNotFound, ArtifactReviewChangeRefused, DecisionChangeRefused, HobbotsApi } from "@hobbots/api";
-import type { DecisionRefused, ThreadId } from "@hobbots/domain";
+import type { ChannelId, DecisionRefused } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 
 /** A refused decision command, as the API answers it. */
-const refusedIn = (threadId: ThreadId) => (refused: DecisionRefused) =>
-  Effect.fail(new DecisionChangeRefused({ threadId, reason: refused.reason, message: refused.message }));
+const refusedIn = (channelId: ChannelId) => (refused: DecisionRefused) =>
+  Effect.fail(new DecisionChangeRefused({ channelId, reason: refused.reason, message: refused.message }));
 
 // A chat's or camp's decisions, artifacts and brief (ADR 037), for user sessions only (PE-006). A
 // hub without records or briefs, as in some tests, shows none and records none.
@@ -17,8 +17,8 @@ export const RecordsHandlers = HttpApiBuilder.group(HobbotsApi, "records", (hand
     // A hub that keeps no activity, as in some tests, has no artifact to show.
     const contents = Option.getOrElse(yield* Effect.serviceOption(ArtifactContents), () =>
       ArtifactContents.of({
-        versions: (threadId, artifactId) => Effect.fail(new ArtifactNotFound({ threadId, artifactId })),
-        content: (threadId, artifactId) => Effect.fail(new ArtifactNotFound({ threadId, artifactId })),
+        versions: (channelId, artifactId) => Effect.fail(new ArtifactNotFound({ channelId, artifactId })),
+        content: (channelId, artifactId) => Effect.fail(new ArtifactNotFound({ channelId, artifactId })),
       }),
     );
     const records = Option.getOrElse(found, () =>
@@ -35,38 +35,38 @@ export const RecordsHandlers = HttpApiBuilder.group(HobbotsApi, "records", (hand
       }),
     );
     return handlers.handleAll({
-      decisions: ({ params }) => records.decisionsOf(params.threadId),
+      decisions: ({ params }) => records.decisionsOf(params.channelId),
       recordDecision: ({ params, payload }) =>
         records
-          .recordYours(params.threadId, payload)
-          .pipe(Effect.catchTag("DecisionRefused", refusedIn(params.threadId))),
+          .recordYours(params.channelId, payload)
+          .pipe(Effect.catchTag("DecisionRefused", refusedIn(params.channelId))),
       crossOutDecision: ({ params }) =>
         records
-          .crossOut(params.threadId, params.decisionId)
-          .pipe(Effect.catchTag("DecisionRefused", refusedIn(params.threadId))),
-      // Read once the thread is known, so a thread that is not there is refused.
+          .crossOut(params.channelId, params.decisionId)
+          .pipe(Effect.catchTag("DecisionRefused", refusedIn(params.channelId))),
+      // Read once the channel is known, so a channel that is not there is refused.
       artifacts: ({ params }) =>
-        Effect.andThen(records.decisionsOf(params.threadId), records.artifactsOf(params.threadId)),
+        Effect.andThen(records.decisionsOf(params.channelId), records.artifactsOf(params.channelId)),
       reviewArtifact: ({ params, payload }) =>
-        records.review(params.threadId, params.artifactId, payload.outcome).pipe(
+        records.review(params.channelId, params.artifactId, payload.outcome).pipe(
           Effect.catchTag("ArtifactReviewRefused", (refused) =>
             Effect.fail(
               new ArtifactReviewChangeRefused({
-                threadId: params.threadId,
+                channelId: params.channelId,
                 artifactId: refused.artifactId,
                 reason: refused.reason,
               }),
             ),
           ),
         ),
-      artifactVersions: ({ params }) => contents.versions(params.threadId, params.artifactId),
-      artifactContent: ({ params }) => contents.content(params.threadId, params.artifactId, params.version),
+      artifactVersions: ({ params }) => contents.versions(params.channelId, params.artifactId),
+      artifactContent: ({ params }) => contents.content(params.channelId, params.artifactId, params.version),
       brief: ({ params }) =>
         Effect.andThen(
-          records.decisionsOf(params.threadId),
+          records.decisionsOf(params.channelId),
           Option.isNone(briefs)
             ? Effect.succeed(null)
-            : briefs.value.briefOf(params.threadId).pipe(Effect.map(Option.getOrNull)),
+            : briefs.value.briefOf(params.channelId).pipe(Effect.map(Option.getOrNull)),
         ),
     });
   }),

@@ -126,7 +126,7 @@ function QuestCard({ quest }: { quest: LedQuest }) {
   return (
     <QuestLink
       quest={group.quest}
-      threadAgentId={group.threadAgentId}
+      channelAgentId={group.channelAgentId}
       taskId={group.quest.taskId}
       className="flex min-w-0 flex-col gap-1.5 rounded-control bg-deep px-3 py-2.5 text-text-strong no-underline hover:bg-hover hover:text-text-strong"
     >

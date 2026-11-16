@@ -1,4 +1,4 @@
-import type { MessageId, ThreadId } from "@hobbots/domain";
+import type { ChannelId, MessageId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { charmCallsQuery, useSettleCharmCall } from "../../api/charm-calls.ts";
@@ -12,19 +12,19 @@ const copy = messages.charmCall;
  * same call to the same place. Shows nothing for a step that is not a Charm call.
  */
 export function SettleCharmCall({
-  threadId,
+  channelId,
   messageId,
   stepId,
 }: {
-  threadId: ThreadId;
+  channelId: ChannelId;
   messageId: MessageId;
   stepId: string;
 }) {
   const charmCall = useQuery({
-    ...charmCallsQuery(threadId),
+    ...charmCallsQuery(channelId),
     select: (all) => all.find((c) => c.messageId === messageId && c.stepId === stepId),
   }).data;
-  const settle = useSettleCharmCall(threadId, messageId, stepId);
+  const settle = useSettleCharmCall(channelId, messageId, stepId);
   if (charmCall === undefined) return null;
   if (charmCall.state !== "uncertain" && charmCall.state !== "sending") {
     return (

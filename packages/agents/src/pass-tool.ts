@@ -11,11 +11,11 @@ import {
   TurnRequests,
 } from "@hobbots/domain";
 import { Effect, Ref, Schema } from "effect";
+import type { Reply } from "./channel-run.ts";
 import { hubAnswer } from "./charms.ts";
 import type { HobbotsRepository } from "./repository.ts";
 import type { HubTool, HubToolAnswer, HubTools } from "./runtime.ts";
 import type { Redactor } from "./secrets.ts";
-import type { Reply } from "./thread-run.ts";
 
 /**
  * The `pass` tool (ADR 039, One hob speaks at a time): a hob asked to answer that has nothing to add

@@ -4,14 +4,14 @@ import { readStored, removeStored, writeStored } from "../lib/storage.ts";
 import type { WaitingPlace } from "./outbox.ts";
 
 /**
- * The unsent text of each thread and fresh page. It lives outside the chat, so switching threads
+ * The unsent text of each channel and fresh page. It lives outside the chat, so switching channels
  * keeps it, and in browser storage, so a reload keeps it too. Typing changes memory at once and
  * storage a moment later, so a long draft stays quick to type in; a cleared draft leaves storage at
  * once, so a reload never brings back a message just sent, and leaving the page saves what waits.
- * Like the outbox, it is a store outside React because it must outlive each thread's chat view
+ * Like the outbox, it is a store outside React because it must outlive each channel's chat view
  * (ADR 016).
  */
-/** Where a draft is typed: a thread or fresh page, or the box of a quest's thread (#1390). */
+/** Where a draft is typed: a channel or fresh page, or the box of a quest's channel (#1390). */
 export type DraftPlace = WaitingPlace | `quest-${TaskId}`;
 
 const drafts = new Map<DraftPlace, string>();
@@ -84,7 +84,7 @@ export const appendDraft = (place: DraftPlace, content: string) => {
   writeDraft(place, now.trim() === "" ? content : `${now}\n${content}`);
 };
 
-/** A fresh page that became a thread takes its unsent text along. */
+/** A fresh page that became a channel takes its unsent text along. */
 export const moveDraft = (from: DraftPlace, to: DraftPlace) => {
   const text = readDraft(from);
   if (text === "") return;

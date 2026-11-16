@@ -1,4 +1,4 @@
-import type { AgentId, TaskTree, ThreadId } from "@hobbots/domain";
+import type { AgentId, ChannelId, TaskTree } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { messagesQuery } from "../../api/queries.ts";
@@ -66,12 +66,12 @@ function Chip({ chip, owner, hobs }: { chip: NoteChip; owner: AgentId; hobs: Hob
 /**
  * Your notes in a hob's lane (ADR 027): in the lead's, each message you sent while the work ran,
  * dashed, and whom the lead passed it to; in each lane a note reached, "← Your note, via Aldric".
- * Built from the hub's records and your messages in the work's thread, never from what a hob says.
+ * Built from the hub's records and your messages in the work's channel, never from what a hob says.
  */
 export function LaneNotes({ tree, ownerId, hobs }: { tree: TaskTree; ownerId: AgentId; hobs: HobLookup }) {
-  const threadId = tree.tasks[0]?.threadId ?? null;
+  const channelId = tree.tasks[0]?.channelId ?? null;
   const transcript =
-    useQuery({ ...messagesQuery(threadId ?? ("" as ThreadId)), enabled: threadId !== null }).data ?? [];
+    useQuery({ ...messagesQuery(channelId ?? ("" as ChannelId)), enabled: channelId !== null }).data ?? [];
   const chips = laneNoteChips(tree, transcript).get(ownerId) ?? [];
   if (chips.length === 0) return null;
   return (

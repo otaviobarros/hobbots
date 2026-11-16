@@ -25,6 +25,7 @@ import {
   Agent,
   AgentId,
   ApprovalId,
+  ChannelId,
   type CharmCall,
   Device,
   DeviceId,
@@ -37,7 +38,6 @@ import {
   OWNER_USER_ID,
   type PolicyDecision,
   type SafetyPreset,
-  ThreadId,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Layer, Option, Redacted, Schema } from "effect";
@@ -1354,7 +1354,7 @@ const callAs = (agentId: AgentId, w: World, folder: string, tool: string, input:
     const access = accessIn(folder, turn.preset ?? "balanced", turn.overrides);
     const tools = yield* charmToolsFor({
       agentId,
-      threadId: ThreadId.make("t1"),
+      channelId: ChannelId.make("t1"),
       messageId: MessageId.make("m1"),
       scope: () => "reply:m1",
       currentAccess: Effect.succeed(access),
@@ -1811,7 +1811,7 @@ const pushAs = (
     const access = pushAccess(folder);
     const tools = yield* charmToolsFor({
       agentId: FRODO,
-      threadId: ThreadId.make("t1"),
+      channelId: ChannelId.make("t1"),
       messageId: MessageId.make("m1"),
       scope: () => "reply:m1",
       currentAccess: Effect.succeed(access),

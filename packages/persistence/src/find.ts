@@ -1,5 +1,6 @@
 import { FindIndex, FindIndexLog, type FindScope } from "@hobbots/agents";
 import {
+  type ChannelId,
   FIND_KINDS,
   type FindKind,
   FoundMessage,
@@ -7,7 +8,6 @@ import {
   searchTerms,
   searchWords,
   snippetOf,
-  type ThreadId,
 } from "@hobbots/domain";
 import { Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -32,40 +32,40 @@ export const FindIndexLogLive = Layer.effect(
     const sql = yield* SqlClient.SqlClient;
     const journal = yield* EventJournal;
 
-    // A thread's rows, written again from its records as they stand now: its old rows go, and so do
-    // the rows of records that moved into it, which another thread's rows held until now.
-    const indexThread = (threadId: ThreadId, sequence: number) =>
+    // A channel's rows, written again from its records as they stand now: its old rows go, and so do
+    // the rows of records that moved into it, which another channel's rows held until now.
+    const indexChannel = (channelId: ChannelId, sequence: number) =>
       Effect.gen(function* () {
-        yield* sql`DELETE FROM find_records WHERE thread_id = ${threadId}
-          OR (kind = 'decision' AND record_id IN (SELECT id FROM decisions WHERE thread_id = ${threadId}))
-          OR (kind = 'artifact' AND record_id IN (SELECT id FROM artifacts WHERE thread_id = ${threadId}))
-          OR (kind = 'chapter' AND record_id IN (SELECT id FROM chapters WHERE thread_id = ${threadId}))`;
-        yield* sql`INSERT INTO find_records (kind, record_id, thread_id, chapter_id, message_id, title, body, state,
+        yield* sql`DELETE FROM find_records WHERE channel_id = ${channelId}
+          OR (kind = 'decision' AND record_id IN (SELECT id FROM decisions WHERE channel_id = ${channelId}))
+          OR (kind = 'artifact' AND record_id IN (SELECT id FROM artifacts WHERE channel_id = ${channelId}))
+          OR (kind = 'chapter' AND record_id IN (SELECT id FROM chapters WHERE channel_id = ${channelId}))`;
+        yield* sql`INSERT INTO find_records (kind, record_id, channel_id, chapter_id, message_id, title, body, state,
             actor_kind, actor_id, at, indexed_sequence)
-          SELECT 'decision', id, thread_id, chapter_id, source_message_id, text, text, state, actor_kind, actor_id,
+          SELECT 'decision', id, channel_id, chapter_id, source_message_id, text, text, state, actor_kind, actor_id,
             recorded_at, CAST(${sequence} AS BIGINT)
-          FROM decisions WHERE thread_id = ${threadId}`;
-        yield* sql`INSERT INTO find_records (kind, record_id, thread_id, chapter_id, message_id, title, detail, body,
+          FROM decisions WHERE channel_id = ${channelId}`;
+        yield* sql`INSERT INTO find_records (kind, record_id, channel_id, chapter_id, message_id, title, detail, body,
             artifact_kind, version, actor_kind, actor_id, at, indexed_sequence)
-          SELECT 'artifact', id, thread_id, chapter_id, CASE WHEN origin_kind = 'message' THEN origin_id END, title,
+          SELECT 'artifact', id, channel_id, chapter_id, CASE WHEN origin_kind = 'message' THEN origin_id END, title,
             locator, title || ' ' || locator, kind, latest_version, actor_kind, actor_id, updated_at,
             CAST(${sequence} AS BIGINT)
-          FROM artifacts WHERE thread_id = ${threadId}`;
-        yield* sql`INSERT INTO find_records (kind, record_id, thread_id, chapter_id, title, detail, body, number, at,
+          FROM artifacts WHERE channel_id = ${channelId}`;
+        yield* sql`INSERT INTO find_records (kind, record_id, channel_id, chapter_id, title, detail, body, number, at,
             indexed_sequence)
-          SELECT 'chapter', id, thread_id, id, title, summary, COALESCE(title, '') || ' ' || COALESCE(summary, ''),
+          SELECT 'chapter', id, channel_id, id, title, summary, COALESCE(title, '') || ' ' || COALESCE(summary, ''),
             number, started_at, CAST(${sequence} AS BIGINT)
           FROM chapters
-          WHERE thread_id = ${threadId} AND state <> 'moved' AND (title IS NOT NULL OR summary IS NOT NULL)`;
+          WHERE channel_id = ${channelId} AND state <> 'moved' AND (title IS NOT NULL OR summary IS NOT NULL)`;
       });
 
     return FindIndexLog.of({
       cursor: sqlOrDie(projectorCursor(sql, PROJECTOR)),
       readAfter: (sequence, limit) => journal.readAfter(sequence, limit),
-      index: (sequence, threads) =>
+      index: (sequence, channels) =>
         sqlOrDie(
           Effect.gen(function* () {
-            for (const threadId of threads) yield* indexThread(threadId, sequence);
+            for (const channelId of channels) yield* indexChannel(channelId, sequence);
             yield* moveProjectorCursor(sql, PROJECTOR, sequence);
           }).pipe(sql.withTransaction),
         ),
@@ -115,7 +115,7 @@ const dialects = (sqlite: string, pg: string, match: Match, rest: ReadonlyArray<
   pg: { text: pg.replace(/\?(\d+)/g, "$$$1"), params: [match.pg, ...rest] },
 });
 
-/** Who may be found: hobs that did not retire, in one thread (`?2`), or in every thread but private camps. */
+/** Who may be found: hobs that did not retire, in one channel (`?2`), or in every channel but private camps. */
 const scopeClause = (scope: FindScope) =>
   `a.status <> 'retired' AND ${scope.in === null ? "t.private = 0" : "t.id = ?2"}`;
 
@@ -129,23 +129,23 @@ const kindList = (kinds: ReadonlyArray<FindKind>) =>
 
 // A chapter's citation opens its first message, read now since a chapter gets messages after its row.
 // A decision's state is read now too, so one crossed out a moment ago already shows crossed out.
-const RECORD_COLUMNS = `r.kind, r.record_id, r.thread_id, r.title, r.detail, r.body,
+const RECORD_COLUMNS = `r.kind, r.record_id, r.channel_id, r.title, r.detail, r.body,
   COALESCE(CASE WHEN r.kind = 'decision' THEN (SELECT d.state FROM decisions d WHERE d.id = r.record_id) END,
     r.state) AS state, r.artifact_kind,
   r.version, r.number, r.actor_kind, r.actor_id, r.at,
   COALESCE(r.message_id, CASE WHEN r.kind = 'chapter' THEN
     (SELECT m.id FROM messages m WHERE m.chapter_id = r.chapter_id ORDER BY m.seq LIMIT 1) END) AS message_id,
-  t.title AS thread_title, t.kind AS thread_kind, t.agent_id AS hob_id`;
+  t.title AS channel_title, t.kind AS channel_kind, t.agent_id AS hob_id`;
 
-const RECORDS_FROM = "JOIN threads t ON t.id = r.thread_id JOIN agents a ON a.id = t.agent_id";
+const RECORDS_FROM = "JOIN channels t ON t.id = r.channel_id JOIN agents a ON a.id = t.agent_id";
 
 // A row the projector has not caught up with yet is left out: one whose record has moved to
 // another chat or camp, such as with a chapter into a private camp, or whose chapter moved away.
 // So privacy and scope hold from the move's own transaction, whatever the projector's lag.
-const STILL_THERE = `r.thread_id = CASE r.kind
-    WHEN 'decision' THEN (SELECT d.thread_id FROM decisions d WHERE d.id = r.record_id)
-    WHEN 'artifact' THEN (SELECT x.thread_id FROM artifacts x WHERE x.id = r.record_id)
-    ELSE (SELECT c.thread_id FROM chapters c WHERE c.id = r.record_id AND c.state <> 'moved') END`;
+const STILL_THERE = `r.channel_id = CASE r.kind
+    WHEN 'decision' THEN (SELECT d.channel_id FROM decisions d WHERE d.id = r.record_id)
+    WHEN 'artifact' THEN (SELECT x.channel_id FROM artifacts x WHERE x.id = r.record_id)
+    ELSE (SELECT c.channel_id FROM chapters c WHERE c.id = r.record_id AND c.state <> 'moved') END`;
 
 /** The records that match, in `scope`, in the order given for each dialect. */
 const recordsQuery = (
@@ -167,12 +167,12 @@ const recordsQuery = (
 /** Messages the index leaves out: still queued, or a reply still streaming or stopping. */
 const UNSETTLED = "NOT IN ('queued', 'streaming', 'stopping')";
 
-const MESSAGE_COLUMNS = `m.id AS message_id, m.thread_id, m.role, m.content, m.created_at AS at, m.actor_kind,
-  m.actor_id, t.title AS thread_title, t.kind AS thread_kind, t.agent_id AS hob_id`;
+const MESSAGE_COLUMNS = `m.id AS message_id, m.channel_id, m.role, m.content, m.created_at AS at, m.actor_kind,
+  m.actor_id, t.title AS channel_title, t.kind AS channel_kind, t.agent_id AS hob_id`;
 
 /** The newest settled messages that match, in `scope`. */
 const messagesQuery = (match: Match, scope: FindScope): FindQuery => {
-  const from = "JOIN threads t ON t.id = m.thread_id JOIN agents a ON a.id = t.agent_id";
+  const from = "JOIN channels t ON t.id = m.channel_id JOIN agents a ON a.id = t.agent_id";
   const rest = `AND m.status ${UNSETTLED} AND ${scopeClause(scope)}
     ORDER BY m.created_at DESC, m.seq DESC LIMIT ${FIND_MESSAGES}`;
   return dialects(
@@ -192,9 +192,9 @@ const actorOf = (row: Row) => ({ kind: row.actorKind, id: row.actorId });
 
 /** Where a found row is, and its words that matched. */
 const placeOf = (row: Row, text: string, terms: ReadonlyArray<string>) => ({
-  threadId: row.threadId,
-  threadTitle: row.threadTitle,
-  threadKind: row.threadKind,
+  channelId: row.channelId,
+  channelTitle: row.channelTitle,
+  channelKind: row.channelKind,
   hobId: row.hobId,
   messageId: row.messageId ?? null,
   snippet: snippetOf(text, terms),

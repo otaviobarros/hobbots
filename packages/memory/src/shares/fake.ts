@@ -20,7 +20,7 @@ export const makeMemoryShareLogFake = () => {
       occurredAt: payload.share.updatedAt,
       correlation: {
         agentId: payload.share.agentId,
-        threadId: payload.share.threadId,
+        channelId: payload.share.channelId,
         messageId: payload.share.messageId,
       },
       causationId: null,

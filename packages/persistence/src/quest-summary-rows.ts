@@ -1,6 +1,7 @@
 import {
   AgentId,
   ApprovalState,
+  type ChannelId,
   type JournaledEvent,
   type Quest,
   QuestionState,
@@ -10,7 +11,6 @@ import {
   type SummaryTree,
   sameSummary,
   TaskId,
-  type ThreadId,
 } from "@hobbots/domain";
 import { Effect, Schema } from "effect";
 import type { SqlClient, SqlError, Statement } from "effect/sql";
@@ -29,7 +29,7 @@ interface SummaryRow {
   readonly taskId: string;
   readonly leadId: string;
   readonly parentQuestId: string | null;
-  readonly threadId: string | null;
+  readonly channelId: string | null;
   readonly state: string;
   readonly needs: number | string;
   readonly working: number | string;
@@ -51,7 +51,7 @@ const summaryFromRow = (row: SummaryRow) =>
     taskId: row.taskId,
     leadId: row.leadId,
     parentQuestId: row.parentQuestId,
-    threadId: row.threadId,
+    channelId: row.channelId,
     state: row.state,
     tones: {
       needs: Number(row.needs),
@@ -72,7 +72,7 @@ const summaryColumns = (summary: QuestSummaryFields, revision: number) => ({
   task_id: summary.taskId,
   lead_id: summary.leadId,
   parent_quest_id: summary.parentQuestId,
-  thread_id: summary.threadId,
+  channel_id: summary.channelId,
   state: summary.state,
   needs: summary.tones.needs,
   working: summary.tones.working,
@@ -99,7 +99,7 @@ const approvalRows = decodeRows(Schema.Struct({ taskId: Schema.NullOr(TaskId), s
 interface Touched {
   readonly tasks: Set<string>;
   /** Chats started fresh, whose open Quests moved into them, and camps a chapter moved into with its Quests (#1389). */
-  readonly fresh: Array<ThreadId>;
+  readonly fresh: Array<ChannelId>;
   /** Artifacts registered or whose review settled. */
   readonly artifacts: Array<string>;
   /** Chapters moved into a camp, whose artifacts may have joined the camp's own at the same place. */
@@ -129,7 +129,7 @@ const touchedBy = (events: ReadonlyArray<JournaledEvent>): Touched => {
  * ending, a question reaching you or leaving, an approval waiting or decided, an artifact a Task made
  * registered or its review settled, or a chapter moved, whose artifacts may have joined the camp's
  * and taken its review. A chat started fresh moves the open Quests of the chat it replaced into it,
- * and a chapter moved into a camp the Quests started in it (#1389), so the thread of each changes.
+ * and a chapter moved into a camp the Quests started in it (#1389), so the channel of each changes.
  */
 const touchedTasks = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledEvent>) =>
   Effect.gen(function* () {
@@ -137,7 +137,7 @@ const touchedTasks = (sql: SqlClient.SqlClient, events: ReadonlyArray<JournaledE
     if (fresh.length > 0) {
       const rows = yield* sql<{
         readonly taskId: string;
-      }>`SELECT task_id FROM quests WHERE ${sql.in("thread_id", fresh)}`;
+      }>`SELECT task_id FROM quests WHERE ${sql.in("channel_id", fresh)}`;
       for (const row of rows) ids.add(row.taskId);
     }
     if (landed.length > 0) {
@@ -222,11 +222,11 @@ const listSummaries = (sql: SqlClient.SqlClient, where: Statement.Fragment) =>
   );
 
 /**
- * The summaries the sync snapshot serves: with a thread, every Quest followed in it, ended ones
+ * The summaries the sync snapshot serves: with a channel, every Quest followed in it, ended ones
  * included; without one, every Quest still under way. Oldest Quest first.
  */
-export const readQuestSummaries = (sql: SqlClient.SqlClient, threadId: ThreadId | null) =>
+export const readQuestSummaries = (sql: SqlClient.SqlClient, channelId: ChannelId | null) =>
   listSummaries(
     sql,
-    threadId === null ? sql`s.state IN ('active', 'paused', 'stopping')` : sql`s.thread_id = ${threadId}`,
+    channelId === null ? sql`s.state IN ('active', 'paused', 'stopping')` : sql`s.channel_id = ${channelId}`,
   ).pipe(Effect.orDie);

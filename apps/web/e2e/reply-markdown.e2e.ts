@@ -52,17 +52,17 @@ const send = async (page: Page, text: string) => {
   await composer.press("Enter");
 };
 
-/** The row of the thread's reply; the fake runtime echoes the prompt into it. */
+/** The row of the channel's reply; the fake runtime echoes the prompt into it. */
 const replyRow = async (current: Hub, page: Page) => {
-  await expect(page).toHaveURL(/threads\//);
-  const thread = page.url().match(/threads\/([^/?#]+)/)?.[1];
+  await expect(page).toHaveURL(/channels\//);
+  const channel = page.url().match(/channels\/([^/?#]+)/)?.[1];
   const messages = await api<ReadonlyArray<{ id: string; role: string }>>(
     current,
     "GET",
-    `/api/threads/${thread}/messages`,
+    `/api/channels/${channel}/messages`,
   );
   const reply = messages.find((message) => message.role === "assistant");
-  if (reply === undefined) throw new Error("The thread has no reply yet");
+  if (reply === undefined) throw new Error("The channel has no reply yet");
   return page.locator(`#message-${reply.id}`);
 };
 

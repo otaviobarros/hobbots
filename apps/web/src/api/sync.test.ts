@@ -1,4 +1,4 @@
-import { AgentId, Chapter, ChapterId, Message, MessageId, Thread, ThreadId } from "@hobbots/domain";
+import { AgentId, Channel, ChannelId, Chapter, ChapterId, Message, MessageId } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { applyEvent } from "./events.ts";
@@ -6,12 +6,12 @@ import { connectionQuery, setConnection } from "./live.ts";
 import { queryKeys, upsertMessage } from "./queries.ts";
 import { startGeneration, syncedMessages } from "./sync.ts";
 
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 const now = "2026-10-30T12:00:00.000Z";
 const message = (id: string, status: Message["status"], content: string, revision: number) =>
   new Message({
     id: MessageId.make(id),
-    threadId,
+    channelId,
     role: "assistant",
     content,
     status,
@@ -21,7 +21,7 @@ const message = (id: string, status: Message["status"], content: string, revisio
     revision,
   });
 
-const messages = (client: QueryClient) => client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(threadId));
+const messages = (client: QueryClient) => client.getQueryData<ReadonlyArray<Message>>(queryKeys.messages(channelId));
 
 // A fetch the test answers by hand, to land a response after events that happened while it was in flight.
 const pendingFetch = () => {
@@ -31,28 +31,28 @@ const pendingFetch = () => {
 };
 const load = (client: QueryClient, fetch: () => Promise<ReadonlyArray<Message>>) =>
   client.fetchQuery({
-    queryKey: queryKeys.messages(threadId),
-    queryFn: syncedMessages(threadId, fetch, upsertMessage),
+    queryKey: queryKeys.messages(channelId),
+    queryFn: syncedMessages(channelId, fetch, upsertMessage),
   });
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("reply chunks", () => {
-  it("applies a repeated chunk once and fetches the thread again after a missed one", async () => {
+  it("applies a repeated chunk once and fetches the channel again after a missed one", async () => {
     const client = new QueryClient();
-    client.setQueryData(queryKeys.messages(threadId), [message("m1", "streaming", "Hel", 4)]);
+    client.setQueryData(queryKeys.messages(channelId), [message("m1", "streaming", "Hel", 4)]);
     const delta = (offset: number, text: string) =>
-      applyEvent(client, { _tag: "MessageDelta", threadId, messageId: MessageId.make("m1"), offset, delta: text });
+      applyEvent(client, { _tag: "MessageDelta", channelId, messageId: MessageId.make("m1"), offset, delta: text });
 
     // A reconnect sends the whole text so far at offset 0; only the new part is added.
     delta(0, "Hello");
     delta(3, "lo");
     expect(messages(client)?.[0]?.content).toBe("Hello");
-    expect(client.getQueryState(queryKeys.messages(threadId))?.isInvalidated).toBe(false);
+    expect(client.getQueryState(queryKeys.messages(channelId))?.isInvalidated).toBe(false);
 
     // A chunk past the end of the text means chunks were missed: the text stays and is fetched again.
     delta(9, "!");
     expect(messages(client)?.[0]?.content).toBe("Hello");
-    expect(client.getQueryState(queryKeys.messages(threadId))?.isInvalidated).toBe(true);
+    expect(client.getQueryState(queryKeys.messages(channelId))?.isInvalidated).toBe(true);
   });
 });
 
@@ -64,7 +64,7 @@ describe("query responses during a sync generation", () => {
 
     // While the request is in flight: the reply finishes, a queued message is removed, another arrives.
     applyEvent(client, { _tag: "MessageUpserted", message: message("m1", "complete", "Hello", 9) });
-    applyEvent(client, { _tag: "MessageDequeued", threadId, messageId: MessageId.make("q1"), reason: "removed" });
+    applyEvent(client, { _tag: "MessageDequeued", channelId, messageId: MessageId.make("q1"), reason: "removed" });
     applyEvent(client, { _tag: "MessageUpserted", message: message("m2", "streaming", "", 11) });
     answer([message("q1", "queued", "later", 3), message("m1", "streaming", "Hel", 5)]);
     await loading;
@@ -77,19 +77,19 @@ describe("query responses during a sync generation", () => {
 
   it("keeps text a chunk already delivered when the response read an older checkpoint", async () => {
     const client = new QueryClient();
-    client.setQueryData(queryKeys.messages(threadId), [message("m1", "streaming", "Hello wor", 5)]);
+    client.setQueryData(queryKeys.messages(channelId), [message("m1", "streaming", "Hello wor", 5)]);
     await load(client, () => Promise.resolve([message("m1", "streaming", "Hel", 5)]));
     expect(messages(client)?.[0]?.content).toBe("Hello wor");
   });
 
   it("keeps the streamed text of a reply that started after the response was read", async () => {
     const client = new QueryClient();
-    client.setQueryData(queryKeys.messages(threadId), [message("u1", "complete", "hi", 6)]);
+    client.setQueryData(queryKeys.messages(channelId), [message("u1", "complete", "hi", 6)]);
     const { fetch, answer } = pendingFetch();
     const loading = load(client, fetch);
 
     applyEvent(client, { _tag: "MessageUpserted", message: message("m1", "streaming", "", 7) });
-    applyEvent(client, { _tag: "MessageDelta", threadId, messageId: MessageId.make("m1"), offset: 0, delta: "Hel" });
+    applyEvent(client, { _tag: "MessageDelta", channelId, messageId: MessageId.make("m1"), offset: 0, delta: "Hel" });
     answer([message("u1", "complete", "hi", 6)]);
     await loading;
 
@@ -154,11 +154,11 @@ describe("a chapter moved into a camp", () => {
   // covers ADR 037 (Moving a chapter into a camp moves it), CH-009, STD-REACT-028
   it("shows a message an event brought in the camp it moved to, and never again in the chat (#1385)", async () => {
     const client = new QueryClient();
-    const campId = ThreadId.make("camp-1");
-    const chapter = (id: string, thread: ThreadId, state: "moved" | "live", revision: number) =>
+    const campId = ChannelId.make("camp-1");
+    const chapter = (id: string, channel: ChannelId, state: "moved" | "live", revision: number) =>
       new Chapter({
         id: ChapterId.make(id),
-        threadId: thread,
+        channelId: channel,
         number: 1,
         title: null,
         summary: null,
@@ -168,17 +168,17 @@ describe("a chapter moved into a camp", () => {
         movedTo: state === "moved" ? campId : null,
         revision,
       });
-    const thread = (id: ThreadId, kind: "chat" | "camp") =>
-      new Thread({ id, agentId: AgentId.make("a1"), title: id, kind, createdAt: now, updatedAt: now, revision: 9 });
+    const channel = (id: ChannelId, kind: "direct" | "camp") =>
+      new Channel({ id, ownerHobId: AgentId.make("a1"), title: id, kind, createdAt: now, updatedAt: now, revision: 9 });
     const inChat = new Message({ ...message("m1", "complete", "Plant beans.", 4), chapterId: ChapterId.make("c1") });
     // The reply arrived live, so the overlay holds it, in the chat.
     applyEvent(client, { _tag: "MessageUpserted", message: inChat });
     applyEvent(client, {
       _tag: "ChapterMoved",
-      threadId,
-      thread: thread(threadId, "chat"),
-      camp: thread(campId, "camp"),
-      stub: chapter("c1", threadId, "moved", 9),
+      channelId,
+      channel: channel(channelId, "direct"),
+      camp: channel(campId, "camp"),
+      stub: chapter("c1", channelId, "moved", 9),
       chapter: chapter("k1", campId, "live", 9),
       chapters: [],
       campChapters: [],
@@ -190,7 +190,7 @@ describe("a chapter moved into a camp", () => {
       queryKey: queryKeys.messages(campId),
       queryFn: syncedMessages(campId, () => Promise.resolve([]), upsertMessage),
     });
-    expect(inCamp.map((each) => [each.id, each.threadId, each.chapterId, each.revision])).toEqual([
+    expect(inCamp.map((each) => [each.id, each.channelId, each.chapterId, each.revision])).toEqual([
       ["m1", campId, "k1", 9],
     ]);
   });
@@ -198,11 +198,11 @@ describe("a chapter moved into a camp", () => {
   // covers ADR 037 (Moving a chapter into a camp moves it), STD-REACT-012
   it("drops a first transcript read that began before the move, which no event told about the message (#1385)", async () => {
     const client = new QueryClient();
-    const campId = ThreadId.make("camp-1");
-    const chapter = (id: string, thread: ThreadId, state: "moved" | "live") =>
+    const campId = ChannelId.make("camp-1");
+    const chapter = (id: string, channel: ChannelId, state: "moved" | "live") =>
       new Chapter({
         id: ChapterId.make(id),
-        threadId: thread,
+        channelId: channel,
         number: 1,
         title: null,
         summary: null,
@@ -212,14 +212,14 @@ describe("a chapter moved into a camp", () => {
         movedTo: state === "moved" ? campId : null,
         revision: 9,
       });
-    const thread = (id: ThreadId, kind: "chat" | "camp") =>
-      new Thread({ id, agentId: AgentId.make("a1"), title: id, kind, createdAt: now, updatedAt: now, revision: 9 });
+    const channel = (id: ChannelId, kind: "direct" | "camp") =>
+      new Channel({ id, ownerHobId: AgentId.make("a1"), title: id, kind, createdAt: now, updatedAt: now, revision: 9 });
     const inChat = new Message({ ...message("m1", "complete", "Plant beans.", 4), chapterId: ChapterId.make("c1") });
     // The chat opens and reads its transcript; the read is slow, and nothing is cached yet.
     const { fetch, answer, pending } = pendingFetch();
     const watching = new QueryObserver(client, {
-      queryKey: queryKeys.messages(threadId),
-      queryFn: syncedMessages(threadId, fetch, upsertMessage),
+      queryKey: queryKeys.messages(channelId),
+      queryFn: syncedMessages(channelId, fetch, upsertMessage),
     }).subscribe(() => undefined);
     await settle();
     expect(pending()).toBe(1);
@@ -227,10 +227,10 @@ describe("a chapter moved into a camp", () => {
     // Another device moves the chapter while the read is on its way; no MessageUpserted came before.
     applyEvent(client, {
       _tag: "ChapterMoved",
-      threadId,
-      thread: thread(threadId, "chat"),
-      camp: thread(campId, "camp"),
-      stub: chapter("c1", threadId, "moved"),
+      channelId,
+      channel: channel(channelId, "direct"),
+      camp: channel(campId, "camp"),
+      stub: chapter("c1", channelId, "moved"),
       chapter: chapter("k1", campId, "live"),
       chapters: [],
       campChapters: [],

@@ -16,8 +16,8 @@ import {
   ToolLogs,
   UnattendedSummonLimits,
 } from "@hobbots/agents";
-import { CONNECT_PROTOCOL, HobbotsApi, MentionRefused, type SetBrainPayload, ThreadNotFound } from "@hobbots/api";
-import type { ThreadId } from "@hobbots/domain";
+import { ChannelNotFound, CONNECT_PROTOCOL, HobbotsApi, MentionRefused, type SetBrainPayload } from "@hobbots/api";
+import type { ChannelId } from "@hobbots/domain";
 import type { Backpack } from "@hobbots/inbox";
 import { Effect, Layer, Option } from "effect";
 import { HttpServerRequest } from "effect/http";
@@ -87,14 +87,14 @@ const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
         retireAs(params.agentId, payload).pipe(Effect.provideService(HobLifecycle, lifecycle)),
       openWork: ({ params, query }) => openWork(params.agentId, query.handOverTo).pipe(Effect.provide(context)),
       bringBack: ({ params }) => lifecycle.bringBack(params.agentId),
-      threads: ({ params, query }) =>
+      channels: ({ params, query }) =>
         repo.findAgent(params.agentId).pipe(
           Effect.flatMap(foundAgent(params.agentId)),
           Effect.flatMap(() =>
-            query.archived === "true" ? repo.listArchivedThreads(params.agentId) : repo.listThreads(params.agentId),
+            query.archived === "true" ? repo.listArchivedChannels(params.agentId) : repo.listChannels(params.agentId),
           ),
         ),
-      createThread: ({ params }) => chat.createThread(params.agentId),
+      createChannel: ({ params }) => chat.createChannel(params.agentId),
       makeCamp: ({ params, payload }) =>
         chat.makeCamp(params.agentId, {
           key: payload.key,
@@ -113,69 +113,69 @@ const AgentsHandlers = HttpApiBuilder.group(HobbotsApi, "agents", (handlers) =>
   }),
 ).pipe(Layer.provide(HobInputErrorsLayer));
 
-const ThreadsHandlers = HttpApiBuilder.group(HobbotsApi, "threads", (handlers) =>
+const ChannelsHandlers = HttpApiBuilder.group(HobbotsApi, "channels", (handlers) =>
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
     const chat = yield* ChatService;
     const hobs = yield* HobService;
     // Hubs without a log store, as in tests, have no full logs to open.
     const logs = yield* Effect.serviceOption(ToolLogs);
-    // Making a brain the hob's default edits the hob (a new configuration version), then the thread
-    // follows the hob again. Otherwise only the thread changes (ADR 017).
-    const setBrain = (threadId: ThreadId, { brain, makeDefault }: SetBrainPayload) =>
+    // Making a brain the hob's default edits the hob (a new configuration version), then the channel
+    // follows the hob again. Otherwise only the channel changes (ADR 017).
+    const setBrain = (channelId: ChannelId, { brain, makeDefault }: SetBrainPayload) =>
       Effect.gen(function* () {
-        if (brain === null || makeDefault !== true) return yield* chat.setBrain(threadId, brain);
-        const thread = yield* repo
-          .findThread(threadId)
+        if (brain === null || makeDefault !== true) return yield* chat.setBrain(channelId, brain);
+        const channel = yield* repo
+          .findChannel(channelId)
           .pipe(
             Effect.flatMap(
-              Option.match({ onNone: () => Effect.fail(new ThreadNotFound({ threadId })), onSome: Effect.succeed }),
+              Option.match({ onNone: () => Effect.fail(new ChannelNotFound({ channelId })), onSome: Effect.succeed }),
             ),
           );
-        // One step under the hob's lock: an archived thread changes nothing, not even its hob's
-        // default, and no archive lands between the hob's edit and the thread following it.
-        // standards-allow STD-ARCH-021: a thread's brain changes under the lock of the hob it belongs to
-        return yield* hobs.updateThen(thread.agentId, brain, chat.checkBrainSwitch(threadId), () =>
-          chat.followHob(threadId),
+        // One step under the hob's lock: an archived channel changes nothing, not even its hob's
+        // default, and no archive lands between the hob's edit and the channel following it.
+        return yield* hobs.updateThen(channel.ownerHobId, brain, chat.checkBrainSwitch(channelId), () =>
+          chat.followHob(channelId),
         );
       });
-    // A read of a thread that must exist: refused with ThreadNotFound when it does not.
-    const ofThread = <A>(threadId: ThreadId, read: (threadId: ThreadId) => Effect.Effect<A>) =>
-      repo
-        .findThread(threadId)
-        .pipe(
-          Effect.flatMap(
-            Option.match({ onNone: () => Effect.fail(new ThreadNotFound({ threadId })), onSome: () => read(threadId) }),
-          ),
-        );
+    // A read of a channel that must exist: refused with ChannelNotFound when it does not.
+    const ofChannel = <A>(channelId: ChannelId, read: (channelId: ChannelId) => Effect.Effect<A>) =>
+      repo.findChannel(channelId).pipe(
+        Effect.flatMap(
+          Option.match({
+            onNone: () => Effect.fail(new ChannelNotFound({ channelId })),
+            onSome: () => read(channelId),
+          }),
+        ),
+      );
     return handlers.handleAll({
-      messages: ({ params }) => ofThread(params.threadId, repo.listMessages),
+      messages: ({ params }) => ofChannel(params.channelId, repo.listMessages),
       sendPrompt: ({ params, payload }) =>
         chat
-          .sendPrompt(params.threadId, payload.content, payload.skill ?? null)
+          .sendPrompt(params.channelId, payload.content, payload.skill ?? null)
           .pipe(
             Effect.catchTag("MentionRefused", (refused) =>
-              Effect.fail(new MentionRefused({ threadId: refused.threadId, hobs: refused.hobs })),
+              Effect.fail(new MentionRefused({ channelId: refused.channelId, hobs: refused.hobs })),
             ),
           ),
-      removeQueued: ({ params }) => chat.removeQueued(params.threadId, params.messageId),
-      sendNow: ({ params }) => chat.sendNow(params.threadId, params.messageId),
-      interrupt: ({ params }) => chat.stop(params.threadId),
-      stopAll: ({ params }) => chat.stopAll(params.threadId),
-      letHobsGoOn: ({ params }) => chat.letHobsGoOn(params.threadId),
-      stopWaiting: ({ params }) => chat.stopWaiting(params.threadId),
-      continueReply: ({ params }) => chat.continueReply(params.threadId, params.messageId),
+      removeQueued: ({ params }) => chat.removeQueued(params.channelId, params.messageId),
+      sendNow: ({ params }) => chat.sendNow(params.channelId, params.messageId),
+      interrupt: ({ params }) => chat.stop(params.channelId),
+      stopAll: ({ params }) => chat.stopAll(params.channelId),
+      letHobsGoOn: ({ params }) => chat.letHobsGoOn(params.channelId),
+      stopWaiting: ({ params }) => chat.stopWaiting(params.channelId),
+      continueReply: ({ params }) => chat.continueReply(params.channelId, params.messageId),
       toolLog: ({ params }) => readToolLog(params, repo, logs),
-      setBrain: ({ params, payload }) => setBrain(params.threadId, payload),
-      rename: ({ params, payload }) => chat.rename(params.threadId, payload.title),
-      pin: ({ params, payload }) => chat.setPinned(params.threadId, payload.pinned),
-      setPrivate: ({ params, payload }) => chat.setPrivate(params.threadId, payload.private),
-      markRead: ({ params, payload }) => chat.markRead(params.threadId, payload.messageId, payload.revision),
-      unreadThreads: () => chat.unreadThreads,
-      archive: ({ params }) => chat.archive(params.threadId),
-      restore: ({ params }) => chat.restore(params.threadId),
-      startFresh: ({ params, payload }) => chat.startFresh(params.threadId, payload.key),
-      carryOver: ({ params }) => ofThread(params.threadId, repo.carryOver),
+      setBrain: ({ params, payload }) => setBrain(params.channelId, payload),
+      rename: ({ params, payload }) => chat.rename(params.channelId, payload.title),
+      pin: ({ params, payload }) => chat.setPinned(params.channelId, payload.pinned),
+      setPrivate: ({ params, payload }) => chat.setPrivate(params.channelId, payload.private),
+      markRead: ({ params, payload }) => chat.markRead(params.channelId, payload.messageId, payload.revision),
+      unreadChannels: () => chat.unreadChannels,
+      archive: ({ params }) => chat.archive(params.channelId),
+      restore: ({ params }) => chat.restore(params.channelId),
+      startFresh: ({ params, payload }) => chat.startFresh(params.channelId, payload.key),
+      carryOver: ({ params }) => ofChannel(params.channelId, repo.carryOver),
     });
   }),
 );
@@ -187,17 +187,17 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
     const chat = yield* ChatService;
     const presences = yield* HobPresences;
 
-    // A hob is working while one of its threads has a turn running, until the turn's runtime has
+    // A hob is working while one of its channels has a turn running, until the turn's runtime has
     // exited. `TurnStarted` and `TurnEnded` announce each change once it has happened, so a read made
     // on either event already agrees with it.
     // In a camp the hob speaking may be a member, so each turn names its own hob (ADR 039), never
     // the hob the camp belongs to.
     const activity = chat.activeTurns.pipe(
       Effect.flatMap((turns) =>
-        Effect.forEach(turns, ({ threadId, agentId }) =>
+        Effect.forEach(turns, ({ channelId, agentId }) =>
           repo
             .findAgent(agentId)
-            .pipe(Effect.map(Option.map((agent) => ({ agentId: agent.id, name: agent.name, threadId })))),
+            .pipe(Effect.map(Option.map((agent) => ({ agentId: agent.id, name: agent.name, channelId })))),
         ),
       ),
       Effect.map((hobs) => ({ working: hobs.flatMap(Option.toArray) })),
@@ -206,7 +206,7 @@ const SystemHandlers = HttpApiBuilder.group(HobbotsApi, "system", (handlers) =>
     return handlers.handleAll({
       activity: () => activity,
       status: () =>
-        Effect.all([chat.threadRuns, presences.current]).pipe(
+        Effect.all([chat.channelRuns, presences.current]).pipe(
           Effect.map(([runs, presences]) => ({
             runsRevision: runs.revision,
             runs: runs.runs,
@@ -267,7 +267,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     DevicesHandlers,
     AgentsHandlers,
     HobChangesHandlers,
-    ThreadsHandlers,
+    ChannelsHandlers,
     ChaptersHandlers,
     RecordsHandlers,
     CampSuggestionsHandlers,

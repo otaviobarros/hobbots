@@ -89,7 +89,7 @@ test("a save shows a quiet line under its reply, Open reads the page, and Undo r
   const reply = page.getByRole("article").filter({ has: lines });
   await expect(reply).toContainText("Remember that launch emails");
 
-  // The line is read back with the thread.
+  // The line is read back with the channel.
   await page.reload();
   await expect(savedLines(page)).toContainText("Saved to Pip's memory");
 
@@ -109,7 +109,7 @@ test("a save shows a quiet line under its reply, Open reads the page, and Undo r
 
 // covers ADR 028 (Writes), #961
 // covers ADR 028 (The memory brief), through the whole server rather than a hub built for the test
-test("a page a hob saved reaches its next thread's brief (#961)", async ({ page }) => {
+test("a page a hob saved reaches its next channel's brief (#961)", async ({ page }) => {
   const { url, pip } = await hubWithMemory("empty");
   await page.goto(`${url}/#/hobs/${pip.id}/chat`);
   await send(page, ["Remember this.", saveLine("brief", "# Launch day\n\nLaunch emails go out Tuesday at 9 AM.")]);
@@ -193,8 +193,8 @@ test("when a chat's saves cannot be read, it says so and Try again brings the li
   ]);
   await expect(savedLines(page)).toBeVisible();
 
-  const threadSaves = "**/api/threads/*/memory-saves";
-  await page.route(threadSaves, (route) => route.fulfill({ status: 500, body: "" }));
+  const channelSaves = "**/api/channels/*/memory-saves";
+  await page.route(channelSaves, (route) => route.fulfill({ status: 500, body: "" }));
   await page.reload();
   const chat = page.getByRole("main", { name: "Chat" });
   // The client asks again a few times before it gives up.
@@ -203,7 +203,7 @@ test("when a chat's saves cannot be read, it says so and Try again brings the li
   });
   await expect(savedLines(page)).toHaveCount(0);
 
-  await page.unroute(threadSaves);
+  await page.unroute(channelSaves);
   await chat.getByRole("button", { name: "Try again" }).click();
   await expect(savedLines(page)).toContainText("Saved to Pip's memory");
   await expect(chat.getByRole("alert")).toHaveCount(0);

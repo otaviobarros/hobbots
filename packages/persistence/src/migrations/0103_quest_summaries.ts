@@ -1,13 +1,13 @@
 import {
   type AgentId,
   type ApprovalState,
+  type ChannelId,
   type QuestId,
   type QuestionState,
   type QuestState,
   questSummaryOf,
   type TaskId,
   type TaskState,
-  type ThreadId,
 } from "@hobbots/domain";
 import { Effect } from "effect";
 import { SqlClient } from "effect/sql";
@@ -81,7 +81,7 @@ export default Effect.gen(function* () {
           taskId: String(quest.task_id) as TaskId,
           leadId: String(quest.lead_id) as AgentId,
           parentQuestId: text(quest.parent_quest_id) as QuestId | null,
-          threadId: text(quest.thread_id) as ThreadId | null,
+          channelId: text(quest.thread_id) as ChannelId | null,
           state: String(quest.state) as QuestState,
         },
         tree,
@@ -91,7 +91,7 @@ export default Effect.gen(function* () {
         task_id: summary.taskId,
         lead_id: summary.leadId,
         parent_quest_id: summary.parentQuestId,
-        thread_id: summary.threadId,
+        thread_id: summary.channelId,
         state: summary.state,
         ...summary.tones,
         needs_you: summary.needsYou,

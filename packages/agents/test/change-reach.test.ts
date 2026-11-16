@@ -1,4 +1,4 @@
-import { AgentId, type CharmOperation, EMPTY_HOB_POLICY, type HobPolicy, type Thread } from "@hobbots/domain";
+import { AgentId, type Channel, type CharmOperation, EMPTY_HOB_POLICY, type HobPolicy } from "@hobbots/domain";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import {
@@ -138,13 +138,13 @@ describe("when a change applies", () => {
   it("counts the runtime of each of the hob's chats, not only the hob's own runtime", async () => {
     // A Claude Code hob with one chat moved to Codex: that chat resumes with the tools it started with.
     const id = AgentId.make("thorn");
-    const threads = [{ brain: { runtime: "codex", model: null, effort: null } }] as unknown as ReadonlyArray<Thread>;
+    const channels = [{ brain: { runtime: "codex", model: null, effort: null } }] as unknown as ReadonlyArray<Channel>;
     const adapters = (runtime: string) =>
       (runtime === "codex" ? { resumeKeepsHubTools: true } : {}) as unknown as RuntimeAdapterShape;
-    const reachFor = (chats: ReadonlyArray<Thread>) =>
+    const reachFor = (chats: ReadonlyArray<Channel>) =>
       Effect.runPromise(
         reachOf({
-          repo: { listThreads: () => Effect.succeed(chats) } as never,
+          repo: { listChannels: () => Effect.succeed(chats) } as never,
           setup: { get: Effect.succeed({ safetyPreset: "balanced" }) } as never,
           adapters,
           charms: CHARMS,
@@ -153,7 +153,7 @@ describe("when a change applies", () => {
           { policy: policy(["ledger"]), id, runtime: "claude-code" },
         ),
       );
-    expect((await reachFor(threads)).newSessionsOnly).toEqual({
+    expect((await reachFor(channels)).newSessionsOnly).toEqual({
       ...NONE,
       runtimes: ["codex"],
       operations: ["read-hobs"],

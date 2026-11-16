@@ -244,7 +244,7 @@ export interface ToolPolicy {
   readonly hob: HobPolicy;
   /** Hobbots' own data folder, never reachable even when a shared folder contains it. */
   readonly dataFolder: string;
-  /** Narrowing added by the thread, Quest, task or delegation. Each may only narrow. */
+  /** Narrowing added by the channel, Quest, task or delegation. Each may only narrow. */
   readonly restrictions: ReadonlyArray<PolicyLayer>;
   /** The operations the Charms the hub holds declare (ADR 031); a Charm operation not among them stays closed. */
   readonly charmOperations?: ReadonlyArray<CharmOperation>;
@@ -545,7 +545,7 @@ export interface TurnSteers {
 export interface PromptRequest {
   readonly prompt: string;
   /**
-   * What the session missed while other brains replied in the thread (ADR 017), to deliver ahead of
+   * What the session missed while other brains replied in the channel (ADR 017), to deliver ahead of
    * the prompt in the same turn. Absent or null when it saw everything.
    */
   readonly briefing?: string | null;
@@ -610,7 +610,7 @@ export interface PromptRequest {
    */
   readonly steering?: CallSteering | null;
   /**
-   * A turn that belongs to no hob or thread, such as a memory task (ADR 028): the runtime keeps no
+   * A turn that belongs to no hob or channel, such as a memory task (ADR 028): the runtime keeps no
    * session of it, so it can never be resumed or listed. It starts a new session (`sessionId` null).
    */
   readonly ephemeral?: boolean;

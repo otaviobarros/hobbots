@@ -303,7 +303,7 @@
   },
   {
     "name": "memory_save",
-    "description": "Save a page to memory so a later thread can find it: a lesson you learned, a fact about a project, a preference the user stated. `mine` writes your own memory at once. A `project` or `everyone` share goes to the user's safety settings first. Never save secrets, credentials or anything the user asked you to forget. There is no delete: to correct a page, save it again at the same path.",
+    "description": "Save a page to memory so a later channel can find it: a lesson you learned, a fact about a project, a preference the user stated. `mine` writes your own memory at once. A `project` or `everyone` share goes to the user's safety settings first. Never save secrets, credentials or anything the user asked you to forget. There is no delete: to correct a page, save it again at the same path.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -327,7 +327,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 20000,
-          "description": "The whole page, in markdown. Start it with a `# ` heading, which becomes its title. Keep it to what a later thread needs: a lesson, a fact, a preference."
+          "description": "The whole page, in markdown. Start it with a `# ` heading, which becomes its title. Keep it to what a later channel needs: a lesson, a fact, a preference."
         },
         "tags": {
           "type": "array",

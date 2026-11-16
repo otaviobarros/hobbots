@@ -24,14 +24,14 @@ describe("The URLs a session found", () => {
       );
       return {
         before,
-        thread: yield* store.sources("thread:t1", ["https://example.test/a", "https://example.test/b"]),
+        channel: yield* store.sources("thread:t1", ["https://example.test/a", "https://example.test/b"]),
         otherWork: yield* store.sources("task:k1", ["https://example.test/a"]),
         many: yield* store.sources("task:k1", many),
       };
     }).pipe(Effect.provide(WebFoundUrlsLive), Effect.provide(TestDatabase), Effect.runPromise);
 
     expect(found.before.size).toBe(0);
-    expect([...found.thread]).toEqual([["https://example.test/a", "a link on https://example.test/"]]);
+    expect([...found.channel]).toEqual([["https://example.test/a", "a link on https://example.test/"]]);
     expect(found.otherWork.size).toBe(0);
     expect(found.many.size).toBe(1_200);
   });

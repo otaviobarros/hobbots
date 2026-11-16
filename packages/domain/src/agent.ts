@@ -28,7 +28,7 @@ export type Effort = typeof Effort.Type;
 export const ConfigVersion = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 export type ConfigVersion = typeof ConfigVersion.Type;
 /**
- * Where a hob is in its life (AG-006). A paused hob keeps its threads but starts no new turns until
+ * Where a hob is in its life (AG-006). A paused hob keeps its channels but starts no new turns until
  * it is woken; a retired hob takes no new work and stays readable in the Archive until it is brought back.
  */
 export const AgentStatus = Schema.Literals(["active", "paused", "retired"]);

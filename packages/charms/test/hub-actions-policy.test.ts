@@ -81,7 +81,7 @@ describe("a fake Charm's read on the hub action pipeline", () => {
         decide: (approvals, base, request: PolicyRequest) => decideHubCall(engine, approvals, base, request),
       })({
         agentId: AgentId.make("hob"),
-        threadId: null,
+        channelId: null,
         messageId: null,
         scope: () => "",
         currentAccess: Effect.succeed(access),

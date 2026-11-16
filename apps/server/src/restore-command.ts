@@ -23,7 +23,7 @@ const restore = Effect.gen(function* () {
   const summary = yield* summaryOf(backup, manifest);
   yield* Console.log(`Backup made ${summary.createdAt} by Hobbots ${summary.hobbotsVersion}`);
   yield* Console.log(
-    `${summary.hobs} hobs, ${summary.threads} threads, ${summary.quests} Quests and ${summary.tasks} Tasks`,
+    `${summary.hobs} hobs, ${summary.channels} channels, ${summary.quests} Quests and ${summary.tasks} Tasks`,
   );
   for (const folder of summary.missingFolders) yield* Console.log(`Not on this computer: ${folder}`);
   yield* Console.log("Devices, keychain items and runtime sign-ins do not come back. Pair devices and sign in again.");

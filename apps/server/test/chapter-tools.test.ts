@@ -1,10 +1,10 @@
 import {
+  ChannelMemberRepository,
   ChapterService,
   ChatService,
   HobbotsRepository,
   type PromptRequest,
   START_CHAPTER_OUTSIDE_CHAT,
-  ThreadMemberRepository,
   unknownMessageText,
 } from "@hobbots/agents";
 import {
@@ -19,7 +19,7 @@ import {
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FRODO, hub, messagesWhen, PIP, partyHub, send, threadId } from "./party-hub.ts";
+import { channelId, FRODO, hub, messagesWhen, PIP, partyHub, send } from "./party-hub.ts";
 
 // Issue #1381 (ADR 037): the hob ends a chapter itself with `start_chapter`, and reads back a message
 // the context pack cut with `read_message`. Both are hub tools, so Claude Code and Codex serve them
@@ -40,13 +40,13 @@ const chapterHub = (lead: RuntimeKind = "claude-code") => {
   const party = partyHub({ chapters: true, lead });
   dispose = party.dispose;
   const { run } = party;
-  /** Sends your message to Frodo and waits until his thread holds `count` messages, every reply ended. */
+  /** Sends your message to Frodo and waits until his channel holds `count` messages, every reply ended. */
   const say = (lines: ReadonlyArray<string>, count: number) =>
     run(send(lines)).then(() => run(messagesWhen((all) => all.length >= count)));
-  const chapters = () => run(ChapterService.use((service) => service.listChapters(threadId)));
-  const thread = () =>
-    run(HobbotsRepository.use((repo) => repo.findThread(threadId)).pipe(Effect.map(Option.getOrThrow)));
-  return { ...party, say, chapters, thread };
+  const chapters = () => run(ChapterService.use((service) => service.listChapters(channelId)));
+  const channel = () =>
+    run(HobbotsRepository.use((repo) => repo.findChannel(channelId)).pipe(Effect.map(Option.getOrThrow)));
+  return { ...party, say, chapters, channel };
 };
 
 describe("start_chapter", () => {
@@ -54,10 +54,10 @@ describe("start_chapter", () => {
   it.each<RuntimeKind>(["claude-code", "codex"])(
     "on %s, the hob starts a chapter and its next turn runs in a new session (#1381)",
     async (runtime) => {
-      const { say, chapters, thread, requests, answers } = chapterHub(runtime);
+      const { say, chapters, channel, requests, answers } = chapterHub(runtime);
       await say(["My cat is called Miso."], 2);
       expect(offered(requests[0])).toEqual(expect.arrayContaining([START_CHAPTER_TOOL, READ_MESSAGE_TOOL]));
-      const first = liveSession(await thread(), runtime, FRODO);
+      const first = liveSession(await channel(), runtime, FRODO);
       expect(first?.sessionId).toMatch(/^fake-/);
 
       await say(["Let's talk about the garden.", hub("start_chapter", { key: "chapter", title: "The garden" })], 4);
@@ -68,14 +68,14 @@ describe("start_chapter", () => {
       ]);
       // The turn that started it ran in the first chapter's session, which no later turn resumes.
       expect(requests[1]?.sessionId).toBe(first?.sessionId);
-      expect(liveSession(await thread(), runtime, FRODO)).toBeUndefined();
+      expect(liveSession(await channel(), runtime, FRODO)).toBeUndefined();
 
       const all = await say(["What should I plant?"], 6);
       const fresh = requests[2] as PromptRequest;
       expect(fresh.sessionId).toBeNull();
       expect(offered(fresh)).toEqual(expect.arrayContaining([START_CHAPTER_TOOL, READ_MESSAGE_TOOL]));
-      expect((all.at(-1) as Message).chapterId).toBe((await thread()).liveChapterId);
-      const second = liveSession(await thread(), runtime, FRODO);
+      expect((all.at(-1) as Message).chapterId).toBe((await channel()).liveChapterId);
+      const second = liveSession(await channel(), runtime, FRODO);
       expect(second?.sessionId).not.toBe(first?.sessionId);
     },
   );
@@ -150,7 +150,7 @@ describe("start_chapter", () => {
 
 describe("read_message", () => {
   // covers ADR 037 (The context pack), ADR 036 (paging)
-  it("pages a long message of the hob's own thread, redacted (#1381)", async () => {
+  it("pages a long message of the hob's own channel, redacted (#1381)", async () => {
     const { say, answers } = chapterHub();
     const long = `The plan starts here, with ${SECRET}.\n${"line of the plan\n".repeat(2_000)}The plan ends here.`;
     const [prompt] = await say([long], 2);
@@ -195,9 +195,9 @@ describe("read_message", () => {
   });
 
   // covers ADR 037 (The context pack), PE-001
-  it("never reads a message of another hob's thread (#1381)", async () => {
+  it("never reads a message of another hob's channel (#1381)", async () => {
     const { run, say, answers } = chapterHub();
-    const pips = await run(ChatService.use((chat) => chat.createThread(PIP)));
+    const pips = await run(ChatService.use((chat) => chat.createChannel(PIP)));
     await run(ChatService.use((chat) => chat.sendPrompt(pips.id, "Pip's own plan")));
     const [theirs] = await run(HobbotsRepository.use((repo) => repo.listMessages(pips.id)));
     const id = (theirs as Message).id;
@@ -219,11 +219,11 @@ describe("read_message", () => {
   // covers ADR 039 (One hob speaks at a time, The context pack with several hobs)
   it("reads a message of a camp the hob joined (#1461)", async () => {
     const { run, say, answers } = chapterHub();
-    // Pip's first thread is the direct chat; a second one is a camp, which Frodo joins.
-    await run(ChatService.use((chat) => chat.createThread(PIP)));
-    const camp = await run(ChatService.use((chat) => chat.createThread(PIP)));
+    // Pip's first channel is the direct chat; a second one is a camp, which Frodo joins.
+    await run(ChatService.use((chat) => chat.createChannel(PIP)));
+    const camp = await run(ChatService.use((chat) => chat.createChannel(PIP)));
     await run(ChatService.use((chat) => chat.sendPrompt(camp.id, "The camp's plan")));
-    await run(ThreadMemberRepository.use((members) => members.add(camp.id, hobActor(FRODO), OWNER_ACTOR)));
+    await run(ChannelMemberRepository.use((members) => members.add(camp.id, hobActor(FRODO), OWNER_ACTOR)));
     const [said, replied] = await run(HobbotsRepository.use((repo) => repo.listMessages(camp.id)));
     const id = (said as Message).id;
 

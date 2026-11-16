@@ -124,7 +124,7 @@ describe("traceRows", () => {
       ownerId: AgentId.make(id === "campaign" ? "aldric" : "ada"),
       parentId: parentId === null ? null : TaskId.make(parentId),
       rootId: TaskId.make("campaign"),
-      threadId: null,
+      channelId: null,
       brief,
       state: "active" as const,
       dependsOn: [],

@@ -11,7 +11,7 @@ import { Effect, Layer, Option } from "effect";
  * up can name a path outside the folder.
  */
 const logFile = (folder: string, key: ToolLogKey) =>
-  join(folder, `${createHash("sha256").update(`${key.threadId}\0${key.messageId}\0${key.stepId}`).digest("hex")}.log`);
+  join(folder, `${createHash("sha256").update(`${key.channelId}\0${key.messageId}\0${key.stepId}`).digest("hex")}.log`);
 
 const write = async (folder: string, key: ToolLogKey, text: string) => {
   await mkdir(folder, { recursive: true, mode: 0o700 });

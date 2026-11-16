@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { Actor } from "./actor.ts";
-import { ChapterId, MessageId, ThreadId } from "./ids.ts";
+import { ChannelId, ChapterId, MessageId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { Revision } from "./revision.ts";
 
@@ -23,7 +23,7 @@ export type DecisionState = typeof DecisionState.Type;
 export class Decision extends Schema.Class<Decision>("Decision")({
   id: DecisionId,
   /** The chat or camp it was made in, and its chapter there. */
-  threadId: ThreadId,
+  channelId: ChannelId,
   chapterId: ChapterId,
   /** The message whose turn recorded it, or null for one you recorded in the app. */
   sourceMessageId: Schema.NullOr(MessageId),
@@ -80,14 +80,14 @@ export const DecisionStates = {
 
 /**
  * Why a decision was not recorded or crossed out. `empty-text`: it has no text. `too-long`: it is
- * longer than `DECISION_TEXT_MAX`. `thread-closed`: its chat or camp is archived or superseded.
+ * longer than `DECISION_TEXT_MAX`. `channel-closed`: its chat or camp is archived or superseded.
  * `not-found`: the decision to replace or cross out is not in this chat or camp. `superseded`: it
  * was crossed out already. `key-reused`: the key was used for another decision.
  */
 export const DecisionRefusal = Schema.Literals([
   "empty-text",
   "too-long",
-  "thread-closed",
+  "channel-closed",
   "not-found",
   "superseded",
   "key-reused",
@@ -122,14 +122,14 @@ export interface DecisionPlan {
 /** A decision to record, as the command reads it in its transaction. */
 export interface DecisionDraft {
   readonly id: DecisionId;
-  readonly threadId: ThreadId;
+  readonly channelId: ChannelId;
   readonly chapterId: ChapterId;
   readonly sourceMessageId: MessageId | null;
   readonly text: string;
   readonly actor: Actor;
   readonly at: string;
   /** Whether its chat or camp is open: a closed one takes no new decisions. */
-  readonly threadOpen: boolean;
+  readonly channelOpen: boolean;
   /**
    * The decision it replaces: undefined when it replaces none, null when the one it names is not in
    * this chat or camp.
@@ -154,7 +154,7 @@ const replaceable = (decision: Decision | null): Decision | DecisionRefused => {
 /** Why a closed chat or camp takes no new decision. */
 const closed = () =>
   new DecisionRefused({
-    reason: "thread-closed",
+    reason: "channel-closed",
     message: "This chat or camp is closed, so it takes no new decisions.",
   });
 
@@ -164,12 +164,12 @@ const closed = () =>
  * records as stored, in the transaction that writes and journals the result.
  */
 export const planDecision = (draft: DecisionDraft): DecisionPlan | DecisionRefused => {
-  if (!draft.threadOpen) return closed();
+  if (!draft.channelOpen) return closed();
   const text = decisionText(draft.text);
   if (text instanceof DecisionRefused) return text;
   const recorded = new Decision({
     id: draft.id,
-    threadId: draft.threadId,
+    channelId: draft.channelId,
     chapterId: draft.chapterId,
     sourceMessageId: draft.sourceMessageId,
     text,
@@ -196,9 +196,9 @@ export const planDecision = (draft: DecisionDraft): DecisionPlan | DecisionRefus
 export const planCrossOut = (
   decision: Decision | null,
   at: string,
-  threadOpen: boolean,
+  channelOpen: boolean,
 ): Decision | DecisionRefused => {
-  if (!threadOpen) return closed();
+  if (!channelOpen) return closed();
   const replaced = replaceable(decision);
   if (replaced instanceof DecisionRefused) return replaced;
   const superseded = DecisionStates.transition(replaced, { _tag: "Supersede", by: null, at });

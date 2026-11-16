@@ -13,6 +13,8 @@ import {
   ApprovalRequest,
   ArtifactId,
   AttemptId,
+  Channel,
+  ChannelId,
   CheckpointId,
   type Committed,
   carriedFrom,
@@ -25,8 +27,6 @@ import {
   QuestId,
   QuestionId,
   TaskId,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -78,7 +78,7 @@ const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
 const ADA = AgentId.make("ada");
 const PIP = AgentId.make("pip");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 
 const seed = Effect.gen(function* () {
   const repo = yield* HobbotsRepository;
@@ -104,8 +104,8 @@ const seed = Effect.gen(function* () {
       }),
     );
   }
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, ownerHobId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
   );
 });
 
@@ -120,7 +120,7 @@ const newTask = (
   id: TaskId.make(id),
   ownerId,
   parentId: parentId === null ? null : TaskId.make(parentId),
-  threadId,
+  channelId,
   brief: `Brief for ${id}`,
   dependsOn: dependsOn.map((each) => TaskId.make(each)),
   createdAt: new Date(Date.parse(now) + 1000 * ++clock).toISOString(),
@@ -209,15 +209,15 @@ describe("Task records", () => {
       }),
     );
 
-    expect(result.tree.tasks.map((task) => [task.id, task.ownerId, task.parentId, task.rootId, task.threadId])).toEqual(
-      [
-        ["campaign", ALDRIC, null, "campaign", threadId],
-        ["copy", QUILL, "campaign", "campaign", threadId],
-        ["build", ADA, "campaign", "campaign", threadId],
-        ["research", ADA, "build", "campaign", threadId],
-        ["keywords", PIP, "build", "campaign", threadId],
-      ],
-    );
+    expect(
+      result.tree.tasks.map((task) => [task.id, task.ownerId, task.parentId, task.rootId, task.channelId]),
+    ).toEqual([
+      ["campaign", ALDRIC, null, "campaign", channelId],
+      ["copy", QUILL, "campaign", "campaign", channelId],
+      ["build", ADA, "campaign", "campaign", channelId],
+      ["research", ADA, "build", "campaign", channelId],
+      ["keywords", PIP, "build", "campaign", channelId],
+    ]);
     expect(result.tree.tasks.find((task) => task.id === "build")?.dependsOn).toEqual(["copy"]);
     expect(
       result.tree.quests.map((quest) => [quest.id, quest.taskId, quest.leadId, quest.parentQuestId, quest.depth]),
@@ -243,15 +243,15 @@ describe("Task records", () => {
     // A subtree holds only what is under its Task.
     expect(result.sub.tasks.map((task) => task.id)).toEqual(["build", "research", "keywords"]);
     expect(result.sub.quests.map((quest) => quest.id)).toEqual(["q2"]);
-    // Each change is journaled with its event, correlated with the Task's owner and thread. A new
+    // Each change is journaled with its event, correlated with the Task's owner and channel. A new
     // step also lands in its owner's backpack, journaled after it (ADR 019).
     // The step is a Task under the Quest, so the Quest's summary changes in the same transaction (ADR 037).
     expect(tags(result.step.entries)).toEqual(["TaskCreated", "BackpackItemRecorded", "QuestSummaryChanged"]);
-    expect(result.step.entries[0]?.correlation).toEqual({ agentId: ADA, threadId, messageId: null });
+    expect(result.step.entries[0]?.correlation).toEqual({ agentId: ADA, channelId, messageId: null });
     expect(result.step.value.revision).toBe(result.step.entries[0]?.sequence);
     // A new Quest's summary is journaled with it; the Quest it sits in still counts the same Tasks.
     expect(tags(result.nested.entries)).toEqual(["QuestStarted", "QuestSummaryChanged"]);
-    expect(result.nested.entries[0]?.correlation).toEqual({ agentId: ADA, threadId, messageId: null });
+    expect(result.nested.entries[0]?.correlation).toEqual({ agentId: ADA, channelId, messageId: null });
   });
 
   it("refuses a Task without an owner, an orphan, a step under another owner, and a dependency outside its tree, writing nothing", async () => {
@@ -599,7 +599,7 @@ describe("Task records", () => {
     expect(result.asked.value).toMatchObject({ recipientId: ADA, chain: [], state: "open" });
     // Each step of the question lands in the backpack of the hob it reaches (ADR 019).
     expect(tags(result.asked.entries)).toEqual(["QuestionAsked", "BackpackItemRecorded"]);
-    expect(result.asked.entries[0]?.correlation).toEqual({ agentId: PIP, threadId, messageId: null });
+    expect(result.asked.entries[0]?.correlation).toEqual({ agentId: PIP, channelId, messageId: null });
     expect(result.wrong).toMatchObject({ _tag: "TaskRefused", reason: "not-recipient" });
     expect(result.up.value).toMatchObject({ recipientId: ALDRIC, chain: [ADA] });
     // Ada's copy settles as she passes it on (#573), and the question lands in Aldric's backpack.
@@ -741,7 +741,7 @@ describe("Task records", () => {
     // You talk only to the lead: Pip's step goes to Ada, who leads Pip; Ada's Task to Aldric; the top to Aldric.
     expect(result.onStep.value.recipientId).toBe(ADA);
     expect(tags(result.onStep.entries)).toEqual(["NoteLeft", "BackpackItemRecorded"]);
-    expect(result.onStep.entries[0]?.correlation).toEqual({ agentId: ADA, threadId, messageId: null });
+    expect(result.onStep.entries[0]?.correlation).toEqual({ agentId: ADA, channelId, messageId: null });
     expect(result.onStep.entries[1]?.payload).toMatchObject({
       item: { recipientId: ADA, kind: "message", taskId: "keyword-step", payload: { senderId: null } },
     });
@@ -998,7 +998,7 @@ describe("Task records", () => {
     expect(result.wrongSource).toMatchObject({ _tag: "TaskRefused", reason: "checkpoint-kind" });
     expect(result.finding.value).toMatchObject({ source: "unplanned", kind: "finding", attemptId: null });
     expect(tags(result.handed.entries)).toEqual(["HandedOff", "BackpackItemRecorded"]);
-    expect(result.handed.entries[0]?.correlation).toEqual({ agentId: ADA, threadId, messageId: null });
+    expect(result.handed.entries[0]?.correlation).toEqual({ agentId: ADA, channelId, messageId: null });
     expect(result.again.entries).toEqual([]);
     expect(result.again.value).toEqual(result.handed.value);
     expect(result.outside).toMatchObject({ _tag: "TaskRefused", reason: "artifact-outside-tree" });
@@ -1066,9 +1066,9 @@ describe("Task records", () => {
         const notSibling = yield* reason(
           tasks.createTask({ task: newTask("ada-step", ADA, "build", ["campaign"]), delegation: null, milestones: [] }),
         );
-        const noThread = yield* reason(
+        const noChannel = yield* reason(
           tasks.createTask({
-            task: { ...newTask("lost", PIP, null), threadId: ThreadId.make("nowhere") },
+            task: { ...newTask("lost", PIP, null), channelId: ChannelId.make("nowhere") },
             delegation: null,
             milestones: [],
           }),
@@ -1083,7 +1083,7 @@ describe("Task records", () => {
           limits: DEFAULT_QUEST_LIMITS,
           createdAt: now,
         });
-        return { raced, staleResult, failOpen, waiting, notSibling, noThread, stepQuest };
+        return { raced, staleResult, failOpen, waiting, notSibling, noChannel, stepQuest };
       }),
     );
 
@@ -1095,7 +1095,7 @@ describe("Task records", () => {
     expect(result.failOpen).toBe("children-open");
     expect(result.waiting).toBe("dependencies-open");
     expect(result.notSibling).toBe("dependency-outside-tree");
-    expect(result.noThread).toBe("thread-missing");
+    expect(result.noChannel).toBe("channel-missing");
     expect(result.stepQuest.value).toMatchObject({ parentQuestId: "q1", depth: 1 });
   });
 
@@ -1175,7 +1175,7 @@ describe("Task records", () => {
     ]);
     expect(result.afterQuest).toEqual([]);
   });
-  it("gives a member's work on a nested Quest the hob whose thread the request came from", async () => {
+  it("gives a member's work on a nested Quest the hob whose channel the request came from", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* campaign;
@@ -1197,11 +1197,11 @@ describe("Task records", () => {
       }),
     );
 
-    // Ada leads Pip's Quest, but it is followed in Aldric's thread.
-    expect(result.pip.map((each) => [each.task.id, each.quest.id, each.quest.leadId, each.threadAgentId])).toEqual([
+    // Ada leads Pip's Quest, but it is followed in Aldric's channel.
+    expect(result.pip.map((each) => [each.task.id, each.quest.id, each.quest.leadId, each.channelAgentId])).toEqual([
       ["keywords", "q2", ADA, ALDRIC],
     ]);
-    expect(result.quill.map((each) => [each.quest.leadId, each.threadAgentId])).toEqual([[ALDRIC, ALDRIC]]);
+    expect(result.quill.map((each) => [each.quest.leadId, each.channelAgentId])).toEqual([[ALDRIC, ALDRIC]]);
   });
 });
 
@@ -1210,7 +1210,7 @@ const approval = (id: string, agentId: AgentId, taskId: string | null, rootId = 
   new ApprovalRequest({
     id: ApprovalId.make(id),
     agentId,
-    threadId,
+    channelId,
     messageId: null,
     taskId: taskId === null ? null : TaskId.make(taskId),
     rootTaskId: taskId === null ? null : TaskId.make(rootId),

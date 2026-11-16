@@ -27,11 +27,12 @@ import {
   TaskFiles,
   UserGitIdentity,
 } from "@hobbots/agents";
-import type { AttemptActivityRead, ThreadTasksRead } from "@hobbots/api";
+import type { AttemptActivityRead, ChannelTasksRead } from "@hobbots/api";
 import { LocalGitToolsLive } from "@hobbots/charms";
 import {
   type Agent,
   type ApprovalRequest,
+  type Channel,
   GIT_INIT_LABEL,
   type GitIdentity,
   type HubQuestion,
@@ -39,7 +40,6 @@ import {
   type Message,
   roleFields,
   settleCommitsAs,
-  type Thread,
 } from "@hobbots/domain";
 import { Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
@@ -202,30 +202,30 @@ const eventually = <A>(read: () => Promise<A | undefined>) =>
     ),
   );
 
-const messages = async (thread: Thread) =>
-  (await request<ReadonlyArray<Message>>("GET", `/api/threads/${thread.id}/messages`)).body;
+const messages = async (channel: Channel) =>
+  (await request<ReadonlyArray<Message>>("GET", `/api/channels/${channel.id}/messages`)).body;
 
 /** Sends `lines` as one message and waits until its reply has ended. */
-const exchange = async (thread: Thread, ...lines: Array<string>) => {
-  const before = (await messages(thread)).length;
-  const sent = await request("POST", `/api/threads/${thread.id}/messages`, { content: lines.join("\n") });
+const exchange = async (channel: Channel, ...lines: Array<string>) => {
+  const before = (await messages(channel)).length;
+  const sent = await request("POST", `/api/channels/${channel.id}/messages`, { content: lines.join("\n") });
   expect(sent.status).toBe(200);
   return eventually(async () => {
-    const all = await messages(thread);
+    const all = await messages(channel);
     const last = all.at(-1);
     return all.length >= before + 2 && last?.role === "assistant" && !isInProgress(last.status) ? last : undefined;
   });
 };
 
-const approvals = async (thread: Thread) =>
-  (await request<ReadonlyArray<ApprovalRequest>>("GET", `/api/threads/${thread.id}/approvals`)).body;
+const approvals = async (channel: Channel) =>
+  (await request<ReadonlyArray<ApprovalRequest>>("GET", `/api/channels/${channel.id}/approvals`)).body;
 
 const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-/** The thread's Quest attempts, once every one has ended. */
-const endedAttempts = (thread: Thread, count: number) =>
+/** The channel's Quest attempts, once every one has ended. */
+const endedAttempts = (channel: Channel, count: number) =>
   eventually(async () => {
-    const [tree] = (await request<ThreadTasksRead>("GET", `/api/threads/${thread.id}/tasks`)).body.trees;
+    const [tree] = (await request<ChannelTasksRead>("GET", `/api/channels/${channel.id}/tasks`)).body.trees;
     const attempts = tree?.attempts ?? [];
     return attempts.length >= count && attempts.every((attempt) => attempt.state === "completed")
       ? attempts
@@ -273,10 +273,10 @@ describe("creating a Git repository from the sandbox, end to end", () => {
         });
       const lead = (await create("Rowan", 742)).body;
       const member = (await create("Bracken", 743)).body;
-      const thread = (await request<Thread>("POST", `/api/agents/${lead.id}/threads`)).body;
+      const channel = (await request<Channel>("POST", `/api/agents/${lead.id}/channels`)).body;
       // Bracken writes the ledger, cannot commit it with no identity set, and says the commit waits.
       await exchange(
-        thread,
+        channel,
         "Keep a pocket ledger",
         hub("delegate_task", {
           key: "ledger",
@@ -294,7 +294,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
         }),
       );
       const blocked = await eventually(async () => {
-        const [tree] = (await request<ThreadTasksRead>("GET", `/api/threads/${thread.id}/tasks`)).body.trees;
+        const [tree] = (await request<ChannelTasksRead>("GET", `/api/channels/${channel.id}/tasks`)).body.trees;
         const task = tree?.tasks.find((each) => each.ownerId === member.id && each.state === "blocked");
         const settled = tree?.attempts.every((each) => each.state !== "running") ?? false;
         return task !== undefined && settled ? task : undefined;
@@ -305,11 +305,11 @@ describe("creating a Git repository from the sandbox, end to end", () => {
       const asked = body.questions.filter(
         (question) => question.ask.kind === "coding-setup" && question.key === member.id,
       );
-      expect(asked).toEqual([expect.objectContaining({ chat: { agentId: lead.id, threadId: thread.id } })]);
+      expect(asked).toEqual([expect.objectContaining({ chat: { agentId: lead.id, channelId: channel.id } })]);
 
       // The lead's commit of Bracken's open work is refused, naming whose it is, and nothing is committed.
       const tried = await exchange(
-        thread,
+        channel,
         "Commit Bracken's ledger",
         "fake:tool Bash git add -A && git commit -m 'chore: pocket ledger v0.1'",
       );
@@ -325,7 +325,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
       mkdirSync(join(ledgerProject, "src"));
       execFileSync("git", ["init", "--quiet", join(ledgerProject, "vendor")]);
       const spelled = await exchange(
-        thread,
+        channel,
         "Commit from src",
         "fake:tool Bash git -C src/.. commit -m 'chore: ledger'",
       );
@@ -334,7 +334,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
         reason: expect.stringContaining("They are Bracken's to commit"),
       });
       const nested = await exchange(
-        thread,
+        channel,
         "Commit the vendored copy",
         "fake:tool Bash git -C vendor commit -m 'chore: vendor'",
       );
@@ -356,7 +356,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
         "-m",
         "chore: pocket ledger v0.1",
       );
-      const again = await exchange(thread, "Commit your notes", "fake:tool Bash git commit -m 'docs: notes'");
+      const again = await exchange(channel, "Commit your notes", "fake:tool Bash git commit -m 'docs: notes'");
       expect(again.steps.find((step) => step.kind === "tool" && step.label.includes("git commit"))).toMatchObject({
         state: "done",
       });
@@ -383,12 +383,12 @@ describe("creating a Git repository from the sandbox, end to end", () => {
         instructions: "",
       })
     ).body;
-    const thread = (await request<Thread>("POST", `/api/agents/${nettle.id}/threads`)).body;
-    await exchange(thread, "Start a repository", hub("start_quest", { key: "quest", goal: "Start a repository" }));
+    const channel = (await request<Channel>("POST", `/api/agents/${nettle.id}/channels`)).body;
+    await exchange(channel, "Start a repository", hub("start_quest", { key: "quest", goal: "Start a repository" }));
 
     // A `git init` command is refused and points to git_init, which the hub runs.
     const created = await exchange(
-      thread,
+      channel,
       "Make it a repository",
       "fake:tool Bash git init",
       hub("git_init", { folder: project }),
@@ -405,7 +405,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
 
     // Then it commits in the repository, as usual.
     await exchange(
-      thread,
+      channel,
       "Commit the README",
       `fake:run ${JSON.stringify({
         command: "git add README.md && git commit -m 'First'",
@@ -414,7 +414,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
       })}`,
     );
     // The three turns on the Task share its one Attempt (#644), which ends after each reply.
-    const attempts = await endedAttempts(thread, 1);
+    const attempts = await endedAttempts(channel, 1);
     const last = attempts.at(-1);
     if (last === undefined) throw new Error("no attempt");
     const { activity } = (await request<AttemptActivityRead>("GET", `/api/attempts/${last.id}/activity`)).body;
@@ -459,11 +459,11 @@ describe("creating a Git repository from the sandbox, end to end", () => {
         instructions: "",
       })
     ).body;
-    const thread = (await request<Thread>("POST", `/api/agents/${frodo.id}/threads`)).body;
+    const channel = (await request<Channel>("POST", `/api/agents/${frodo.id}/channels`)).body;
 
     // A delete the hub can read is refused, since the repository's config and hooks are in it, and
     // the hob is told what it can do instead.
-    const refused = await exchange(thread, "Start clean", `fake:tool Bash rm -rf ${earlier}`);
+    const refused = await exchange(channel, "Start clean", `fake:tool Bash rm -rf ${earlier}`);
     expect(refused.steps.find((step) => step.kind === "tool")).toMatchObject({
       state: "denied",
       reason: expect.stringContaining("the git_init tool replaces it"),
@@ -471,7 +471,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     expect(git("rev-parse", "HEAD")).toMatch(/^[0-9a-f]{40}$/);
 
     // One the hub cannot read in full is asked about on Balanced: the user approves it, the one step they take.
-    const sent = await request("POST", `/api/threads/${thread.id}/messages`, {
+    const sent = await request("POST", `/api/channels/${channel.id}/messages`, {
       content: [
         "Delete everything",
         `fake:run ${JSON.stringify({
@@ -484,14 +484,14 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     });
     expect(sent.status).toBe(200);
     const pending = await eventually(async () => {
-      return (await approvals(thread)).find((approval) => approval.state === "pending");
+      return (await approvals(channel)).find((approval) => approval.state === "pending");
     });
     await request("POST", `/api/approvals/${pending.id}/decision`, {
       decision: "approve",
       actionDigest: pending.actionDigest,
     });
     await eventually(async () => {
-      const last = (await messages(thread)).at(-1);
+      const last = (await messages(channel)).at(-1);
       return last?.role === "assistant" && !isInProgress(last.status) ? last : undefined;
     });
     // The fake runs no command, so the test leaves what the real sandbox does (local-git.test.ts in @hobbots/charms): only the
@@ -501,14 +501,14 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     }
 
     // git_init replaces that .git with a new repository, and asks nothing more.
-    const created = await exchange(thread, "Make it a repository", hub("git_init", { folder: earlier }));
+    const created = await exchange(channel, "Make it a repository", hub("git_init", { folder: earlier }));
     expect(created.steps.find((step) => step.label === GIT_INIT_LABEL)).toMatchObject({ state: "done" });
     expect(git("rev-parse", "--is-inside-work-tree")).toBe("true");
     expect(() => git("rev-parse", "--verify", "--quiet", "HEAD")).toThrow();
     expect(existsSync(join(earlier, ".git", "hooks"))).toBe(false);
     expect(readFileSync(join(earlier, ".git", "config"), "utf8")).not.toContain("earlier.git");
     expect(readdirSync(earlier)).toEqual([".git"]);
-    expect(await approvals(thread)).toHaveLength(1);
+    expect(await approvals(channel)).toHaveLength(1);
   });
 
   it("a refused git_init is recorded with its reason and fails its step, and one that created a repository is on the Task", async () => {
@@ -529,15 +529,15 @@ describe("creating a Git repository from the sandbox, end to end", () => {
         instructions: "",
       })
     ).body;
-    const thread = (await request<Thread>("POST", `/api/agents/${frodo.id}/threads`)).body;
-    await exchange(thread, "Start a repository", hub("start_quest", { key: "quest", goal: "Start a repository" }));
+    const channel = (await request<Channel>("POST", `/api/agents/${frodo.id}/channels`)).body;
+    await exchange(channel, "Start a repository", hub("start_quest", { key: "quest", goal: "Start a repository" }));
     // A repository is already there, so the first git_init is refused; the second makes one in a new folder.
     execFileSync("git", ["init", "--quiet", frodoProject], {
       env: { PATH: process.env.PATH, HOME: temp, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
     });
     const inner = join(frodoProject, "app");
     const reply = await exchange(
-      thread,
+      channel,
       "Make it a repository",
       hub("git_init", { folder: frodoProject }),
       hub("git_init", { folder: inner }),
@@ -547,7 +547,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     expect(JSON.stringify(refusedStep)).toContain("is already a Git repository");
     expect(createdStep).toMatchObject({ state: "done" });
 
-    const [tree] = (await request<ThreadTasksRead>("GET", `/api/threads/${thread.id}/tasks`)).body.trees;
+    const [tree] = (await request<ChannelTasksRead>("GET", `/api/channels/${channel.id}/tasks`)).body.trees;
     expect(tree?.refusals).toEqual([
       expect.objectContaining({
         agentId: frodo.id,
@@ -583,9 +583,9 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     const lead = (await create("Bramble", 699)).body;
     const member = (await create("Thistle", 700)).body;
     const commit = "git add README.md && git commit -m 'First'";
-    const thread = (await request<Thread>("POST", `/api/agents/${lead.id}/threads`)).body;
+    const channel = (await request<Channel>("POST", `/api/agents/${lead.id}/channels`)).body;
     const asked = await exchange(
-      thread,
+      channel,
       "Start the project",
       hub("delegate_task", {
         key: "repo",
@@ -607,7 +607,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
     expect(asked.content).toContain("Thistle will have: file reads, file edits, commands, git_init.");
 
     const tree = await eventually(async () => {
-      const [found] = (await request<ThreadTasksRead>("GET", `/api/threads/${thread.id}/tasks`)).body.trees;
+      const [found] = (await request<ChannelTasksRead>("GET", `/api/channels/${channel.id}/tasks`)).body.trees;
       const done = found?.tasks.find((task) => task.ownerId === member.id && task.state === "completed");
       // Its Task completes before the turn that completed it has ended.
       return found?.attempts.some((each) => each.taskId === done?.id && each.state === "completed") ? found : undefined;
@@ -625,7 +625,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
       { command: commit, folder: memberProject, state: "succeeded" },
     ]);
     // The lead never stepped in: none of its turns called git_init.
-    expect((await messages(thread)).flatMap((m) => m.steps).some((step) => step.label === GIT_INIT_LABEL)).toBe(false);
+    expect((await messages(channel)).flatMap((m) => m.steps).some((step) => step.label === GIT_INIT_LABEL)).toBe(false);
   });
 
   it("a member's commit as another hob is refused with the identity it commits as, and its plain commit runs", async () => {
@@ -647,12 +647,12 @@ describe("creating a Git repository from the sandbox, end to end", () => {
         instructions: "",
       })
     ).body;
-    const thread = (await request<Thread>("POST", `/api/agents/${pip.id}/threads`)).body;
-    await exchange(thread, "Keep a ledger", hub("start_quest", { key: "quest", goal: "Keep a ledger" }));
+    const channel = (await request<Channel>("POST", `/api/agents/${pip.id}/channels`)).body;
+    await exchange(channel, "Keep a ledger", hub("start_quest", { key: "quest", goal: "Keep a ledger" }));
 
     const bot = "frodo-hobbots[bot]";
     const asFrodo = `git -c user.name=${bot} -c user.email=351716127+${bot}@users.noreply.github.com commit -m 'chore: pocket ledger v0.1'`;
-    const refused = await exchange(thread, "Commit the ledger as Frodo", `fake:tool Bash ${asFrodo}`);
+    const refused = await exchange(channel, "Commit the ledger as Frodo", `fake:tool Bash ${asFrodo}`);
     expect(refused.steps.find((step) => step.kind === "tool" && step.label.includes(`user.name=${bot}`))).toMatchObject(
       {
         state: "denied",
@@ -662,7 +662,7 @@ describe("creating a Git repository from the sandbox, end to end", () => {
 
     // Told why, it commits without the override, which runs.
     const committed = await exchange(
-      thread,
+      channel,
       "Commit the ledger",
       `fake:run ${JSON.stringify({
         command: "git commit -m 'chore: pocket ledger v0.1'",

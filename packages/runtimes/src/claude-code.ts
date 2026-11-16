@@ -343,7 +343,7 @@ fs.renameSync(partial, file);
 /**
  * Makes `target` hold the latest copy of a session, by copying its transcript in from whichever
  * configuration folder last wrote it. Claude Code keeps a session's id on resume and appends where
- * the turn ran, so a thread whose turns move between folders keeps its whole history this way. A
+ * the turn ran, so a channel whose turns move between folders keeps its whole history this way. A
  * session no folder has is left for Claude Code to report. A hob's commands can write its runtime
  * folder, even while this runs, so the copy itself runs in COPY_TRANSCRIPT. Only the transcript
  * moves: what a session keeps beside it, such as subagent runs, stays where it was written.
@@ -1421,7 +1421,7 @@ export const makeClaudeCode = (config: ClaudeCodeConfig) =>
           // The sign-in sits in the tools' environment, where any command can print it.
           for (const value of Object.values(login)) request.redaction?.remember({ value, kind: "Claude sign-in" });
           // A sandboxed turn keeps its sessions in the hob's runtime folder, and one without tools in the
-          // user's own, so a thread resumes wherever its last turn ran.
+          // user's own, so a channel resumes wherever its last turn ran.
           const { sessionId } = request;
           if (sessionId && request.tools) {
             const [target, source] = sandboxed

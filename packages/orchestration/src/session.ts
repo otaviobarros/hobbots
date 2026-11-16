@@ -37,6 +37,7 @@ import {
   type AgentConfiguration,
   type AgentId,
   type AttemptId,
+  type ChannelId,
   endedSteps,
   previewToolOutput,
   type ReplyStep,
@@ -46,7 +47,6 @@ import {
   stripEscapes,
   systemInstructions,
   type TaskId,
-  type ThreadId,
   usageLimitOutcome,
   type WebReadMark,
 } from "@hobbots/domain";
@@ -68,7 +68,7 @@ export interface SessionTurn {
   /** The Attempt the turn runs as, which its commands and file changes are recorded on (ADR 023). */
   readonly attemptId: AttemptId;
   /** The chat the Task belongs to, which its web records name (ADR 036). */
-  readonly threadId: ThreadId | null;
+  readonly channelId: ChannelId | null;
   /** The runtime session to resume, or null for a fresh one with nothing of the hob's chat. */
   readonly sessionId: string | null;
   readonly access: ToolAccess | null;
@@ -185,7 +185,7 @@ export const runSessionTurn = (
     });
     const skills = yield* mounter.mounts(given);
     // Its skill uses are counted for the hob; a session's turn has no reply of yours to show them under.
-    const skillUses = yield* skillUseRecorder({ agentId: turn.agent.id, threadId: null, messageId: null });
+    const skillUses = yield* skillUseRecorder({ agentId: turn.agent.id, channelId: null, messageId: null });
     skillUses.given(given);
     const expected = turn.sessionId === null ? undefined : { sessionId: turn.sessionId };
     // The session's read-the-web mark (ADR 036): a resumed session holds the one an Attempt of the
@@ -230,10 +230,10 @@ export const runSessionTurn = (
     // What the turn searched is recorded, against the hob's web limits (ADR 036, Usage and limits).
     const webUse = yield* webSearchTurn({
       agentId: turn.agent.id,
-      threadId: turn.threadId,
+      channelId: turn.channelId,
       messageId: null,
       runtime: turn.config.runtime,
-      work: webWorkOf({ threadId: null, taskId: turn.taskId }),
+      work: webWorkOf({ channelId: null, taskId: turn.taskId }),
       taskId: Effect.succeed(turn.taskId),
       attemptId: Effect.succeed(turn.attemptId),
     });
@@ -268,7 +268,7 @@ export const runSessionTurn = (
           // its session is marked as having read the web (ADR 036).
           recordSearch: (event) =>
             Effect.andThen(
-              web.searched({ threadId: null, taskId: turn.taskId }, redactor)(event),
+              web.searched({ channelId: null, taskId: turn.taskId }, redactor)(event),
               webMark.read({ _tag: "Search", query: redactor.text(event.query) }),
             ),
           ...(turn.steers === undefined || adapter.steersTurns !== true ? {} : { steers: turn.steers }),

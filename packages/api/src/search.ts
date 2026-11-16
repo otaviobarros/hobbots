@@ -1,4 +1,4 @@
-import { AskAnswer, FIND_QUERY_MAX, FindKind, FindResult, SearchHit, ThreadId } from "@hobbots/domain";
+import { AskAnswer, ChannelId, FIND_QUERY_MAX, FindKind, FindResult, SearchHit } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { DeviceSession } from "./user-session.ts";
@@ -7,12 +7,12 @@ import { DeviceSession } from "./user-session.ts";
 const Query = Schema.String.check(Schema.isMaxLength(FIND_QUERY_MAX));
 
 /** What Ask asks: a question, in one chat or camp (`in`) or everywhere. */
-export const AskPayload = Schema.Struct({ question: Query, in: Schema.NullOr(ThreadId) });
+export const AskPayload = Schema.Struct({ question: Query, in: Schema.NullOr(ChannelId) });
 
 export class SearchGroup extends HttpApiGroup.make("search")
   .add(
-    // Threads whose title or finished messages contain every word of `q`; retired hobs and private
-    // camps are left out. Archived threads are found too; their `thread.archivedAt` marks them.
+    // Channels whose title or finished messages contain every word of `q`; retired hobs and private
+    // camps are left out. Archived channels are found too; their `channel.archivedAt` marks them.
     HttpApiEndpoint.get("search", "/search", {
       query: { q: Query },
       success: Schema.Array(SearchHit),
@@ -22,7 +22,7 @@ export class SearchGroup extends HttpApiGroup.make("search")
     // Decisions, artifacts, chapters and messages with every word of `q`, newest first (ADR 037):
     // in the chat or camp `in`, or everywhere but private camps. `kind` narrows them to one; all by default.
     HttpApiEndpoint.get("find", "/find", {
-      query: { q: Query, in: Schema.optionalKey(ThreadId), kind: Schema.optionalKey(FindKind) },
+      query: { q: Query, in: Schema.optionalKey(ChannelId), kind: Schema.optionalKey(FindKind) },
       success: FindResult,
     }),
   )

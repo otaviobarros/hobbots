@@ -177,18 +177,18 @@ function BusiestTurns({
       <UsageTable first={copy.columns.turn} searchesEnd>
         {turns.map((turn) => {
           const look = looks.get(turn.agentId);
-          const title = turn.threadId === null ? copy.taskTurn : (turn.threadTitle ?? copy.untitled);
+          const title = turn.channelId === null ? copy.taskTurn : (turn.channelTitle ?? copy.untitled);
           return (
             <tr key={turn.turn} className="shadow-[inset_0_1px_0_var(--color-line)]">
               <WhoCell
                 look={look}
                 title={
-                  turn.threadId === null ? (
+                  turn.channelId === null ? (
                     <span className="text-text-strong">{title}</span>
                   ) : (
                     <Link
-                      to="/hobs/$hobId/threads/$threadId"
-                      params={{ hobId: turn.agentId, threadId: turn.threadId }}
+                      to="/hobs/$hobId/channels/$channelId"
+                      params={{ hobId: turn.agentId, channelId: turn.channelId }}
                       search={turn.messageId === null ? {} : { message: turn.messageId }}
                       className="text-text-strong underline-offset-2 hover:underline"
                     >

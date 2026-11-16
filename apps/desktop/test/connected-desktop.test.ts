@@ -256,7 +256,7 @@ describe("the connected desktop", () => {
     }
     // The window may show the hub's two origins, HTTP on its port and HTTPS, and nothing else:
     // another port on the same host is another service.
-    expect(isHubPage(ORIGINS, "http://studio.example.ts.net:4317/threads/t1")).toBe(true);
+    expect(isHubPage(ORIGINS, "http://studio.example.ts.net:4317/channels/t1")).toBe(true);
     expect(isHubPage(ORIGINS, "https://studio.example.ts.net/")).toBe(true);
     expect(isHubPage(ORIGINS, "http://studio.example.ts.net:8080/")).toBe(false);
     expect(isHubPage(ORIGINS, "http://studio.example.ts.net/")).toBe(false);
@@ -323,7 +323,7 @@ describe("the connected desktop", () => {
 
     // The pinned node: page loads and the hub's calls go out untouched.
     expect(await send("http://studio.example.ts.net:4317/")).toEqual({});
-    expect(await send("https://studio.example.ts.net/api/threads")).toEqual({});
+    expect(await send("https://studio.example.ts.net/api/channels")).toEqual({});
     // Another port of the hub's host is another service: it never sees the device cookies.
     expect(await send("http://studio.example.ts.net:8080/")).toEqual({
       requestHeaders: { cookie: "theme=dark", accept: "text/html" },
@@ -340,7 +340,7 @@ describe("the connected desktop", () => {
     nodes.set(HUB_ADDRESS, OTHER);
     now += 61_000;
     expect(await send("http://studio.example.ts.net:4317/")).toEqual({ cancel: true });
-    expect(await send("https://studio.example.ts.net/threads/t1")).toEqual({ cancel: true });
+    expect(await send("https://studio.example.ts.net/channels/t1")).toEqual({ cancel: true });
     expect(await send("http://studio.example.ts.net:4317/api/activity")).toEqual({ cancel: true });
     expect(refused).toBe(3);
     // A Tailscale that cannot answer is not the pinned node either.
@@ -437,7 +437,7 @@ describe("the connected desktop", () => {
   it("a program that pretends to be a hub is trusted only as the node the user chose, and never gets a real token", async () => {
     const pretender = fakeHub({
       pretend: true,
-      health: { app: "hobbots", name: "Your Hub", version: "0.5.0", connect: 1 },
+      health: { app: "hobbots", name: "Your Hub", version: "0.5.0", connect: CONNECT_PROTOCOL },
     });
     const { lookup } = tailnet();
     const kept: Array<string> = [];

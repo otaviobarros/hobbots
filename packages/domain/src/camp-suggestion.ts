@@ -1,9 +1,9 @@
 import { Effect, Schema } from "effect";
+import { CAMP_GOAL_MAX, CHANNEL_TITLE_MAX } from "./channel.ts";
 import { type Chapter, ChapterStates, oneLineUpTo } from "./chapter.ts";
-import { ChapterId, ThreadId } from "./ids.ts";
+import { ChannelId, ChapterId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { Revision } from "./revision.ts";
-import { CAMP_GOAL_MAX, THREAD_TITLE_MAX } from "./thread.ts";
 
 /**
  * Camp suggestions (ADR 037, Records): when a topic in the chat grows, the hub suggests making it a
@@ -34,8 +34,8 @@ export const CAMP_SUGGESTION_MESSAGES = 80;
 /** How sure the hub's brain must be, from 0 to 1, that a chapter drifted into its own topic. */
 export const CAMP_DRIFT_CONFIDENCE = 0.7;
 
-/** The name a suggestion offers for its camp: one line, as long as a thread's title; null when it has no text. */
-export const suggestedCampTitle = (title: string): string | null => oneLineUpTo(title, THREAD_TITLE_MAX);
+/** The name a suggestion offers for its camp: one line, as long as a channel's title; null when it has no text. */
+export const suggestedCampTitle = (title: string): string | null => oneLineUpTo(title, CHANNEL_TITLE_MAX);
 
 /** The goal a suggestion offers for its camp: one line, as long as a camp's goal; null when it has no text. */
 export const suggestedCampGoal = (goal: string): string | null => oneLineUpTo(goal, CAMP_GOAL_MAX);
@@ -54,7 +54,7 @@ export type CampSuggestionReason = typeof CampSuggestionReason.Type;
 export class CampSuggestion extends Schema.Class<CampSuggestion>("CampSuggestion")({
   id: CampSuggestionId,
   /** The chat it is offered in, and the chapter it would move. */
-  threadId: ThreadId,
+  channelId: ChannelId,
   chapterId: ChapterId,
   /** Why it was raised, as codes and counts, never as text, so every client words it its own way. */
   reasons: Schema.Array(CampSuggestionReason),
@@ -71,7 +71,7 @@ export class CampSuggestion extends Schema.Class<CampSuggestion>("CampSuggestion
   /** When it was kept, accepted or expired, or null while it is open. */
   settledAt: Schema.NullOr(Schema.String),
   /** The camp its chapter moved into, once accepted; null otherwise. */
-  campId: Schema.NullOr(ThreadId),
+  campId: Schema.NullOr(ChannelId),
   revision: Revision,
 }) {}
 
@@ -84,7 +84,7 @@ export type CampSuggestionEvent =
   /** You chose Keep in chat: the chapter stays, and it is never suggested again. */
   | { readonly _tag: "Keep"; readonly at: string }
   /** The chapter moved into `campId`, whichever way it was asked, offered or not. */
-  | { readonly _tag: "Accept"; readonly at: string; readonly campId: ThreadId }
+  | { readonly _tag: "Accept"; readonly at: string; readonly campId: ChannelId }
   /** It no longer applies: its chapter was merged away, or its chat closed. */
   | { readonly _tag: "Expire"; readonly at: string };
 
@@ -133,7 +133,7 @@ export const CampSuggestionStateMachine = defineMachine<
     Accept: {
       from: ["pending", "open"],
       to: "accepted",
-      guard: (suggestion, e) => e.campId !== suggestion.threadId,
+      guard: (suggestion, e) => e.campId !== suggestion.channelId,
       apply: (suggestion, e) =>
         new CampSuggestion({ ...suggestion, state: "accepted", settledAt: e.at, campId: e.campId }),
     },
@@ -185,8 +185,8 @@ export const campSuggestionReasons = (counts: ChapterCounts): ReadonlyArray<Camp
 
 /** What the rule reads of a chapter, in the transaction that may raise its suggestion. */
 export interface SuggestionFacts {
-  /** The thread the chapter is in, and whether it is its hob's open chat. */
-  readonly thread: { readonly id: ThreadId; readonly openChat: boolean };
+  /** The channel the chapter is in, and whether it is its hob's open chat. */
+  readonly channel: { readonly id: ChannelId; readonly openChat: boolean };
   readonly chapter: Chapter;
   /** Whether the chapter has a suggestion already, in any state. */
   readonly suggested: boolean;
@@ -201,12 +201,12 @@ export interface SuggestionFacts {
  * checked for one topic before it is offered (#1557). Null when it raises none.
  */
 export const planCampSuggestion = (facts: SuggestionFacts): CampSuggestion | null => {
-  if (!facts.thread.openChat) return null;
-  if (facts.chapter.threadId !== facts.thread.id || !ChapterStates.isInThread(facts.chapter)) return null;
+  if (!facts.channel.openChat) return null;
+  if (facts.chapter.channelId !== facts.channel.id || !ChapterStates.isInChannel(facts.chapter)) return null;
   if (facts.suggested || facts.reasons.length === 0) return null;
   return new CampSuggestion({
     id: facts.id,
-    threadId: facts.thread.id,
+    channelId: facts.channel.id,
     chapterId: facts.chapter.id,
     reasons: facts.reasons,
     title: null,

@@ -1,6 +1,6 @@
-import { hobProposalOpen, memoryShareWaits, skillProposalOpen, type ThreadId } from "@hobbots/domain";
+import { type ChannelId, hobProposalOpen, memoryShareWaits, skillProposalOpen } from "@hobbots/domain";
 import { Schema } from "effect";
-import { entryThread, type InboxEntry } from "./inbox-entries.ts";
+import { entryChannel, type InboxEntry } from "./inbox-entries.ts";
 import type { InboxTab } from "./inbox-items.ts";
 
 /**
@@ -12,12 +12,12 @@ export type InboxScope = typeof InboxScope.Type;
 
 /** The chat or camp the Inbox opened on, and its scope; undefined when it opened on everything. */
 export interface InboxIn {
-  readonly threadId: ThreadId;
+  readonly channelId: ChannelId;
   readonly scope: InboxScope;
 }
 
 /** The search params that keep the Inbox on its chat or camp, for every link that stays in it. */
-type InSearch = { readonly in?: ThreadId; readonly scope?: "everywhere" };
+type InSearch = { readonly in?: ChannelId; readonly scope?: "everywhere" };
 
 /** A link inside the Inbox: its tab, and the chat or camp it stays on. */
 export type InboxSearch = InSearch & { readonly tab: InboxTab };
@@ -25,13 +25,13 @@ export type InboxSearch = InSearch & { readonly tab: InboxTab };
 export const inSearch = (scope: InboxIn | undefined): InSearch =>
   scope === undefined
     ? {}
-    : { in: scope.threadId, ...(scope.scope === "everywhere" && { scope: "everywhere" as const }) };
+    : { in: scope.channelId, ...(scope.scope === "everywhere" && { scope: "everywhere" as const }) };
 
 /** The entries the Inbox lists: those about its chat or camp, unless it shows everywhere. */
 export const inScope = (entries: ReadonlyArray<InboxEntry>, scope: InboxIn | undefined): ReadonlyArray<InboxEntry> =>
   scope === undefined || scope.scope === "everywhere"
     ? entries
-    : entries.filter((entry) => entryThread(entry) === scope.threadId);
+    : entries.filter((entry) => entryChannel(entry) === scope.channelId);
 
 /**
  * Whether an entry still waits on you. Needs you keeps the one you decided in view, so its outcome

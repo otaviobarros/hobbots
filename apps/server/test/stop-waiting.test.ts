@@ -8,7 +8,7 @@ import {
   RuntimeAdapter,
   type RuntimeEvent,
 } from "@hobbots/agents";
-import { Agent, AgentId, type Message, type MessageId, type ThreadId } from "@hobbots/domain";
+import { Agent, AgentId, type ChannelId, type Message, type MessageId } from "@hobbots/domain";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { Effect, Layer, Schedule, Stream } from "effect";
@@ -117,14 +117,14 @@ const run = <A, E>(
     return yield* test(requests, restarts).pipe(Effect.provide(layer));
   }).pipe(Effect.scoped, Effect.runPromise);
 
-const reply = (threadId: ThreadId, messageId: MessageId) =>
+const reply = (channelId: ChannelId, messageId: MessageId) =>
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
-    return (yield* repo.listMessages(threadId)).find((m) => m.id === messageId);
+    return (yield* repo.listMessages(channelId)).find((m) => m.id === messageId);
   });
 
-const until = (threadId: ThreadId, messageId: MessageId, ready: (message: Message) => boolean) =>
-  reply(threadId, messageId).pipe(
+const until = (channelId: ChannelId, messageId: MessageId, ready: (message: Message) => boolean) =>
+  reply(channelId, messageId).pipe(
     Effect.flatMap((m) => (m !== undefined && ready(m) ? Effect.succeed(m) : Effect.fail("not yet" as const))),
     Effect.retry(Schedule.spaced("5 millis")),
   );
@@ -134,15 +134,15 @@ describe("Stop waiting (#1056)", () => {
     const result = await run((requests) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
-        const thread = yield* chat.createThread(HOB_ID);
-        const { assistantMessage } = yield* chat.sendPrompt(thread.id, "start the dev server");
+        const channel = yield* chat.createChannel(HOB_ID);
+        const { assistantMessage } = yield* chat.sendPrompt(channel.id, "start the dev server");
         if (assistantMessage === null) return yield* Effect.die("the first message did not start");
-        const waiting = yield* until(thread.id, assistantMessage.id, (m) =>
+        const waiting = yield* until(channel.id, assistantMessage.id, (m) =>
           m.steps.some((step) => step.waitedOn === true),
         );
-        yield* chat.stopWaiting(thread.id);
-        const ended = yield* until(thread.id, assistantMessage.id, (m) => m.status === "complete");
-        yield* chat.sendPrompt(thread.id, "next");
+        yield* chat.stopWaiting(channel.id);
+        const ended = yield* until(channel.id, assistantMessage.id, (m) => m.status === "complete");
+        yield* chat.sendPrompt(channel.id, "next");
         yield* Effect.suspend(() => (requests.length === 2 ? Effect.void : Effect.fail("not yet" as const))).pipe(
           Effect.retry(Schedule.spaced("5 millis")),
         );
@@ -166,13 +166,13 @@ describe("Stop waiting (#1056)", () => {
     const result = await run((requests, restarts) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
-        const thread = yield* chat.createThread(HOB_ID);
-        const { assistantMessage } = yield* chat.sendPrompt(thread.id, "start the dev server");
+        const channel = yield* chat.createChannel(HOB_ID);
+        const { assistantMessage } = yield* chat.sendPrompt(channel.id, "start the dev server");
         if (assistantMessage === null) return yield* Effect.die("the first message did not start");
-        yield* until(thread.id, assistantMessage.id, (m) => m.steps.some((step) => step.waitedOn === true));
-        yield* chat.stopWaiting(thread.id);
-        const ended = yield* until(thread.id, assistantMessage.id, (m) => m.status === "complete");
-        yield* chat.sendPrompt(thread.id, "next");
+        yield* until(channel.id, assistantMessage.id, (m) => m.steps.some((step) => step.waitedOn === true));
+        yield* chat.stopWaiting(channel.id);
+        const ended = yield* until(channel.id, assistantMessage.id, (m) => m.status === "complete");
+        yield* chat.sendPrompt(channel.id, "next");
         yield* Effect.suspend(() => (requests.length === 2 ? Effect.void : Effect.fail("not yet" as const))).pipe(
           Effect.retry(Schedule.spaced("5 millis")),
         );
@@ -189,17 +189,17 @@ describe("Stop waiting (#1056)", () => {
     const result = await run(() =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
-        const idle = yield* chat.createThread(HOB_ID);
+        const idle = yield* chat.createChannel(HOB_ID);
         yield* chat.stopWaiting(idle.id);
-        const thread = yield* chat.createThread(HOB_ID);
-        const { assistantMessage } = yield* chat.sendPrompt(thread.id, "busy");
+        const channel = yield* chat.createChannel(HOB_ID);
+        const { assistantMessage } = yield* chat.sendPrompt(channel.id, "busy");
         if (assistantMessage === null) return yield* Effect.die("the first message did not start");
-        yield* until(thread.id, assistantMessage.id, (m) => m.content.length > 0);
-        yield* chat.stopWaiting(thread.id);
+        yield* until(channel.id, assistantMessage.id, (m) => m.content.length > 0);
+        yield* chat.stopWaiting(channel.id);
         yield* Effect.sleep("30 millis");
-        const after = yield* reply(thread.id, assistantMessage.id);
-        yield* chat.stop(thread.id);
-        const stopped = yield* until(thread.id, assistantMessage.id, (m) => m.status === "stopped");
+        const after = yield* reply(channel.id, assistantMessage.id);
+        yield* chat.stop(channel.id);
+        const stopped = yield* until(channel.id, assistantMessage.id, (m) => m.status === "stopped");
         return { after, stopped };
       }),
     );

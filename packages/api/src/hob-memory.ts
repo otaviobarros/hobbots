@@ -1,4 +1,4 @@
-import { AgentId, MemorySave, ThreadId } from "@hobbots/domain";
+import { AgentId, ChannelId, MemorySave } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { AgentNotFound } from "./errors.ts";
@@ -6,7 +6,7 @@ import { MemoryNotAnswering, MemoryScopes } from "./memory-pages.ts";
 import { DeviceSession } from "./user-session.ts";
 
 /**
- * Memory in a chat and on a hob's page (ADR 028, #961): the saves a thread's replies made, Undo for
+ * Memory in a chat and on a hob's page (ADR 028, #961): the saves a channel's replies made, Undo for
  * one of them, and what a hob reads. Every call goes through the hub, as you.
  */
 
@@ -29,10 +29,10 @@ export class MemorySaveNotUndoable extends Schema.TaggedError<MemorySaveNotUndoa
 
 export class HobMemoryGroup extends HttpApiGroup.make("hobMemory")
   .add(
-    // The saves the thread's replies made, oldest first; the stream adds later ones as
+    // The saves the channel's replies made, oldest first; the stream adds later ones as
     // `MemorySaveRecorded` and `MemorySaveChanged`.
-    HttpApiEndpoint.get("threadSaves", "/threads/:threadId/memory-saves", {
-      params: { threadId: ThreadId },
+    HttpApiEndpoint.get("channelSaves", "/channels/:channelId/memory-saves", {
+      params: { channelId: ChannelId },
       success: Schema.Array(MemorySave),
     }),
   )

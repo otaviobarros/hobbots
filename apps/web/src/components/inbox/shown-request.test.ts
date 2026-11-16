@@ -1,4 +1,4 @@
-import { AgentId, ApprovalId, ApprovalRequest, INBOX_HISTORY, MessageId, ThreadId } from "@hobbots/domain";
+import { AgentId, ApprovalId, ApprovalRequest, ChannelId, INBOX_HISTORY, MessageId } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { inboxWindow } from "../../api/inbox-window.ts";
 import { selectedRequest, tabRequests } from "./inbox-items.ts";
@@ -10,7 +10,7 @@ const request = (n: number, state: ApprovalRequest["state"]) =>
   new ApprovalRequest({
     id: ApprovalId.make(`r${String(n).padStart(4, "0")}`),
     agentId: AgentId.make("pip"),
-    threadId: ThreadId.make("t1"),
+    channelId: ChannelId.make("t1"),
     messageId: MessageId.make("m1"),
     stepId: "tool-1",
     tool: "Bash",

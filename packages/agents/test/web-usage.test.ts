@@ -2,10 +2,10 @@ import {
   AgentId,
   AttemptId,
   blockedSiteFor,
+  ChannelId,
   DEFAULT_WEB_SETTINGS,
   effectiveWebLimits,
   MessageId,
-  ThreadId,
   webSearchBilledPerSearch,
 } from "@hobbots/domain";
 import { Effect } from "effect";
@@ -17,7 +17,7 @@ import { blockedSiteOf, type RuntimeEvent, WebRecords, type WebTurnPlace, webSea
 const ada = AgentId.make("ada");
 const place = (messageId: string): WebTurnPlace => ({
   agentId: ada,
-  threadId: ThreadId.make("t1"),
+  channelId: ChannelId.make("t1"),
   messageId: MessageId.make(messageId),
   runtime: "codex",
   work: "thread:t1",
@@ -80,7 +80,7 @@ describe("web limits and records", () => {
     expect(usage.count).toEqual({ searches: 1, pages: 0, bytes: 0, tokens: 0, billed: [] });
     expect(usage.searches[0]).toMatchObject({
       agentId: ada,
-      threadId: "t1",
+      channelId: "t1",
       messageId: "m1",
       attemptId: "a1",
       turn: "reply:m1",

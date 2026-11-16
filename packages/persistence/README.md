@@ -1,6 +1,6 @@
 # packages/persistence
 
-Validation slice implemented ([ADR 009](../../docs/decisions/009-toolchain-and-validation-slice.md)): SQLite client, migrations and `HobbotsRepositoryLive`, which implements the `HobbotsRepository` port of `@hobbots/agents` for hobs, threads and messages.
+Validation slice implemented ([ADR 009](../../docs/decisions/009-toolchain-and-validation-slice.md)): SQLite client, migrations and `HobbotsRepositoryLive`, which implements the `HobbotsRepository` port of `@hobbots/agents` for hobs, channels and messages.
 
 SQLite/PostgreSQL repositories, transactions, journal, outbox and migrations. `TaskRepositoryLive` stores the Tasks, Quests and records of [ADR 018](../../docs/decisions/018-tasks-and-quests.md) and checks their lineage on every write.
 
@@ -8,7 +8,7 @@ SQLite/PostgreSQL repositories, transactions, journal, outbox and migrations. `T
 
 ## Migrations
 
-Each migration is one file in `src/migrations`. `pnpm migration:new <name>` adds one named by the current UTC second, such as `20261113231542_thread_members.ts`; the first 114 keep their numbers `0001` to `0114`. No list names them: `src/migrations/index.ts` reads the folder. The migrator in `src/migrator.ts` applies every migration a database has not applied, in id order, so a pull request that merges after one opened later still gets its migration applied everywhere ([ADR 040](../../docs/decisions/040-parallel-pull-requests.md)). Never edit a migration once it merges.
+Each migration is one file in `src/migrations`. `pnpm migration:new <name>` adds one named by the current UTC second, such as `20261113231542_channel_members.ts`; the first 114 keep their numbers `0001` to `0114`. No list names them: `src/migrations/index.ts` reads the folder. The migrator in `src/migrator.ts` applies every migration a database has not applied, in id order, so a pull request that merges after one opened later still gets its migration applied everywhere ([ADR 040](../../docs/decisions/040-parallel-pull-requests.md)). Never edit a migration once it merges.
 
 ## Test database
 

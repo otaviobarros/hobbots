@@ -1,4 +1,4 @@
-import { AgentId, Quest, type TaskTree, ThreadId } from "@hobbots/domain";
+import { AgentId, ChannelId, Quest, type TaskTree } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import type { HobState } from "../../lib/hob-state.ts";
 import { memberWork, quest } from "../../test/member-work.ts";
@@ -7,44 +7,44 @@ import {
   homeSummary,
   inFilter,
   peekBench,
-  peekThread,
+  peekChannel,
   pickUpRows,
   questProgress,
   sceneChips,
 } from "./home-model.ts";
 
-const older = { id: ThreadId.make("t-old"), updatedAt: "2026-11-01T08:00:00.000Z" };
-const newer = { id: ThreadId.make("t-new"), updatedAt: "2026-11-02T08:00:00.000Z" };
+const older = { id: ChannelId.make("t-old"), updatedAt: "2026-11-01T08:00:00.000Z" };
+const newer = { id: ChannelId.make("t-new"), updatedAt: "2026-11-02T08:00:00.000Z" };
 
-describe("peekThread", () => {
+describe("peekChannel", () => {
   it("opens the chat the hob is replying in, else the one it used last", () => {
-    expect(peekThread([newer, older], { [older.id]: "thinking" })).toBe(older);
-    expect(peekThread([older, newer], {})).toBe(newer);
-    expect(peekThread([], {})).toBeNull();
+    expect(peekChannel([newer, older], { [older.id]: "thinking" })).toBe(older);
+    expect(peekChannel([older, newer], {})).toBe(newer);
+    expect(peekChannel([], {})).toBeNull();
   });
 });
 
 describe("peekBench", () => {
   const ada = AgentId.make("ada");
   const launch = quest("q1", "aldric");
-  // Only the first Task of a tree is read: the request asked of the hob in that thread.
+  // Only the first Task of a tree is read: the request asked of the hob in that channel.
   const treeOf = (work: ReturnType<typeof memberWork>) => ({ tasks: [work.task] }) as unknown as TaskTree;
 
   it("opens the Task the hob's chat works on", () => {
     const own = memberWork("own", "ada", launch, "active");
     expect(peekBench(ada, newer.id, [treeOf(own)], [])).toEqual({
       hobId: ada,
-      threadId: newer.id,
+      channelId: newer.id,
       taskId: own.task.id,
     });
   });
 
-  it("else opens the hob's open Quest work in the Quest's thread", () => {
+  it("else opens the hob's open Quest work in the Quest's channel", () => {
     const done = memberWork("done", "ada", launch, "completed");
     const build = memberWork("build", "ada", launch, "active");
     expect(peekBench(ada, newer.id, [treeOf(done)], [build, done])).toEqual({
       hobId: AgentId.make("aldric"),
-      threadId: launch.threadId,
+      channelId: launch.channelId,
       taskId: build.task.id,
     });
   });
@@ -91,31 +91,31 @@ describe("pickUpRows", () => {
   const launch = quest("q1", "aldric", 0);
   const group = (updated: number) => {
     const work = memberWork("copy", "quill", launch, "blocked", updated);
-    return { quest: launch, threadAgentId: launch.leadId, members: [work] };
+    return { quest: launch, channelAgentId: launch.leadId, members: [work] };
   };
   const chat = (id: string, day: number) => ({
     hob: "aldric",
-    thread: { id: ThreadId.make(id), updatedAt: `2026-11-0${day}T08:00:00.000Z` },
+    channel: { id: ChannelId.make(id), updatedAt: `2026-11-0${day}T08:00:00.000Z` },
   });
 
   it("mixes chats and Quests, the most recently active first", () => {
-    const rows = pickUpRows([chat("t-old", 1), chat("t-new", 3), chat("q1-thread", 1)], [group(10)]);
-    expect(rows.map((row) => (row.kind === "thread" ? row.thread.id : row.group.quest.id))).toEqual([
+    const rows = pickUpRows([chat("t-old", 1), chat("t-new", 3), chat("q1-channel", 1)], [group(10)]);
+    expect(rows.map((row) => (row.kind === "channel" ? row.channel.id : row.group.quest.id))).toEqual([
       "t-new",
       "t-old",
       "q1",
     ]);
   });
 
-  it("leaves out a Quest whose thread is not open, as in an archived camp, and keeps one with no thread", () => {
+  it("leaves out a Quest whose channel is not open, as in an archived camp, and keeps one with no channel", () => {
     const archived = pickUpRows([chat("t-old", 1)], [group(10)]);
-    expect(archived.map((row) => row.kind)).toEqual(["thread"]);
-    const threadless = { ...group(10), quest: new Quest({ ...launch, threadId: null }) };
-    expect(pickUpRows([chat("t-old", 1)], [threadless]).map((row) => row.kind)).toEqual(["thread", "quest"]);
+    expect(archived.map((row) => row.kind)).toEqual(["channel"]);
+    const threadless = { ...group(10), quest: new Quest({ ...launch, channelId: null }) };
+    expect(pickUpRows([chat("t-old", 1)], [threadless]).map((row) => row.kind)).toEqual(["channel", "quest"]);
   });
 
   it("shows a chat that follows a Quest once, as that Quest", () => {
-    const rows = pickUpRows([chat("q1-thread", 3)], [group(10)]);
+    const rows = pickUpRows([chat("q1-channel", 3)], [group(10)]);
     expect(rows.map((row) => row.kind)).toEqual(["quest"]);
   });
 
@@ -124,7 +124,7 @@ describe("pickUpRows", () => {
       [1, 2, 3, 4, 5, 6, 7].map((day) => chat(`t${day}`, day)),
       [],
     );
-    expect(rows.map((row) => (row.kind === "thread" ? row.thread.id : ""))).toEqual(["t7", "t6", "t5", "t4", "t3"]);
+    expect(rows.map((row) => (row.kind === "channel" ? row.channel.id : ""))).toEqual(["t7", "t6", "t5", "t4", "t3"]);
   });
 });
 

@@ -1,5 +1,5 @@
 import { TaskNotFound, UserSession } from "@hobbots/api";
-import type { Actor, Claim, ClaimClash, ClaimId, ClaimScope, Committed, TaskId, ThreadId } from "@hobbots/domain";
+import type { Actor, ChannelId, Claim, ClaimClash, ClaimId, ClaimScope, Committed, TaskId } from "@hobbots/domain";
 import { Context, DateTime, Effect, Option } from "effect";
 import { EventPublisher } from "./ports.ts";
 import { TaskRepository } from "./tasks.ts";
@@ -72,9 +72,9 @@ export class ClaimRegister extends Context.Service<
     readonly ofTask: (taskId: TaskId) => Effect.Effect<ReadonlyArray<Claim>>;
     /**
      * The open clashes a chat or camp shows as a Heads-up (#1390): each group of open claims that
-     * clash, one of them contested by a Task whose work belongs to the thread, oldest first.
+     * clash, one of them contested by a Task whose work belongs to the channel, oldest first.
      */
-    readonly clashesIn: (threadId: ThreadId) => Effect.Effect<ReadonlyArray<ClaimClash>>;
+    readonly clashesIn: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<ClaimClash>>;
     /**
      * Moves the Task's open claims to you (#1449): each becomes yours, its hob hears of it through
      * its backpack in the same transaction, and the hub refuses its writes to them until the Task

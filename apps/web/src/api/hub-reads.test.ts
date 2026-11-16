@@ -15,9 +15,9 @@ const { applyStatusFrame, hubStatusQuery } = await import("./hub-status.ts");
 const { activeSummariesQuery, questSummaryChanged } = await import("./quest-summaries.ts");
 
 const runFrame = JSON.stringify({
-  _tag: "ThreadRunChanged",
+  _tag: "ChannelRunChanged",
   run: {
-    threadId: "t1",
+    channelId: "t1",
     rootMessageId: null,
     run: "running",
     reply: "working",
@@ -29,7 +29,7 @@ const runFrame = JSON.stringify({
 });
 const summary = {
   questId: "q1",
-  threadId: null,
+  channelId: null,
   state: "active",
   tones: { needs: 0, working: 1, waiting: 0, done: 0, problem: 0, idle: 0 },
   needsYou: 0,
@@ -63,7 +63,7 @@ describe("the hub's reads in the window", () => {
     await settled();
     expect(hubReadFailed(client)).toBe(true);
 
-    // A run event for another thread is no snapshot: the hob whose presence it never read is still unknown.
+    // A run event for another channel is no snapshot: the hob whose presence it never read is still unknown.
     applyStatusFrame(client, runFrame);
     expect(hubReadFailed(client)).toBe(true);
 

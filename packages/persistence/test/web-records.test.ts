@@ -2,12 +2,12 @@ import { WebRecords } from "@hobbots/agents";
 import {
   AgentId,
   AttemptId,
+  ChannelId,
   DEFAULT_WEB_SETTINGS,
   MessageId,
   NO_HOB_WEB_LIMITS,
   QuestId,
   TaskId,
-  ThreadId,
   WebFetchRecord,
   WebRecordId,
   WebSearchRecord,
@@ -34,7 +34,7 @@ const storedHob = (id: string) =>
 const place = (id: string, messageId: string | null, at: string) => ({
   id: WebRecordId.make(id),
   agentId: ada,
-  threadId: ThreadId.make("t1"),
+  channelId: ChannelId.make("t1"),
   messageId: messageId === null ? null : MessageId.make(messageId),
   taskId: null,
   attemptId: messageId === null ? AttemptId.make("a1") : null,
@@ -241,7 +241,7 @@ describe("web records and Settings › Web", () => {
       {
         turn: "attempt:a1",
         agentId: ada,
-        threadId: ThreadId.make("t1"),
+        channelId: ChannelId.make("t1"),
         messageId: null,
         taskId: null,
         at: "2026-11-08T11:00:00.000Z",
@@ -251,7 +251,7 @@ describe("web records and Settings › Web", () => {
       {
         turn: "reply:m1",
         agentId: ada,
-        threadId: ThreadId.make("t1"),
+        channelId: ChannelId.make("t1"),
         messageId: MessageId.make("m1"),
         taskId: null,
         at: "2026-11-08T10:30:00.000Z",

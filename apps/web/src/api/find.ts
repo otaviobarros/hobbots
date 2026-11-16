@@ -1,4 +1,4 @@
-import { FIND_QUERY_MAX, type FindResult, type ThreadId } from "@hobbots/domain";
+import { type ChannelId, FIND_QUERY_MAX, type FindResult } from "@hobbots/domain";
 import { keepPreviousData, queryOptions, useMutation, useQuery } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { useSettledQuery } from "./search.ts";
@@ -9,7 +9,7 @@ import { useSettledQuery } from "./search.ts";
 /** How often open results are read again: about as often as the hub indexes what changed. */
 const REFRESH_MS = 5_000;
 
-const findQuery = (query: string, scope: ThreadId | null) =>
+const findQuery = (query: string, scope: ChannelId | null) =>
   queryOptions({
     queryKey: ["find", scope, query] as const,
     queryFn: () => call((c) => c.search.find({ query: scope === null ? { q: query } : { q: query, in: scope } })),
@@ -25,7 +25,7 @@ const nothing: FindResult = { records: [], messages: [] };
  * What matches `query` in the chat or camp `scope`, or everywhere when it is null, asked once
  * typing pauses. While the next answer is on its way the previous one stays, so nothing flickers.
  */
-export const useFind = (query: string, scope: ThreadId | null) => {
+export const useFind = (query: string, scope: ChannelId | null) => {
   const { trimmed, enabled, typing } = useSettledQuery(query);
   const result = useQuery({ ...findQuery(trimmed, scope), enabled, placeholderData: keepPreviousData });
   const found = enabled ? (result.data ?? nothing) : nothing;
@@ -39,7 +39,7 @@ const askKey = ["find", "ask"] as const;
 export const useAsk = () =>
   useMutation({
     mutationKey: askKey,
-    mutationFn: (input: { readonly question: string; readonly scope: ThreadId | null }) =>
+    mutationFn: (input: { readonly question: string; readonly scope: ChannelId | null }) =>
       call((c) =>
         c.search.ask({ payload: { question: input.question.trim().slice(0, FIND_QUERY_MAX), in: input.scope } }),
       ),

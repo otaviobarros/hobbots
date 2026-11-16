@@ -11,7 +11,7 @@ import { ApiError } from "../../api/client.ts";
 export type ChapterChangeError = ChapterChangeRefusal | "unreachable";
 
 const REFUSALS: ReadonlySet<string> = new Set<ChapterChangeRefusal>([
-  "thread-closed",
+  "channel-closed",
   "empty-title",
   "live-chapter-empty",
   "message-not-found",

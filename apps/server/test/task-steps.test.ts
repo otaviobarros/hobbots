@@ -14,6 +14,7 @@ import {
   Agent,
   AgentId,
   AttemptId,
+  type ChannelId,
   isLiveAttempt,
   type Message,
   SkillName,
@@ -22,7 +23,6 @@ import {
   type Task,
   TaskId,
   type TaskTree,
-  type ThreadId,
 } from "@hobbots/domain";
 import { waitFor, waitUntil } from "@hobbots/domain/testing";
 import {
@@ -268,17 +268,17 @@ const insertAldric = Effect.gen(function* () {
 
 const seed = Effect.andThen(
   insertAldric,
-  ChatService.use((chat) => chat.createThread(ALDRIC)),
+  ChatService.use((chat) => chat.createChannel(ALDRIC)),
 );
 
 /** A prompt line that makes the fake call a Task tool with `input`. */
 const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
 
-/** The thread's latest reply once it has ended. */
-const reply = (threadId: ThreadId) =>
+/** The channel's latest reply once it has ended. */
+const reply = (channelId: ChannelId) =>
   waitUntil(
     Effect.map(
-      HobbotsRepository.use((repo) => repo.listMessages(threadId)),
+      HobbotsRepository.use((repo) => repo.listMessages(channelId)),
       (all) => all.at(-1),
     ),
     (last): last is Message => last?.role === "assistant" && last.status !== "streaming" && last.status !== "stopping",
@@ -288,17 +288,17 @@ const reply = (threadId: ThreadId) =>
 /** `prompt`, with the reply asked to repeat the hub's answers, for a test that reads a refusal's words (#1560). */
 const saying = (prompt: string) => `${prompt}\n${FAKE_SAY_ANSWERS_DIRECTIVE}`;
 
-const send = (threadId: ThreadId, prompt: string) =>
+const send = (channelId: ChannelId, prompt: string) =>
   Effect.gen(function* () {
-    yield* ChatService.use((chat) => chat.sendPrompt(threadId, prompt));
-    return yield* reply(threadId);
+    yield* ChatService.use((chat) => chat.sendPrompt(channelId, prompt));
+    return yield* reply(channelId);
   });
 
-/** The thread's one Task tree, once `ready` holds for it. */
-const treeWhen = (threadId: ThreadId, ready: (tree: TaskTree) => boolean) =>
+/** The channel's one Task tree, once `ready` holds for it. */
+const treeWhen = (channelId: ChannelId, ready: (tree: TaskTree) => boolean) =>
   waitUntil(
     Effect.map(
-      TaskRepository.use((tasks) => tasks.readThreadTrees(threadId)),
+      TaskRepository.use((tasks) => tasks.readChannelTrees(channelId)),
       ([tree]) => tree,
     ),
     (tree): tree is TaskTree => tree !== undefined && ready(tree),
@@ -320,14 +320,14 @@ const chain = (briefs: ReadonlyArray<string>) =>
 describe("a Task's steps in fresh sessions", () => {
   it("a Task split into four steps shows step 2 of 4 and finishes with one result", async () => {
     const { run, control, stepsAsked } = setUp();
-    const thread = await run(seed);
+    const channel = await run(seed);
     const briefs = ["Outline the campaign", "Write the copy", "Pick the images", "Proofread everything"];
     await run(
-      send(thread.id, `Plan the Black Friday launch\n${hub("plan_steps", { key: "plan", steps: chain(briefs) })}`),
+      send(channel.id, `Plan the Black Friday launch\n${hub("plan_steps", { key: "plan", steps: chain(briefs) })}`),
     );
 
     // The request became a Task with four steps; only the first runs.
-    const first = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
+    const first = await run(treeWhen(channel.id, (tree) => states(tree)[0] === "active"));
     expect(first.tasks[0]?.brief).toBe(
       `Plan the Black Friday launch\n${hub("plan_steps", { key: "plan", steps: chain(briefs) })}`,
     );
@@ -335,24 +335,24 @@ describe("a Task's steps in fresh sessions", () => {
     expect(shown(first)).toBe("step 1 of 4");
 
     await run(control.open("Outline the campaign"));
-    const second = await run(treeWhen(thread.id, (tree) => states(tree)[1] === "active"));
+    const second = await run(treeWhen(channel.id, (tree) => states(tree)[1] === "active"));
     expect(states(second)).toEqual(["completed", "active", "queued", "queued"]);
     expect(shown(second)).toBe("step 2 of 4");
 
     for (const brief of briefs.slice(1)) await run(control.open(brief));
-    const ended = await run(treeWhen(thread.id, (tree) => states(tree).every((state) => state === "completed")));
+    const ended = await run(treeWhen(channel.id, (tree) => states(tree).every((state) => state === "completed")));
     expect(ended.tasks[0]?.state).toBe("active");
 
-    // Every step ran in a session of its own, from its brief, never the thread's.
+    // Every step ran in a session of its own, from its brief, never the channel's.
     const asked = stepsAsked();
     expect(asked.map((request) => request.prompt.split("\n")[0])).toEqual(briefs);
     expect(asked.every((request) => request.sessionId === null && request.briefing === null)).toBe(true);
     const sessions = ended.attempts.filter((each) => each.taskId !== ended.tasks[0]?.id).map((each) => each.sessionId);
     expect(new Set(sessions).size).toBe(4);
-    const threadSession = (await run(HobbotsRepository.use((repo) => repo.findThread(thread.id)))).pipe(
+    const channelSession = (await run(HobbotsRepository.use((repo) => repo.findChannel(channel.id)))).pipe(
       Option.getOrThrow,
     ).sessions[0]?.sessionId;
-    expect(sessions).not.toContain(threadSession);
+    expect(sessions).not.toContain(channelSession);
     // A later step hears what the one before it returned, and nothing of the steps after it.
     const third = asked[2]?.prompt ?? "";
     expect(third).toContain("Step 2 returned:");
@@ -361,9 +361,9 @@ describe("a Task's steps in fresh sessions", () => {
 
     // The owner returns one result for the Task.
     await run(
-      send(thread.id, hub("complete_task", { delivered: true, key: "done", summary: "The launch plan is ready" })),
+      send(channel.id, hub("complete_task", { delivered: true, key: "done", summary: "The launch plan is ready" })),
     );
-    const finished = await run(treeWhen(thread.id, (tree) => tree.tasks[0]?.state === "completed"));
+    const finished = await run(treeWhen(channel.id, (tree) => tree.tasks[0]?.state === "completed"));
     expect(finished.tasks[0]?.result?.summary).toBe("The launch plan is ready");
     expect(finished.tasks.filter((task) => task.parentId === null)).toHaveLength(1);
   });
@@ -408,16 +408,16 @@ describe("a Task's steps in fresh sessions", () => {
       }),
     );
     const { run, control, stepsAsked } = setUp({ skills });
-    const thread = await run(seed);
+    const channel = await run(seed);
     await run(
       send(
-        thread.id,
+        channel.id,
         `Ship it\n${hub("plan_steps", { key: "plan", steps: chain(["Cut the release\nfake:skill release"]) })}`,
       ),
     );
-    await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
+    await run(treeWhen(channel.id, (tree) => states(tree)[0] === "active"));
     await run(control.open("Cut the release"));
-    await run(treeWhen(thread.id, (tree) => states(tree)[0] === "completed"));
+    await run(treeWhen(channel.id, (tree) => states(tree)[0] === "completed"));
     const mount = {
       name: "release",
       revision: hash,
@@ -430,33 +430,33 @@ describe("a Task's steps in fresh sessions", () => {
     expect(control.requests[0]?.skills).toEqual([mount]);
     // The step used it, counted for its hob with no reply of yours to show it under (#1096).
     const uses = await Effect.runPromise(library.uses({ agentId: ALDRIC }));
-    expect(uses).toMatchObject([{ name: "release", pin: hash, number: 1, threadId: null, messageId: null }]);
+    expect(uses).toMatchObject([{ name: "release", pin: hash, number: 1, channelId: null, messageId: null }]);
   });
 
   it("the owner's session holds the steps' checkpoints and results, not their transcripts", async () => {
     const { run, control } = setUp();
-    const thread = await run(seed);
+    const channel = await run(seed);
     const steps = [
       {
         brief: `Research keywords\n${hub("report_checkpoint", { key: "found", kind: "finding", summary: "Shoppers search for bundles" })}\n${hub("complete_task", { delivered: true, key: "kw", summary: "Twelve keywords chosen" })}`,
       },
       { brief: `Draft the copy\n${hub("complete_task", { delivered: true, key: "copy", summary: "Copy drafted" })}` },
     ];
-    await run(send(thread.id, `Write the campaign\n${hub("plan_steps", { key: "plan", steps })}`));
+    await run(send(channel.id, `Write the campaign\n${hub("plan_steps", { key: "plan", steps })}`));
     await run(control.open("Research keywords"));
     await run(control.open("Draft the copy"));
-    const ended = await run(treeWhen(thread.id, (tree) => states(tree).every((state) => state === "completed")));
+    const ended = await run(treeWhen(channel.id, (tree) => states(tree).every((state) => state === "completed")));
     expect(stepsOf(ended).map((step) => step.result?.summary)).toEqual(["Twelve keywords chosen", "Copy drafted"]);
     expect(ended.checkpoints.some((each) => each.kind === "finding")).toBe(true);
     // A step that returned its own result still ends its session as completed.
     const settled = await run(
-      treeWhen(thread.id, (tree) =>
+      treeWhen(channel.id, (tree) =>
         tree.attempts.filter((each) => each.taskId !== tree.tasks[0]?.id).every((each) => each.state === "completed"),
       ),
     );
     expect(settled.attempts.filter((each) => each.taskId !== settled.tasks[0]?.id)).toHaveLength(2);
 
-    const next = await run(send(thread.id, "How did it go?"));
+    const next = await run(send(channel.id, "How did it go?"));
     const told = control.requests.at(-1)?.briefing ?? "";
     expect(told).toContain("Twelve keywords chosen");
     expect(told).toContain("Copy drafted");
@@ -468,7 +468,7 @@ describe("a Task's steps in fresh sessions", () => {
 
   it("a step works from the whole result and artifacts of the step it comes after, not a summary", async () => {
     const { run, control, stepsAsked } = setUp();
-    const thread = await run(seed);
+    const channel = await run(seed);
     // Longer than a summary, as an outline or a draft is: only its end says it arrived whole.
     const outline = `${"Channel notes for the launch. ".repeat(100)}End of the outline.`;
     const draft = `${"Draft line for the launch. ".repeat(100)}End of the draft.`;
@@ -483,17 +483,17 @@ describe("a Task's steps in fresh sessions", () => {
       },
       { brief: "Write the copy", after: [1] },
     ];
-    await run(send(thread.id, `Plan the spring launch\n${hub("plan_steps", { key: "plan", steps })}`));
+    await run(send(channel.id, `Plan the spring launch\n${hub("plan_steps", { key: "plan", steps })}`));
     await run(control.open("Outline the channels"));
     await run(control.open("Write the copy"));
-    await run(treeWhen(thread.id, (tree) => states(tree).every((state) => state === "completed")));
+    await run(treeWhen(channel.id, (tree) => states(tree).every((state) => state === "completed")));
 
     const second = stepsAsked()[1]?.prompt ?? "";
     expect(second).toContain(`Step 1 returned: ${outline}`);
     expect(second).toMatch(new RegExp(`Draft \\(text, artifact [0-9a-f-]+\\): ${draft}`));
 
     // The owner's briefing still keeps each result short, so its own context stays small.
-    await run(send(thread.id, "How did it go?"));
+    await run(send(channel.id, "How did it go?"));
     const told = control.requests.at(-1)?.briefing ?? "";
     expect(told).toContain("Channel notes for the launch.");
     expect(told).not.toContain("End of the outline.");
@@ -504,7 +504,7 @@ describe("a Task's steps in fresh sessions", () => {
     const { run, control, stepsAsked } = setUp({
       limits: { maxRunningStepsPerHob: 5, maxRunningStepsPerTree: 5, cancelTimeoutMs: 30_000 },
     });
-    const thread = await run(seed);
+    const channel = await run(seed);
     // Five results, each longer than one step is given of it.
     const result = (n: number) => `${`Result ${n} keeps going. `.repeat(250)}End of result ${n}.`;
     const briefs = [1, 2, 3, 4, 5].map((n) => `Write part ${n}`);
@@ -514,9 +514,9 @@ describe("a Task's steps in fresh sessions", () => {
       })),
       { brief: "Join the parts", after: [1, 2, 3, 4, 5] },
     ];
-    await run(send(thread.id, `Write the guide\n${hub("plan_steps", { key: "plan", steps })}`));
+    await run(send(channel.id, `Write the guide\n${hub("plan_steps", { key: "plan", steps })}`));
     for (const brief of [...briefs, "Join the parts"]) await run(control.open(brief));
-    await run(treeWhen(thread.id, (tree) => states(tree).every((state) => state === "completed")));
+    await run(treeWhen(channel.id, (tree) => states(tree).every((state) => state === "completed")));
 
     const joined = stepsAsked().find((request) => request.prompt.startsWith("Join the parts"))?.prompt ?? "";
     expect(joined).toContain("Step 1 returned: Result 1 keeps going.");
@@ -532,69 +532,69 @@ describe("a Task's steps in fresh sessions", () => {
     const { run, control } = setUp({
       limits: { maxRunningStepsPerHob: 2, maxRunningStepsPerTree: 3, cancelTimeoutMs: 30_000 },
     });
-    const thread = await run(seed);
+    const channel = await run(seed);
     const briefs = ["Banner A", "Banner B", "Banner C"];
-    await run(send(thread.id, hub("plan_steps", { key: "plan", steps: briefs.map((brief) => ({ brief })) })));
+    await run(send(channel.id, hub("plan_steps", { key: "plan", steps: briefs.map((brief) => ({ brief })) })));
 
-    const two = await run(treeWhen(thread.id, (tree) => states(tree).filter((s) => s === "active").length === 2));
+    const two = await run(treeWhen(channel.id, (tree) => states(tree).filter((s) => s === "active").length === 2));
     expect(states(two)).toEqual(["active", "active", "queued"]);
     await run(waitFor("two waiting turns", () => control.waiting().length === 2));
 
     await run(control.open("Banner B"));
-    const next = await run(treeWhen(thread.id, (tree) => states(tree)[2] === "active"));
+    const next = await run(treeWhen(channel.id, (tree) => states(tree)[2] === "active"));
     expect(states(next)).toEqual(["active", "completed", "active"]);
     await run(control.open("Banner A"));
     await run(control.open("Banner C"));
-    await run(treeWhen(thread.id, (tree) => states(tree).every((state) => state === "completed")));
+    await run(treeWhen(channel.id, (tree) => states(tree).every((state) => state === "completed")));
   });
 
   it("the tree's limit holds steps back across its hob's limit", async () => {
     const { run } = setUp({ limits: { maxRunningStepsPerHob: 4, maxRunningStepsPerTree: 1, cancelTimeoutMs: 30_000 } });
-    const thread = await run(seed);
-    await run(send(thread.id, hub("plan_steps", { key: "plan", steps: [{ brief: "One" }, { brief: "Two" }] })));
-    const one = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
+    const channel = await run(seed);
+    await run(send(channel.id, hub("plan_steps", { key: "plan", steps: [{ brief: "One" }, { brief: "Two" }] })));
+    const one = await run(treeWhen(channel.id, (tree) => states(tree)[0] === "active"));
     expect(states(one)).toEqual(["active", "queued"]);
   });
 
   it("the owner keeps answering while its steps run", async () => {
     const { run, control } = setUp();
-    const thread = await run(seed);
-    await run(send(thread.id, hub("plan_steps", { key: "plan", steps: [{ brief: "Long research" }] })));
-    await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
+    const channel = await run(seed);
+    await run(send(channel.id, hub("plan_steps", { key: "plan", steps: [{ brief: "Long research" }] })));
+    await run(treeWhen(channel.id, (tree) => states(tree)[0] === "active"));
 
-    const answered = await run(send(thread.id, "Are you still there?"));
+    const answered = await run(send(channel.id, "Are you still there?"));
     expect(answered.status).toBe("complete");
     expect(answered.content).toContain("Are you still there?");
     expect(answered.content).toContain("Long research");
-    expect(states(await run(treeWhen(thread.id, () => true)))).toEqual(["active"]);
+    expect(states(await run(treeWhen(channel.id, () => true)))).toEqual(["active"]);
     await run(control.open("Long research"));
-    await run(treeWhen(thread.id, (tree) => states(tree)[0] === "completed"));
+    await run(treeWhen(channel.id, (tree) => states(tree)[0] === "completed"));
   });
 
   it("a step whose session fails fails with the reason, and the steps after it wait", async () => {
     const { run, control } = setUp();
-    const thread = await run(seed);
+    const channel = await run(seed);
     const steps = [{ brief: "fake:cut-off the outline" }, { brief: "Write from the outline", after: [1] }];
-    await run(send(thread.id, hub("plan_steps", { key: "plan", steps })));
+    await run(send(channel.id, hub("plan_steps", { key: "plan", steps })));
     await run(control.open("fake:cut-off the outline"));
-    const failed = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "failed"));
+    const failed = await run(treeWhen(channel.id, (tree) => states(tree)[0] === "failed"));
     expect(states(failed)).toEqual(["failed", "queued"]);
     const attempt = failed.attempts.find((each) => each.taskId === stepsOf(failed)[0]?.id);
     expect(attempt?.state).toBe("failed");
     expect(attempt?.outcome).toBe("Claude stopped responding");
 
-    await run(send(thread.id, "What happened?"));
+    await run(send(channel.id, "What happened?"));
     expect(control.requests.at(-1)?.briefing).toContain("failed");
   });
 
   it("cancelling a running step stops its session and confirms the cancel", async () => {
     const { run } = setUp();
-    const thread = await run(seed);
-    await run(send(thread.id, hub("plan_steps", { key: "plan", steps: [{ brief: "Slow work" }] })));
-    const running = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
+    const channel = await run(seed);
+    await run(send(channel.id, hub("plan_steps", { key: "plan", steps: [{ brief: "Slow work" }] })));
+    const running = await run(treeWhen(channel.id, (tree) => states(tree)[0] === "active"));
     const step = stepsOf(running)[0] as Task;
-    await run(send(thread.id, hub("cancel_task", { key: "stop", task_id: step.id })));
-    const cancelled = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "cancelled"));
+    await run(send(channel.id, hub("cancel_task", { key: "stop", task_id: step.id })));
+    const cancelled = await run(treeWhen(channel.id, (tree) => states(tree)[0] === "cancelled"));
     // Its Attempt names the hob that cancelled it (#674).
     expect(cancelled.attempts.find((each) => each.taskId === step.id)).toMatchObject({
       state: "cancelled",
@@ -604,12 +604,12 @@ describe("a Task's steps in fresh sessions", () => {
 
   it("a chat turn's report outside any Task is refused, and starts no Task", async () => {
     const { run } = setUp();
-    const thread = await run(seed);
+    const channel = await run(seed);
     const answer = await run(
-      send(thread.id, saying(hub("report_checkpoint", { key: "r", kind: "progress", summary: "x" }))),
+      send(channel.id, saying(hub("report_checkpoint", { key: "r", kind: "progress", summary: "x" }))),
     );
     expect(answer.content).toContain("Refused (no-task)");
-    expect(await run(TaskRepository.use((tasks) => tasks.readThreadTrees(thread.id)))).toEqual([]);
+    expect(await run(TaskRepository.use((tasks) => tasks.readChannelTrees(channel.id)))).toEqual([]);
   });
 
   it("after a restart, a step that was running fails and no Attempt stays live", async () => {
@@ -627,7 +627,7 @@ describe("a Task's steps in fresh sessions", () => {
           policyVersion: null,
           startedAt: now,
         });
-        const base = { ownerId: ALDRIC, threadId: null, dependsOn: [], createdAt: now };
+        const base = { ownerId: ALDRIC, channelId: null, dependsOn: [], createdAt: now };
         const top = yield* tasks.createTask({
           task: { ...base, id: TOP, parentId: null, brief: "The launch" },
           delegation: null,
@@ -650,9 +650,9 @@ describe("a Task's steps in fresh sessions", () => {
 
   it("a Task whose cancel was asked for is confirmed once its last step stops", async () => {
     const { run } = setUp();
-    const thread = await run(seed);
-    await run(send(thread.id, hub("plan_steps", { key: "plan", steps: [{ brief: "Slow work" }] })));
-    const running = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
+    const channel = await run(seed);
+    await run(send(channel.id, hub("plan_steps", { key: "plan", steps: [{ brief: "Slow work" }] })));
+    const running = await run(treeWhen(channel.id, (tree) => states(tree)[0] === "active"));
     const [top, step] = running.tasks as [Task, Task];
     // As Cancel on the Quest tab will: the Task and its step move to cancelling together.
     // Each move reads the Task again, since the turn that planned the steps may still be ending.
@@ -669,21 +669,21 @@ describe("a Task's steps in fresh sessions", () => {
         yield* TaskSignal.use((signal) => signal.notify);
       }),
     );
-    const ended = await run(treeWhen(thread.id, (tree) => tree.tasks[0]?.state === "cancelled"));
+    const ended = await run(treeWhen(channel.id, (tree) => tree.tasks[0]?.state === "cancelled"));
     expect(ended.tasks.map((task) => task.state)).toEqual(["cancelled", "cancelled"]);
   });
 
   it("a key from an earlier request is a new call in a later one, never replayed or refused (#660)", async () => {
     const { run, control } = setUp();
-    const thread = await run(seed);
+    const channel = await run(seed);
     const plan = hub("plan_steps", { key: "plan", steps: [{ brief: "Draft" }] });
-    await run(send(thread.id, `First request\n${plan}`));
+    await run(send(channel.id, `First request\n${plan}`));
     await run(control.open("Draft"));
-    await run(treeWhen(thread.id, (tree) => states(tree)[0] === "completed"));
-    await run(send(thread.id, hub("complete_task", { delivered: true, key: "done", summary: "First done" })));
-    const again = await run(send(thread.id, `Second request\n${plan}`));
+    await run(treeWhen(channel.id, (tree) => states(tree)[0] === "completed"));
+    await run(send(channel.id, hub("complete_task", { delivered: true, key: "done", summary: "First done" })));
+    const again = await run(send(channel.id, `Second request\n${plan}`));
     expect(again.content).not.toContain("Refused");
-    const trees = await run(TaskRepository.use((tasks) => tasks.readThreadTrees(thread.id)));
+    const trees = await run(TaskRepository.use((tasks) => tasks.readChannelTrees(channel.id)));
     expect(trees.map((tree) => tree.tasks[0]?.brief.split("\n")[0])).toEqual(["First request", "Second request"]);
     expect(trees.flatMap((tree) => tree.refusals)).toEqual([]);
   });
@@ -691,14 +691,14 @@ describe("a Task's steps in fresh sessions", () => {
   it("narrowing its hob's folders stops a running step and fails it with the reason", async () => {
     folders = ["/work/site", "/work/brand"];
     const { run } = setUp();
-    const thread = await run(seed);
-    await run(send(thread.id, hub("plan_steps", { key: "plan", steps: [{ brief: "Edit the site" }] })));
-    const running = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
+    const channel = await run(seed);
+    await run(send(channel.id, hub("plan_steps", { key: "plan", steps: [{ brief: "Edit the site" }] })));
+    const running = await run(treeWhen(channel.id, (tree) => states(tree)[0] === "active"));
     const step = stepsOf(running)[0] as Task;
 
     folders = ["/work/site"];
     await run(ChatService.use((chat) => chat.reviewAuthority(ALDRIC)));
-    const failed = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "failed"));
+    const failed = await run(treeWhen(channel.id, (tree) => states(tree)[0] === "failed"));
     const attempt = failed.attempts.find((each) => each.taskId === step.id);
     expect(attempt?.state).toBe("interrupted");
     expect(attempt?.outcome).toBe("Stopped because its hob's permissions were narrowed.");
@@ -709,9 +709,9 @@ describe("a Task's steps in fresh sessions", () => {
     // Fibers yield every few operations, so the waiting review runs as soon as the start lets go of
     // the authority lock. Before the fix it then found the step with no session to stop.
     const { run, control } = setUp({ opsBeforeYield: 4 });
-    const thread = await run(seed);
-    await run(send(thread.id, hub("plan_steps", { key: "plan", steps: chain(["Outline", "Edit the site"]) })));
-    await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
+    const channel = await run(seed);
+    await run(send(channel.id, hub("plan_steps", { key: "plan", steps: chain(["Outline", "Edit the site"]) })));
+    await run(treeWhen(channel.id, (tree) => states(tree)[0] === "active"));
 
     // The second step reads its hob's wide access as it starts, and waits there.
     const hold = { reached: await run(Deferred.make<void>()), release: await run(Deferred.make<void>()) };
@@ -725,7 +725,7 @@ describe("a Task's steps in fresh sessions", () => {
     await run(Deferred.succeed(hold.release, undefined));
     await review;
 
-    const failed = await run(treeWhen(thread.id, (tree) => states(tree)[1] === "failed"));
+    const failed = await run(treeWhen(channel.id, (tree) => states(tree)[1] === "failed"));
     const step = stepsOf(failed)[1] as Task;
     const attempt = failed.attempts.find((each) => each.taskId === step.id);
     expect(attempt?.state).toBe("interrupted");
@@ -738,28 +738,28 @@ describe("a Task's steps in fresh sessions", () => {
       send(first.id, saying(`Plan the launch\n${hub("start_quest", { key: "launch", goal: "Launch" })}`)),
     );
     expect(started.content).not.toContain("Refused");
-    const second = await run(ChatService.use((chat) => chat.createThread(ALDRIC)));
+    const second = await run(ChatService.use((chat) => chat.createChannel(ALDRIC)));
     const refused = await run(
       send(second.id, saying(`Plan the sale\n${hub("start_quest", { key: "sale", goal: "Sale" })}`)),
     );
     expect(refused.content).toContain("Refused (concurrency-limit)");
     // The refused call leaves no Task behind in the second conversation.
-    expect(await run(TaskRepository.use((tasks) => tasks.readThreadTrees(second.id)))).toEqual([]);
+    expect(await run(TaskRepository.use((tasks) => tasks.readChannelTrees(second.id)))).toEqual([]);
   });
   it("a request whose hob asked you a question completes once the next turn is briefed with your answer", async () => {
     const { run, control } = setUp();
-    const thread = await run(seed);
+    const channel = await run(seed);
     const steps = [{ brief: `Outline\n${hub("complete_task", { delivered: true, key: "o", summary: "Outlined" })}` }];
     await run(
       send(
-        thread.id,
+        channel.id,
         `Plan the launch\n${hub("plan_steps", { key: "plan", steps })}\n${hub("ask", { key: "q", question: "Which date?" })}`,
       ),
     );
     await run(control.open("Outline"));
     const asked = await run(
       treeWhen(
-        thread.id,
+        channel.id,
         (tree) => tree.questions.length === 1 && states(tree).every((state) => state === "completed"),
       ),
     );
@@ -767,9 +767,9 @@ describe("a Task's steps in fresh sessions", () => {
     if (question === undefined) throw new Error("no question");
     await run(TaskRepository.use((tasks) => tasks.answerQuestion(question.id, { _tag: "User" }, "Friday", now)));
 
-    await run(send(thread.id, hub("complete_task", { delivered: true, key: "done", summary: "Launch on Friday" })));
+    await run(send(channel.id, hub("complete_task", { delivered: true, key: "done", summary: "Launch on Friday" })));
     expect(control.requests.at(-1)?.briefing).toContain("Which date? Answer: Friday");
-    const finished = await run(treeWhen(thread.id, (tree) => tree.tasks[0]?.state === "completed"));
+    const finished = await run(treeWhen(channel.id, (tree) => tree.tasks[0]?.state === "completed"));
     expect(finished.tasks[0]?.result?.summary).toBe("Launch on Friday");
     const ledger = await run(TaskRepository.use((tasks) => tasks.readLedger(finished.tasks[0]?.id ?? TaskId.make(""))));
     expect(Option.getOrThrow(ledger).open).toEqual([]);
@@ -777,7 +777,7 @@ describe("a Task's steps in fresh sessions", () => {
 
   it("a step that was handed an artifact completes from the prompt that showed it, and so does its Task", async () => {
     const { run, control } = setUp();
-    const thread = await run(seed);
+    const channel = await run(seed);
     const steps = [
       {
         brief: `Draft\n${hub("complete_task", { delivered: true, key: "d", summary: "Drafted", artifacts: [{ kind: "text", label: "Doc", value: "The draft" }] })}`,
@@ -785,34 +785,34 @@ describe("a Task's steps in fresh sessions", () => {
       { brief: `Review\n${hub("complete_task", { delivered: true, key: "r", summary: "Reviewed" })}`, after: [1] },
       { brief: `Publish\n${hub("complete_task", { delivered: true, key: "p", summary: "Published" })}`, after: [2] },
     ];
-    await run(send(thread.id, `Write the post\n${hub("plan_steps", { key: "plan", steps })}`));
+    await run(send(channel.id, `Write the post\n${hub("plan_steps", { key: "plan", steps })}`));
     await run(control.open("Draft"));
-    const drafted = await run(treeWhen(thread.id, (tree) => states(tree).join() === "completed,active,queued"));
+    const drafted = await run(treeWhen(channel.id, (tree) => states(tree).join() === "completed,active,queued"));
     const publish = stepsOf(drafted)[2];
     const artifact = drafted.artifacts[0];
     if (publish === undefined || artifact === undefined) throw new Error("no step or artifact");
     // The owner hands the draft to the last step before it starts.
-    await run(send(thread.id, hub("hand_off", { key: "h", artifact_id: artifact.id, to_task_id: publish.id })));
+    await run(send(channel.id, hub("hand_off", { key: "h", artifact_id: artifact.id, to_task_id: publish.id })));
     await run(control.open("Review"));
     await run(control.open("Publish"));
-    await run(treeWhen(thread.id, (tree) => states(tree).every((state) => state === "completed")));
+    await run(treeWhen(channel.id, (tree) => states(tree).every((state) => state === "completed")));
     const prompt = control.requests.find((request) => request.prompt.startsWith("Publish"))?.prompt ?? "";
     expect(prompt).toContain("Handed to this step:");
 
-    await run(send(thread.id, hub("complete_task", { delivered: true, key: "done", summary: "The post is out" })));
-    const finished = await run(treeWhen(thread.id, (tree) => tree.tasks[0]?.state === "completed"));
+    await run(send(channel.id, hub("complete_task", { delivered: true, key: "done", summary: "The post is out" })));
+    const finished = await run(treeWhen(channel.id, (tree) => tree.tasks[0]?.state === "completed"));
     expect(finished.tasks[0]?.result?.summary).toBe("The post is out");
   });
 
   it("a result that lands after the turn's briefing was read is not settled by that turn", async () => {
     const { run, control } = setUp();
-    const thread = await run(seed);
+    const channel = await run(seed);
     const steps = [{ brief: `Outline\n${hub("complete_task", { delivered: true, key: "o", summary: "Outlined" })}` }];
-    await run(send(thread.id, `Plan the launch\n${hub("plan_steps", { key: "plan", steps })}`));
+    await run(send(channel.id, `Plan the launch\n${hub("plan_steps", { key: "plan", steps })}`));
     // The planning turn has ended its Attempt, so its own end-of-turn ledger read does not take the hook.
     const planned = await run(
       treeWhen(
-        thread.id,
+        channel.id,
         (tree) =>
           states(tree)[0] === "active" &&
           tree.attempts.some((each) => each.taskId === tree.tasks[0]?.id) &&
@@ -832,7 +832,7 @@ describe("a Task's steps in fresh sessions", () => {
         ),
     };
     const refused = await run(
-      send(thread.id, saying(hub("complete_task", { delivered: true, key: "done", summary: "Launched" }))),
+      send(channel.id, saying(hub("complete_task", { delivered: true, key: "done", summary: "Launched" }))),
     );
     expect(control.requests.at(-1)?.briefing).toContain(", active: Outline.");
     expect(refused.content).toContain("Refused (items-open)");
@@ -841,23 +841,23 @@ describe("a Task's steps in fresh sessions", () => {
     expect(Option.getOrThrow(open).open.map((entry) => entry._tag)).toEqual(["Item"]);
 
     // The next turn is briefed with the result, so it carries it and completes.
-    await run(send(thread.id, hub("complete_task", { delivered: true, key: "again", summary: "Launched" })));
+    await run(send(channel.id, hub("complete_task", { delivered: true, key: "again", summary: "Launched" })));
     expect(control.requests.at(-1)?.briefing).toContain("Result: Outlined");
-    const finished = await run(treeWhen(thread.id, (tree) => tree.tasks[0]?.state === "completed"));
+    const finished = await run(treeWhen(channel.id, (tree) => tree.tasks[0]?.state === "completed"));
     expect(finished.tasks[0]?.result?.summary).toBe("Launched");
   });
 
   it("a hand-off made after a step's tree was read reaches its prompt before the step settles it", async () => {
     const { run, control } = setUp();
-    const thread = await run(seed);
+    const channel = await run(seed);
     const steps = [
       {
         brief: `Draft\n${hub("complete_task", { delivered: true, key: "d", summary: "Drafted", artifacts: [{ kind: "text", label: "Doc", value: "The draft" }] })}`,
       },
       { brief: `Publish\n${hub("complete_task", { delivered: true, key: "p", summary: "Published" })}`, after: [1] },
     ];
-    await run(send(thread.id, `Write the post\n${hub("plan_steps", { key: "plan", steps })}`));
-    const planned = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
+    await run(send(channel.id, `Write the post\n${hub("plan_steps", { key: "plan", steps })}`));
+    const planned = await run(treeWhen(channel.id, (tree) => states(tree)[0] === "active"));
     const publish = stepsOf(planned)[1] as Task;
     // The draft is handed to the last step after the runner read the tree it starts from.
     beforeLedger = {
@@ -872,7 +872,7 @@ describe("a Task's steps in fresh sessions", () => {
     };
     await run(control.open("Draft"));
     await run(control.open("Publish"));
-    const ended = await run(treeWhen(thread.id, (tree) => states(tree).every((state) => state === "completed")));
+    const ended = await run(treeWhen(channel.id, (tree) => states(tree).every((state) => state === "completed")));
     expect(ended.handOffs).toHaveLength(1);
     const prompt = control.requests.find((request) => request.prompt.startsWith("Publish"))?.prompt ?? "";
     expect(prompt).toMatch(/Handed to this step:\n {2}- Doc \(text, artifact [0-9a-f-]+\): The draft/);
@@ -880,30 +880,32 @@ describe("a Task's steps in fresh sessions", () => {
 
   it("the owner's briefing shows the steps of its steps, so a cancelled nested step does not keep its request open", async () => {
     const { run, control } = setUp();
-    const thread = await run(seed);
-    await run(send(thread.id, `Research\n${hub("plan_steps", { key: "plan", steps: [{ brief: "Survey" }] })}`));
-    const planned = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "active"));
+    const channel = await run(seed);
+    await run(send(channel.id, `Research\n${hub("plan_steps", { key: "plan", steps: [{ brief: "Survey" }] })}`));
+    const planned = await run(treeWhen(channel.id, (tree) => states(tree)[0] === "active"));
     const survey = stepsOf(planned)[0] as Task;
-    await run(send(thread.id, hub("plan_steps", { key: "deeper", task_id: survey.id, steps: [{ brief: "Dig" }] })));
-    await run(treeWhen(thread.id, (tree) => states(tree).join() === "active,active"));
-    await run(send(thread.id, hub("cancel_task", { key: "stop", task_id: survey.id })));
-    await run(treeWhen(thread.id, (tree) => states(tree).join() === "cancelled,cancelled"));
+    await run(send(channel.id, hub("plan_steps", { key: "deeper", task_id: survey.id, steps: [{ brief: "Dig" }] })));
+    await run(treeWhen(channel.id, (tree) => states(tree).join() === "active,active"));
+    await run(send(channel.id, hub("cancel_task", { key: "stop", task_id: survey.id })));
+    await run(treeWhen(channel.id, (tree) => states(tree).join() === "cancelled,cancelled"));
 
-    await run(send(thread.id, hub("complete_task", { delivered: true, key: "done", summary: "Dropped the research" })));
+    await run(
+      send(channel.id, hub("complete_task", { delivered: true, key: "done", summary: "Dropped the research" })),
+    );
     const briefing = control.requests.at(-1)?.briefing ?? "";
     expect(briefing).toContain(`1. Step ${survey.id}, cancelled: Survey.`);
     expect(briefing).toMatch(/\n {2}1\.1\. Step \S+, cancelled: Dig\./);
-    const finished = await run(treeWhen(thread.id, (tree) => tree.tasks[0]?.state === "completed"));
+    const finished = await run(treeWhen(channel.id, (tree) => tree.tasks[0]?.state === "completed"));
     expect(finished.tasks[0]?.result?.summary).toBe("Dropped the research");
   });
 
   it("a step that ends without reaching a milestone it promised fails with a blocker that says so", async () => {
     const { run, control } = setUp();
-    const thread = await run(seed);
+    const channel = await run(seed);
     const steps = [{ brief: "Research the market", milestones: ["Sources listed"] }];
-    await run(send(thread.id, `Research\n${hub("plan_steps", { key: "plan", steps })}`));
+    await run(send(channel.id, `Research\n${hub("plan_steps", { key: "plan", steps })}`));
     await run(control.open("Research the market"));
-    const ended = await run(treeWhen(thread.id, (tree) => states(tree)[0] === "failed"));
+    const ended = await run(treeWhen(channel.id, (tree) => states(tree)[0] === "failed"));
     const step = stepsOf(ended)[0];
     const blocker = ended.checkpoints.find((each) => each.taskId === step?.id && each.kind === "blocker");
     expect(blocker?.summary).toContain('milestone "Sources listed" is not reached');

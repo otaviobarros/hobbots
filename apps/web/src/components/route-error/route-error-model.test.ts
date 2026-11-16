@@ -9,7 +9,7 @@ describe("failureOf", () => {
   });
 
   it("reads a thing the hub no longer has as missing", () => {
-    expect(failureOf(new ApiError("ThreadNotFound", "ThreadNotFound"))).toBe("missing");
+    expect(failureOf(new ApiError("ChannelNotFound", "ChannelNotFound"))).toBe("missing");
     expect(failureOf(new ApiError("AgentNotFound", "AgentNotFound"))).toBe("missing");
   });
 

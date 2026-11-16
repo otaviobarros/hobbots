@@ -1,4 +1,4 @@
-import { AgentId, AttemptId, HistoryFilter, MemoryKind, MemoryScopeKey, TaskId, ThreadId } from "@hobbots/domain";
+import { AgentId, AttemptId, ChannelId, HistoryFilter, MemoryKind, MemoryScopeKey, TaskId } from "@hobbots/domain";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   createHashHistory,
@@ -13,7 +13,7 @@ import { openChatOf } from "./api/camps.ts";
 import { moveDraft } from "./api/drafts.ts";
 import { keptDraftOrStored } from "./api/first-hob.ts";
 import { needsPairing } from "./api/pairing.ts";
-import { agentsQuery, threadsQuery } from "./api/queries.ts";
+import { agentsQuery, channelsQuery } from "./api/queries.ts";
 import { opensWelcome, readSetup, setupDone } from "./api/setup.ts";
 import { ArchiveTab } from "./components/archive-page/archive-model.ts";
 import { ArchiveNotices } from "./components/archive-page/archive-notices.tsx";
@@ -223,16 +223,16 @@ const chatRoute = createRoute({
   path: "hobs/$hobId/chat",
   beforeLoad: async ({ context, params }) => {
     // While the hub is out of reach the empty chat still shows, and its message waits in the outbox.
-    const threads = await context.queryClient
-      .ensureQueryData(threadsQuery(AgentId.make(params.hobId)))
+    const channels = await context.queryClient
+      .ensureQueryData(channelsQuery(AgentId.make(params.hobId)))
       .catch(() => undefined);
-    const chat = openChatOf(threads);
+    const chat = openChatOf(channels);
     if (chat !== undefined) {
       // A draft written for the hob's chat, as a starter question writes it, opens with the chat.
       moveDraft(`new-${AgentId.make(params.hobId)}`, chat.id);
       throw redirect({
-        to: "/hobs/$hobId/threads/$threadId",
-        params: { hobId: params.hobId, threadId: chat.id },
+        to: "/hobs/$hobId/channels/$channelId",
+        params: { hobId: params.hobId, channelId: chat.id },
         replace: true,
       });
     }
@@ -243,8 +243,8 @@ const chatRoute = createRoute({
   },
 });
 
-// A hob's archived threads now live in the Archive, narrowed to that hob (CH-009).
-const archivedThreadsRoute = createRoute({
+// A hob's archived channels now live in the Archive, narrowed to that hob (CH-009).
+const archivedChannelsRoute = createRoute({
   getParentRoute: () => shellRoute,
   errorComponent: (props) => <PageError error={props.error} way="hobs" />,
   path: "hobs/$hobId/archived",
@@ -254,25 +254,25 @@ const archivedThreadsRoute = createRoute({
 });
 
 // `?message=` names a message to scroll to, as a search result does. `?quest=` opens a quest of the
-// thread in its sheet, and with `tab` its Workbench beside the chat instead, with the `task` whose
+// channel in its sheet, and with `tab` its Workbench beside the chat instead, with the `task` whose
 // hob's work it shows, the `attempt` it shows and the `file` a tab shows first (ADR 037).
-const threadRoute = createRoute({
+const channelRoute = createRoute({
   getParentRoute: () => shellRoute,
   errorComponent: (props) => <PageError error={props.error} way="hobs" />,
-  path: "hobs/$hobId/threads/$threadId",
+  path: "hobs/$hobId/channels/$channelId",
   validateSearch: Schema.toStandardSchemaV1(
     Schema.Struct({
       message: searchParam(Schema.String),
       ...QuestSearch,
     }),
   ),
-  component: function ThreadPage() {
-    const params = threadRoute.useParams();
-    const { message, quest, task, tab, attempt, file, from, scope } = threadRoute.useSearch();
+  component: function ChannelPage() {
+    const params = channelRoute.useParams();
+    const { message, quest, task, tab, attempt, file, from, scope } = channelRoute.useSearch();
     return (
       <HobsLayout
         hobId={AgentId.make(params.hobId)}
-        threadId={ThreadId.make(params.threadId)}
+        channelId={ChannelId.make(params.channelId)}
         focusMessageId={message}
         quest={
           quest === undefined
@@ -369,13 +369,13 @@ const inboxRoute = createRoute({
     Schema.Struct({
       tab: searchParam(InboxTab),
       request: searchParam(Schema.String),
-      in: searchParam(ThreadId),
+      in: searchParam(ChannelId),
       scope: searchParam(InboxScope),
     }),
   ),
   component: function Inbox() {
     const search = inboxRoute.useSearch();
-    const scope = search.in === undefined ? undefined : { threadId: search.in, scope: search.scope ?? "here" };
+    const scope = search.in === undefined ? undefined : { channelId: search.in, scope: search.scope ?? "here" };
     return <InboxPage tab={search.tab ?? "needs"} requestId={search.request} scope={scope} />;
   },
 });
@@ -515,7 +515,7 @@ const archiveListRoute = createRoute({
 const archiveChatRoute = createRoute({
   getParentRoute: () => archiveRoute,
   errorComponent: (props) => <PageError error={props.error} way="archive" />,
-  path: "chats/$hobId/$threadId",
+  path: "chats/$hobId/$channelId",
   validateSearch: Schema.toStandardSchemaV1(Schema.Struct({ message: searchParam(Schema.String) })),
   component: function ArchiveChat() {
     const params = archiveChatRoute.useParams();
@@ -523,7 +523,7 @@ const archiveChatRoute = createRoute({
     return (
       <ArchivedChatPage
         hobId={AgentId.make(params.hobId)}
-        threadId={ThreadId.make(params.threadId)}
+        channelId={ChannelId.make(params.channelId)}
         focusMessageId={message}
       />
     );
@@ -544,10 +544,10 @@ const retiredHobRoute = createRoute({
 const retiredChatRoute = createRoute({
   getParentRoute: () => archiveRoute,
   errorComponent: (props) => <PageError error={props.error} way="archive" />,
-  path: "hobs/$hobId/$threadId",
+  path: "hobs/$hobId/$channelId",
   component: function RetiredChat() {
     const params = retiredChatRoute.useParams();
-    return <RetiredChatPage hobId={AgentId.make(params.hobId)} threadId={ThreadId.make(params.threadId)} />;
+    return <RetiredChatPage hobId={AgentId.make(params.hobId)} channelId={ChannelId.make(params.channelId)} />;
   },
 });
 
@@ -571,14 +571,14 @@ const archivedHobRoute = createRoute({
   },
 });
 
-const archivedThreadRoute = createRoute({
+const archivedChannelRoute = createRoute({
   getParentRoute: () => shellRoute,
   errorComponent: (props) => <PageError error={props.error} way="archive" />,
-  path: "settings/archived/$hobId/threads/$threadId",
+  path: "settings/archived/$hobId/channels/$channelId",
   beforeLoad: ({ params }) => {
     throw redirect({
-      to: "/archive/hobs/$hobId/$threadId",
-      params: { hobId: params.hobId, threadId: params.threadId },
+      to: "/archive/hobs/$hobId/$channelId",
+      params: { hobId: params.hobId, channelId: params.channelId },
       replace: true,
     });
   },
@@ -599,8 +599,8 @@ const routeTree = rootRoute.addChildren([
     hobsRoute,
     hobRoute,
     chatRoute,
-    archivedThreadsRoute,
-    threadRoute,
+    archivedChannelsRoute,
+    channelRoute,
     profileRoute,
     summonRoute,
     arrivedRoute,
@@ -613,7 +613,7 @@ const routeTree = rootRoute.addChildren([
     archiveRoute.addChildren([archiveListRoute, archiveChatRoute, retiredHobRoute, retiredChatRoute]),
     archivedRoute,
     archivedHobRoute,
-    archivedThreadRoute,
+    archivedChannelRoute,
   ]),
 ]);
 

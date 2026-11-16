@@ -24,12 +24,12 @@ import {
   CAMP_SUGGESTION_DECISIONS,
   type CampSuggestion,
   CHAPTER_BREAK_IDLE_MINUTES,
+  ChannelId,
   ChapterId,
   isInProgress,
   type Message,
   type RuntimeKind,
   roleFields,
-  ThreadId,
 } from "@hobbots/domain";
 import {
   CampSuggestionRepositoryLive,
@@ -188,13 +188,13 @@ const start = async (runtime: RuntimeKind, decider: Layer.Layer<never> | Layer.L
           createdAt: NOW,
         }),
       );
-      return (yield* (yield* ChatService).createThread(WREN)).id;
+      return (yield* (yield* ChatService).createChannel(WREN)).id;
     }),
   );
 };
 
 /** Sends `content` and waits for the turn to end. */
-const say = async (id: ThreadId, content: string): Promise<Message> => {
+const say = async (id: ChannelId, content: string): Promise<Message> => {
   await run(ChatService.use((chat) => chat.sendPrompt(id, content)));
   return vi.waitFor(async () => {
     const all = await run(HobbotsRepository.use((repo) => repo.listMessages(id)));
@@ -203,12 +203,12 @@ const say = async (id: ThreadId, content: string): Promise<Message> => {
   });
 };
 
-const startChapter = (id: ThreadId, chapter: string, title: string) =>
+const startChapter = (id: ChannelId, chapter: string, title: string) =>
   run(ChapterService.use((chapters) => chapters.startChapter(id, { id: ChapterId.make(chapter), title })));
 
-const GARDEN_CAMP = ThreadId.make("camp-garden");
+const GARDEN_CAMP = ChannelId.make("camp-garden");
 
-const intoNewCamp = (id: ThreadId, chapter: string) =>
+const intoNewCamp = (id: ChannelId, chapter: string) =>
   run(
     ChatService.use((chat) =>
       chat.moveChapter(id, ChapterId.make(chapter), {
@@ -223,16 +223,16 @@ const intoNewCamp = (id: ThreadId, chapter: string) =>
 
 const runDrift = () => run(CampDrift.use((drift) => drift.runOnce));
 const runBreaks = () => run(ChapterBreaks.use((breaks) => breaks.runOnce));
-const chaptersOf = (id: ThreadId) => run(ChapterService.use((chapters) => chapters.listChapters(id)));
-const openIn = (id: ThreadId) => run(CampSuggestionService.use((service) => service.listOpen(id)));
+const chaptersOf = (id: ChannelId) => run(ChapterService.use((chapters) => chapters.listChapters(id)));
+const openIn = (id: ChannelId) => run(CampSuggestionService.use((service) => service.listOpen(id)));
 
-/** Moves every message of the thread written so far back by `minutes`, as if the chat sat idle since. */
-const idleFor = (id: ThreadId, minutes: number) =>
+/** Moves every message of the channel written so far back by `minutes`, as if the chat sat idle since. */
+const idleFor = (id: ChannelId, minutes: number) =>
   run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const rows = yield* sql<{ readonly id: string; readonly createdAt: string }>`SELECT id, created_at FROM messages
-        WHERE thread_id = ${id}`;
+        WHERE channel_id = ${id}`;
       for (const row of rows) {
         const earlier = new Date(Date.parse(row.createdAt) - minutes * 60_000).toISOString();
         yield* sql`UPDATE messages SET created_at = ${earlier} WHERE id = ${row.id}`;
@@ -240,8 +240,8 @@ const idleFor = (id: ThreadId, minutes: number) =>
     }),
   );
 
-/** Records `count` of your decisions in the thread, keyed from `from`. */
-const decideMany = async (id: ThreadId, count: number, from = 1) => {
+/** Records `count` of your decisions in the channel, keyed from `from`. */
+const decideMany = async (id: ChannelId, count: number, from = 1) => {
   for (let n = from; n < from + count; n++) {
     await run(
       asOwner(
@@ -269,7 +269,7 @@ describe("a chapter moved into a camp", () => {
       await say(id, "What should I plant?");
       const moved = await intoNewCamp(id, "garden");
       expect(moved.stub).toMatchObject({ state: "moved", movedTo: GARDEN_CAMP });
-      expect(moved.camp).toMatchObject({ kind: "camp", origin: { threadId: id, chapterId: "garden" } });
+      expect(moved.camp).toMatchObject({ kind: "camp", origin: { channelId: id, chapterId: "garden" } });
 
       // The camp's first turn starts a session from its pack, with the moved chapter's transcript.
       await say(GARDEN_CAMP, "Tomatoes or beans?");
@@ -340,7 +340,7 @@ describe("camp suggestions", () => {
     // Under No AI no model is asked: the camp takes the chapter's own title, none here, and no goal.
     expect(judged).toEqual([]);
     expect(open).toMatchObject({
-      threadId: id,
+      channelId: id,
       reasons: [{ code: "decisions", count: CAMP_SUGGESTION_DECISIONS }],
       title: null,
       goal: null,
@@ -372,7 +372,7 @@ describe("camp suggestions", () => {
     expect(judged[0]).toMatchObject({ task: "judgments", rule: "stay" });
     const [raised] = await journaled("CampSuggested");
     expect((raised as { payload: { suggestion: CampSuggestion } }).payload.suggestion).toMatchObject({
-      threadId: id,
+      channelId: id,
       reasons: [{ code: "drift", count: 2 }],
       state: "pending",
     });

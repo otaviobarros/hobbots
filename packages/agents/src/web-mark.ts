@@ -32,7 +32,7 @@ const nextSource = (before: WebReadMark | null, read: WebRead): string =>
 
 /**
  * A turn's hold on its session's mark. `kept` is the mark the session held when the turn started,
- * or null; `keep` records each change where the session's mark lives, such as the thread's session
+ * or null; `keep` records each change where the session's mark lives, such as the channel's session
  * or the Attempt it runs as. The mark is held for the turn's next call before it is kept, so a slow
  * write never lets a call through unmarked.
  */

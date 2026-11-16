@@ -29,7 +29,7 @@ export function MemorySavedLines({ saves, hob }: { saves: ReadonlyArray<MemorySa
 }
 
 /**
- * Says that a thread's saves could not be read, so no reply shows its line, and offers to read them
+ * Says that a channel's saves could not be read, so no reply shows its line, and offers to read them
  * again: without it, a failed read would look like a chat in which nothing was saved.
  */
 export function MemorySavesUnread({ name, retry }: { name: string; retry: () => void }) {

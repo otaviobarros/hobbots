@@ -32,8 +32,8 @@ const api = async <A>(current: Hub, method: string, path: string, body?: unknown
 /** A token you might paste into a message: the export never holds it. */
 const TOKEN = `ghp_${"x7Y8".repeat(9)}`;
 
-/** A finished setup whose hobs work in `project`, with Pip and one finished thread that holds a token. */
-const pipWithThread = async (current: Hub, project: string) => {
+/** A finished setup whose hobs work in `project`, with Pip and one finished channel that holds a token. */
+const pipWithChannel = async (current: Hub, project: string) => {
   await api(current, "PATCH", "/setup", {
     completed: true,
     connectedProviders: ["claude-code"],
@@ -53,14 +53,14 @@ const pipWithThread = async (current: Hub, project: string) => {
     effort: "medium",
     instructions: "",
   });
-  const thread = await api<{ id: string }>(current, "POST", `/agents/${pip.id}/threads`);
-  await api(current, "POST", `/threads/${thread.id}/messages`, { content: `Tagline ideas, with ${TOKEN}` });
+  const channel = await api<{ id: string }>(current, "POST", `/agents/${pip.id}/channels`);
+  await api(current, "POST", `/channels/${channel.id}/messages`, { content: `Tagline ideas, with ${TOKEN}` });
   await expect
     .poll(async () =>
-      (await api<Array<{ status: string }>>(current, "GET", `/threads/${thread.id}/messages`)).map((m) => m.status),
+      (await api<Array<{ status: string }>>(current, "GET", `/channels/${channel.id}/messages`)).map((m) => m.status),
     )
     .toEqual(["complete", "complete"]);
-  return { pip: pip.id, thread: thread.id };
+  return { pip: pip.id, channel: channel.id };
 };
 
 /** Every file's text in the one export folder inside `folder`. */
@@ -82,7 +82,7 @@ test("Settings › Export saves a hob's export as a folder that opens without Ho
   hub = await startHub(dataDir);
   const project = join(saved, "project");
   mkdirSync(project);
-  await pipWithThread(hub, project);
+  await pipWithChannel(hub, project);
   const out = join(saved, "out");
   mkdirSync(out);
 
@@ -106,8 +106,8 @@ test("Settings › Export saves a hob's export as a folder that opens without Ho
   const { paths, text } = exported(out);
   expect(paths).toEqual([
     "README.md",
+    expect.stringMatching(/^channels\/\d{4}-\d{2}-\d{2} Tagline ideas/),
     "export.json",
-    expect.stringMatching(/^threads\/\d{4}-\d{2}-\d{2} Tagline ideas/),
   ]);
   expect(text).toContain("Tagline ideas");
   expect(text).toContain("[redacted: GitHub token]");

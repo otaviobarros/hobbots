@@ -14,17 +14,17 @@ import {
   type RuntimeEvent,
 } from "@hobbots/agents";
 import type { MembersReport } from "@hobbots/api";
-import { Agent, AgentId, type Message, type Thread, type ThreadMember } from "@hobbots/domain";
+import { Agent, AgentId, type Channel, type ChannelMember, type Message } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
+  ChannelMemberRepositoryLive,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   SearchIndex,
   SetupRepository,
   TaskRepositoryLive,
-  ThreadMemberRepositoryLive,
   UserRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -106,7 +106,7 @@ beforeEach(() => {
         Hobs.pipe(
           Layer.provideMerge(
             Layer.mergeAll(
-              ThreadMemberRepositoryLive,
+              ChannelMemberRepositoryLive,
               UserRepositoryLive,
               HobbotsRepositoryLive,
               ApprovalRepositoryLive,
@@ -165,26 +165,26 @@ const waitUntil = (check: () => Promise<boolean>) =>
   );
 
 const since = "2026-11-14T00:00:00.000Z";
-const report = async (threadId: string) =>
-  (await request<MembersReport>("GET", `/api/threads/${threadId}/members?since=${since}`)).body;
-const shown = (member: ThreadMember) => `${member.actor.kind}:${member.actor.id}:${member.state}`;
+const report = async (channelId: string) =>
+  (await request<MembersReport>("GET", `/api/channels/${channelId}/members?since=${since}`)).body;
+const shown = (member: ChannelMember) => `${member.actor.kind}:${member.actor.id}:${member.state}`;
 const working = async (): Promise<ReadonlyArray<string>> =>
   (await request<{ working: ReadonlyArray<{ agentId: string }> }>("GET", "/api/activity")).body.working.map(
     (hob) => hob.agentId,
   );
-/** Whether the thread runs no reply and has no hob waiting next, as the hub's status shows it. */
-const idle = async (threadId: string) =>
-  !(await request<{ runs: ReadonlyArray<{ threadId: string }> }>("GET", "/api/status")).body.runs.some(
-    (run) => run.threadId === threadId,
+/** Whether the channel runs no reply and has no hob waiting next, as the hub's status shows it. */
+const idle = async (channelId: string) =>
+  !(await request<{ runs: ReadonlyArray<{ channelId: string }> }>("GET", "/api/status")).body.runs.some(
+    (run) => run.channelId === channelId,
   );
-const replies = async (threadId: string) =>
-  (await request<ReadonlyArray<Message>>("GET", `/api/threads/${threadId}/messages`)).body
+const replies = async (channelId: string) =>
+  (await request<ReadonlyArray<Message>>("GET", `/api/channels/${channelId}/messages`)).body
     .filter((message) => message.role === "assistant")
     .map((message) => `${message.actor?.id}:${message.status}`);
 
 /** Quill's camp, made with Pip and Rook. */
 const campOfThree = async () => {
-  const made = await request<Thread>("POST", `/api/agents/${QUILL}/camps`, {
+  const made = await request<Channel>("POST", `/api/agents/${QUILL}/camps`, {
     key: "camp-plans",
     title: "Plans",
     goal: null,
@@ -209,36 +209,36 @@ describe("a camp's members over the API", () => {
     expect(listed.people.map((user) => user.id)).toEqual(["owner"]);
     expect(listed.today).toEqual([]);
 
-    const lead = await request("DELETE", `/api/threads/${camp.id}/members/hob/${QUILL}`);
+    const lead = await request("DELETE", `/api/channels/${camp.id}/members/hob/${QUILL}`);
     expect(lead).toMatchObject({ status: 409, body: { _tag: "MembershipRefused", reason: "lead" } });
-    const owner = await request("DELETE", `/api/threads/${camp.id}/members/user/owner`);
+    const owner = await request("DELETE", `/api/channels/${camp.id}/members/user/owner`);
     expect(owner).toMatchObject({ status: 409, body: { _tag: "MembershipRefused", reason: "owner" } });
 
-    const out = await request<ThreadMember>("DELETE", `/api/threads/${camp.id}/members/hob/${ROOK}`);
+    const out = await request<ChannelMember>("DELETE", `/api/channels/${camp.id}/members/hob/${ROOK}`);
     expect(out.status).toBe(200);
     expect(shown(out.body)).toBe("hob:rook:removed");
-    const back = await request<ThreadMember>("POST", `/api/threads/${camp.id}/members`, {
+    const back = await request<ChannelMember>("POST", `/api/channels/${camp.id}/members`, {
       actor: { kind: "hob", id: ROOK },
     });
     expect(back.status).toBe(200);
     expect(shown(back.body)).toBe("hob:rook:active");
-    const stranger = await request("POST", `/api/threads/${camp.id}/members`, { actor: { kind: "hob", id: "wren" } });
+    const stranger = await request("POST", `/api/channels/${camp.id}/members`, { actor: { kind: "hob", id: "wren" } });
     expect(stranger.status).toBe(404);
     // Only a person the hub knows joins.
-    const nobody = await request("POST", `/api/threads/${camp.id}/members`, { actor: { kind: "user", id: "nobody" } });
+    const nobody = await request("POST", `/api/channels/${camp.id}/members`, { actor: { kind: "user", id: "nobody" } });
     expect(nobody).toMatchObject({ status: 409, body: { _tag: "MembershipRefused", reason: "unknown" } });
   });
 
   // covers ADR 039 (Members; One hob speaks at a time), #1467
   it("drops what a hob taken out was waiting to answer, and stops the answer it was giving (#1467)", async () => {
     const camp = await campOfThree();
-    await request("POST", `/api/threads/${camp.id}/messages`, { content: "@pip @rook what do you think?" });
+    await request("POST", `/api/channels/${camp.id}/messages`, { content: "@pip @rook what do you think?" });
     await waitUntil(async () => (await working()).includes(PIP));
 
     // Rook waits for the floor while Pip speaks; taken out, Rook owes nothing.
-    expect((await request("DELETE", `/api/threads/${camp.id}/members/hob/${ROOK}`)).status).toBe(200);
+    expect((await request("DELETE", `/api/channels/${camp.id}/members/hob/${ROOK}`)).status).toBe(200);
     // Pip, taken out while it speaks, stops.
-    expect((await request("DELETE", `/api/threads/${camp.id}/members/hob/${PIP}`)).status).toBe(200);
+    expect((await request("DELETE", `/api/channels/${camp.id}/members/hob/${PIP}`)).status).toBe(200);
     // Done when Pip's reply is settled as stopped and the camp runs nothing, with no one next.
     await waitUntil(async () => (await replies(camp.id)).join() === `${PIP}:stopped` && (await idle(camp.id)));
 

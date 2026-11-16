@@ -1,6 +1,7 @@
 import { NodeHttpServer } from "@effect/platform-node";
 import {
   ApprovalService,
+  ChannelMemberRepository,
   ChatService,
   EventPublisher,
   GrantService,
@@ -12,29 +13,28 @@ import {
   PermissionSummary,
   RuntimeAdapter,
   type RuntimeEvent,
-  ThreadMemberRepository,
 } from "@hobbots/agents";
 import {
   type Agent,
   AgentId,
+  Channel,
+  ChannelId,
   Agent as HobRecord,
   hobActor,
   type Message,
   OWNER_ACTOR,
   roleFields,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import {
   ApprovalRepositoryLive,
   BackpackLive,
+  ChannelMemberRepositoryLive,
   EventJournal,
   GrantRepositoryLive,
   HobbotsRepositoryLive,
   SearchIndex,
   SetupRepository,
   TaskRepositoryLive,
-  ThreadMemberRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { makeFakeRuntime } from "@hobbots/runtimes";
@@ -62,7 +62,7 @@ const hob = {
 
 const QUILL = AgentId.make("quill");
 const PIP = AgentId.make("pip");
-const CAMP = ThreadId.make("camp");
+const CAMP = ChannelId.make("camp");
 
 /** Quill's camp, which Pip joined. */
 const CampSeed = Layer.effectDiscard(
@@ -89,10 +89,10 @@ const CampSeed = Layer.effectDiscard(
         }),
       );
     }
-    yield* repo.upsertThread(
-      new Thread({ id: CAMP, agentId: QUILL, title: "Plans", kind: "camp", createdAt: at, updatedAt: at }),
+    yield* repo.upsertChannel(
+      new Channel({ id: CAMP, ownerHobId: QUILL, title: "Plans", kind: "camp", createdAt: at, updatedAt: at }),
     );
-    yield* Effect.orDie((yield* ThreadMemberRepository).add(CAMP, hobActor(PIP), OWNER_ACTOR));
+    yield* Effect.orDie((yield* ChannelMemberRepository).add(CAMP, hobActor(PIP), OWNER_ACTOR));
   }),
 );
 
@@ -120,7 +120,7 @@ beforeEach(() => {
         CampSeed.pipe(
           Layer.provideMerge(
             Layer.mergeAll(
-              ThreadMemberRepositoryLive,
+              ChannelMemberRepositoryLive,
               HobbotsRepositoryLive,
               ApprovalRepositoryLive,
               GrantRepositoryLive,
@@ -167,7 +167,7 @@ const request = async (method: string, path: string, body?: unknown) => {
 };
 
 const activity = async (): Promise<ReadonlyArray<string>> =>
-  (await request("GET", "/api/activity")).body.working.map((hob: { threadId: string }) => hob.threadId);
+  (await request("GET", "/api/activity")).body.working.map((hob: { channelId: string }) => hob.channelId);
 
 const waitUntil = (check: () => Promise<boolean>) =>
   Effect.runPromise(
@@ -179,7 +179,7 @@ const waitUntil = (check: () => Promise<boolean>) =>
 
 interface TurnRead {
   readonly event: string;
-  readonly threadId: string;
+  readonly channelId: string;
   readonly working: ReadonlyArray<string>;
 }
 
@@ -205,7 +205,7 @@ const followTurns = async () => {
       turns = [];
       for (const turn of arrived) {
         const data = JSON.parse(turn.data);
-        reads.push({ event: data._tag, threadId: data.threadId, working: await activity() });
+        reads.push({ event: data._tag, channelId: data.channelId, working: await activity() });
       }
     }
   };
@@ -216,20 +216,20 @@ const followTurns = async () => {
 describe("turn events", () => {
   // covers ADR 039 (One hob speaks at a time)
   it("names the member hob speaking in a camp as the one working (#1461)", async () => {
-    await request("POST", `/api/threads/${CAMP}/messages`, { content: "@pip what do you think?" });
+    await request("POST", `/api/channels/${CAMP}/messages`, { content: "@pip what do you think?" });
     await waitUntil(async () => (await activity()).length > 0);
     const { working } = (await request("GET", "/api/activity")).body;
-    expect(working).toEqual([{ agentId: PIP, name: "Pip", threadId: CAMP }]);
+    expect(working).toEqual([{ agentId: PIP, name: "Pip", channelId: CAMP }]);
     Effect.runSync(Queue.end(turn));
     await waitUntil(async () => (await activity()).length === 0);
   });
 
   it("a read of /api/activity made on each turn event already agrees with it, even while the runtime is slow to exit", async () => {
     const agent: Agent = (await request("POST", "/api/agents", hob)).body;
-    const thread = (await request("POST", `/api/agents/${agent.id}/threads`)).body;
+    const channel = (await request("POST", `/api/agents/${agent.id}/channels`)).body;
     const follower = await followTurns();
 
-    await request("POST", `/api/threads/${thread.id}/messages`, { content: "hello" });
+    await request("POST", `/api/channels/${channel.id}/messages`, { content: "hello" });
     await waitUntil(async () => follower.reads.length > 0);
     Effect.runSync(
       Queue.offerAll(turn, [
@@ -238,12 +238,12 @@ describe("turn events", () => {
       ]),
     );
     await waitUntil(async () => {
-      const list: ReadonlyArray<Message> = (await request("GET", `/api/threads/${thread.id}/messages`)).body;
+      const list: ReadonlyArray<Message> = (await request("GET", `/api/channels/${channel.id}/messages`)).body;
       return list.some((m) => m.role === "assistant" && m.status === "complete");
     });
     // The reply completed, but the runtime has not exited: the turn still runs and has not ended.
     await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(await activity()).toEqual([thread.id]);
+    expect(await activity()).toEqual([channel.id]);
     expect(follower.reads.map((read) => read.event)).toEqual(["TurnStarted"]);
 
     Effect.runSync(Queue.end(turn));
@@ -251,8 +251,8 @@ describe("turn events", () => {
     await follower.stop();
 
     expect(follower.reads).toEqual([
-      { event: "TurnStarted", threadId: thread.id, working: [thread.id] },
-      { event: "TurnEnded", threadId: thread.id, working: [] },
+      { event: "TurnStarted", channelId: channel.id, working: [channel.id] },
+      { event: "TurnEnded", channelId: channel.id, working: [] },
     ]);
   });
 });
@@ -272,9 +272,9 @@ const atPublish = <A, E>(
       publish: () => Effect.void,
       publishTransient: (event) =>
         event._tag === "TurnStarted" || event._tag === "TurnEnded"
-          ? Effect.suspend(() => chat?.activeThreads ?? Effect.succeed([])).pipe(
+          ? Effect.suspend(() => chat?.activeChannels ?? Effect.succeed([])).pipe(
               Effect.flatMap((working) =>
-                Effect.sync(() => seen.push({ event: event._tag, threadId: event.threadId, working })),
+                Effect.sync(() => seen.push({ event: event._tag, channelId: event.channelId, working })),
               ),
               Effect.asVoid,
             )
@@ -333,23 +333,23 @@ describe("turn events at the moment they are published", () => {
     const result = await atPublish((seen, exit) =>
       Effect.gen(function* () {
         const chat = yield* ChatService;
-        const thread = yield* chat.createThread(AgentId.make("wren"));
-        yield* chat.sendPrompt(thread.id, "write a poem");
+        const channel = yield* chat.createChannel(AgentId.make("wren"));
+        yield* chat.sendPrompt(channel.id, "write a poem");
         yield* until(() => seen.length === 1);
-        yield* chat.stop(thread.id);
+        yield* chat.stop(channel.id);
         // The runtime holds its shutdown: the turn still runs, and its end is not announced.
         yield* Effect.sleep("50 millis");
-        const whileExiting = { running: yield* chat.activeThreads, announced: seen.length };
+        const whileExiting = { running: yield* chat.activeChannels, announced: seen.length };
         yield* Deferred.succeed(exit, undefined);
         yield* until(() => seen.length === 2);
-        return { threadId: thread.id as ThreadId, whileExiting, seen };
+        return { channelId: channel.id as ChannelId, whileExiting, seen };
       }),
     );
 
-    expect(result.whileExiting).toEqual({ running: [result.threadId], announced: 1 });
+    expect(result.whileExiting).toEqual({ running: [result.channelId], announced: 1 });
     expect(result.seen).toEqual([
-      { event: "TurnStarted", threadId: result.threadId, working: [result.threadId] },
-      { event: "TurnEnded", threadId: result.threadId, working: [] },
+      { event: "TurnStarted", channelId: result.channelId, working: [result.channelId] },
+      { event: "TurnEnded", channelId: result.channelId, working: [] },
     ]);
   });
 });

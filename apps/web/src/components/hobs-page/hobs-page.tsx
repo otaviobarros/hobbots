@@ -1,4 +1,4 @@
-import type { Agent, Thread } from "@hobbots/domain";
+import type { Agent, Channel } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@hobbots/ui/components/empty";
 import { FilterChip, FilterChips } from "@hobbots/ui/components/filter-chips";
@@ -7,8 +7,8 @@ import { Skeleton } from "@hobbots/ui/components/skeleton";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { type ActivityMap, useHobPresence, useThreadReplies } from "../../api/hub-status.ts";
-import { agentsQuery, archivedAgentsQuery, threadsQuery } from "../../api/queries.ts";
+import { type ActivityMap, useChannelReplies, useHobPresence } from "../../api/hub-status.ts";
+import { agentsQuery, archivedAgentsQuery, channelsQuery } from "../../api/queries.ts";
 import { matchesHob } from "../../lib/crew.ts";
 import { type HobState, presenceState } from "../../lib/hob-state.ts";
 import { HubWait, ROW_WIDTHS, SKELETON_ROWS } from "../loading/hub-wait.tsx";
@@ -68,14 +68,14 @@ function Crew({
   onRetry: () => void;
 }) {
   const reading = hobs === undefined;
-  const threadLists = useQueries({ queries: (hobs ?? []).map((hob) => threadsQuery(hob.id)) });
-  const activity = useThreadReplies();
+  const channelLists = useQueries({ queries: (hobs ?? []).map((hob) => channelsQuery(hob.id)) });
+  const activity = useChannelReplies();
   const presence = useHobPresence();
   const navigate = useNavigate();
 
   const crew = (hobs ?? []).map((hob, index) => {
-    const threads = threadLists[index]?.data ?? [];
-    return { hob, threads, state: presenceState(presence[hob.id], hob.status) };
+    const channels = channelLists[index]?.data ?? [];
+    return { hob, channels, state: presenceState(presence[hob.id], hob.status) };
   });
   const counts = filterCounts(crew);
   const finding = query.trim() !== "";
@@ -151,7 +151,7 @@ function Shown({
   filter,
   finding,
 }: {
-  shown: ReadonlyArray<{ readonly hob: Agent; readonly threads: ReadonlyArray<Thread>; readonly state: HobState }>;
+  shown: ReadonlyArray<{ readonly hob: Agent; readonly channels: ReadonlyArray<Channel>; readonly state: HobState }>;
   activity: ActivityMap;
   filter: HobFilter;
   finding: boolean;
@@ -160,8 +160,8 @@ function Shown({
     <>
       {(shown.length > 0 || (filter === "all" && !finding)) && (
         <div className="grid grid-cols-2 gap-3.5 min-[1120px]:grid-cols-3">
-          {shown.map(({ hob, state, threads }) => (
-            <HobCard key={hob.id} hob={hob} state={state} threads={threads} activity={activity} />
+          {shown.map(({ hob, state, channels }) => (
+            <HobCard key={hob.id} hob={hob} state={state} channels={channels} activity={activity} />
           ))}
           {filter === "all" && !finding && <SummonCard />}
         </div>

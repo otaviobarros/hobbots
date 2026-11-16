@@ -108,7 +108,7 @@ export const messages = {
   } satisfies Record<CheckpointKind, string>,
   room: {
     elsewhere: "Pinned from another thread",
-    openThread: "Open its thread",
+    openChannel: "Open its thread",
     missing: "A pinned quest is no longer on this hub.",
     unpin: "Unpin",
     unreadable: "A pinned quest could not be loaded right now.",

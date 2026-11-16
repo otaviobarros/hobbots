@@ -1,4 +1,4 @@
-import type { Agent, BackpackItem, Task, TaskTree, ThreadId } from "@hobbots/domain";
+import type { Agent, BackpackItem, ChannelId, Task, TaskTree } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import {
   DropdownMenu,
@@ -11,7 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { agentsQuery } from "../../api/queries.ts";
 import { useTaskControl } from "../../api/task-controls.ts";
-import { threadTasksQuery } from "../../api/tasks.ts";
+import { channelTasksQuery } from "../../api/tasks.ts";
 import { HobMenuItems } from "../hob-sprite/hob-menu-items.tsx";
 import { HubWait } from "../loading/hub-wait.tsx";
 import { controlError, reassignTargets } from "../quest/control-room.ts";
@@ -29,20 +29,20 @@ const copy = messages;
  */
 export function BlockerReassign({
   item,
-  threadId,
+  channelId,
   owner,
   disabled,
   onSent,
 }: {
   item: BackpackItem;
-  /** The thread the item's Task tree belongs to. */
-  threadId: ThreadId;
+  /** The channel the item's Task tree belongs to. */
+  channelId: ChannelId;
   /** The stuck hob's name, which a refusal names. */
   owner: string;
   disabled: boolean;
   onSent: (sent: Promise<unknown>, to: Agent) => void;
 }) {
-  const read = useQuery(threadTasksQuery(threadId));
+  const read = useQuery(channelTasksQuery(channelId));
   const control = useTaskControl();
   const [target, setTarget] = useState<Agent | null>(null);
   // Whether the Task can change hands is unknown until its tree is read: the card says so, never

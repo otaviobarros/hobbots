@@ -1,15 +1,15 @@
 import { HobbotsRepository, type NewTask, TaskRepository } from "@hobbots/agents";
-import { ThreadKeyReused } from "@hobbots/api";
+import { ChannelKeyReused } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  Channel,
+  ChannelId,
+  ChannelLifecycle,
   DEFAULT_QUEST_LIMITS,
   QuestId,
   QuestionId,
   TaskId,
-  Thread,
-  ThreadId,
-  ThreadLifecycle,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -31,15 +31,15 @@ const run = <A, E>(
 const NOW = "2026-11-11T00:00:00.000Z";
 const LATER = "2026-11-11T01:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
-const CHAT = ThreadId.make("chat-1");
-const FRESH = ThreadId.make("chat-2");
+const CHAT = ChannelId.make("chat-1");
+const FRESH = ChannelId.make("chat-2");
 
 let clock = 0;
 const newTask = (id: string, parentId: string | null): NewTask => ({
   id: TaskId.make(id),
   ownerId: ALDRIC,
   parentId: parentId === null ? null : TaskId.make(parentId),
-  threadId: CHAT,
+  channelId: CHAT,
   brief: `Brief for ${id}`,
   dependsOn: [],
   createdAt: new Date(Date.parse(NOW) + 1000 * ++clock).toISOString(),
@@ -63,8 +63,8 @@ const hobWithChat = Effect.gen(function* () {
       createdAt: NOW,
     }),
   );
-  const chat = yield* repo.upsertThread(
-    new Thread({ id: CHAT, agentId: ALDRIC, title: "Lamps", kind: "chat", createdAt: NOW, updatedAt: NOW }),
+  const chat = yield* repo.upsertChannel(
+    new Channel({ id: CHAT, ownerHobId: ALDRIC, title: "Lamps", kind: "direct", createdAt: NOW, updatedAt: NOW }),
   );
   return chat.value;
 });
@@ -97,32 +97,32 @@ const openWork = Effect.gen(function* () {
   yield* tasks.moveTask(done.value.id, done.value.revision, "cancelled", NOW);
 });
 
-const supersede = (chat: Thread) => {
-  const next = ThreadLifecycle.transition(chat, {
+const supersede = (chat: Channel) => {
+  const next = ChannelLifecycle.transition(chat, {
     _tag: "Supersede",
     at: LATER,
     hobRetired: false,
     approvalPending: false,
     replyRunning: false,
   });
-  if (!(next instanceof Thread)) throw next;
+  if (!(next instanceof Channel)) throw next;
   return next;
 };
 
-const freshChat = new Thread({
+const freshChat = new Channel({
   id: FRESH,
-  agentId: ALDRIC,
-  title: "New thread",
-  kind: "chat",
-  origin: { threadId: CHAT, chapterId: null },
+  ownerHobId: ALDRIC,
+  title: "New channel",
+  kind: "direct",
+  origin: { channelId: CHAT, chapterId: null },
   createdAt: LATER,
   updatedAt: LATER,
 });
 
-const camp = (fields: Partial<Thread> = {}) =>
-  new Thread({
-    id: ThreadId.make("camp-1"),
-    agentId: ALDRIC,
+const camp = (fields: Partial<Channel> = {}) =>
+  new Channel({
+    id: ChannelId.make("camp-1"),
+    ownerHobId: ALDRIC,
     title: "Launch post",
     kind: "camp",
     goal: "Write the launch post",
@@ -136,7 +136,7 @@ const camp = (fields: Partial<Thread> = {}) =>
 const placesOf = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const rows = (table: string) =>
-    sql<{ id: string; threadId: string | null }>`SELECT id, thread_id FROM ${sql(table)} ORDER BY id`;
+    sql<{ id: string; channelId: string | null }>`SELECT id, channel_id FROM ${sql(table)} ORDER BY id`;
   return {
     tasks: yield* rows("tasks"),
     quests: yield* rows("quests"),
@@ -153,7 +153,7 @@ const breakNextAppend = Effect.gen(function* () {
   yield* sql`INSERT INTO event_journal ${sql.insert({
     sequence: next,
     id: "planted",
-    type: "ThreadUpserted",
+    type: "ChannelUpserted",
     schema_version: 4,
     occurred_at: NOW,
     payload: "{}",
@@ -171,7 +171,7 @@ describe("Make a camp", () => {
         const made = yield* repo.makeCamp(camp());
         const again = yield* repo.makeCamp(camp({ createdAt: LATER, updatedAt: LATER }));
         // Renamed since, the camp still answers the request that made it.
-        const renamed = yield* repo.upsertThread(new Thread({ ...made.value, title: "Launch post, renamed" }));
+        const renamed = yield* repo.upsertChannel(new Channel({ ...made.value, title: "Launch post, renamed" }));
         const afterRename = yield* repo.makeCamp(camp({ createdAt: LATER, updatedAt: LATER }));
         const reused = yield* Effect.exit(repo.makeCamp(camp({ title: "Something else" })));
         const onChat = yield* Effect.exit(repo.makeCamp(camp({ id: CHAT })));
@@ -191,8 +191,8 @@ describe("Make a camp", () => {
     expect(result.made.entries.map((entry) => entry.payload._tag)).toEqual([
       "CampMade",
       "ChapterStarted",
-      "ThreadMemberAdded",
-      "ThreadMemberAdded",
+      "ChannelMemberAdded",
+      "ChannelMemberAdded",
     ]);
     expect(result.made.entries.slice(2).map((entry) => entry.payload)).toMatchObject([
       { member: { actor: { kind: "user", id: "owner" }, role: "owner", state: "active" } },
@@ -203,8 +203,8 @@ describe("Make a camp", () => {
     expect(result.again.value).toEqual(result.made.value);
     expect(result.afterRename.entries).toEqual([]);
     expect(result.afterRename.value).toEqual(result.renamed.value);
-    expect(result.reused).toEqual(Exit.fail(new ThreadKeyReused({ threadId: ThreadId.make("camp-1") })));
-    expect(result.onChat).toEqual(Exit.fail(new ThreadKeyReused({ threadId: CHAT })));
+    expect(result.reused).toEqual(Exit.fail(new ChannelKeyReused({ channelId: ChannelId.make("camp-1") })));
+    expect(result.onChat).toEqual(Exit.fail(new ChannelKeyReused({ channelId: CHAT })));
     expect(result.entries.filter((entry) => entry.payload._tag === "CampMade")).toHaveLength(1);
   });
 });
@@ -216,22 +216,22 @@ describe("Start fresh", () => {
         const chat = yield* hobWithChat;
         yield* openWork;
         const repo = yield* HobbotsRepository;
-        const stored = Option.getOrThrow(yield* repo.findThread(CHAT));
+        const stored = Option.getOrThrow(yield* repo.findChannel(CHAT));
         const started = Option.getOrThrow(yield* repo.startFresh({ superseded: supersede(stored), chat: freshChat }));
         return {
           chat,
           started,
           places: yield* placesOf,
           carried: yield* repo.listCarriedOver(FRESH),
-          live: yield* repo.listThreads(ALDRIC),
-          archived: yield* repo.listArchivedThreads(ALDRIC),
+          live: yield* repo.listChannels(ALDRIC),
+          archived: yield* repo.listArchivedChannels(ALDRIC),
         };
       }),
     );
 
     const { started } = result;
     expect(started.value.superseded).toMatchObject({ id: CHAT, state: "superseded", archivedAt: LATER });
-    expect(started.value.chat).toMatchObject({ id: FRESH, kind: "chat", state: "open", origin: { threadId: CHAT } });
+    expect(started.value.chat).toMatchObject({ id: FRESH, kind: "direct", state: "open", origin: { channelId: CHAT } });
     expect(started.value.carried.map((item) => [item.ref._tag, item.label])).toEqual([
       ["task", "Brief for launch"],
       ["question", "Which lamps first?"],
@@ -248,34 +248,34 @@ describe("Start fresh", () => {
       "BackpackItemChanged",
       "BackpackItemChanged",
       "ChapterStarted",
-      "ThreadMemberAdded",
-      "ThreadMemberAdded",
+      "ChannelMemberAdded",
+      "ChannelMemberAdded",
       "QuestSummaryChanged",
     ]);
     expect(started.entries.slice(4, 6).map((entry) => entry.payload)).toMatchObject([
-      { member: { threadId: FRESH, actor: { kind: "user", id: "owner" }, role: "owner" } },
-      { member: { threadId: FRESH, actor: { kind: "hob" }, role: "member" } },
+      { member: { channelId: FRESH, actor: { kind: "user", id: "owner" }, role: "owner" } },
+      { member: { channelId: FRESH, actor: { kind: "hob" }, role: "member" } },
     ]);
-    expect(started.entries[6]?.payload).toMatchObject({ summary: { threadId: FRESH } });
+    expect(started.entries[6]?.payload).toMatchObject({ summary: { channelId: FRESH } });
     expect(started.value.chat.liveChapterId).not.toBeNull();
     const [fresh, ...rest] = started.entries;
     const moved = rest.filter((entry) => entry.payload._tag === "BackpackItemChanged");
-    expect(fresh?.correlation.threadId).toBe(FRESH);
+    expect(fresh?.correlation.channelId).toBe(FRESH);
     for (const entry of moved) {
-      expect(entry.payload).toMatchObject({ item: { threadId: FRESH, revision: entry.sequence } });
+      expect(entry.payload).toMatchObject({ item: { channelId: FRESH, revision: entry.sequence } });
     }
     // The open tree and its Quest moved; the Task that was over stays where it was.
     expect(result.places.tasks).toEqual([
-      { id: "launch", threadId: FRESH },
-      { id: "old", threadId: CHAT },
-      { id: "wire", threadId: FRESH },
+      { id: "launch", channelId: FRESH },
+      { id: "old", channelId: CHAT },
+      { id: "wire", channelId: FRESH },
     ]);
-    expect(result.places.quests).toEqual([{ id: "quest-1", threadId: FRESH }]);
-    expect(result.places.items.every((item) => item.threadId === FRESH)).toBe(true);
+    expect(result.places.quests).toEqual([{ id: "quest-1", channelId: FRESH }]);
+    expect(result.places.items.every((item) => item.channelId === FRESH)).toBe(true);
     expect(result.places.carried).toHaveLength(3);
-    // The hob keeps one open chat: the new one is listed, the old one is with the archived threads.
-    expect(result.live.map((thread) => thread.id)).toEqual([FRESH]);
-    expect(result.archived.map((thread) => [thread.id, thread.state])).toEqual([[CHAT, "superseded"]]);
+    // The hob keeps one open chat: the new one is listed, the old one is with the archived channels.
+    expect(result.live.map((channel) => channel.id)).toEqual([FRESH]);
+    expect(result.archived.map((channel) => [channel.id, channel.state])).toEqual([[CHAT, "superseded"]]);
   });
 
   it("writes nothing when the chat changed since it was read (#1376)", async () => {
@@ -284,13 +284,13 @@ describe("Start fresh", () => {
         const chat = yield* hobWithChat;
         const repo = yield* HobbotsRepository;
         // A turn recorded its session after the chat was read.
-        yield* repo.upsertThread(new Thread({ ...chat, title: "Lamps, renamed" }));
+        yield* repo.upsertChannel(new Channel({ ...chat, title: "Lamps, renamed" }));
         const stale = yield* repo.startFresh({ superseded: supersede(chat), chat: freshChat });
-        return { stale, thread: yield* repo.findThread(FRESH), chat: yield* repo.findThread(CHAT) };
+        return { stale, channel: yield* repo.findChannel(FRESH), chat: yield* repo.findChannel(CHAT) };
       }),
     );
     expect(Option.isNone(result.stale)).toBe(true);
-    expect(Option.isNone(result.thread)).toBe(true);
+    expect(Option.isNone(result.channel)).toBe(true);
     expect(Option.getOrThrow(result.chat).state).toBe("open");
   });
 
@@ -303,7 +303,7 @@ describe("Start fresh", () => {
         const before = yield* placesOf;
         const clear = yield* breakNextAppend;
         const campExit = yield* Effect.exit(repo.makeCamp(camp()));
-        const stored = Option.getOrThrow(yield* repo.findThread(CHAT));
+        const stored = Option.getOrThrow(yield* repo.findChannel(CHAT));
         const freshExit = yield* Effect.exit(repo.startFresh({ superseded: supersede(stored), chat: freshChat }));
         yield* clear;
         return {
@@ -311,9 +311,9 @@ describe("Start fresh", () => {
           freshExit,
           before,
           after: yield* placesOf,
-          camp: yield* repo.findThread(ThreadId.make("camp-1")),
-          fresh: yield* repo.findThread(FRESH),
-          chat: yield* repo.findThread(CHAT),
+          camp: yield* repo.findChannel(ChannelId.make("camp-1")),
+          fresh: yield* repo.findChannel(FRESH),
+          chat: yield* repo.findChannel(CHAT),
           // Once the journal takes writes again, the same Start fresh goes through whole.
           retried: yield* repo.startFresh({ superseded: supersede(stored), chat: freshChat }),
         };

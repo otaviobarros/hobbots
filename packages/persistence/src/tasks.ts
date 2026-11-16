@@ -16,6 +16,7 @@ import {
   AttemptTransitions,
   ancestorsOf,
   CHECKPOINT_KINDS,
+  type ChannelId,
   Checkpoint,
   CheckpointId,
   type CheckpointKind,
@@ -53,7 +54,6 @@ import {
   type TaskTarget,
   TaskTransitions,
   TaskWait,
-  type ThreadId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option } from "effect";
 import { SqlClient, SqlError } from "effect/sql";
@@ -213,21 +213,21 @@ export const TaskRepositoryLive = Layer.effect(
 
     interface Placement {
       readonly rootId: TaskId;
-      readonly threadId: ThreadId | null;
+      readonly channelId: ChannelId | null;
       readonly quest: Quest | null;
       readonly lead: AgentId;
     }
     type Placed = Effect.Effect<Placement, TaskRefused | SqlError.SqlError>;
 
-    /** The Task you asked for: it starts its own tree, in a thread that exists, with no lead and no siblings. */
+    /** The Task you asked for: it starts its own tree, in a channel that exists, with no lead and no siblings. */
     const placeTop = (input: NewTask, hasDelegation: boolean): Placed =>
       Effect.gen(function* () {
         if (hasDelegation) return yield* refuse("delegation-mismatch", "The Task you asked for has no lead");
         if (input.dependsOn.length > 0) return yield* refuse("dependency-outside-tree", "A top Task has no siblings");
-        const [thread] =
-          input.threadId === null ? [true] : yield* sql`SELECT id FROM threads WHERE id = ${input.threadId}`;
-        if (thread === undefined) return yield* refuse("thread-missing", `No thread ${input.threadId}`);
-        return { rootId: input.id, threadId: input.threadId, quest: null, lead: input.ownerId };
+        const [channel] =
+          input.channelId === null ? [true] : yield* sql`SELECT id FROM channels WHERE id = ${input.channelId}`;
+        if (channel === undefined) return yield* refuse("channel-missing", `No channel ${input.channelId}`);
+        return { rootId: input.id, channelId: input.channelId, quest: null, lead: input.ownerId };
       });
 
     /** A child: a step under its own owner's Task, or a member's Task delegated from a Quest on its parent. */
@@ -257,10 +257,10 @@ export const TaskRepositoryLive = Layer.effect(
         if (input.dependsOn.some((id) => !siblings.has(id))) {
           return yield* refuse("dependency-outside-tree", "A Task depends only on its siblings");
         }
-        return { rootId: parent.rootId, threadId: parent.threadId, quest: quest ?? null, lead: parent.ownerId };
+        return { rootId: parent.rootId, channelId: parent.channelId, quest: quest ?? null, lead: parent.ownerId };
       });
 
-    /** Checks a new Task's lineage, and returns where it sits: its root, thread, and a member's Quest and lead. */
+    /** Checks a new Task's lineage, and returns where it sits: its root, channel, and a member's Quest and lead. */
     const lineage = (input: NewTask, hasDelegation: boolean): Placed =>
       Effect.gen(function* () {
         const [owner] = yield* sql`SELECT id FROM agents WHERE id = ${input.ownerId}`;
@@ -278,7 +278,7 @@ export const TaskRepositoryLive = Layer.effect(
           const task = new Task({
             ...fields,
             rootId: placed.rootId,
-            threadId: placed.threadId,
+            channelId: placed.channelId,
             state: "queued",
             result: null,
             currentAttemptId: null,
@@ -287,9 +287,9 @@ export const TaskRepositoryLive = Layer.effect(
           });
           yield* sql`INSERT INTO tasks ${sql.insert(taskColumns(task))}`;
           // A top Task started in a chat or camp belongs to the chapter it was started in, and moves with it (ADR 037).
-          if (task.parentId === null && task.threadId !== null) {
+          if (task.parentId === null && task.channelId !== null) {
             yield* sql`UPDATE tasks SET chapter_id = (SELECT c.id FROM chapters c
-              WHERE c.thread_id = ${task.threadId} AND c.state = 'live') WHERE id = ${task.id}`;
+              WHERE c.channel_id = ${task.channelId} AND c.state = 'live') WHERE id = ${task.id}`;
           }
           const delegation =
             brief === null || placed.quest === null
@@ -351,7 +351,7 @@ export const TaskRepositoryLive = Layer.effect(
             ...input,
             leadId: task.ownerId,
             parentQuestId: outer?.id ?? null,
-            threadId: task.threadId,
+            channelId: task.channelId,
             depth,
             state: "active",
             endedAt: null,
@@ -362,7 +362,7 @@ export const TaskRepositoryLive = Layer.effect(
             task_id: quest.taskId,
             lead_id: quest.leadId,
             parent_quest_id: quest.parentQuestId,
-            thread_id: quest.threadId,
+            channel_id: quest.channelId,
             goal: quest.goal,
             acceptance: JSON.stringify(quest.acceptance),
             limits: JSON.stringify(quest.limits),
@@ -1318,7 +1318,7 @@ export const TaskRepositoryLive = Layer.effect(
       leaveNote,
       listWaitingQuestions: read.waitingQuestions.pipe(Effect.orDie),
       listFailedTasks: read.failedTasks.pipe(Effect.orDie),
-      listQuestSummaries: (threadId) => readQuestSummaries(sql, threadId),
+      listQuestSummaries: (channelId) => readQuestSummaries(sql, channelId),
       handOff,
       waitFor,
       startTurn: (turn) =>
@@ -1363,7 +1363,7 @@ export const TaskRepositoryLive = Layer.effect(
           Effect.orDie,
         ),
       readTree: (taskId) => read.readTree(taskId).pipe(Effect.map(Option.fromNullishOr), Effect.orDie),
-      readThreadTrees: (threadId) => read.threadTrees(threadId).pipe(Effect.orDie),
+      readChannelTrees: (channelId) => read.channelTrees(channelId).pipe(Effect.orDie),
       findQuest: (questId) =>
         read.quest(questId).pipe(
           Effect.map(([quest]) => Option.fromNullishOr(quest)),

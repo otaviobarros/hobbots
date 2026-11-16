@@ -1,0 +1,275 @@
+import { AgentId, ChannelId, MessageId, mainLine, type ReplyActivity } from "@hobbots/domain";
+import { agreesWithModel } from "@hobbots/domain/machine-testing";
+import * as fc from "fast-check";
+import { describe, expect, it } from "vitest";
+import {
+  type ChannelRun,
+  type ChannelRunEvent,
+  ChannelRunMachine,
+  idleRun,
+  isAtRest,
+  isBusy,
+  type Reply,
+  RUN_STATES,
+  type RunState,
+  runStatus,
+} from "../src/channel-run.ts";
+
+// The machine compares replies by identity only, so plain objects stand in for them.
+const replies = [0, 1, 2].map((n) => ({ n }) as unknown as Reply);
+const replyIndex = (reply: Reply | null) => (reply === null ? null : replies.indexOf(reply));
+const messages = ["m-1", "m-2", "m-3"].map((id) => MessageId.make(id));
+const channelId = ChannelId.make("t-1");
+const line = mainLine(channelId);
+const hobs = ["quill", "pip", "rook"].map((id) => AgentId.make(id));
+
+/** What the model tracks of a run: every field, with the reply as its place in `replies`. */
+interface RunView {
+  readonly run: RunState;
+  readonly speaking: AgentId | null;
+  readonly carrier: AgentId | null;
+  readonly next: ReadonlyArray<AgentId>;
+  readonly paused: ReadonlyArray<AgentId>;
+  readonly reply: number | null;
+  readonly activity: ReplyActivity | null;
+  readonly chosen: MessageId | null;
+  readonly held: ReadonlyArray<AgentId>;
+}
+
+const view = (run: ChannelRun): RunView => ({
+  run: run.run,
+  speaking: run.speaking,
+  carrier: run.carrier,
+  next: run.next,
+  paused: run.paused,
+  reply: replyIndex(run.reply),
+  activity: run.activity,
+  chosen: run.chosen,
+  held: run.held,
+});
+
+type Rule<T extends ChannelRunEvent["_tag"]> = (
+  m: RunView,
+  event: Extract<ChannelRunEvent, { readonly _tag: T }>,
+) => RunView | "refused";
+
+/** The rules of ADR 037's run, written apart from the machine's table. */
+const rules: { readonly [T in ChannelRunEvent["_tag"]]: Rule<T> } = {
+  // A dispatch names the hob whose work it puts through, until it is delivered (#1549).
+  Dispatch: (m, e) => (m.run === "idle" ? { ...m, run: "dispatching", carrier: e.hobId } : "refused"),
+  Launch: (m, e) => {
+    const launched = { speaking: e.hobId, reply: replyIndex(e.reply), activity: e.activity };
+    if (m.run === "idle") return { ...m, ...launched, run: "running" };
+    return m.run === "dispatching" ? { ...m, ...launched, run: "carrying" } : "refused";
+  },
+  // Only the reply that runs now reports what it does, and only a change is a transition.
+  ReplyChanged: (m, e) =>
+    (m.run === "running" || m.run === "carrying") && m.reply === replyIndex(e.reply) && m.activity !== e.activity
+      ? { ...m, activity: e.activity }
+      : "refused",
+  // Only the turn that runs now can end; a stale reply is refused.
+  TurnEnded: (m, e) => {
+    if (m.reply !== replyIndex(e.reply)) return "refused";
+    const ended = { speaking: null, reply: null, activity: null };
+    if (m.run === "running") return { ...m, ...ended, run: "draining" };
+    return m.run === "carrying" ? { ...m, ...ended, run: "dispatching" } : "refused";
+  },
+  Drained: (m) => {
+    if (m.run === "draining") return { ...m, run: "idle" };
+    return m.run === "idle" ? m : "refused";
+  },
+  Delivered: (m) => (m.run === "dispatching" ? { ...m, run: "idle", carrier: null } : "refused"),
+  // Only a change of who is next, or of whose relay waits for a person, is a transition.
+  Lined: (m, e) =>
+    JSON.stringify([m.next, m.paused]) === JSON.stringify([e.next, e.paused])
+      ? "refused"
+      : { ...m, next: e.next, paused: e.paused },
+  Choose: (m, e) => ({ ...m, chosen: e.messageId }),
+  Unchoose: (m, e) => (e.messageId === null || m.chosen === e.messageId ? { ...m, chosen: null } : m),
+  // Each hob's stop is kept apart: holding one hob leaves another's hold as it is.
+  Hold: (m, e) => (m.held.includes(e.hobId) ? m : { ...m, held: [...m.held, e.hobId] }),
+  // A hob that wakes releases only its own stopped work; your message or resume releases all.
+  Release: (m, e) =>
+    e.hobId === undefined ? { ...m, held: [] } : { ...m, held: m.held.filter((hobId) => hobId !== e.hobId) },
+};
+
+const step = (m: RunView, event: ChannelRunEvent) =>
+  (rules[event._tag] as Rule<ChannelRunEvent["_tag"]>)(m, event as never);
+
+const reply = fc.constantFrom(...replies);
+const messageId = fc.constantFrom(...messages);
+const activity = fc.constantFrom<ReplyActivity | null>("thinking", "working", "waiting", null);
+const hob = fc.constantFrom(...hobs);
+const next = fc.array(hob, { maxLength: 3 }).map((ids) => [...new Set(ids)]);
+
+const events: fc.Arbitrary<ChannelRunEvent> = fc.oneof(
+  hob.map((h) => ({ _tag: "Dispatch", hobId: h }) as const),
+  fc.tuple(hob, reply, activity).map(([h, r, a]) => ({ _tag: "Launch", hobId: h, reply: r, activity: a }) as const),
+  fc.tuple(reply, activity).map(([r, a]) => ({ _tag: "ReplyChanged", reply: r, activity: a }) as const),
+  reply.map((r) => ({ _tag: "TurnEnded", reply: r }) as const),
+  fc.constant({ _tag: "Drained" } as const),
+  fc.constant({ _tag: "Delivered" } as const),
+  fc.tuple(next, next).map(([ids, paused]) => ({ _tag: "Lined", next: ids, paused }) as const),
+  messageId.map((id) => ({ _tag: "Choose", messageId: id }) as const),
+  fc.option(messageId, { nil: null }).map((id) => ({ _tag: "Unchoose", messageId: id }) as const),
+  hob.map((h) => ({ _tag: "Hold", hobId: h }) as const),
+  fc
+    .option(hob, { nil: undefined })
+    .map((h) => (h === undefined ? { _tag: "Release" } : { _tag: "Release", hobId: h }) as const),
+);
+
+/** Any run a channel can be in: a turn's reply only while one runs. A restart starts from `idleRun`. */
+const records: fc.Arbitrary<ChannelRun> = fc.oneof(
+  fc.constant(idleRun),
+  fc
+    .record({
+      run: fc.constantFrom(...RUN_STATES),
+      speaking: hob,
+      carrier: hob,
+      next,
+      paused: next,
+      reply,
+      activity,
+      chosen: fc.option(messageId, { nil: null }),
+      held: next,
+    })
+    .map((r) => {
+      const turning = r.run === "running" || r.run === "carrying";
+      const dispatching = r.run === "dispatching" || r.run === "carrying";
+      return {
+        ...r,
+        carrier: dispatching ? r.carrier : null,
+        speaking: turning ? r.speaking : null,
+        reply: turning ? r.reply : null,
+        activity: turning ? r.activity : null,
+      };
+    }),
+);
+
+const apply = (run: ChannelRun, ...events: ReadonlyArray<ChannelRunEvent>) =>
+  events.reduce((current, event) => {
+    const next = ChannelRunMachine.transition(current, event);
+    if (typeof next === "string") throw new Error(next);
+    return next;
+  }, run);
+
+describe("ChannelRunMachine", () => {
+  it("agrees with its model over random runs of sends, Send now, who is next, stops and turn ends", () => {
+    agreesWithModel({
+      machine: ChannelRunMachine,
+      records,
+      events,
+      model: { init: view, step, view },
+      isError: (result): result is string => typeof result === "string",
+      runs: 1000,
+    });
+  });
+
+  it("frees a channel once its turn ends and drains", () => {
+    const r = replies[0] as Reply;
+    const run = apply(idleRun, { _tag: "Launch", hobId: hobs[0] as AgentId, reply: r, activity: "thinking" });
+    expect(isBusy(run)).toBe(true);
+    const ended = apply(run, { _tag: "TurnEnded", reply: r }, { _tag: "Drained" });
+    expect(isBusy(ended)).toBe(false);
+    expect(isAtRest(ended)).toBe(true);
+  });
+
+  it("follows what the running reply does, and publishes it with the run", () => {
+    const [first, second] = replies as [Reply, Reply];
+    const run = apply(idleRun, { _tag: "Launch", hobId: hobs[0] as AgentId, reply: first, activity: "thinking" });
+    const writing = apply(run, { _tag: "ReplyChanged", reply: first, activity: "working" });
+    expect(runStatus(line, writing, 4)).toEqual({
+      channelId,
+      rootMessageId: null,
+      run: "running",
+      reply: "working",
+      speaking: hobs[0],
+      next: [],
+      paused: [],
+      revision: 4,
+    });
+    // No change, or a reply that no longer runs, is no transition, so nothing is published for it.
+    expect(ChannelRunMachine.can(writing, { _tag: "ReplyChanged", reply: first, activity: "working" })).toBe(false);
+    expect(ChannelRunMachine.can(writing, { _tag: "ReplyChanged", reply: second, activity: "waiting" })).toBe(false);
+    const ended = apply(writing, { _tag: "TurnEnded", reply: first });
+    expect(runStatus(line, ended, 5)).toEqual({
+      channelId,
+      rootMessageId: null,
+      run: "draining",
+      reply: null,
+      speaking: null,
+      next: [],
+      paused: [],
+      revision: 5,
+    });
+  });
+
+  it("refuses the end of a turn that another turn already replaced", () => {
+    const [first, second] = replies as [Reply, Reply];
+    const run = apply(idleRun, { _tag: "Launch", hobId: hobs[0] as AgentId, reply: second, activity: "thinking" });
+    expect(ChannelRunMachine.can(run, { _tag: "TurnEnded", reply: first })).toBe(false);
+  });
+
+  it("goes back to dispatching when a carried turn ends, naming the dispatch's hob until it is delivered (#1549)", () => {
+    const r = replies[0] as Reply;
+    const pip = hobs[1] as AgentId;
+    const dispatching = apply(idleRun, { _tag: "Dispatch", hobId: pip });
+    expect(dispatching.carrier).toBe(pip);
+    const run = apply(
+      dispatching,
+      { _tag: "Launch", hobId: pip, reply: r, activity: "thinking" },
+      { _tag: "TurnEnded", reply: r },
+    );
+    expect(run).toMatchObject({ run: "dispatching", carrier: pip, speaking: null });
+    expect(apply(run, { _tag: "Delivered" })).toMatchObject({ run: "idle", carrier: null });
+  });
+
+  it("says who speaks while a turn runs, and keeps who is next until nobody waits", () => {
+    const r = replies[0] as Reply;
+    const [quill, pip, rook] = hobs as [AgentId, AgentId, AgentId];
+    const lined = apply(idleRun, { _tag: "Lined", next: [pip, rook], paused: [] });
+    expect(isAtRest(lined)).toBe(false);
+    const speaking = apply(lined, { _tag: "Launch", hobId: quill, reply: r, activity: "thinking" });
+    expect(speaking.speaking).toBe(quill);
+    // The same line-up again is no transition, so nothing is published for it.
+    expect(ChannelRunMachine.can(speaking, { _tag: "Lined", next: [pip, rook], paused: [] })).toBe(false);
+    const ended = apply(speaking, { _tag: "TurnEnded", reply: r }, { _tag: "Drained" });
+    expect(ended.speaking).toBeNull();
+    expect(isAtRest(apply(ended, { _tag: "Lined", next: [], paused: [] }))).toBe(true);
+  });
+
+  it("keeps a line whose relay waits for a person, and publishes whose it is (#1463)", () => {
+    const [quill, pip] = hobs as [AgentId, AgentId];
+    const paused = apply(idleRun, { _tag: "Lined", next: [], paused: [pip, quill] });
+    // Nothing runs or waits there, but the line still says the hobs wait for a person.
+    expect(isAtRest(paused)).toBe(false);
+    expect(runStatus(line, paused, 7)).toMatchObject({ run: "idle", next: [], paused: [pip, quill] });
+    expect(ChannelRunMachine.can(paused, { _tag: "Lined", next: [], paused: [pip, quill] })).toBe(false);
+    // Once a person lets them go on, or writes, nothing is paused and the line rests.
+    expect(isAtRest(apply(paused, { _tag: "Lined", next: [], paused: [] }))).toBe(true);
+  });
+
+  it("keeps a hold set when the stopped turn ended before the stop was saved", () => {
+    const [pip, rook] = hobs as [AgentId, AgentId];
+    const held = apply(idleRun, { _tag: "Hold", hobId: pip });
+    expect(held.held).toEqual([pip]);
+    expect(isAtRest(held)).toBe(false);
+    expect(isAtRest(apply(held, { _tag: "Release" }))).toBe(true);
+    // Another hob that wakes leaves Pip's stopped work held; Pip waking releases it.
+    expect(apply(held, { _tag: "Release", hobId: rook }).held).toEqual([pip]);
+    expect(isAtRest(apply(held, { _tag: "Release", hobId: pip }))).toBe(true);
+    // Stopping Rook's turn too keeps Pip's work held; each hob's waking releases only its own.
+    const both = apply(held, { _tag: "Hold", hobId: rook });
+    expect(both.held).toEqual([pip, rook]);
+    expect(apply(both, { _tag: "Release", hobId: rook }).held).toEqual([pip]);
+    expect(apply(both, { _tag: "Release" }).held).toEqual([]);
+  });
+
+  it("forgets the chosen message only when that message, or any, is taken", () => {
+    const [a, b] = messages as [MessageId, MessageId];
+    const chosen = apply(idleRun, { _tag: "Choose", messageId: a });
+    expect(apply(chosen, { _tag: "Unchoose", messageId: b }).chosen).toBe(a);
+    expect(apply(chosen, { _tag: "Unchoose", messageId: a }).chosen).toBeNull();
+    expect(apply(chosen, { _tag: "Unchoose", messageId: null }).chosen).toBeNull();
+  });
+});

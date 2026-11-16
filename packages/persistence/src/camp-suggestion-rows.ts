@@ -3,12 +3,12 @@ import {
   CampSuggestionId,
   type CampSuggestionReason,
   CampSuggestions,
+  ChannelLifecycle,
   ChapterId,
   campSuggestionReasons,
   isInProgress,
   type JournaledEvent,
   planCampSuggestion,
-  ThreadLifecycle,
 } from "@hobbots/domain";
 import { Array as Arr, DateTime, Effect, Schema } from "effect";
 import type { SqlClient, SqlError, Statement } from "effect/sql";
@@ -22,7 +22,7 @@ import { chapterRows } from "./chapter-rows.ts";
 /** A row of `camp_suggestions`, as the SQL client reads it. */
 export interface CampSuggestionRow {
   readonly id: string;
-  readonly threadId: string;
+  readonly channelId: string;
   readonly chapterId: string;
   readonly reasons: string;
   readonly title: string | null;
@@ -40,7 +40,7 @@ const decode = Schema.decodeUnknownSync(CampSuggestion);
 export const suggestionFromRow = (row: CampSuggestionRow) =>
   decode({
     id: row.id,
-    threadId: row.threadId,
+    channelId: row.channelId,
     chapterId: row.chapterId,
     reasons: JSON.parse(row.reasons),
     title: row.title,
@@ -55,7 +55,7 @@ export const suggestionFromRow = (row: CampSuggestionRow) =>
 
 const suggestionColumns = (suggestion: CampSuggestion) => ({
   id: suggestion.id,
-  thread_id: suggestion.threadId,
+  channel_id: suggestion.channelId,
   chapter_id: suggestion.chapterId,
   reasons: JSON.stringify(suggestion.reasons),
   title: suggestion.title,
@@ -120,16 +120,16 @@ export const raiseSuggestion = (
   Effect.gen(function* () {
     const [chapter] = chapterRows(yield* sql`SELECT * FROM chapters WHERE id = ${chapterId}`);
     if (chapter === undefined) return null;
-    const [thread] = yield* sql<{ readonly openChat: unknown }>`SELECT
-        (CASE WHEN kind = 'chat' AND state = 'open' THEN 1 ELSE 0 END) AS open_chat
-      FROM threads WHERE id = ${chapter.threadId}`;
-    const openChat = Number(thread?.openChat ?? 0) === 1;
+    const [channel] = yield* sql<{ readonly openChat: unknown }>`SELECT
+        (CASE WHEN kind = 'direct' AND state = 'open' THEN 1 ELSE 0 END) AS open_chat
+      FROM channels WHERE id = ${chapter.channelId}`;
+    const openChat = Number(channel?.openChat ?? 0) === 1;
     const suggested = openChat && (yield* suggestionOfChapter(sql, chapterId)) !== null;
     // Counted only when the chapter could take a suggestion, so a busy chapter costs one read.
     const counted =
       openChat && !suggested && reasons === null ? campSuggestionReasons(yield* countsOf(sql, chapterId)) : [];
     const raised = planCampSuggestion({
-      thread: { id: chapter.threadId, openChat },
+      channel: { id: chapter.channelId, openChat },
       chapter,
       suggested,
       reasons: reasons ?? counted,
@@ -173,10 +173,10 @@ export const reconcileSplit = (
     if (withdrawn instanceof CampSuggestion) {
       const written = new CampSuggestion({ ...withdrawn, revision: first });
       yield* settleSuggestion(sql, written);
-      events.push({ _tag: "CampSuggestionExpired", threadId: written.threadId, suggestion: written });
+      events.push({ _tag: "CampSuggestionExpired", channelId: written.channelId, suggestion: written });
     }
     const raised = yield* raiseSuggestion(sql, part, null, first + events.length, at);
-    if (raised !== null) events.push({ _tag: "CampSuggested", threadId: raised.threadId, suggestion: raised });
+    if (raised !== null) events.push({ _tag: "CampSuggested", channelId: raised.channelId, suggestion: raised });
     return events;
   });
 
@@ -226,7 +226,7 @@ export const raiseCampSuggestions = (
     const raised: Array<JournaledEvent> = [];
     for (const chapterId of grown) {
       const suggestion = yield* raiseSuggestion(sql, chapterId, null, first + raised.length, at);
-      if (suggestion !== null) raised.push({ _tag: "CampSuggested", threadId: suggestion.threadId, suggestion });
+      if (suggestion !== null) raised.push({ _tag: "CampSuggested", channelId: suggestion.channelId, suggestion });
     }
     return raised;
   });
@@ -239,10 +239,10 @@ const endedSuggestions = (sql: SqlClient.SqlClient, event: JournaledEvent) => {
   switch (event._tag) {
     case "ChapterMerged":
       return open(sql`chapter_id = ${event.absorbed}`);
-    case "ThreadUpserted":
-      return ThreadLifecycle.isOpen(event.thread) ? Effect.succeed([]) : open(sql`thread_id = ${event.thread.id}`);
+    case "ChannelUpserted":
+      return ChannelLifecycle.isOpen(event.channel) ? Effect.succeed([]) : open(sql`channel_id = ${event.channel.id}`);
     case "ChatStartedFresh":
-      return open(sql`thread_id = ${event.superseded.id}`);
+      return open(sql`channel_id = ${event.superseded.id}`);
     default:
       return Effect.succeed([]);
   }
@@ -270,7 +270,7 @@ export const expireCampSuggestions = (
       if (!(next instanceof CampSuggestion)) continue;
       const written = new CampSuggestion({ ...next, revision: first + expired.length });
       yield* settleSuggestion(sql, written);
-      expired.push({ _tag: "CampSuggestionExpired", threadId: written.threadId, suggestion: written });
+      expired.push({ _tag: "CampSuggestionExpired", channelId: written.channelId, suggestion: written });
     }
     return expired;
   });

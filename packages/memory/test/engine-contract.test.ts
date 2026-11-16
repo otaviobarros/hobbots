@@ -190,7 +190,7 @@ describe.runIf(enabled)(`the bundled ai-memory ${AI_MEMORY_VERSION}`, () => {
   it("captures events through /hook/batch and skips a replayed ingest key", async () => {
     const event = (name: string, key: string, body: Record<string, unknown>) => ({
       url: `/hook?event=${name}&agent=hobbots&workspace=${MEMORY_WORKSPACE}&project=hob-h2&extension=hobbots&source_event=${name}&ingest_key=${key}`,
-      body: { session_id: "thread-1", cwd: dataDir, ...body },
+      body: { session_id: "channel-1", cwd: dataDir, ...body },
     });
     const batch = [
       event("session-start", "hobbots-entry-1", {}),

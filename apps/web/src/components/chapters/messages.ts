@@ -13,10 +13,10 @@ interface Counted {
 
 const tokens = (count: number) => plural(count, { one: "1 token", other: `${formatCount(count)} tokens` });
 
-/** User-facing copy for a thread's chapters and its Focus chip (STD-I18N-001). */
+/** User-facing copy for a channel's chapters and its Focus chip (STD-I18N-001). */
 export const messages = {
   divider: {
-    /** A chapter nobody named, such as a thread's first. */
+    /** A chapter nobody named, such as a channel's first. */
     untitled: ({ number }: { readonly number: number }) => `Chapter ${formatCount(number)}`,
     started: ({ day }: { readonly day: string }) => day,
     resting: "Resting",
@@ -47,7 +47,7 @@ export const messages = {
   },
   /** Why a split or a merge changed nothing, and what to do. */
   errors: {
-    "thread-closed": () => "This chat is archived, so its chapters stay as they are.",
+    "channel-closed": () => "This chat is archived, so its chapters stay as they are.",
     "empty-title": () => "Give the chapter a title.",
     "live-chapter-empty": () => "This chapter has no messages yet.",
     "message-not-found": () => "That message is no longer in this chat. Its chapters changed meanwhile.",
@@ -56,14 +56,14 @@ export const messages = {
     moved: () => "That chapter moved into a camp, so it can't change here.",
     "chapter-not-found": () => "That chapter was already merged.",
     // Refusals of a move into a camp (#1385), whose sheet is #1387.
-    "same-thread": () => "That chapter is already here.",
+    "same-channel": () => "That chapter is already here.",
     "not-a-camp": () => "Pick one of this hob's open camps.",
     "reply-running": () => "Wait for the reply to finish, then try again.",
     "chapter-changed": () => "The chapters changed meanwhile. Try again.",
     unreachable: () => "Couldn't change the chapters. Hobbots may be reconnecting; try again in a moment.",
   } satisfies Record<ChapterChangeError, () => string>,
   dismiss: "Dismiss",
-  /** When the thread's chapters could not be read; the transcript still shows, undivided. */
+  /** When the channel's chapters could not be read; the transcript still shows, undivided. */
   unread: "Couldn't read this chat's chapters, so it shows without them.",
   focus: {
     /** The chip's label: the live chapter's title, and how many chapters rest. */

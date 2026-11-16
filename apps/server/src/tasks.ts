@@ -1,11 +1,11 @@
 import { HobbotsRepository, HubQuestions, QuestionService, TaskControls, TaskRepository } from "@hobbots/agents";
 import {
   AgentNotFound,
+  ChannelNotFound,
   HobbotsApi,
   HubQuestionNotFound,
   QuestNotFound,
   TaskNotFound,
-  ThreadNotFound,
 } from "@hobbots/api";
 import {
   type AgentId,
@@ -65,12 +65,12 @@ export const TasksHandlers = HttpApiBuilder.group(HobbotsApi, "tasks", (handlers
             tree: tree.value,
           };
         }),
-      threadTasks: ({ params }) =>
+      channelTasks: ({ params }) =>
         Effect.gen(function* () {
           const at = yield* cursor;
-          const thread = yield* repo.findThread(params.threadId);
-          if (Option.isNone(thread)) return yield* new ThreadNotFound({ threadId: params.threadId });
-          return { cursor: at, trees: yield* tasks.readThreadTrees(params.threadId) };
+          const channel = yield* repo.findChannel(params.channelId);
+          if (Option.isNone(channel)) return yield* new ChannelNotFound({ channelId: params.channelId });
+          return { cursor: at, trees: yield* tasks.readChannelTrees(params.channelId) };
         }),
       failed: () =>
         Effect.gen(function* () {
@@ -80,7 +80,7 @@ export const TasksHandlers = HttpApiBuilder.group(HobbotsApi, "tasks", (handlers
       questSummaries: ({ query }) =>
         Effect.gen(function* () {
           const at = yield* cursor;
-          return { cursor: at, summaries: yield* tasks.listQuestSummaries(query.threadId ?? null) };
+          return { cursor: at, summaries: yield* tasks.listQuestSummaries(query.channelId ?? null) };
         }),
       questWork: ({ params }) =>
         ofHob(params.agentId, tasks.listMemberWork(params.agentId)).pipe(

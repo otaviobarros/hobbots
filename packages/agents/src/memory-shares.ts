@@ -400,7 +400,7 @@ export const MemorySharesLive = Layer.effectContext(
           version: null,
           previous: Option.match(before, { onNone: () => null, onSome: (page) => page?.version ?? null }),
           replaced: Option.match(before, { onNone: () => null, onSome: (page) => page?.markdown ?? null }),
-          threadId: turn.threadId,
+          channelId: turn.channelId,
           messageId: turn.messageId,
           createdAt: at,
           updatedAt: at,

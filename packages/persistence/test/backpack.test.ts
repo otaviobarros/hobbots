@@ -7,6 +7,8 @@ import {
   AttemptId,
   type BackpackItem,
   type CarriedItem,
+  Channel,
+  ChannelId,
   CheckpointId,
   type Committed,
   carriedFrom,
@@ -20,8 +22,6 @@ import {
   QuestId,
   QuestionId,
   TaskId,
-  Thread,
-  ThreadId,
 } from "@hobbots/domain";
 import { Backpack } from "@hobbots/inbox";
 import { Deferred, Effect, Fiber, Layer, Option } from "effect";
@@ -63,14 +63,14 @@ const now = "2026-11-01T00:00:00.000Z";
 const ALDRIC = AgentId.make("aldric");
 const QUILL = AgentId.make("quill");
 const ADA = AgentId.make("ada");
-const threadId = ThreadId.make("t1");
+const channelId = ChannelId.make("t1");
 
 let clock = 0;
 const newTask = (id: string, ownerId: AgentId, parentId: string | null): NewTask => ({
   id: TaskId.make(id),
   ownerId,
   parentId: parentId === null ? null : TaskId.make(parentId),
-  threadId,
+  channelId,
   brief: `Brief for ${id}`,
   dependsOn: [],
   createdAt: new Date(Date.parse(now) + 1000 * ++clock).toISOString(),
@@ -108,8 +108,8 @@ const campaign = Effect.gen(function* () {
       }),
     );
   }
-  yield* repo.upsertThread(
-    new Thread({ id: threadId, agentId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
+  yield* repo.upsertChannel(
+    new Channel({ id: channelId, ownerHobId: ALDRIC, title: "Campaign", createdAt: now, updatedAt: now }),
   );
   const tasks = yield* TaskRepository;
   yield* tasks.createTask({ task: newTask("campaign", ALDRIC, null), delegation: null, milestones: [] });
@@ -193,7 +193,7 @@ describe("A hob's backpack", () => {
       state: "pending",
       taskId: "copy",
       questId: "q1",
-      threadId,
+      channelId,
       claim: null,
       fencingToken: 0,
       deliveries: [],
@@ -202,7 +202,7 @@ describe("A hob's backpack", () => {
       payload: { _tag: "task", task: { id: "copy" }, delegation: { id: "d-copy", leadId: ALDRIC } },
     });
     expect(result.stored.revision).toBe(result.copy.entries[1]?.sequence);
-    expect(result.copy.entries[1]?.correlation).toEqual({ agentId: QUILL, threadId, messageId: null });
+    expect(result.copy.entries[1]?.correlation).toEqual({ agentId: QUILL, channelId, messageId: null });
     expect(result.refused).toMatchObject({ _tag: "TaskRefused", reason: "owner-missing" });
     expect(result.after).toBe(result.before);
     expect(result.headAfter).toEqual(result.headBefore);
@@ -547,7 +547,7 @@ const pendingApproval = Effect.gen(function* () {
   yield* repo.upsertMessage(
     new Message({
       id: messageId,
-      threadId,
+      channelId,
       role: "assistant",
       content: "",
       status: "streaming",
@@ -560,7 +560,7 @@ const pendingApproval = Effect.gen(function* () {
     new ApprovalRequest({
       id: ApprovalId.make("ap-push"),
       agentId: ALDRIC,
-      threadId,
+      channelId,
       messageId,
       stepId: "tool-1",
       tool: "Bash",

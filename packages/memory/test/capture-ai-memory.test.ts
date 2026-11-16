@@ -12,7 +12,7 @@ import { engineDataDir, engineEnabled, startEngineStore } from "./engine-store.t
 vi.setConfig({ testTimeout: 90_000 });
 
 /**
- * How many observations ai-memory keeps of a thread's session, its ends left out, read as the hob:
+ * How many observations ai-memory keeps of a channel's session, its ends left out, read as the hob:
  * ai-memory shows a session only to the actor that owns it.
  */
 type RunningEngine = Effect.Success<ReturnType<typeof startEngineStore>>;
@@ -25,7 +25,7 @@ interface EngineObservation {
   readonly created_at: string;
 }
 
-const observationsOf = (engine: RunningEngine, hob: string, threadId: string) =>
+const observationsOf = (engine: RunningEngine, hob: string, channelId: string) =>
   Effect.promise(async () => {
     const response = await fetch(`${engine.endpoint.url}/mcp`, {
       method: "POST",
@@ -44,7 +44,7 @@ const observationsOf = (engine: RunningEngine, hob: string, threadId: string) =>
           arguments: {
             workspace: MEMORY_WORKSPACE,
             project: hob,
-            session_id: engineSessionOf({ workspace: MEMORY_WORKSPACE, project: hob }, threadId),
+            session_id: engineSessionOf({ workspace: MEMORY_WORKSPACE, project: hob }, channelId),
             limit: 100,
           },
         },

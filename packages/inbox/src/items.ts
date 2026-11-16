@@ -328,7 +328,7 @@ const questAbove = (task: Task, trees: Trees, quests: ReadonlyArray<Quest>): Que
 };
 
 /**
- * The outcome of an approval request no live turn waits for, for the hob that asked: in the thread
+ * The outcome of an approval request no live turn waits for, for the hob that asked: in the channel
  * it asked in, or for a party member, on the Task its turn worked on.
  */
 const approvalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: ToolCallSource | null) =>
@@ -339,11 +339,11 @@ const approvalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: ToolC
     return [
       {
         recipientId: approval.agentId,
-        // A party member's request continues the session that works its Task; a chat turn's, its thread.
+        // A party member's request continues the session that works its Task; a chat turn's, its channel.
         taskId: approval.messageId === null ? approval.taskId : null,
         questId: null,
         attemptId: null,
-        threadId: approval.threadId,
+        channelId: approval.channelId,
         dedupeKey: dedupeKey(draft, "approval-outcome", toolCall),
         payload: { _tag: "approval-outcome", approval },
         notBefore: null,
@@ -353,7 +353,7 @@ const approvalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: ToolC
 
 /**
  * How a hob proposal settled (ADR 034), for its manager, when no call waits for it any more: in the
- * thread it was proposed in, or for a party member, on the Task its turn worked on. Recorded only for
+ * channel it was proposed in, or for a party member, on the Task its turn worked on. Recorded only for
  * a settling the hub marks unwaited, as an approval's outcome is.
  */
 const hobProposalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: ToolCallSource | null) =>
@@ -367,7 +367,7 @@ const hobProposalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: To
         taskId: proposal.messageId === null ? proposal.taskId : null,
         questId: null,
         attemptId: null,
-        threadId: proposal.threadId,
+        channelId: proposal.channelId,
         dedupeKey: dedupeKey(draft, "hob-proposal", toolCall),
         payload: { _tag: "hob-proposal", proposal },
         notBefore: null,
@@ -378,13 +378,13 @@ const hobProposalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: To
 /** Whether a proposal moved to where the hob that made it hears of it: you added it, or said Not now. */
 const decidedProposal = (event: JournaledEvent) =>
   event._tag === "SkillProposalChanged" &&
-  event.proposal.threadId !== null &&
+  event.proposal.channelId !== null &&
   (event.proposal.state === "added" || event.proposal.state === "declined");
 
 /**
- * How a skill proposal ended (ADR 029), for the hob that made it, in the thread it proposed from.
- * Routine, so it rides along that thread's next turn and never wakes the hob on its own. A proposal
- * made outside any chat, as a party member's, has no thread to carry it: that hob hears how it ended
+ * How a skill proposal ended (ADR 029), for the hob that made it, in the channel it proposed from.
+ * Routine, so it rides along that channel's next turn and never wakes the hob on its own. A proposal
+ * made outside any chat, as a party member's, has no channel to carry it: that hob hears how it ended
  * from `skill_propose` when it proposes again.
  */
 const proposalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: ToolCallSource | null) =>
@@ -398,7 +398,7 @@ const proposalOutcomes = (events: ReadonlyArray<JournaledEvent>, toolCall: ToolC
         taskId: null,
         questId: null,
         attemptId: null,
-        threadId: proposal.threadId,
+        channelId: proposal.channelId,
         dedupeKey: dedupeKey(draft, "skill-proposal", toolCall),
         payload: { _tag: "skill-proposal", proposal },
         notBefore: null,
@@ -489,7 +489,7 @@ export const backpackItemsFor = (
     taskId: draft.task.id,
     questId: questAbove(draft.task, trees, context.quests),
     attemptId: draft.attemptId,
-    threadId: draft.task.threadId,
+    channelId: draft.task.channelId,
     dedupeKey: dedupeKey(draft, draft.payload._tag, context.toolCall),
     payload: draft.payload,
     notBefore: null,

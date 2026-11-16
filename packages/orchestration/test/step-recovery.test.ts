@@ -2,13 +2,13 @@ import {
   AgentId,
   Attempt,
   AttemptId,
+  ChannelId,
   Checkpoint,
   CheckpointId,
   Task,
   TaskId,
   type TaskState,
   TaskTree,
-  ThreadId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { stepPrompt } from "../src/briefs.ts";
@@ -25,7 +25,7 @@ const task = (id: string, parentId: string | null, state: TaskState) =>
     ownerId: NETTLE,
     parentId: parentId === null ? null : TaskId.make(parentId),
     rootId: TaskId.make("build"),
-    threadId: parentId === null ? ThreadId.make("chat") : null,
+    channelId: parentId === null ? ChannelId.make("chat") : null,
     brief: `Brief for ${id}`,
     state,
     dependsOn: [],

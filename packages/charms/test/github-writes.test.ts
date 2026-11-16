@@ -18,6 +18,7 @@ import {
 import {
   AgentId,
   ApprovalId,
+  ChannelId,
   type CharmCall,
   EMPTY_HOB_POLICY,
   type GitHubRepository,
@@ -25,7 +26,6 @@ import {
   MessageId,
   type PolicyDecision,
   type SafetyPreset,
-  ThreadId,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { Effect, Layer, Schema } from "effect";
@@ -293,7 +293,7 @@ const makeHub = (
       const access = turn.access ?? accessFor();
       const tools = yield* charmToolsFor({
         agentId: AgentId.make("hob"),
-        threadId: ThreadId.make("t1"),
+        channelId: ChannelId.make("t1"),
         messageId: MessageId.make("m1"),
         scope: () => "reply:m1",
         currentAccess: Effect.succeed(access),

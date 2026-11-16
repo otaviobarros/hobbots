@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { AgentId, ThreadId } from "../src/ids.ts";
+import { AgentId, ChannelId } from "../src/ids.ts";
 import type { MessageStatus, ReplyStep } from "../src/message.ts";
 import {
+  type ChannelRunStatus,
   type HobPresence,
   hobPresenceState,
   leadsNeedingYou,
@@ -10,7 +11,6 @@ import {
   type StatusEvent,
   type StatusSnapshot,
   shownStatus,
-  type ThreadRunStatus,
   withSnapshot,
   withStatusEvent,
 } from "../src/presence.ts";
@@ -57,10 +57,10 @@ describe("hobPresenceState", () => {
 });
 
 describe("the status a client holds", () => {
-  const thread = ThreadId.make("t1");
+  const channel = ChannelId.make("t1");
   const hob = AgentId.make("a1");
-  const run = (run: ThreadRunStatus["run"], revision: number): ThreadRunStatus => ({
-    threadId: thread,
+  const run = (run: ChannelRunStatus["run"], revision: number): ChannelRunStatus => ({
+    channelId: channel,
     rootMessageId: null,
     run,
     reply: run === "running" ? "working" : null,
@@ -86,7 +86,7 @@ describe("the status a client holds", () => {
       hobs: [presence("working", 80)],
     });
     // The restarted hub's connection starts with `Ready`: the client drops what it held.
-    const after = withSnapshot(withStatusEvent(noStatus, { _tag: "ThreadRunChanged", run: run("running", 1) }), {
+    const after = withSnapshot(withStatusEvent(noStatus, { _tag: "ChannelRunChanged", run: run("running", 1) }), {
       runsRevision: 0,
       runs: [],
       presenceRevision: 1,
@@ -97,23 +97,23 @@ describe("the status a client holds", () => {
   });
 
   it("keeps an event that arrived while the snapshot was read, and drops an older one", () => {
-    const early = withStatusEvent(noStatus, { _tag: "ThreadRunChanged", run: run("idle", 5) });
-    const fresh = withStatusEvent(early, { _tag: "ThreadRunChanged", run: run("running", 9) });
+    const early = withStatusEvent(noStatus, { _tag: "ChannelRunChanged", run: run("idle", 5) });
+    const fresh = withStatusEvent(early, { _tag: "ChannelRunChanged", run: run("running", 9) });
     expect(shownStatus(withSnapshot(early, snapshot({ runsRevision: 7, runs: [run("running", 7)] }))).runs).toEqual([
       run("running", 7),
     ]);
     expect(shownStatus(withSnapshot(fresh, snapshot({ runsRevision: 7 }))).runs).toEqual([run("running", 9)]);
     // Once the snapshot is in, an event from before it changes nothing.
     const held = withSnapshot(noStatus, snapshot({ runsRevision: 7, runs: [run("running", 7)] }));
-    expect(withStatusEvent(held, { _tag: "ThreadRunChanged", run: run("idle", 6) })).toBe(held);
+    expect(withStatusEvent(held, { _tag: "ChannelRunChanged", run: run("idle", 6) })).toBe(held);
   });
 
   // covers ADR 039 (Hobs talking to hobs)
   it("shows an idle run whose hobs wait for a person, from the snapshot as from an event (#1463)", () => {
-    const waiting: ThreadRunStatus = { ...run("idle", 4), paused: [hob] };
+    const waiting: ChannelRunStatus = { ...run("idle", 4), paused: [hob] };
     expect(shownStatus(withSnapshot(noStatus, snapshot({ runsRevision: 4, runs: [waiting] }))).runs).toEqual([waiting]);
-    expect(shownStatus(withStatusEvent(noStatus, { _tag: "ThreadRunChanged", run: waiting })).runs).toEqual([waiting]);
-    expect(shownStatus(withStatusEvent(noStatus, { _tag: "ThreadRunChanged", run: run("idle", 5) })).runs).toEqual([]);
+    expect(shownStatus(withStatusEvent(noStatus, { _tag: "ChannelRunChanged", run: waiting })).runs).toEqual([waiting]);
+    expect(shownStatus(withStatusEvent(noStatus, { _tag: "ChannelRunChanged", run: run("idle", 5) })).runs).toEqual([]);
   });
 
   it("shows a hob brought back after its removal, even when a snapshot from before both arrives last", () => {
@@ -151,18 +151,18 @@ describe("leadsNeedingYou", () => {
   const ada = AgentId.make("ada");
   const aldric = AgentId.make("aldric");
   const pip = AgentId.make("pip");
-  const thread = ThreadId.make("t1");
-  const leadOf = (id: ThreadId) => (id === thread ? aldric : undefined);
+  const channel = ChannelId.make("t1");
+  const leadOf = (id: ChannelId) => (id === channel ? aldric : undefined);
 
   it("marks only the lead whose chat a member's request, question, stuck work or failed Task waits in", () => {
     const needs = leadsNeedingYou({
       approvals: [
-        { agentId: ada, threadId: thread, state: "pending" },
-        { agentId: pip, threadId: ThreadId.make("t9"), state: "approved" },
+        { agentId: ada, channelId: channel, state: "pending" },
+        { agentId: pip, channelId: ChannelId.make("t9"), state: "approved" },
       ],
-      blockers: [{ recipientId: ada, threadId: thread }],
+      blockers: [{ recipientId: ada, channelId: channel }],
       questions: [{ question: { askerId: ada, chain: [aldric] } }],
-      failed: [{ task: { id: "build", ownerId: ada, threadId: thread } as never, leadId: aldric }],
+      failed: [{ task: { id: "build", ownerId: ada, channelId: channel } as never, leadId: aldric }],
       leadOf,
     });
     expect([...needs]).toEqual([aldric]);
@@ -170,7 +170,7 @@ describe("leadsNeedingYou", () => {
 
   it("marks the hob itself when its chat is not known, and nobody for decided requests", () => {
     const needs = leadsNeedingYou({
-      approvals: [{ agentId: pip, threadId: ThreadId.make("t9"), state: "pending" }],
+      approvals: [{ agentId: pip, channelId: ChannelId.make("t9"), state: "pending" }],
       blockers: [],
       questions: [{ question: { askerId: ada, chain: [] } }],
       failed: [],

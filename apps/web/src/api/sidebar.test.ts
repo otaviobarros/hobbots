@@ -1,5 +1,5 @@
 import type { SidebarRead } from "@hobbots/api";
-import { ThreadId } from "@hobbots/domain";
+import { ChannelId } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 
@@ -17,7 +17,7 @@ const { startGeneration } = await import("./sync.ts");
 
 // Only the camps' ids matter here: each read answers with the sidebar the hub had when it was taken.
 const read = (...camps: ReadonlyArray<string>) =>
-  ({ sidebar: { camps: camps.map((threadId) => ({ threadId })), directMessages: [] } }) as unknown as SidebarRead;
+  ({ sidebar: { camps: camps.map((channelId) => ({ channelId })), directMessages: [] } }) as unknown as SidebarRead;
 
 const watched = () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -27,7 +27,7 @@ const watched = () => {
     queryFn: () => new Promise<SidebarRead>((resolve) => pending.push(resolve)),
   });
   const unsubscribe = observer.subscribe(() => {});
-  const shown = () => observer.getCurrentResult().data?.sidebar.camps.map((camp) => camp.threadId);
+  const shown = () => observer.getCurrentResult().data?.sidebar.camps.map((camp) => camp.channelId);
   const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
   return { client, pending, shown, settled, unsubscribe };
 };
@@ -46,14 +46,14 @@ describe("the sidebar's read", () => {
     list.unsubscribe();
   });
 
-  it("reads again after a member or thread event, and not after a message (#1469)", async () => {
+  it("reads again after a member or channel event, and not after a message (#1469)", async () => {
     const list = watched();
     list.pending[0]?.(read());
     await list.settled();
     applySidebarEvent(list.client, { _tag: "MessageDequeued" } as never);
     await list.settled();
     expect(list.pending).toHaveLength(1);
-    applySidebarEvent(list.client, { _tag: "ThreadMemberAdded" } as never);
+    applySidebarEvent(list.client, { _tag: "ChannelMemberAdded" } as never);
     await list.settled();
     expect(list.pending).toHaveLength(2);
     list.unsubscribe();
@@ -70,7 +70,7 @@ describe("the sidebar's read", () => {
     await settled();
     answers.shift()?.(read("launch"));
     const shown = await reading;
-    expect(shown.sidebar.camps.map((camp) => camp.threadId)).toEqual(["launch"]);
+    expect(shown.sidebar.camps.map((camp) => camp.channelId)).toEqual(["launch"]);
   });
 
   it("reads again when a request, a blocker, a question or a Task changes what waits on you (#1469)", async () => {
@@ -111,16 +111,16 @@ describe("the sidebar's read", () => {
   });
 
   it("counts a mention you have not read as unread, so opening its camp marks it read (#1469)", () => {
-    const camp = ThreadId.make("camp");
+    const camp = ChannelId.make("camp");
     const withMention = {
-      sidebar: { camps: [{ threadId: camp, mentions: 1 }], directMessages: [] },
+      sidebar: { camps: [{ channelId: camp, mentions: 1 }], directMessages: [] },
     } as unknown as SidebarRead;
     const read = {
-      sidebar: { camps: [{ threadId: camp, mentions: 0 }], directMessages: [] },
+      sidebar: { camps: [{ channelId: camp, mentions: 0 }], directMessages: [] },
     } as unknown as SidebarRead;
     expect(mentionsYou(withMention, camp)).toBe(true);
     expect(mentionsYou(read, camp)).toBe(false);
-    expect(mentionsYou(withMention, ThreadId.make("other"))).toBe(false);
+    expect(mentionsYou(withMention, ChannelId.make("other"))).toBe(false);
     expect(mentionsYou(undefined, camp)).toBe(false);
   });
 });

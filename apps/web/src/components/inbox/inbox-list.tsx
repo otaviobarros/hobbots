@@ -11,9 +11,9 @@ import { FlagIcon } from "../quest/flag-icon.tsx";
 import { EntryPortrait } from "./entry-portrait.tsx";
 import {
   entryAsker,
+  entryChannel,
   entryPlace,
   entryRow,
-  entryThread,
   groupByPlace,
   type InboxEntry,
   type InboxGroup,
@@ -30,7 +30,7 @@ import type { InboxDirectory } from "./use-inbox-directory.ts";
 const copy = messages;
 
 /**
- * The entries, by quest or by urgency. By quest groups them by quest, or by thread outside a quest,
+ * The entries, by quest or by urgency. By quest groups them by quest, or by channel outside a quest,
  * with this hub's devices apart, the most urgent first in each group and among the groups. By
  * urgency is one list, the most urgent first, and each row names its quest. The selected one is
  * filled, and it is the list's one stop for Tab: ↑ and ↓ move from there (`useListKeys`).
@@ -120,12 +120,12 @@ const placeName = (place: InboxPlace, directory: InboxDirectory): string => {
   if (place.kind === "memory") return copy.memory;
   if (place.kind === "skills") return copy.skills;
   if (place.kind === "quest") return copy.questName({ name: directory.hobName(place.quest.leadId) });
-  return directory.threadTitle(place.threadId);
+  return directory.channelTitle(place.channelId);
 };
 
 /**
  * A group's heading: a short label with its icon, then the detail. A quest is its lead's quest and
- * its goal, a thread outside a quest whose chat it is and its title, this hub its devices, and
+ * its goal, a channel outside a quest whose chat it is and its title, this hub its devices, and
  * memory the shares, and skills the proposals.
  */
 const groupHeading = (
@@ -147,11 +147,11 @@ const groupHeading = (
     };
   }
   const first = entries[0];
-  const owner = directory.threadHob(place.threadId) ?? (first === undefined ? undefined : entryAsker(first));
+  const owner = directory.channelHob(place.channelId) ?? (first === undefined ? undefined : entryAsker(first));
   return {
     icon: "chat",
     label: owner === undefined ? copy.unknownHob : directory.hobName(owner),
-    detail: directory.threadTitle(place.threadId),
+    detail: directory.channelTitle(place.channelId),
   };
 };
 
@@ -180,8 +180,8 @@ function InboxItem({
   directory: InboxDirectory;
   now: Date;
 }) {
-  const thread = entryThread(entry);
-  const row = entryRow(entry, directory.hobName, thread === null ? undefined : directory.threadHob(thread), now);
+  const channel = entryChannel(entry);
+  const row = entryRow(entry, directory.hobName, channel === null ? undefined : directory.channelHob(channel), now);
   const asker = entryAsker(entry);
   const hob = asker === undefined ? undefined : directory.hob(asker);
   const closed = entry.kind === "approval" && entry.request.state !== "pending";

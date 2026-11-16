@@ -3,7 +3,7 @@ import { TooltipProvider } from "@hobbots/ui/components/tooltip";
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
-import { useThreadReplies } from "../../api/hub-status.ts";
+import { useChannelReplies } from "../../api/hub-status.ts";
 import { isMac } from "../archive/archive-rules.ts";
 import { MakeCampSheet } from "../camps/make-camp-sheet.tsx";
 import { ChiefMark, type ChiefMood } from "../chief/chief-mark.tsx";
@@ -172,7 +172,7 @@ function You({ you, wide }: { you: User; wide: boolean }) {
 /** The chief of the hobs, whose lantern speaks for them: it leads to For you while anything needs you. */
 function Chief({ waiting }: { waiting: number }) {
   const [looks, setLooks] = useState(0);
-  const activity = useThreadReplies();
+  const activity = useChannelReplies();
   const mood = chiefMood({ waiting, working: Object.keys(activity).length > 0, preview: previewMood() });
 
   return (

@@ -1,6 +1,7 @@
 import type { InvalidFolder } from "@hobbots/api";
 import type {
   AgentId,
+  ChannelId,
   CommitIdentity,
   Committed,
   EventEnvelope,
@@ -9,7 +10,6 @@ import type {
   InstallationSetup,
   MessageId,
   SettingChange,
-  ThreadId,
   TransientEvent,
 } from "@hobbots/domain";
 import { Context, Effect, Option, Schema } from "effect";
@@ -77,7 +77,7 @@ export class FolderChecks extends Context.Service<FolderChecks, FolderChecksShap
 
 /** The tool step a full log belongs to. */
 export interface ToolLogKey {
-  readonly threadId: ThreadId;
+  readonly channelId: ChannelId;
   readonly messageId: MessageId;
   readonly stepId: string;
 }

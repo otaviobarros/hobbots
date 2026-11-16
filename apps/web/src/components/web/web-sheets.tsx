@@ -62,7 +62,7 @@ const usePageAnswer = (message: Message, step: PageStep) => {
     queryFn: async ({ signal }): Promise<PageAnswer> => {
       if (output === undefined || step.stepId === null) throw new Error("No answer");
       if (output.omittedBytes === 0) return parsePageAnswer(output.head);
-      const response = await fetch(toolLogUrl(message.threadId, message.id, step.stepId), {
+      const response = await fetch(toolLogUrl(message.channelId, message.id, step.stepId), {
         signal,
         credentials: "same-origin",
       });

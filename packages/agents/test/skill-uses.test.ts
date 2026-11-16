@@ -17,7 +17,7 @@ describe("a turn's skill uses (ADR 029, The use line)", () => {
   it("keeps a library skill and an organization skill of the same name apart", async () => {
     const recorded = await Effect.runPromise(
       Effect.gen(function* () {
-        const uses = yield* skillUseRecorder({ agentId: AgentId.make("pip"), threadId: null, messageId: null });
+        const uses = yield* skillUseRecorder({ agentId: AgentId.make("pip"), channelId: null, messageId: null });
         uses.given([RELEASE]);
         uses.organization(["release"]);
         return [
@@ -48,7 +48,7 @@ describe("a turn's skill uses (ADR 029, The use line)", () => {
   it("records nothing for a source the turn did not have the skill from", async () => {
     const recorded = await Effect.runPromise(
       Effect.gen(function* () {
-        const uses = yield* skillUseRecorder({ agentId: AgentId.make("pip"), threadId: null, messageId: null });
+        const uses = yield* skillUseRecorder({ agentId: AgentId.make("pip"), channelId: null, messageId: null });
         uses.given([RELEASE]);
         uses.organization(["org-steps"]);
         return [

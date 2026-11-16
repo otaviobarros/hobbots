@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { type CrossOutRequest, type DecisionRequest, RecordRepository, type ReviewRequest } from "@hobbots/agents";
-import { ThreadNotFound } from "@hobbots/api";
+import { ChannelNotFound } from "@hobbots/api";
 import {
   Artifact,
   ArtifactReviewRefused,
+  type ChannelId,
   ChapterId,
   Decision,
   type DecisionId,
@@ -16,7 +17,6 @@ import {
   planPullRequestEnded,
   planReview,
   type RegisteredArtifactId,
-  type ThreadId,
 } from "@hobbots/domain";
 import { Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, type Statement } from "effect/sql";
@@ -27,14 +27,14 @@ import { sqlOrDie } from "./sql-errors.ts";
 // Decisions (ADR 037, migration 0101). The rules are the pure `planDecision` and `planCrossOut` in
 // @hobbots/domain; this runs them on the decisions as stored, in the transaction that writes their
 // result and journals its events, after taking the journal's head, so an archive cannot land between
-// the check of the thread and the write. The artifacts registry is written by the journal itself
+// the check of the channel and the write. The artifacts registry is written by the journal itself
 // (`registerArtifacts`); this reads it and settles each artifact's review (#1422), whose change the
 // journal folds into the summaries of the Quests whose Tasks made it.
 
 /** A row of `decisions`, as the SQL client reads it. */
 export interface DecisionRow {
   readonly id: string;
-  readonly threadId: string;
+  readonly channelId: string;
   readonly chapterId: string;
   readonly sourceMessageId: string | null;
   readonly text: string;
@@ -54,7 +54,7 @@ const decode = Schema.decodeUnknownEffect(Decision);
 export const decisionFromRow = (row: DecisionRow) =>
   decode({
     id: row.id,
-    threadId: row.threadId,
+    channelId: row.channelId,
     chapterId: row.chapterId,
     sourceMessageId: row.sourceMessageId,
     text: row.text,
@@ -80,27 +80,27 @@ export const RecordRepositoryLive = Layer.effect(
     const sql = yield* SqlClient.SqlClient;
     const change = makeJournaledChange(sql);
 
-    /** Whether the thread is open, failing when it is not there. */
-    const threadOpen = (threadId: ThreadId) =>
+    /** Whether the channel is open, failing when it is not there. */
+    const channelOpen = (channelId: ChannelId) =>
       Effect.gen(function* () {
-        const [thread] = yield* sql<{ readonly state: string }>`SELECT state FROM threads WHERE id = ${threadId}`;
-        if (thread === undefined) return yield* new ThreadNotFound({ threadId });
-        return thread.state === "open";
+        const [channel] = yield* sql<{ readonly state: string }>`SELECT state FROM channels WHERE id = ${channelId}`;
+        if (channel === undefined) return yield* new ChannelNotFound({ channelId });
+        return channel.state === "open";
       });
 
-    const findIn = (threadId: ThreadId, decisionId: DecisionId) =>
+    const findIn = (channelId: ChannelId, decisionId: DecisionId) =>
       Effect.gen(function* () {
         const [row] = yield* sql<DecisionRow>`SELECT * FROM decisions
-          WHERE id = ${decisionId} AND thread_id = ${threadId}`;
+          WHERE id = ${decisionId} AND channel_id = ${channelId}`;
         return row === undefined ? null : yield* decisionFromRow(row);
       });
 
-    /** The chapter a decision joins: its reply's, or the thread's live chapter. */
+    /** The chapter a decision joins: its reply's, or the channel's live chapter. */
     const chapterOf = (request: DecisionRequest) =>
       Effect.gen(function* () {
         const [row] = yield* sql<{ readonly chapterId: string | null }>`SELECT COALESCE(
-            (SELECT m.chapter_id FROM messages m WHERE m.id = ${request.sourceMessageId} AND m.thread_id = ${request.threadId}),
-            (SELECT c.id FROM chapters c WHERE c.thread_id = ${request.threadId} AND c.state = 'live')
+            (SELECT m.chapter_id FROM messages m WHERE m.id = ${request.sourceMessageId} AND m.channel_id = ${request.channelId}),
+            (SELECT c.id FROM chapters c WHERE c.channel_id = ${request.channelId} AND c.state = 'live')
           ) AS chapter_id`;
         return row?.chapterId == null ? null : ChapterId.make(row.chapterId);
       });
@@ -121,33 +121,33 @@ export const RecordRepositoryLive = Layer.effect(
       });
 
     const recordDecision = (request: DecisionRequest) =>
-      change<DecisionPlan, DecisionRefused | ThreadNotFound>((first) =>
+      change<DecisionPlan, DecisionRefused | ChannelNotFound>((first) =>
         Effect.gen(function* () {
-          const open = yield* threadOpen(request.threadId);
-          // A key is the thread's own: the same key in another thread is another request.
-          const key = digestOf("key", `${request.threadId}\0${request.key}`);
+          const open = yield* channelOpen(request.channelId);
+          // A key is the channel's own: the same key in another channel is another request.
+          const key = digestOf("key", `${request.channelId}\0${request.key}`);
           const input = digestOf("input", request.input);
           const [earlier] = yield* sql<DecisionRow>`SELECT * FROM decisions WHERE request_key = ${key}`;
           if (earlier !== undefined) return yield* recordedBefore(earlier, input);
           const chapterId = yield* chapterOf(request);
-          if (chapterId === null) return yield* new ThreadNotFound({ threadId: request.threadId });
+          if (chapterId === null) return yield* new ChannelNotFound({ channelId: request.channelId });
           const plan = planDecision({
             id: request.id,
-            threadId: request.threadId,
+            channelId: request.channelId,
             chapterId,
             sourceMessageId: request.sourceMessageId,
             text: request.text,
             actor: request.actor,
             at: request.at,
-            threadOpen: open,
-            ...(request.replaces === null ? {} : { replaces: yield* findIn(request.threadId, request.replaces) }),
+            channelOpen: open,
+            ...(request.replaces === null ? {} : { replaces: yield* findIn(request.channelId, request.replaces) }),
           });
           if (plan instanceof DecisionRefused) return yield* plan;
           const recorded = at(plan.recorded, first);
           const superseded = plan.superseded === null ? null : at(plan.superseded, first + 1);
           yield* sql`INSERT INTO decisions ${sql.insert({
             id: recorded.id,
-            thread_id: recorded.threadId,
+            channel_id: recorded.channelId,
             chapter_id: recorded.chapterId,
             source_message_id: recorded.sourceMessageId,
             text: recorded.text,
@@ -174,10 +174,10 @@ export const RecordRepositoryLive = Layer.effect(
         superseded_at = ${decision.supersededAt}, revision = ${decision.revision} WHERE id = ${decision.id}`;
 
     const crossOutDecision = (request: CrossOutRequest) =>
-      change<Decision, DecisionRefused | ThreadNotFound>((first) =>
+      change<Decision, DecisionRefused | ChannelNotFound>((first) =>
         Effect.gen(function* () {
-          const open = yield* threadOpen(request.threadId);
-          const found = yield* findIn(request.threadId, request.decisionId);
+          const open = yield* channelOpen(request.channelId);
+          const found = yield* findIn(request.channelId, request.decisionId);
           // Crossed out already, by a cross-out or a replacement: crossing it out again changes nothing.
           if (found !== null && !DecisionStates.isActive(found)) {
             return { value: found, events: [] as ReadonlyArray<JournaledEvent> };
@@ -205,10 +205,10 @@ export const RecordRepositoryLive = Layer.effect(
       });
 
     const reviewArtifact = (request: ReviewRequest) =>
-      change<Artifact, ArtifactReviewRefused | ThreadNotFound>((first) =>
+      change<Artifact, ArtifactReviewRefused | ChannelNotFound>((first) =>
         Effect.gen(function* () {
-          yield* threadOpen(request.threadId);
-          const artifact = yield* findArtifact(sql`id = ${request.artifactId} AND thread_id = ${request.threadId}`);
+          yield* channelOpen(request.channelId);
+          const artifact = yield* findArtifact(sql`id = ${request.artifactId} AND channel_id = ${request.channelId}`);
           const plan = planReview({ id: request.artifactId, artifact, ...request });
           if (plan instanceof ArtifactReviewRefused) return yield* plan;
           if (!plan.changed) return { value: plan.artifact, events: [] as ReadonlyArray<JournaledEvent> };
@@ -238,26 +238,26 @@ export const RecordRepositoryLive = Layer.effect(
           artifactsFromRows,
         ),
       ),
-      listDecisions: (threadId) =>
+      listDecisions: (channelId) =>
         sqlOrDie(
           Effect.flatMap(
-            sql<DecisionRow>`SELECT * FROM decisions WHERE thread_id = ${threadId}
+            sql<DecisionRow>`SELECT * FROM decisions WHERE channel_id = ${channelId}
               ORDER BY recorded_sequence DESC`,
             (rows) => Effect.forEach(rows, decisionFromRow),
           ),
         ),
-      artifactVersions: (threadId, artifactId) =>
+      artifactVersions: (channelId, artifactId) =>
         sqlOrDie(
           Effect.gen(function* () {
-            const artifact = yield* findArtifact(sql`id = ${artifactId} AND thread_id = ${threadId}`);
+            const artifact = yield* findArtifact(sql`id = ${artifactId} AND channel_id = ${channelId}`);
             if (artifact === null) return Option.none();
             return Option.some({ artifact, versions: yield* storedVersions(sql, artifact) });
           }),
         ),
-      listArtifacts: (threadId) =>
+      listArtifacts: (channelId) =>
         sqlOrDie(
           Effect.flatMap(
-            sql<ArtifactRow>`SELECT * FROM artifacts WHERE thread_id = ${threadId}
+            sql<ArtifactRow>`SELECT * FROM artifacts WHERE channel_id = ${channelId}
               ORDER BY updated_at DESC, revision DESC`,
             artifactsFromRows,
           ),

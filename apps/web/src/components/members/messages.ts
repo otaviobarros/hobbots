@@ -6,7 +6,7 @@ interface Named {
 
 const count = (n: number, one: string, other: string) => `${formatCount(n)} ${plural(n, { one, other })}`;
 
-/** User-facing copy for who is in a camp (STD-I18N-001): hobs and people, never members of a thread. */
+/** User-facing copy for who is in a camp (STD-I18N-001): hobs and people, never members of a channel. */
 export const messages = {
   picker: {
     label: "Members",

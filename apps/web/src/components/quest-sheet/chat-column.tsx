@@ -1,4 +1,4 @@
-import type { AgentId, ThreadId } from "@hobbots/domain";
+import type { AgentId, ChannelId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -21,14 +21,14 @@ const placeOf = (room: boolean, folded: boolean, width: RoomWidth) => {
 };
 
 /**
- * The thread beside a quest's Workbench (ADR 027): the same chat, never mounted again, so it keeps its
+ * The channel beside a quest's Workbench (ADR 027): the same chat, never mounted again, so it keeps its
  * scroll position and unsent message as the room opens and closes. Folded, it stays in the page out
  * of sight and out of focus, and a rail with the lead's tile takes its place, with a dot once the
  * lead writes while it is folded.
  */
 export function ChatColumn({
   hobId,
-  threadId,
+  channelId,
   room,
   folded,
   width,
@@ -36,7 +36,7 @@ export function ChatColumn({
   children,
 }: {
   hobId: AgentId;
-  threadId: ThreadId | undefined;
+  channelId: ChannelId | undefined;
   /** Whether the room is open beside the chat. */
   room: boolean;
   folded: boolean;
@@ -45,19 +45,19 @@ export function ChatColumn({
   children: ReactNode;
 }) {
   const replies = useQuery({
-    ...messagesQuery(threadId ?? ("" as ThreadId)),
-    enabled: threadId !== undefined,
+    ...messagesQuery(channelId ?? ("" as ChannelId)),
+    enabled: channelId !== undefined,
     // A lead's routine progress, which the chat leaves out, leaves no dot either (#1006).
     select: (all) =>
       all.filter((message) => message.role === "assistant" && !message.quiet).map((message) => message.id),
   }).data;
   const hidden = room && folded;
-  // The replies this thread held while the chat was last in view; a reply after that leaves the dot.
-  // Another thread starts from its own replies, since the column stays mounted across threads.
+  // The replies this channel held while the chat was last in view; a reply after that leaves the dot.
+  // Another channel starts from its own replies, since the column stays mounted across channels.
   const [seen, setSeen] = useState<SeenReplies>();
-  const next = nextSeen(seen, threadId, replies, hidden);
+  const next = nextSeen(seen, channelId, replies, hidden);
   if (next !== seen) setSeen(next);
-  const unread = hasUnread(next, threadId, replies);
+  const unread = hasUnread(next, channelId, replies);
   const column = useRef<HTMLDivElement>(null);
   const railOpen = useRef<HTMLButtonElement>(null);
   useFoldFocus(hidden, column, railOpen);

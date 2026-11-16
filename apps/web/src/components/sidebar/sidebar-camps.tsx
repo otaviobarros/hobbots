@@ -1,7 +1,7 @@
 import { cn } from "@hobbots/ui/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useKnownUnreadThreads } from "../../api/thread-reads.ts";
+import { useKnownUnreadChannels } from "../../api/channel-reads.ts";
 import { formatCount } from "../../lib/format.ts";
 import { HobTile } from "../hob-sprite/hob-sprite.tsx";
 import { campList, foldedNews } from "./camp-list.ts";
@@ -16,7 +16,7 @@ import { type CampRow, campRows, rowTime } from "./sidebar-rows.ts";
 import { SidebarEmpty, SidebarLoading } from "./sidebar-states.tsx";
 
 /** The camp the address names, if any. */
-const openCampOf = (pathname: string) => /^\/hobs\/[^/]+\/threads\/([^/]+)/.exec(pathname)?.[1];
+const openCampOf = (pathname: string) => /^\/hobs\/[^/]+\/channels\/([^/]+)/.exec(pathname)?.[1];
 
 /**
  * Camps (ADR 039, The sidebar): the camps you share first, as rows with stacked faces, the last line
@@ -37,15 +37,15 @@ export function SidebarCamps({
   const [all, setAll] = useState(false);
   const rows = campRows({
     places: data.read?.sidebar.camps ?? [],
-    threads: data.threads,
+    channels: data.channels,
     hobs: data.hobs,
     you: data.read?.you,
     people: data.read?.people ?? [],
-    unread: useKnownUnreadThreads(),
+    unread: useKnownUnreadChannels(),
   });
   const open = openCampOf(pathname);
   const folded = campList(
-    rows.map((row) => ({ ...row, id: row.thread.id })),
+    rows.map((row) => ({ ...row, id: row.channel.id })),
     open,
   );
   // The rail has no room for Show more, so it lists every camp and scrolls.
@@ -83,8 +83,8 @@ function CampsList({
   return (
     <ul aria-label={copy.camps} className="m-0 flex w-full list-none flex-col items-center gap-0.5 p-0">
       {shown.map((row) => (
-        <li key={row.thread.id} className="flex w-full justify-center">
-          <CampLink row={row} current={row.thread.id === open} wide={wide} />
+        <li key={row.channel.id} className="flex w-full justify-center">
+          <CampLink row={row} current={row.channel.id === open} wide={wide} />
         </li>
       ))}
     </ul>
@@ -144,7 +144,7 @@ function MakeButton({ onMake }: { onMake: () => void }) {
 
 /** A camp's row: shared ones with their faces and last line, a hob's own compact with its tile. */
 function CampLink({ row, current, wide }: { row: CampRow; current: boolean; wide: boolean }) {
-  const { place, thread, hob, needs } = row;
+  const { place, channel, hob, needs } = row;
   const shared = place.section === "shared-camp";
   const news = copy.campNews({ unread: row.unread, mentions: place.mentions, needs });
   return (
@@ -152,21 +152,21 @@ function CampLink({ row, current, wide }: { row: CampRow; current: boolean; wide
       tall={shared}
       face={<CampFace row={row} wide={wide} />}
       link={
-        <SidebarTip label={thread.title} wide={wide}>
+        <SidebarTip label={channel.title} wide={wide}>
           <Link
-            to="/hobs/$hobId/threads/$threadId"
-            params={{ hobId: hob.id, threadId: thread.id }}
+            to="/hobs/$hobId/channels/$channelId"
+            params={{ hobId: hob.id, channelId: channel.id }}
             aria-current={current ? "page" : undefined}
             // The link keeps the camp's name as its name; what is new is told as its description.
-            aria-label={thread.title}
+            aria-label={channel.title}
             aria-description={news === "" ? undefined : news}
             className={cn(sidebarRowLink, shared || row.unread > 0 ? "font-semibold" : "font-normal")}
           >
-            <span className="max-wide:sr-only">{thread.title}</span>
+            <span className="max-wide:sr-only">{channel.title}</span>
           </Link>
         </SidebarTip>
       }
-      line={shared && thread.lastLine !== null ? <CampLine row={row} /> : undefined}
+      line={shared && channel.lastLine !== null ? <CampLine row={row} /> : undefined}
       aside={<CampAside row={row} />}
     />
   );
@@ -193,7 +193,7 @@ function CampFace({ row, wide }: { row: CampRow; wide: boolean }) {
  * holds what you have not read.
  */
 function CampLine({ row }: { row: CampRow }) {
-  const line = row.thread.lastLine ?? "";
+  const line = row.channel.lastLine ?? "";
   return (
     <span className={cn(row.unread > 0 ? "font-semibold text-text-strong" : "text-text-secondary")}>
       {row.lastAuthor === null ? line : copy.lastLine({ author: row.lastAuthor, line })}
@@ -204,7 +204,7 @@ function CampLine({ row }: { row: CampRow }) {
 /** A shared camp's time, or the hob whose camp it is; then Needs you, `@` for a mention of you, and the unread count. */
 function CampAside({ row }: { row: CampRow }) {
   const shared = row.place.section === "shared-camp";
-  const aside = shared ? rowTime(row.thread.updatedAt) : row.needs ? "" : row.hob.name;
+  const aside = shared ? rowTime(row.channel.updatedAt) : row.needs ? "" : row.hob.name;
   return (
     <>
       {aside !== "" && <span className="text-meta text-label">{aside}</span>}

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   type Actor,
   AgentId,
+  ChannelId,
   decideFloor,
   type FloorAction,
   type FloorHob,
@@ -10,7 +11,6 @@ import {
   type FloorSnapshot,
   MessageId,
   startsAtOnce,
-  ThreadId,
   TurnRequest,
   TurnRequestId,
   type TurnRequestState,
@@ -22,7 +22,7 @@ import {
 // and the named examples are the review findings of #1527, so each bug class stays fixed.
 
 const at = "2026-11-14T10:00:00.000Z";
-const THREAD = ThreadId.make("camp");
+const CHANNEL = ChannelId.make("camp");
 const [QUILL, PIP, ROOK] = ["quill", "pip", "rook"].map((id) => AgentId.make(id)) as [AgentId, AgentId, AgentId];
 const HOBS = [QUILL, PIP, ROOK];
 const OWNER: Actor = { kind: "user", id: "owner" };
@@ -30,7 +30,7 @@ const OWNER: Actor = { kind: "user", id: "owner" };
 const request = (id: string, hobId: AgentId, over: Partial<TurnRequest> = {}) =>
   new TurnRequest({
     id: TurnRequestId.make(id),
-    threadId: THREAD,
+    channelId: CHANNEL,
     rootMessageId: null,
     hobId,
     messageId: MessageId.make(`m-${id}`),
@@ -364,7 +364,7 @@ describe("decideFloor", () => {
   });
 
   describe("stop, removal and archive", () => {
-    it("admits nothing in an archived thread, nor while the hub holds what waited after a restore (#1549)", () => {
+    it("admits nothing in an archived channel, nor while the hub holds what waited after a restore (#1549)", () => {
       const asked = request("a", QUILL);
       const busy = { requests: [asked], hobs: hobsWith({ [QUILL]: { work: true } }) };
       expect(decideFloor(snapshot({ ...busy, open: false })).action).toEqual(IDLE);

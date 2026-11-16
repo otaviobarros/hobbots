@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { ChapterId, type MessageId, ThreadId } from "./ids.ts";
+import { ChannelId, ChapterId, type MessageId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { Revision } from "./revision.ts";
 
@@ -7,23 +7,23 @@ import { Revision } from "./revision.ts";
 export const ChapterState = Schema.Literals(["live", "resting", "moved"]);
 export type ChapterState = typeof ChapterState.Type;
 
-/** The longest title a chapter takes, as a thread's (`THREAD_TITLE_MAX`). */
+/** The longest title a chapter takes, as a channel's (`CHANNEL_TITLE_MAX`). */
 export const CHAPTER_TITLE_MAX = 60;
 
 /** The longest one-line summary a resting chapter keeps (#1380). */
 export const CHAPTER_SUMMARY_MAX = 280;
 
 /**
- * One topic of a thread's transcript (ADR 037). Every message belongs to exactly one chapter, and a
- * thread has exactly one live chapter, its last, which the database holds. A runtime session belongs
+ * One topic of a channel's transcript (ADR 037). Every message belongs to exactly one chapter, and a
+ * channel has exactly one live chapter, its last, which the database holds. A runtime session belongs
  * to one chapter, so a new chapter starts a new session.
  */
 export class Chapter extends Schema.Class<Chapter>("Chapter")({
   id: ChapterId,
-  threadId: ThreadId,
-  /** Its place in the thread, from 1, with no gaps: a split or a merge numbers the chapters after it again. */
+  channelId: ChannelId,
+  /** Its place in the channel, from 1, with no gaps: a split or a merge numbers the chapters after it again. */
   number: Schema.Int,
-  /** What the chapter is about, or null for one nobody named, such as a thread's first. */
+  /** What the chapter is about, or null for one nobody named, such as a channel's first. */
   title: Schema.NullOr(Schema.String),
   /**
    * A one-line summary, written by the chapter summary projector once the chapter rests (#1380);
@@ -36,13 +36,13 @@ export class Chapter extends Schema.Class<Chapter>("Chapter")({
   /** When the chapter stopped taking messages, or null while it is live. */
   endedAt: Schema.NullOr(Schema.String),
   /** The camp a moved chapter now lives in, or null (#1364). */
-  movedTo: Schema.NullOr(ThreadId),
+  movedTo: Schema.NullOr(ChannelId),
   revision: Revision,
 }) {}
 
 /** What can happen to one chapter. */
 export type ChapterEvent =
-  /** The thread starts a new chapter after this one. */
+  /** The channel starts a new chapter after this one. */
   | { readonly _tag: "End"; readonly at: string }
   /** The chapter is cut at one of its messages; the ones from there on make the chapter after it. */
   | { readonly _tag: "Split"; readonly at: string }
@@ -52,7 +52,7 @@ export type ChapterEvent =
    */
   | { readonly _tag: "Absorb"; readonly live: boolean; readonly endedAt: string | null }
   /** The chapter moves into a camp, leaving a stub (#1364). */
-  | { readonly _tag: "Move"; readonly to: ThreadId }
+  | { readonly _tag: "Move"; readonly to: ChannelId }
   /** The chapter summary projector wrote the resting chapter's one-line summary (#1380). */
   | { readonly _tag: "Summarize"; readonly summary: string };
 
@@ -66,9 +66,9 @@ export class IllegalChapterTransition extends Schema.TaggedError<IllegalChapterT
 export const ChapterStateMachine = defineMachine<ChapterState, ChapterEvent, Chapter, IllegalChapterTransition>({
   name: "ChapterState",
   states: {
-    live: "The thread's current topic: new messages join it, and its runtime sessions are resumed",
+    live: "The channel's current topic: new messages join it, and its runtime sessions are resumed",
     resting: "An earlier topic: it takes no new messages, and its sessions are never resumed",
-    moved: "Moved into a camp; the thread keeps it as a stub that links there",
+    moved: "Moved into a camp; the channel keeps it as a stub that links there",
   },
   field: "state",
   events: {
@@ -101,7 +101,7 @@ export const ChapterStateMachine = defineMachine<ChapterState, ChapterEvent, Cha
     Move: {
       from: ["resting"],
       to: "moved",
-      guard: (chapter, e) => e.to !== chapter.threadId,
+      guard: (chapter, e) => e.to !== chapter.channelId,
       apply: (chapter, e) => new Chapter({ ...chapter, state: "moved", movedTo: e.to }),
     },
     // Written once: a replay of the projector's journal finds it written and leaves it.
@@ -119,32 +119,32 @@ export const ChapterStateMachine = defineMachine<ChapterState, ChapterEvent, Cha
 export const ChapterStates = {
   ...ChapterStateMachine,
   isLive: (chapter: Chapter): boolean => chapter.state === "live",
-  /** Whether the chapter is still in its thread's transcript, live or resting, not moved out. */
-  isInThread: (chapter: Chapter): boolean => chapter.state !== "moved",
+  /** Whether the chapter is still in its channel's transcript, live or resting, not moved out. */
+  isInChannel: (chapter: Chapter): boolean => chapter.state !== "moved",
 };
 
 /**
  * Why a chapter command changed nothing. `empty-title`: a chapter's title has no text.
  * `live-chapter-empty`: the live chapter has no message yet, so there is nothing to end.
- * `message-not-found`: the message to split at is not in the thread. `chapter-start`: it is the
+ * `message-not-found`: the message to split at is not in the channel. `chapter-start`: it is the
  * first message of its chapter, which would leave an empty chapter. `first-chapter`: the chapter
  * to merge has no chapter before it. `moved`: a chapter it touches moved into a camp.
- * `thread-closed`: the thread is archived or superseded, so its chapters stay as they are.
- * `same-thread`: a chapter moves only into another thread. `not-a-camp`: a chapter moves only into
- * an open camp of the same hob. `reply-running`: a reply runs or waits in the thread, or an approval
+ * `channel-closed`: the channel is archived or superseded, so its chapters stay as they are.
+ * `same-channel`: a chapter moves only into another channel. `not-a-camp`: a chapter moves only into
+ * an open camp of the same hob. `reply-running`: a reply runs or waits in the channel, or an approval
  * waits there, or a Quest in the chapter is led by a hob the camp does not admit, so its chapters
  * stay put until it ends. `chapter-changed`: the chapter the hub judged before splitting it changed
  * meanwhile, so its judgment no longer fits (#1557).
  */
 export const ChapterRefusal = Schema.Literals([
-  "thread-closed",
+  "channel-closed",
   "empty-title",
   "live-chapter-empty",
   "message-not-found",
   "chapter-start",
   "first-chapter",
   "moved",
-  "same-thread",
+  "same-channel",
   "not-a-camp",
   "reply-running",
   "chapter-changed",
@@ -152,12 +152,12 @@ export const ChapterRefusal = Schema.Literals([
 export type ChapterRefusal = typeof ChapterRefusal.Type;
 
 export class ChapterRefused extends Schema.TaggedError<ChapterRefused>()("ChapterRefused", {
-  threadId: ThreadId,
+  channelId: ChannelId,
   reason: ChapterRefusal,
 }) {}
 
 export class ChapterNotFound extends Schema.TaggedError<ChapterNotFound>()("ChapterNotFound", {
-  threadId: ThreadId,
+  channelId: ChannelId,
   chapterId: ChapterId,
 }) {}
 
@@ -174,11 +174,11 @@ export const chapterTitle = (title: string): string | null => oneLineUpTo(title,
 /** A summary as a chapter keeps it: one line, cut at `CHAPTER_SUMMARY_MAX`; null when it has no text. */
 export const chapterSummary = (summary: string): string | null => oneLineUpTo(summary, CHAPTER_SUMMARY_MAX);
 
-/** The first chapter of a new thread, which takes its history. */
-export const firstChapter = (id: ChapterId, threadId: ThreadId, startedAt: string): Chapter =>
+/** The first chapter of a new channel, which takes its history. */
+export const firstChapter = (id: ChapterId, channelId: ChannelId, startedAt: string): Chapter =>
   new Chapter({
     id,
-    threadId,
+    channelId,
     number: 1,
     title: null,
     summary: null,
@@ -188,9 +188,9 @@ export const firstChapter = (id: ChapterId, threadId: ThreadId, startedAt: strin
     movedTo: null,
   });
 
-/** The thread's chapters after a command, in order, with what changed. */
+/** The channel's chapters after a command, in order, with what changed. */
 export interface ChapterPlan {
-  /** Every chapter of the thread after the change, numbered from 1 in order. */
+  /** Every chapter of the channel after the change, numbered from 1 in order. */
   readonly chapters: ReadonlyArray<Chapter>;
   /** The chapters the change wrote or made. */
   readonly changed: ReadonlyArray<Chapter>;
@@ -209,39 +209,39 @@ const changedIn = (before: ReadonlyArray<Chapter>, after: ReadonlyArray<Chapter>
   return after.filter((chapter) => known.get(chapter.id) !== chapter);
 };
 
-/** A thread's chapters after a change, numbered again from 1, with the ones it wrote or made. */
+/** A channel's chapters after a change, numbered again from 1, with the ones it wrote or made. */
 export const chapterPlan = (before: ReadonlyArray<Chapter>, after: ReadonlyArray<Chapter>): ChapterPlan => {
   const chapters = renumbered(after);
   return { chapters, changed: changedIn(before, chapters) };
 };
 
-const refused = (threadId: ThreadId, reason: ChapterRefusal) => new ChapterRefused({ threadId, reason });
+const refused = (channelId: ChannelId, reason: ChapterRefusal) => new ChapterRefused({ channelId, reason });
 
 /**
  * Ends the live chapter and starts chapter `id` after it, titled `title`, at `at`. Refused when the
  * title has no text or the live chapter has no message yet.
  */
 export const planStart = (
-  threadId: ThreadId,
+  channelId: ChannelId,
   chapters: ReadonlyArray<Chapter>,
   input: { readonly id: ChapterId; readonly title: string; readonly at: string; readonly liveHasMessages: boolean },
 ): Planned => {
   const title = chapterTitle(input.title);
-  if (title === null) return refused(threadId, "empty-title");
-  if (!input.liveHasMessages) return refused(threadId, "live-chapter-empty");
+  if (title === null) return refused(channelId, "empty-title");
+  if (!input.liveHasMessages) return refused(channelId, "live-chapter-empty");
   const live = chapters.find(ChapterStates.isLive);
-  if (live === undefined) return refused(threadId, "moved");
+  if (live === undefined) return refused(channelId, "moved");
   const ended = ChapterStateMachine.transition(live, { _tag: "End", at: input.at });
   if (ended instanceof IllegalChapterTransition) return ended;
   const started = new Chapter({
-    ...firstChapter(input.id, threadId, input.at),
+    ...firstChapter(input.id, channelId, input.at),
     number: chapters.length + 1,
     title,
   });
   return chapterPlan(chapters, [...chapters.map((chapter) => (chapter === live ? ended : chapter)), started]);
 };
 
-/** The message a split starts its new chapter at, as the thread stores it. */
+/** The message a split starts its new chapter at, as the channel stores it. */
 export interface SplitPoint {
   readonly messageId: MessageId;
   readonly chapterId: ChapterId;
@@ -255,23 +255,23 @@ export interface SplitPoint {
  * titled `title`. The new chapter is live when the one it came from was, and ends when it did.
  */
 export const planSplit = (
-  threadId: ThreadId,
+  channelId: ChannelId,
   chapters: ReadonlyArray<Chapter>,
   point: SplitPoint | null,
   input: { readonly id: ChapterId; readonly title: string },
 ): Planned => {
   const title = chapterTitle(input.title);
-  if (title === null) return refused(threadId, "empty-title");
-  if (point === null) return refused(threadId, "message-not-found");
-  if (point.first) return refused(threadId, "chapter-start");
+  if (title === null) return refused(channelId, "empty-title");
+  if (point === null) return refused(channelId, "message-not-found");
+  if (point.first) return refused(channelId, "chapter-start");
   const index = chapters.findIndex((chapter) => chapter.id === point.chapterId);
   const from = chapters[index];
-  if (from === undefined) return refused(threadId, "message-not-found");
+  if (from === undefined) return refused(channelId, "message-not-found");
   const cut = ChapterStateMachine.transition(from, { _tag: "Split", at: point.createdAt });
   if (cut instanceof IllegalChapterTransition) return cut;
   const after = new Chapter({
     id: input.id,
-    threadId,
+    channelId,
     number: from.number + 1,
     title,
     summary: null,
@@ -285,16 +285,16 @@ export const planSplit = (
 
 /** Merges chapter `chapterId` into the chapter before it, which keeps its id, title and start. */
 export const planMerge = (
-  threadId: ThreadId,
+  channelId: ChannelId,
   chapters: ReadonlyArray<Chapter>,
   chapterId: ChapterId,
 ): Planned | ChapterNotFound => {
   const index = chapters.findIndex((chapter) => chapter.id === chapterId);
   const absorbed = chapters[index];
-  if (absorbed === undefined) return new ChapterNotFound({ threadId, chapterId });
+  if (absorbed === undefined) return new ChapterNotFound({ channelId, chapterId });
   const into = chapters[index - 1];
-  if (into === undefined) return refused(threadId, "first-chapter");
-  if (!ChapterStates.isInThread(absorbed)) return refused(threadId, "moved");
+  if (into === undefined) return refused(channelId, "first-chapter");
+  if (!ChapterStates.isInChannel(absorbed)) return refused(channelId, "moved");
   const merged = ChapterStateMachine.transition(into, {
     _tag: "Absorb",
     live: ChapterStates.isLive(absorbed),

@@ -1,15 +1,15 @@
 import { ChatService, HobAdmission, HobbotsRepository, HobLifecycle, HobTools } from "@hobbots/agents";
-import { ThreadArchived, ThreadArchiveRefused } from "@hobbots/api";
+import { ChannelArchived, ChannelArchiveRefused } from "@hobbots/api";
 import {
   Agent,
   AgentId,
+  type ChannelId,
   type JournaledEvent,
   type Message,
   OWNER_ACTOR,
   SkillName,
   SkillRevisionHash,
   SkillTrial,
-  type ThreadId,
 } from "@hobbots/domain";
 import { HobbotsRepositoryLive, SearchIndex } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -49,7 +49,7 @@ const testLayer = HobLifecycle.layer.pipe(
       ),
       EventBus.layer,
       HobAdmission.layer,
-      // Slow enough that a reply is still running when the thread is archived.
+      // Slow enough that a reply is still running when the channel is archived.
       FakeRuntimeLayer({ delay: "15 millis" }),
     ),
   ),
@@ -58,27 +58,27 @@ const testLayer = HobLifecycle.layer.pipe(
 const run = <A, E>(effect: Effect.Effect<A, E, Layer.Success<typeof testLayer> | Scope.Scope>) =>
   effect.pipe(Effect.provide(testLayer), Effect.scoped, Effect.runPromise);
 
-// Waits until the thread has no turn running and nothing streaming or queued.
-const settled = (threadId: ThreadId) =>
+// Waits until the channel has no turn running and nothing streaming or queued.
+const settled = (channelId: ChannelId) =>
   Effect.gen(function* () {
     const repo = yield* HobbotsRepository;
     const chat = yield* ChatService;
-    const messages = yield* repo.listMessages(threadId);
+    const messages = yield* repo.listMessages(channelId);
     const busy = messages.some((m) => m.status === "streaming" || m.status === "queued");
-    if (busy || (yield* chat.activeThreads).includes(threadId)) return yield* Effect.fail("busy" as const);
+    if (busy || (yield* chat.activeChannels).includes(channelId)) return yield* Effect.fail("busy" as const);
   }).pipe(Effect.retry(Schedule.spaced("5 millis")));
 
-// A thread with one finished turn, as a thread the user is done with looks.
-const finishedThread = (prompt = "Plan the kettle repair") =>
+// A channel with one finished turn, as a channel the user is done with looks.
+const finishedChannel = (prompt = "Plan the kettle repair") =>
   Effect.gen(function* () {
     const chat = yield* ChatService;
-    const thread = yield* chat.createThread(HOB_ID);
-    yield* chat.sendPrompt(thread.id, prompt);
-    yield* settled(thread.id);
-    return yield* HobbotsRepository.use((repo) => repo.findThread(thread.id)).pipe(Effect.map(Option.getOrThrow));
+    const channel = yield* chat.createChannel(HOB_ID);
+    yield* chat.sendPrompt(channel.id, prompt);
+    yield* settled(channel.id);
+    return yield* HobbotsRepository.use((repo) => repo.findChannel(channel.id)).pipe(Effect.map(Option.getOrThrow));
   });
 
-// Records the thread events published from here on.
+// Records the channel events published from here on.
 /** What `pick` takes from every entry the bus journals from now on. */
 const recordJournaled = <A>(pick: (payload: JournaledEvent) => A | undefined) =>
   Effect.gen(function* () {
@@ -97,74 +97,74 @@ const recordJournaled = <A>(pick: (payload: JournaledEvent) => A | undefined) =>
     return picked;
   });
 
-const recordThreadEvents = recordJournaled((payload) =>
-  payload._tag === "ThreadUpserted" ? payload.thread : undefined,
+const recordChannelEvents = recordJournaled((payload) =>
+  payload._tag === "ChannelUpserted" ? payload.channel : undefined,
 );
 
 /** Every member change (ADR 039). */
 const recordMemberEvents = recordJournaled((payload) =>
-  payload._tag === "ThreadMemberChanged" ? payload.member : undefined,
+  payload._tag === "ChannelMemberChanged" ? payload.member : undefined,
 );
 
 const refusal = (exit: Exit.Exit<unknown, unknown>) =>
   Exit.isFailure(exit) && exit.cause.reasons[0]?._tag === "Fail" ? exit.cause.reasons[0].error : undefined;
 
-describe("archived threads", () => {
-  it("archives and restores a thread once each, durably and live, without moving it", async () => {
+describe("archived channels", () => {
+  it("archives and restores a channel once each, durably and live, without moving it", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const repo = yield* HobbotsRepository;
-        const thread = yield* finishedThread();
-        const events = yield* recordThreadEvents;
+        const channel = yield* finishedChannel();
+        const events = yield* recordChannelEvents;
 
-        const archived = yield* chat.archive(thread.id);
-        const again = yield* chat.archive(thread.id);
+        const archived = yield* chat.archive(channel.id);
+        const again = yield* chat.archive(channel.id);
         const lists = {
-          live: (yield* repo.listThreads(HOB_ID)).map((t) => t.id),
-          archived: (yield* repo.listArchivedThreads(HOB_ID)).map((t) => t.id),
+          live: (yield* repo.listChannels(HOB_ID)).map((t) => t.id),
+          archived: (yield* repo.listArchivedChannels(HOB_ID)).map((t) => t.id),
         };
-        const restored = yield* chat.restore(thread.id);
-        const restoredAgain = yield* chat.restore(thread.id);
+        const restored = yield* chat.restore(channel.id);
+        const restoredAgain = yield* chat.restore(channel.id);
         yield* Effect.yieldNow;
         return {
-          thread,
+          channel,
           archived,
           again,
           lists,
           restored,
           restoredAgain,
-          liveAfter: (yield* repo.listThreads(HOB_ID)).map((t) => t.id),
-          archivedAfter: yield* repo.listArchivedThreads(HOB_ID),
+          liveAfter: (yield* repo.listChannels(HOB_ID)).map((t) => t.id),
+          archivedAfter: yield* repo.listArchivedChannels(HOB_ID),
           events: events.map((t) => t.archivedAt !== null),
         };
       }),
     );
 
-    expect(result.thread.archivedAt).toBeNull();
+    expect(result.channel.archivedAt).toBeNull();
     expect(result.archived.archivedAt).not.toBeNull();
-    expect(result.archived.updatedAt).toBe(result.thread.updatedAt);
+    expect(result.archived.updatedAt).toBe(result.channel.updatedAt);
     expect(result.again).toEqual(result.archived);
-    expect(result.lists).toEqual({ live: [], archived: [result.thread.id] });
+    expect(result.lists).toEqual({ live: [], archived: [result.channel.id] });
     expect(result.restored.archivedAt).toBeNull();
-    expect(result.restored.updatedAt).toBe(result.thread.updatedAt);
+    expect(result.restored.updatedAt).toBe(result.channel.updatedAt);
     expect(result.restoredAgain).toEqual(result.restored);
-    expect(result.liveAfter).toEqual([result.thread.id]);
+    expect(result.liveAfter).toEqual([result.channel.id]);
     expect(result.archivedAfter).toEqual([]);
     // One journaled change each; the repeats change nothing.
     expect(result.events).toEqual([true, false]);
   });
 
-  it("lists a hob's archived threads newest-archived first", async () => {
+  it("lists a hob's archived channels newest-archived first", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
-        const first = yield* finishedThread("first");
-        const second = yield* finishedThread("second");
+        const first = yield* finishedChannel("first");
+        const second = yield* finishedChannel("second");
         yield* chat.archive(second.id);
         yield* Effect.sleep("2 millis");
         yield* chat.archive(first.id);
-        const archived = yield* HobbotsRepository.use((repo) => repo.listArchivedThreads(HOB_ID));
+        const archived = yield* HobbotsRepository.use((repo) => repo.listArchivedChannels(HOB_ID));
         return { order: archived.map((t) => t.id), expected: [first.id, second.id] };
       }),
     );
@@ -176,72 +176,79 @@ describe("archived threads", () => {
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const lifecycle = yield* HobLifecycle;
-        const thread = yield* chat.createThread(HOB_ID);
+        const channel = yield* chat.createChannel(HOB_ID);
 
-        yield* chat.sendPrompt(thread.id, "one");
-        const running = yield* Effect.exit(chat.archive(thread.id));
-        yield* settled(thread.id);
+        yield* chat.sendPrompt(channel.id, "one");
+        const running = yield* Effect.exit(chat.archive(channel.id));
+        yield* settled(channel.id);
 
         // A paused hob keeps the message waiting in the queue.
         yield* lifecycle.pause(HOB_ID);
-        yield* chat.sendPrompt(thread.id, "two");
-        const queued = yield* Effect.exit(chat.archive(thread.id));
+        yield* chat.sendPrompt(channel.id, "two");
+        const queued = yield* Effect.exit(chat.archive(channel.id));
         yield* lifecycle.wake(HOB_ID);
-        yield* settled(thread.id);
+        yield* settled(channel.id);
 
-        const archived = yield* chat.archive(thread.id);
+        const archived = yield* chat.archive(channel.id);
         return { running: refusal(running), queued: refusal(queued), archived };
       }),
     );
-    expect(result.running).toEqual(new ThreadArchiveRefused({ threadId: result.archived.id, reason: "reply-running" }));
-    expect(result.queued).toEqual(new ThreadArchiveRefused({ threadId: result.archived.id, reason: "reply-running" }));
+    expect(result.running).toEqual(
+      new ChannelArchiveRefused({ channelId: result.archived.id, reason: "reply-running" }),
+    );
+    expect(result.queued).toEqual(
+      new ChannelArchiveRefused({ channelId: result.archived.id, reason: "reply-running" }),
+    );
     expect(result.archived.archivedAt).not.toBeNull();
   });
 
-  it("takes no new message, Continue or brain switch in an archived thread until it is restored", async () => {
+  it("takes no new message, Continue or brain switch in an archived channel until it is restored", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const repo = yield* HobbotsRepository;
-        const thread = yield* finishedThread();
-        const archived = yield* chat.archive(thread.id);
-        const reply = (yield* repo.listMessages(thread.id)).at(-1) as Message;
-        const sent = yield* Effect.exit(chat.sendPrompt(thread.id, "more"));
-        const continued = yield* Effect.exit(chat.continueReply(thread.id, reply.id));
+        const channel = yield* finishedChannel();
+        const archived = yield* chat.archive(channel.id);
+        const reply = (yield* repo.listMessages(channel.id)).at(-1) as Message;
+        const sent = yield* Effect.exit(chat.sendPrompt(channel.id, "more"));
+        const continued = yield* Effect.exit(chat.continueReply(channel.id, reply.id));
         const switched = yield* Effect.exit(
-          chat.setBrain(thread.id, { runtime: "claude-code", model: "fable", effort: null }),
+          chat.setBrain(channel.id, { runtime: "claude-code", model: "fable", effort: null }),
         );
-        const before = (yield* repo.listMessages(thread.id)).length;
-        yield* chat.restore(thread.id);
-        yield* chat.sendPrompt(thread.id, "more");
-        yield* settled(thread.id);
+        const before = (yield* repo.listMessages(channel.id)).length;
+        yield* chat.restore(channel.id);
+        yield* chat.sendPrompt(channel.id, "more");
+        yield* settled(channel.id);
         return {
           archived,
           refusals: [sent, continued, switched].map(refusal),
           before,
-          after: (yield* repo.listMessages(thread.id)).length,
+          after: (yield* repo.listMessages(channel.id)).length,
         };
       }),
     );
-    const expected = new ThreadArchived({ threadId: result.archived.id, archivedAt: result.archived.archivedAt ?? "" });
+    const expected = new ChannelArchived({
+      channelId: result.archived.id,
+      archivedAt: result.archived.archivedAt ?? "",
+    });
     expect(result.refusals).toEqual([expected, expected, expected]);
     expect(result.before).toBe(2);
     expect(result.after).toBe(4);
   });
 
-  it("keeps a retired hob's archived threads as they are, and refuses to archive or restore them", async () => {
+  it("keeps a retired hob's archived channels as they are, and refuses to archive or restore them", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const lifecycle = yield* HobLifecycle;
-        const archived = yield* chat.archive((yield* finishedThread("old")).id);
-        const live = yield* finishedThread("current");
+        const archived = yield* chat.archive((yield* finishedChannel("old")).id);
+        const live = yield* finishedChannel("current");
         yield* lifecycle.retire(HOB_ID, "finish");
         const repo = yield* HobbotsRepository;
         return {
           archived,
-          stored: yield* repo.findThread(archived.id),
-          liveIds: (yield* repo.listThreads(HOB_ID)).map((t) => t.id),
+          stored: yield* repo.findChannel(archived.id),
+          liveIds: (yield* repo.listChannels(HOB_ID)).map((t) => t.id),
           live,
           restore: refusal(yield* Effect.exit(chat.restore(archived.id))),
           archive: refusal(yield* Effect.exit(chat.archive(live.id))),
@@ -251,40 +258,40 @@ describe("archived threads", () => {
     );
     expect(Option.getOrNull(result.stored)).toEqual(result.archived);
     expect(result.liveIds).toEqual([result.live.id]);
-    expect(result.restore).toEqual(new ThreadArchiveRefused({ threadId: result.archived.id, reason: "hob-retired" }));
-    expect(result.archive).toEqual(new ThreadArchiveRefused({ threadId: result.live.id, reason: "hob-retired" }));
+    expect(result.restore).toEqual(new ChannelArchiveRefused({ channelId: result.archived.id, reason: "hob-retired" }));
+    expect(result.archive).toEqual(new ChannelArchiveRefused({ channelId: result.live.id, reason: "hob-retired" }));
     expect(result.archivedAgain).toEqual(result.archived);
   });
 
-  it("still finds an archived thread by search, marked archived", async () => {
+  it("still finds an archived channel by search, marked archived", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
-        const archived = yield* chat.archive((yield* finishedThread("Plan the kettle repair")).id);
+        const archived = yield* chat.archive((yield* finishedChannel("Plan the kettle repair")).id);
         const hits = yield* SearchIndex.use((index) => index.search("kettle"));
-        return { archived, hits: hits.map((hit) => [hit.thread.id, hit.thread.archivedAt]) };
+        return { archived, hits: hits.map((hit) => [hit.channel.id, hit.channel.archivedAt]) };
       }),
     );
     expect(result.hits).toEqual([[result.archived.id, result.archived.archivedAt]]);
   });
 });
 
-describe("renamed and pinned threads", () => {
-  it("renames and pins a thread durably and live, without moving it by last activity", async () => {
+describe("renamed and pinned channels", () => {
+  it("renames and pins a channel durably and live, without moving it by last activity", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const repo = yield* HobbotsRepository;
-        const older = yield* finishedThread("Plan the kettle repair");
-        const newer = yield* finishedThread("Draft the release notes");
-        const events = yield* recordThreadEvents;
+        const older = yield* finishedChannel("Plan the kettle repair");
+        const newer = yield* finishedChannel("Draft the release notes");
+        const events = yield* recordChannelEvents;
 
         const renamed = yield* chat.rename(older.id, "Kettle repair");
         const renamedAgain = yield* chat.rename(older.id, "Kettle repair");
         const pinned = yield* chat.setPinned(older.id, true);
         const pinnedAgain = yield* chat.setPinned(older.id, true);
-        const stored = yield* repo.findThread(older.id);
-        const order = (yield* repo.listThreads(HOB_ID)).map((t) => t.id);
+        const stored = yield* repo.findChannel(older.id);
+        const order = (yield* repo.listChannels(HOB_ID)).map((t) => t.id);
         const unpinned = yield* chat.setPinned(older.id, false);
         yield* Effect.yieldNow;
         return {
@@ -317,11 +324,11 @@ describe("renamed and pinned threads", () => {
     ]);
   });
 
-  it("refuses to rename or pin an archived thread", async () => {
+  it("refuses to rename or pin an archived channel", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
-        const archived = yield* chat.archive((yield* finishedThread()).id);
+        const archived = yield* chat.archive((yield* finishedChannel()).id);
         return {
           archived,
           rename: refusal(yield* Effect.exit(chat.rename(archived.id, "Kettle repair"))),
@@ -329,32 +336,35 @@ describe("renamed and pinned threads", () => {
         };
       }),
     );
-    const refused = new ThreadArchived({ threadId: result.archived.id, archivedAt: result.archived.archivedAt ?? "" });
+    const refused = new ChannelArchived({
+      channelId: result.archived.id,
+      archivedAt: result.archived.archivedAt ?? "",
+    });
     expect(result.rename).toEqual(refused);
     expect(result.pin).toEqual(refused);
   });
 });
 
-describe("read threads", () => {
-  it("marks a thread read for every device once you read the hob's reply, and unread again when it writes", async () => {
+describe("read channels", () => {
+  it("marks a channel read for every device once you read the hob's reply, and unread again when it writes", async () => {
     const result = await run(
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const repo = yield* HobbotsRepository;
-        const unread = (threadId: ThreadId) =>
-          chat.unreadThreads.pipe(Effect.map((listed) => listed.threadIds.includes(threadId)));
-        const thread = yield* finishedThread("Plan the kettle repair");
-        const before = yield* unread(thread.id);
-        const reply = (yield* repo.listMessages(thread.id)).at(-1);
+        const unread = (channelId: ChannelId) =>
+          chat.unreadChannels.pipe(Effect.map((listed) => listed.channelIds.includes(channelId)));
+        const channel = yield* finishedChannel("Plan the kettle repair");
+        const before = yield* unread(channel.id);
+        const reply = (yield* repo.listMessages(channel.id)).at(-1);
         if (reply === undefined) throw new Error("no reply");
         const events = yield* recordMemberEvents;
-        const read = yield* chat.markRead(thread.id, reply.id, reply.revision);
-        const afterRead = yield* unread(thread.id);
-        const readAgain = yield* chat.markRead(thread.id, reply.id, reply.revision);
-        yield* chat.sendPrompt(thread.id, "And the lid?");
-        yield* settled(thread.id);
-        const written = yield* unread(thread.id);
-        const missing = yield* Effect.exit(chat.markRead("nope" as ThreadId, reply.id, reply.revision));
+        const read = yield* chat.markRead(channel.id, reply.id, reply.revision);
+        const afterRead = yield* unread(channel.id);
+        const readAgain = yield* chat.markRead(channel.id, reply.id, reply.revision);
+        yield* chat.sendPrompt(channel.id, "And the lid?");
+        yield* settled(channel.id);
+        const written = yield* unread(channel.id);
+        const missing = yield* Effect.exit(chat.markRead("nope" as ChannelId, reply.id, reply.revision));
         yield* Effect.yieldNow;
         return {
           before,
@@ -363,7 +373,7 @@ describe("read threads", () => {
           readAgain,
           written,
           missing: Exit.isFailure(missing),
-          events: events.filter((member) => member.threadId === thread.id),
+          events: events.filter((member) => member.channelId === channel.id),
         };
       }),
     );
@@ -384,9 +394,9 @@ describe("read threads", () => {
       Effect.gen(function* () {
         const chat = yield* ChatService;
         const repo = yield* HobbotsRepository;
-        const first = yield* chat.createThread(HOB_ID);
-        const second = yield* chat.createThread(HOB_ID);
-        const trial = yield* chat.createThread(HOB_ID, {
+        const first = yield* chat.createChannel(HOB_ID);
+        const second = yield* chat.createChannel(HOB_ID);
+        const trial = yield* chat.createChannel(HOB_ID, {
           title: "Try lamps",
           skillTrial: new SkillTrial({
             name: SkillName.make("lamps"),
@@ -397,19 +407,26 @@ describe("read threads", () => {
             proposalId: null,
           }),
         });
-        // With its chat archived the hob has none open, so its next thread is its chat.
+        // With its chat archived the hob has none open, so its next channel is its chat.
         yield* chat.archive(first.id);
-        const next = yield* chat.createThread(HOB_ID);
+        const next = yield* chat.createChannel(HOB_ID);
         const restored = yield* chat.restore(first.id);
-        const open = yield* repo.listThreads(HOB_ID);
-        return { first, second, trial, next, restored, chats: open.filter((t) => t.kind === "chat").map((t) => t.id) };
+        const open = yield* repo.listChannels(HOB_ID);
+        return {
+          first,
+          second,
+          trial,
+          next,
+          restored,
+          chats: open.filter((t) => t.kind === "direct").map((t) => t.id),
+        };
       }),
     );
 
-    expect(result.first).toMatchObject({ kind: "chat", state: "open" });
+    expect(result.first).toMatchObject({ kind: "direct", state: "open" });
     expect(result.second).toMatchObject({ kind: "camp", state: "open" });
     expect(result.trial).toMatchObject({ kind: "camp", state: "open" });
-    expect(result.next).toMatchObject({ kind: "chat", state: "open" });
+    expect(result.next).toMatchObject({ kind: "direct", state: "open" });
     expect(result.restored).toMatchObject({ id: result.first.id, kind: "camp", state: "open", archivedAt: null });
     expect(result.chats).toEqual([result.next.id]);
   });

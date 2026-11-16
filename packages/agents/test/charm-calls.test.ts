@@ -16,7 +16,7 @@ const write = (key: string): CharmWrite => ({
   plan: { commit: "abc" },
   appliedText: "Pushed.",
   step: undefined,
-  threadId: null,
+  channelId: null,
   messageId: MessageId.make("m1"),
 });
 

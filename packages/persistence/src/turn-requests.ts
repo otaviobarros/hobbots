@@ -1,7 +1,10 @@
 import { type HobbotsRepository, passStands } from "@hobbots/agents";
-import { ThreadArchived } from "@hobbots/api";
+import { ChannelArchived } from "@hobbots/api";
 import {
   type Actor,
+  type Channel,
+  type ChannelId,
+  type ChannelMember,
   isActiveMember,
   type JournaledEvent,
   type Line,
@@ -10,24 +13,21 @@ import {
   type MessageId,
   planMemberRemove,
   QueuedMessageTransitions,
-  type Thread,
-  type ThreadId,
-  type ThreadMember,
   type TurnRequest,
   type TurnRequestId,
   TurnRequests,
 } from "@hobbots/domain";
 import { Effect, Option } from "effect";
 import type { SqlClient, SqlError } from "effect/sql";
+import { movedMember, saveState, selectMembers } from "./channel-member-rows.ts";
 import type { makeJournaled, makeJournaledChange } from "./journal.ts";
-import { movedMember, saveState, selectMembers } from "./thread-member-rows.ts";
 import {
+  selectChannelsWaiting,
   selectOpenRequests,
   selectOpenRequestsOf,
   selectRequestsById,
   selectRequestsIn,
   selectRequestsOfReply,
-  selectThreadsWaiting,
   selectWaitingOf,
   stepRequests,
 } from "./turn-request-rows.ts";
@@ -50,7 +50,7 @@ type Writes = Pick<
   | "passedConfigVersions"
   | "dropTurnRequests"
   | "answerUnfinishedTurnRequests"
-  | "threadsWithWaitingRequests"
+  | "channelsWithWaitingRequests"
   | "removeMember"
 >;
 
@@ -91,20 +91,20 @@ export const makeTurnRequestWrites = (
           WHERE id = ${messageId} AND status = 'queued'`;
         events.push(
           { _tag: "MessageUpserted", message },
-          { _tag: "MessageDequeued", threadId: message.threadId, messageId, reason: "dropped" },
+          { _tag: "MessageDequeued", channelId: message.channelId, messageId, reason: "dropped" },
         );
       }
       return events;
     });
 
-  // Whether `hobId` leads a top-level Quest in the thread that has not ended.
-  const leadsOpenQuest = (threadId: ThreadId, hobId: string) =>
-    sql`SELECT 1 FROM tasks WHERE thread_id = ${threadId} AND owner_id = ${hobId} AND parent_id IS NULL
+  // Whether `hobId` leads a top-level Quest in the channel that has not ended.
+  const leadsOpenQuest = (channelId: ChannelId, hobId: string) =>
+    sql`SELECT 1 FROM tasks WHERE channel_id = ${channelId} AND owner_id = ${hobId} AND parent_id IS NULL
       AND state NOT IN ('completed', 'failed', 'cancelled') LIMIT 1`.pipe(Effect.map((rows) => rows.length > 0));
 
-  // Drops every request `hobId` still waits to answer in the thread, on any of its lines.
-  const dropWaitingOf = (threadId: ThreadId, hobId: string, by: Actor) =>
-    selectWaitingOf(sql, threadId, hobId).pipe(
+  // Drops every request `hobId` still waits to answer in the channel, on any of its lines.
+  const dropWaitingOf = (channelId: ChannelId, hobId: string, by: Actor) =>
+    selectWaitingOf(sql, channelId, hobId).pipe(
       Effect.flatMap((waiting) => stepRequests(sql, waiting, { _tag: "Drop", by })),
     );
 
@@ -121,16 +121,21 @@ export const makeTurnRequestWrites = (
         yield* stepRequests(sql, speaking, { _tag: "Answer" });
         return none;
       }
-      yield* sql`INSERT INTO passed_turns (reply_id, thread_id, agent_id, runtime, model, config_version, created_at,
+      yield* sql`INSERT INTO passed_turns (reply_id, channel_id, agent_id, runtime, model, config_version, created_at,
           input_tokens, output_tokens, cache_read_tokens, cache_write_tokens)
-        SELECT id, thread_id, actor_id, runtime, model, config_version, created_at, input_tokens, output_tokens,
+        SELECT id, channel_id, actor_id, runtime, model, config_version, created_at, input_tokens, output_tokens,
           cache_read_tokens, cache_write_tokens
         FROM messages WHERE id = ${replyId}`;
       yield* sql`DELETE FROM messages WHERE id = ${replyId}`;
       const passed = yield* stepRequests(sql, speaking, { _tag: "Pass", reason });
       yield* stepRequests(sql, yield* selectOpenRequestsOf(sql, "message_id", [replyId]), { _tag: "Drop", by: null });
       const events = passed.map(
-        (request): JournaledEvent => ({ _tag: "TurnPassed", threadId: request.threadId, messageId: replyId, request }),
+        (request): JournaledEvent => ({
+          _tag: "TurnPassed",
+          channelId: request.channelId,
+          messageId: replyId,
+          request,
+        }),
       );
       return { value: passed, events };
     });
@@ -164,7 +169,7 @@ export const makeTurnRequestWrites = (
               : [
                   {
                     _tag: "RelayBudgetReset",
-                    threadId: line.threadId,
+                    channelId: line.channelId,
                     rootMessageId: line.rootMessageId,
                     by,
                     requests: woken.map((request) => request.id),
@@ -226,48 +231,48 @@ export const makeTurnRequestWrites = (
         return { value: undefined, events };
       }),
     ),
-    threadsWithWaitingRequests: selectThreadsWaiting(sql).pipe(Effect.orDie),
-    removeMember: (threadId, actor, by) =>
+    channelsWithWaitingRequests: selectChannelsWaiting(sql).pipe(Effect.orDie),
+    removeMember: (channelId, actor, by) =>
       journaledChange<
-        { readonly member: ThreadMember; readonly dropped: ReadonlyArray<TurnRequest> },
-        MemberRefused | ThreadArchived
+        { readonly member: ChannelMember; readonly dropped: ReadonlyArray<TurnRequest> },
+        MemberRefused | ChannelArchived
       >((revision) =>
         Effect.gen(function* () {
-          const [thread] = yield* sql<Pick<Thread, "kind" | "agentId" | "archivedAt">>`SELECT kind, agent_id,
-            archived_at FROM threads WHERE id = ${threadId}`;
-          if (thread === undefined) return yield* Effect.die(new Error(`No thread ${threadId}`));
+          const [channel] = yield* sql<Pick<Channel, "kind" | "ownerHobId" | "archivedAt">>`SELECT kind,
+            agent_id AS owner_hob_id, archived_at FROM channels WHERE id = ${channelId}`;
+          if (channel === undefined) return yield* Effect.die(new Error(`No channel ${channelId}`));
           // A camp archived since it was read is read-only by the time this is written.
-          if (thread.archivedAt !== null) {
-            return yield* new ThreadArchived({ threadId, archivedAt: thread.archivedAt });
+          if (channel.archivedAt !== null) {
+            return yield* new ChannelArchived({ channelId, archivedAt: channel.archivedAt });
           }
-          const members = yield* selectMembers(sql, threadId);
+          const members = yield* selectMembers(sql, channelId);
           // A person must still be in the camp as the change is written, not only when it was asked.
           if (by.kind === "user" && !isActiveMember(members, by)) {
-            return yield* new MemberRefused({ threadId, actor: by, reason: "not-member" });
+            return yield* new MemberRefused({ channelId, actor: by, reason: "not-member" });
           }
-          const plan = planMemberRemove(thread, members, actor);
-          if (plan._tag === "refused") return yield* new MemberRefused({ threadId, actor, reason: plan.reason });
+          const plan = planMemberRemove(channel, members, actor);
+          if (plan._tag === "refused") return yield* new MemberRefused({ channelId, actor, reason: plan.reason });
           if (plan._tag === "gone") return { value: { member: plan.member, dropped: [] }, events: [] };
           // A Quest the hob leads here still comes back to the camp for its results and answers.
-          if (actor.kind === "hob" && (yield* leadsOpenQuest(threadId, actor.id))) {
-            return yield* new MemberRefused({ threadId, actor, reason: "leads-quest" });
+          if (actor.kind === "hob" && (yield* leadsOpenQuest(channelId, actor.id))) {
+            return yield* new MemberRefused({ channelId, actor, reason: "leads-quest" });
           }
           const member = movedMember(plan.member, { _tag: "Remove" }, revision);
           yield* saveState(sql, member);
           // The hob owes nothing here any more: what it was waiting to answer, on any line, is dropped
           // with it. The answer it is speaking now ends with its turn.
-          const dropped = actor.kind === "hob" ? yield* dropWaitingOf(threadId, actor.id, by) : [];
+          const dropped = actor.kind === "hob" ? yield* dropWaitingOf(channelId, actor.id, by) : [];
           const dequeued = yield* dequeueUnowed(
             dropped.map((request) => request.messageId),
             revision + 1,
           );
-          const events: ReadonlyArray<JournaledEvent> = [{ _tag: "ThreadMemberChanged", member }, ...dequeued];
+          const events: ReadonlyArray<JournaledEvent> = [{ _tag: "ChannelMemberChanged", member }, ...dequeued];
           return { value: { member, dropped }, events };
         }),
       ),
-    passedConfigVersions: (threadId, agentId) =>
+    passedConfigVersions: (channelId, agentId) =>
       sql<{ readonly configVersion: number }>`SELECT DISTINCT config_version FROM passed_turns
-        WHERE thread_id = ${threadId} AND agent_id = ${agentId} AND config_version IS NOT NULL`.pipe(
+        WHERE channel_id = ${channelId} AND agent_id = ${agentId} AND config_version IS NOT NULL`.pipe(
         Effect.map((rows) => rows.map((row) => Number(row.configVersion))),
         Effect.orDie,
       ),

@@ -1,8 +1,8 @@
-import type { AgentId, ThreadId } from "@hobbots/domain";
+import type { AgentId, ChannelId } from "@hobbots/domain";
 import type { QueryClient } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
 import { type ConnectionState, connectionQuery } from "./live.ts";
-import { sendPrompt, startThread } from "./queries.ts";
+import { sendPrompt, startChannel } from "./queries.ts";
 
 /**
  * Messages sent while the hub was out of reach. They wait in order and go out one at a time once it
@@ -12,8 +12,8 @@ import { sendPrompt, startThread } from "./queries.ts";
  */
 type WaitingMessage = { readonly id: string; readonly content: string };
 
-/** Where messages wait: a thread, or a hob's fresh page before its thread exists. */
-export type WaitingPlace = ThreadId | `new-${AgentId}`;
+/** Where messages wait: a channel, or a hob's fresh page before its channel exists. */
+export type WaitingPlace = ChannelId | `new-${AgentId}`;
 
 export interface Outbox {
   /** Oldest first, the order they go out in. */
@@ -22,11 +22,11 @@ export interface Outbox {
   readonly sending: string | undefined;
   /** The hub refused the first message. It stays until Try again or the next reconnect. */
   readonly refused: boolean;
-  /** The thread a fresh page's first message started, which the rest followed into. */
-  readonly startedThread: ThreadId | undefined;
+  /** The channel a fresh page's first message started, which the rest followed into. */
+  readonly startedChannel: ChannelId | undefined;
 }
 
-const EMPTY: Outbox = { messages: [], sending: undefined, refused: false, startedThread: undefined };
+const EMPTY: Outbox = { messages: [], sending: undefined, refused: false, startedChannel: undefined };
 
 const boxes = new Map<WaitingPlace, Outbox>();
 const listeners = new Set<() => void>();
@@ -55,20 +55,20 @@ const flush = (place: WaitingPlace) => {
   if (client === undefined || first === undefined || sending !== undefined || refused || !live()) return;
   change(place, (old) => ({ ...old, sending: first.id }));
   const delivered = place.startsWith("new-")
-    ? startThread(client, place.slice("new-".length) as AgentId, first.content).then(({ thread }) => thread.id)
-    : sendPrompt(client, place as ThreadId, first.content).then(() => place as ThreadId);
+    ? startChannel(client, place.slice("new-".length) as AgentId, first.content).then(({ channel }) => channel.id)
+    : sendPrompt(client, place as ChannelId, first.content).then(() => place as ChannelId);
   delivered.then(
-    (threadId) => {
+    (channelId) => {
       // Read now, not when the send began: messages taken back meanwhile stay out.
       const rest = box(place).messages.filter((message) => message.id !== first.id);
-      if (threadId === place) {
+      if (channelId === place) {
         change(place, (old) => ({ ...old, sending: undefined, messages: rest }));
         flush(place);
         return;
       }
-      change(place, (old) => ({ ...old, sending: undefined, messages: [], startedThread: threadId }));
-      change(threadId, (old) => ({ ...old, messages: [...old.messages, ...rest] }));
-      flush(threadId);
+      change(place, (old) => ({ ...old, sending: undefined, messages: [], startedChannel: channelId }));
+      change(channelId, (old) => ({ ...old, messages: [...old.messages, ...rest] }));
+      flush(channelId);
     },
     () => change(place, (old) => ({ ...old, sending: undefined, refused: true })),
   );
@@ -113,5 +113,5 @@ export const tryAgain = (place: WaitingPlace) => {
   flush(place);
 };
 
-/** A fresh page has moved to the thread its first message started. */
-export const followed = (place: WaitingPlace) => change(place, (old) => ({ ...old, startedThread: undefined }));
+/** A fresh page has moved to the channel its first message started. */
+export const followed = (place: WaitingPlace) => change(place, (old) => ({ ...old, startedChannel: undefined }));

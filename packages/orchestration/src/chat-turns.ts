@@ -6,8 +6,8 @@ import {
   carriedFrom,
   carriedWith,
   type EventEnvelope,
-  latestThreadTask,
-  openThreadTask,
+  latestChannelTask,
+  openChannelTask,
   pausedHolder,
   QuestStates,
   type ResponsibilityLedger,
@@ -44,7 +44,7 @@ export const draftScope = (turn: ChatTurn, at: string): CallScope => {
     ownerId: turn.agentId,
     parentId: null,
     rootId: id,
-    threadId: turn.threadId,
+    channelId: turn.channelId,
     brief: cut(turn.prompt, BRIEF_LIMIT) || "A request in this conversation",
     state: "active",
     dependsOn: [],
@@ -164,7 +164,7 @@ const resultsHeld =
   };
 
 /**
- * How a chat turn reaches the Task its hob works on in the thread. The Task is found, or started
+ * How a chat turn reaches the Task its hob works on in the channel. The Task is found, or started
  * from the turn's prompt, inside each call's own transaction, so a refused call leaves no Task
  * behind and two calls never start two.
  */
@@ -210,7 +210,7 @@ export const makeChatResolver = (
      * each result, so the briefing is where the session is told it (#1040).
      */
     briefing: Effect.gen(function* () {
-      const open = openThreadTask(yield* tasks.readThreadTrees(turn.threadId), turn.agentId);
+      const open = openChannelTask(yield* tasks.readChannelTrees(turn.channelId), turn.agentId);
       if (open === undefined) return null;
       workingOn = open.top.id;
       briefedOn = open.top;
@@ -266,8 +266,8 @@ export const makeChatResolver = (
      * call of its started. Null while it works on none, or once its Task ended (ADR 018).
      */
     workingOn: Effect.map(
-      tasks.readThreadTrees(turn.threadId),
-      (trees) => openThreadTask(trees, turn.agentId)?.top.id ?? null,
+      tasks.readChannelTrees(turn.channelId),
+      (trees) => openChannelTask(trees, turn.agentId)?.top.id ?? null,
     ),
 
     /** `ownAttempt` is the Attempt this turn already started, if any. */
@@ -278,12 +278,12 @@ export const makeChatResolver = (
     ): Effect.Effect<ResolvedCaller, TaskToolRefused> =>
       Effect.gen(function* () {
         const journal = journalOf();
-        const trees = yield* tasks.readThreadTrees(turn.threadId);
-        let task: Task | undefined = openThreadTask(trees, turn.agentId)?.top;
+        const trees = yield* tasks.readChannelTrees(turn.channelId);
+        let task: Task | undefined = openChannelTask(trees, turn.agentId)?.top;
         const held = heldBack(trees, workingOn, task, name);
         if (held !== null) return yield* refuse(held.reason, held.message);
         // Once the request has ended, its lead can still read it, never change it, to answer you about it (#666).
-        const ended = task === undefined && name === "read_tasks" ? latestThreadTask(trees, turn.agentId) : undefined;
+        const ended = task === undefined && name === "read_tasks" ? latestChannelTask(trees, turn.agentId) : undefined;
         if (ended !== undefined) {
           return {
             caller: { agentId: turn.agentId, taskId: ended.top.id },
@@ -308,7 +308,7 @@ export const makeChatResolver = (
                   id: TaskId.make(newId()),
                   ownerId: turn.agentId,
                   parentId: null,
-                  threadId: turn.threadId,
+                  channelId: turn.channelId,
                   brief: cut(turn.prompt, BRIEF_LIMIT) || "A request in this conversation",
                   dependsOn: [],
                   createdAt: at,

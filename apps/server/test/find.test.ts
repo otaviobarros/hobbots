@@ -24,6 +24,7 @@ import {
   Agent,
   AgentId,
   type AskAnswer,
+  ChannelId,
   type Chapter,
   ChapterId,
   DEFAULT_MEMORY_SETTINGS,
@@ -36,7 +37,6 @@ import {
   MessageId,
   type RuntimeKind,
   roleFields,
-  ThreadId,
 } from "@hobbots/domain";
 import { HubBrainDecider, MemoryModelEndpoint } from "@hobbots/memory";
 import {
@@ -180,13 +180,13 @@ const start = async <R extends HubDecider>(runtime: RuntimeKind, decider: Layer.
           createdAt: NOW,
         }),
       );
-      return (yield* (yield* ChatService).createThread(WREN)).id;
+      return (yield* (yield* ChatService).createChannel(WREN)).id;
     }),
   );
 };
 
 /** Sends `content` and waits for the turn to end; answers the reply. */
-const say = async (id: ThreadId, content: string): Promise<Message> => {
+const say = async (id: ChannelId, content: string): Promise<Message> => {
   await run(ChatService.use((chat) => chat.sendPrompt(id, content)));
   return vi.waitFor(async () => {
     const all = await run(HobbotsRepository.use((repo) => repo.listMessages(id)));
@@ -195,7 +195,7 @@ const say = async (id: ThreadId, content: string): Promise<Message> => {
   });
 };
 
-const startChapter = (id: ThreadId, chapter: string, title: string) =>
+const startChapter = (id: ChannelId, chapter: string, title: string) =>
   run(ChapterService.use((chapters) => chapters.startChapter(id, { id: ChapterId.make(chapter), title })));
 
 /** Wren's reply recorded a decision, as `record_decision` does. */
@@ -204,7 +204,7 @@ const decided = (reply: Message, key: string, text: string, replaces: DecisionId
     Records.use((records) =>
       records.recordHobs({
         id: DecisionId.make(`decision-${key}`),
-        threadId: reply.threadId,
+        channelId: reply.channelId,
         sourceMessageId: reply.id,
         text,
         replaces,
@@ -240,10 +240,10 @@ const wrote = (reply: Message, path: string) =>
 const index = () => run(FindIndexer.use((indexer) => indexer.runOnce));
 const summarize = () => run(ChapterSummaries.use((projector) => projector.runOnce));
 
-const find = (query: string, scope: { in?: ThreadId; kinds?: ReadonlyArray<FindKind> } = {}) =>
+const find = (query: string, scope: { in?: ChannelId; kinds?: ReadonlyArray<FindKind> } = {}) =>
   run(FindIndex.use((found) => found.find(query, { in: scope.in ?? null, kinds: scope.kinds ?? FIND_KINDS })));
 
-const ask = (question: string, scope: ThreadId | null = null, timeout: Duration.Input = "5 seconds") =>
+const ask = (question: string, scope: ChannelId | null = null, timeout: Duration.Input = "5 seconds") =>
   run(askFromRecords(question, { in: scope }, timeout));
 
 /** What a found record says, in a line a test can compare. */
@@ -260,8 +260,8 @@ const indexedRows = () =>
   run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      return yield* sql<{ kind: string; recordId: string; threadId: string; body: string }>`
-        SELECT kind, record_id, thread_id, body FROM find_records ORDER BY kind, record_id`;
+      return yield* sql<{ kind: string; recordId: string; channelId: string; body: string }>`
+        SELECT kind, record_id, channel_id, body FROM find_records ORDER BY kind, record_id`;
     }),
   );
 
@@ -295,7 +295,7 @@ describe("find", () => {
       "chapter 1: Planned the launch emails.",
     ]);
     const [thursday, file, wednesday, chapter] = found.records;
-    expect(thursday).toMatchObject({ threadId: id, threadKind: "chat", hobId: WREN, messageId: later.id });
+    expect(thursday).toMatchObject({ channelId: id, channelKind: "direct", hobId: WREN, messageId: later.id });
     expect(wednesday).toMatchObject({ messageId: reply.id });
     expect(file).toMatchObject({ kind: "doc", messageId: MessageId.make("wrote-launch.md") });
     // A chapter's citation opens its first message.
@@ -313,7 +313,7 @@ describe("find", () => {
     // In another chat, nothing.
     const other = await run(
       ChatService.use((chat) =>
-        chat.makeCamp(WREN, { key: ThreadId.make("camp-other"), title: "Other", goal: null, private: false }),
+        chat.makeCamp(WREN, { key: ChannelId.make("camp-other"), title: "Other", goal: null, private: false }),
       ),
     );
     expect(await find("launch", { in: other.id })).toEqual({ records: [], messages: [] });
@@ -344,7 +344,7 @@ describe("find", () => {
     const chat = await start("claude-code", brainAnswers(null));
     const camp = await run(
       ChatService.use((service) =>
-        service.makeCamp(WREN, { key: ThreadId.make("secret"), title: "Surprise party", goal: null, private: true }),
+        service.makeCamp(WREN, { key: ChannelId.make("secret"), title: "Surprise party", goal: null, private: true }),
       ),
     );
     const reply = await say(camp.id, "Plan a surprise party for Ana.");
@@ -354,14 +354,14 @@ describe("find", () => {
 
     const everywhere = await find("party");
     expect(everywhere.records).toEqual([]);
-    expect(new Set(everywhere.messages.map((message) => message.threadId))).toEqual(new Set([chat]));
+    expect(new Set(everywhere.messages.map((message) => message.channelId))).toEqual(new Set([chat]));
     const inside = await find("party", { in: camp.id });
     expect(said(inside.records)).toEqual(["decision: The surprise party cake is chocolate. (active)"]);
-    expect(new Set(inside.messages.map((message) => message.threadId))).toEqual(new Set([camp.id]));
+    expect(new Set(inside.messages.map((message) => message.channelId))).toEqual(new Set([camp.id]));
     expect(await ask("What cake for the party?")).toEqual({ _tag: "Matches", reason: "nothing-found", matches: [] });
     expect(await ask("What cake for the party?", camp.id)).toMatchObject({
       _tag: "Matches",
-      matches: [{ _tag: "decision", threadId: camp.id }],
+      matches: [{ _tag: "decision", channelId: camp.id }],
     });
   });
 
@@ -374,7 +374,7 @@ describe("find", () => {
       ChatService.use((chat) =>
         chat.moveChapter(id, (first as Chapter).id, {
           _tag: "new",
-          key: ThreadId.make("camp-launch"),
+          key: ChannelId.make("camp-launch"),
           title: "Launch",
           goal: null,
           private: false,
@@ -384,9 +384,9 @@ describe("find", () => {
     expect(await index()).toBe(true);
 
     expect((await find("launch", { in: id })).records).toEqual([]);
-    const inCamp = await find("launch", { in: ThreadId.make("camp-launch") });
+    const inCamp = await find("launch", { in: ChannelId.make("camp-launch") });
     expect(said(inCamp.records).filter((line) => line.startsWith("decision"))).toHaveLength(2);
-    expect(inCamp.records.every((record) => record.threadTitle === "Launch")).toBe(true);
+    expect(inCamp.records.every((record) => record.channelTitle === "Launch")).toBe(true);
   });
 
   // covers ADR 037 (Records, Moving a chapter, Private camps)
@@ -399,7 +399,7 @@ describe("find", () => {
       ChatService.use((chat) =>
         chat.moveChapter(id, (first as Chapter).id, {
           _tag: "new",
-          key: ThreadId.make("camp-secret"),
+          key: ChannelId.make("camp-secret"),
           title: "Secret launch",
           goal: null,
           private: true,
@@ -417,7 +417,7 @@ describe("find", () => {
     });
     // Once it catches up, the camp finds them from inside.
     expect(await index()).toBe(true);
-    const inCamp = await find("launch", { in: ThreadId.make("camp-secret") });
+    const inCamp = await find("launch", { in: ChannelId.make("camp-secret") });
     expect(said(inCamp.records).filter((line) => line.startsWith("decision"))).toHaveLength(2);
   });
 });

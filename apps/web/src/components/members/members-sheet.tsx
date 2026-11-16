@@ -1,5 +1,5 @@
 import type { MembersReport } from "@hobbots/api";
-import { type Agent, type Thread, type ThreadMember, ThreadMembers } from "@hobbots/domain";
+import { type Agent, type Channel, type ChannelMember, ChannelMembers } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Sheet, SheetCloseButton, SheetContent, SheetHeader, SheetTitle } from "@hobbots/ui/components/sheet";
 import { Skeleton } from "@hobbots/ui/components/skeleton";
@@ -15,19 +15,19 @@ import { CostSection, PeopleSection } from "./people-sections.tsx";
 const copy = messages.sheet;
 
 /** The members the sheet lists: everyone not taken out, with the lead first among the hobs. */
-const shownMembers = (members: ReadonlyArray<ThreadMember>, lead: string): ReadonlyArray<ThreadMember> => {
-  const isLead = (member: ThreadMember) => member.actor.kind === "hob" && member.actor.id === lead;
+const shownMembers = (members: ReadonlyArray<ChannelMember>, lead: string): ReadonlyArray<ChannelMember> => {
+  const isLead = (member: ChannelMember) => member.actor.kind === "hob" && member.actor.id === lead;
   return members.filter((member) => member.state !== "removed").sort((a, b) => Number(isLead(b)) - Number(isLead(a)));
 };
 
 /**
- * A camp's members sheet (ADR 039, Members; Cards every thread shares › Status and cost; Screens ›
+ * A camp's members sheet (ADR 039, Members; Cards every channel shares › Status and cost; Screens ›
  * GroupChatMembers): its hobs, the one that leads its quests marked Lead, what each is doing and
  * its turns and tokens here today; its people, the owner marked; and what today cost on whose plan.
  * Add a hob lists the hobs that can join; each hob but the lead can be taken out, which drops what
  * it still owed here.
  */
-export function MembersSheet({ camp, onClose }: { camp: Thread; onClose: () => void }) {
+export function MembersSheet({ camp, onClose }: { camp: Channel; onClose: () => void }) {
   const read = useQuery(membersToday(camp.id));
   // The sheet names hobs from the hob directory, retired ones too, since a hob that retired stays in
   // the camp as left and keeps what it spent here: until both are read, the sheet waits or says why.
@@ -71,11 +71,11 @@ export function MembersSheet({ camp, onClose }: { camp: Thread; onClose: () => v
   );
 }
 
-function SheetBody({ camp, report, hobs }: { camp: Thread; report: MembersReport; hobs: ReadonlyArray<Agent> }) {
-  const shown = shownMembers(report.members, camp.agentId);
+function SheetBody({ camp, report, hobs }: { camp: Channel; report: MembersReport; hobs: ReadonlyArray<Agent> }) {
+  const shown = shownMembers(report.members, camp.ownerHobId);
   const hobMembers = shown.filter((member) => member.actor.kind === "hob");
   const people = shown.filter((member) => member.actor.kind === "user");
-  const answering = hobMembers.filter(ThreadMembers.isActive).length;
+  const answering = hobMembers.filter(ChannelMembers.isActive).length;
   return (
     <>
       <SheetHeader>
@@ -102,10 +102,10 @@ function SheetBody({ camp, report, hobs }: { camp: Thread; report: MembersReport
  * The camp header's members button (Screens › GroupChat): the faces of up to four members besides
  * you and how many are in the camp, opening the members sheet.
  */
-export function MembersButton({ camp, open, onOpen }: { camp: Thread; open: boolean; onOpen: () => void }) {
+export function MembersButton({ camp, open, onOpen }: { camp: Channel; open: boolean; onOpen: () => void }) {
   const report = useQuery(membersToday(camp.id)).data;
   const hobs = useQuery(agentsQuery).data ?? [];
-  const active = (report?.members ?? []).filter(ThreadMembers.isActive);
+  const active = (report?.members ?? []).filter(ChannelMembers.isActive);
   const faces = active.filter((member) => member.role !== "owner").slice(0, 4);
   return (
     <button

@@ -1,5 +1,5 @@
 import { CAMP_HOBS_MAX, type MakeCampPayload } from "@hobbots/api";
-import { AgentId, CAMP_GOAL_MAX, THREAD_TITLE_MAX, type ThreadId } from "@hobbots/domain";
+import { AgentId, CAMP_GOAL_MAX, CHANNEL_TITLE_MAX, type ChannelId } from "@hobbots/domain";
 import { Schema } from "effect";
 import { ApiError } from "../../api/client.ts";
 
@@ -36,11 +36,11 @@ export type MakeCamp =
       /** The fields whose problems show: each once it lost focus, all of them after a send. */
       readonly shown: ReadonlySet<keyof CampDraft>;
     }
-  | { readonly step: "saving"; readonly draft: CampDraft; readonly key: ThreadId }
+  | { readonly step: "saving"; readonly draft: CampDraft; readonly key: ChannelId }
   | {
       readonly step: "failed";
       readonly draft: CampDraft;
-      readonly key: ThreadId;
+      readonly key: ChannelId;
       readonly error: MakeCampError;
       /** The hob the hub turned away, when it named one. */
       readonly hob: AgentId | null;
@@ -53,7 +53,7 @@ export type MakeCampEvent =
    * `key` is a new key, used unless a failed camp is tried again unchanged. `held`: the chat's
    * chapter cannot move now, as while a reply runs there, so a camp it comes along with waits.
    */
-  | { readonly _tag: "Send"; readonly key: ThreadId; readonly held?: boolean }
+  | { readonly _tag: "Send"; readonly key: ChannelId; readonly held?: boolean }
   | { readonly _tag: "Failed"; readonly error: MakeCampError; readonly hob?: AgentId | null };
 
 /**
@@ -89,7 +89,7 @@ export const withChapterHob = (hobs: ReadonlyArray<AgentId>, hob: AgentId): Read
 ];
 
 // The rules the hub checks, stated once here for the sheet (STD-REACT-017).
-const Title = Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(THREAD_TITLE_MAX));
+const Title = Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(CHANNEL_TITLE_MAX));
 const Goal = Schema.String.check(Schema.isMaxLength(CAMP_GOAL_MAX));
 
 /** What is wrong with each field of the draft, read as the hub reads it: trimmed. */
@@ -110,7 +110,7 @@ export const campProblems = (draft: CampDraft): Partial<Record<keyof CampDraft, 
  * What Make a camp sends for a draft with no problems: trimmed, and no goal when it is blank, and the
  * hobs after the first, which leads it and the camp is made for (`campLead`).
  */
-export const campPayload = (draft: CampDraft, key: ThreadId): MakeCampPayload => {
+export const campPayload = (draft: CampDraft, key: ChannelId): MakeCampPayload => {
   const goal = draft.goal.trim();
   return {
     key,

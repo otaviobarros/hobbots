@@ -1,4 +1,4 @@
-import { type Artifact, type ArtifactVersion, artifactShow, type ThreadId } from "@hobbots/domain";
+import { type Artifact, type ArtifactVersion, artifactShow, type ChannelId } from "@hobbots/domain";
 import { FilterChip, FilterChips } from "@hobbots/ui/components/filter-chips";
 import { useQuery } from "@tanstack/react-query";
 import { artifactVersionsQuery } from "../../api/records.ts";
@@ -17,20 +17,20 @@ const copy = messages.artifacts;
  * (#1422).
  */
 export function ArtifactPanel({
-  threadId,
+  channelId,
   artifact,
   hobName,
   picked,
   onPick,
 }: {
-  threadId: ThreadId;
+  channelId: ChannelId;
   artifact: Artifact;
   hobName: string;
   /** The version picked, or null for the latest. */
   picked: number | null;
   onPick: (version: number) => void;
 }) {
-  const read = useQuery(artifactVersionsQuery(threadId, artifact.id));
+  const read = useQuery(artifactVersionsQuery(channelId, artifact.id));
   const versions = read.data?.versions;
   const shown = shownVersion(versions, picked);
   return (
@@ -53,7 +53,7 @@ export function ArtifactPanel({
         <ArtifactBody
           // A version is drawn afresh, so a source view picked on one does not stick to another.
           key={shown.version}
-          threadId={threadId}
+          channelId={channelId}
           artifact={artifact}
           show={read.data?.show ?? artifactShow(artifact)}
           version={shown}
@@ -63,7 +63,7 @@ export function ArtifactPanel({
       <p className="m-0 text-ui text-text">
         <span className="text-label">{copy.review.label}</span> {reviewLine(artifact, hobName)}
       </p>
-      <ReviewActions threadId={threadId} artifact={artifact} />
+      <ReviewActions channelId={channelId} artifact={artifact} />
     </div>
   );
 }

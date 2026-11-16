@@ -1,6 +1,7 @@
 import type { ToolAccess } from "@hobbots/agents";
 import {
   AgentId,
+  ChannelId,
   Delegation,
   DelegationId,
   EMPTY_HOB_POLICY,
@@ -11,7 +12,6 @@ import {
   TaskId,
   type TaskState,
   TaskTree,
-  ThreadId,
 } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { memberPrompt } from "../src/briefs.ts";
@@ -28,7 +28,7 @@ const task = (id: string, ownerId: AgentId, parentId: string | null, state: Task
     ownerId,
     parentId: parentId === null ? null : TaskId.make(parentId),
     rootId: TaskId.make("campaign"),
-    threadId: ThreadId.make("chat"),
+    channelId: ChannelId.make("chat"),
     brief: `Brief for ${id}\nMore detail`,
     state,
     dependsOn: dependsOn.map((each) => TaskId.make(each)),

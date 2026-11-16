@@ -1,4 +1,4 @@
-import type { TaskId, ThreadId } from "@hobbots/domain";
+import type { ChannelId, TaskId } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Textarea } from "@hobbots/ui/components/textarea";
 import type { FormEvent } from "react";
@@ -10,23 +10,23 @@ import { messages } from "./messages.ts";
 const copy = messages.sheet;
 
 /**
- * The box at the quest thread's end: a message to the lead about the quest, sent to the chat it
+ * The box at the quest channel's end: a message to the lead about the quest, sent to the chat it
  * belongs to. Its draft is kept outside the sheet (ADR 016), so going to the Workbench, back to the
  * camp or closing the sheet keeps what was typed. It clears as it is sent, so anything typed while it
  * goes stays, and a refused send puts its text back in front.
  */
 export function QuestComposer({
-  threadId,
+  channelId,
   questId,
   leadName,
 }: {
-  threadId: ThreadId;
+  channelId: ChannelId;
   questId: TaskId;
   leadName: string;
 }) {
   const place = `quest-${questId}` as const;
   const text = useDraft(place);
-  const send = useSendPrompt(threadId);
+  const send = useSendPrompt(channelId);
   const submit = () => {
     const content = sendable(text);
     if (content === "" || send.isPending) return;

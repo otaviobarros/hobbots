@@ -1,4 +1,4 @@
-import type { Agent, CampSuggestion, Chapter, Thread } from "@hobbots/domain";
+import type { Agent, CampSuggestion, Channel, Chapter } from "@hobbots/domain";
 import { Badge } from "@hobbots/ui/components/badge";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
@@ -39,19 +39,19 @@ export const suggestedFrom = (suggestion: CampSuggestion, chapter: Chapter): Cam
  */
 export function CampSuggestions({
   hob,
-  thread,
+  channel,
   chapters,
   busy,
   onMake,
 }: {
   hob: Agent;
-  thread: Thread;
+  channel: Channel;
   chapters: ReadonlyArray<Chapter>;
   busy: boolean;
   onMake: (from: CampFrom) => void;
 }) {
-  const suggestions = useQuery({ ...campSuggestionsQuery(thread.id), enabled: thread.kind === "chat" });
-  const keep = useKeepInChat(thread.id);
+  const suggestions = useQuery({ ...campSuggestionsQuery(channel.id), enabled: channel.kind === "direct" });
+  const keep = useKeepInChat(channel.id);
   const kept = keep.data === undefined ? undefined : chapters.find((each) => each.id === keep.data.chapterId);
   return (
     <>

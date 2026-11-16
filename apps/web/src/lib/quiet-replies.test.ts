@@ -1,11 +1,11 @@
-import { Message, MessageId, type MessageStatus, type ReplyStep, ThreadId } from "@hobbots/domain";
+import { ChannelId, Message, MessageId, type MessageStatus, type ReplyStep } from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { isQuietReply } from "./quiet-replies.ts";
 
 const message = (role: "user" | "assistant", content: string, status: MessageStatus = "complete") =>
   new Message({
     id: MessageId.make(`${role}-${content}`),
-    threadId: ThreadId.make("chat"),
+    channelId: ChannelId.make("chat"),
     role,
     content,
     status,

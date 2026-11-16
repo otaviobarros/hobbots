@@ -37,10 +37,10 @@ const draftView = (trial: SkillTrial): SkillsView => {
   return trial.skillId === null ? { _tag: "New" } : { _tag: "Edit", skillId: trial.skillId };
 };
 
-/** The address of that editor, opened on the draft the chat `threadId` tries, to go on editing it. */
-export const draftSearch = (trial: SkillTrial, threadId: string): SkillsSearch => ({
+/** The address of that editor, opened on the draft the chat `channelId` tries, to go on editing it. */
+export const draftSearch = (trial: SkillTrial, channelId: string): SkillsSearch => ({
   ...skillsSearchOf(draftView(trial)),
-  trial: threadId,
+  trial: channelId,
 });
 
 /** The fields an editor opens with from a draft you tried: its name, description and instructions. */

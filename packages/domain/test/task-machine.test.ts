@@ -31,7 +31,7 @@ const task = (state: TaskState) =>
     ownerId: "hob-1" as AgentId,
     parentId: null,
     rootId: "task-1" as Task["id"],
-    threadId: null,
+    channelId: null,
     brief: "Do the thing",
     state,
     dependsOn: [],
