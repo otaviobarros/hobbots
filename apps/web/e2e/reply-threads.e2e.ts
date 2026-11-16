@@ -40,7 +40,9 @@ test("replies in a thread beside the chat, keeps the replies out of the main lin
   const box = thread.getByRole("textbox", { name: "Reply in thread" });
   await box.fill("I can, after 2.");
   await box.press("Enter");
-  await expect(thread.getByText("I can, after 2.", { exact: true })).toBeVisible();
+  // The reply can arrive from the event stream before the box empties, so look in the messages.
+  await expect(thread.getByRole("article").getByText("I can, after 2.", { exact: true })).toBeVisible();
+  await expect(box).toHaveValue("");
   await expect(thread).toContainText("1 reply");
   await expect(main.getByRole("button", { name: /^1 reply/ })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("region", { name: "Messages" }).getByText("I can, after 2.")).toHaveCount(0);
