@@ -16,16 +16,19 @@ const pinLabel = (pending: boolean, pinned: boolean): string => {
 const pinSaid = (pin: unknown): string => (pin === null ? messages.unpinnedToast : messages.pinnedToast);
 
 /**
- * A message's ⋯ menu (ADR 037): Pin or Unpin, which lists it under Mine, and Split here when the
- * message can start a chapter. A pinned message shows its ◆ beside the menu.
+ * A message's ⋯ menu (ADR 037): Pin or Unpin, which lists it under Mine, Reply in thread (ADR 039),
+ * and Split here when the message can start a chapter. A pinned message shows its ◆ beside the menu.
  */
 export function MessageMenu({
   channelId,
   messageId,
+  onReply,
   onSplit,
 }: {
   channelId: ChannelId;
   messageId: MessageId;
+  /** Opens the message's reply thread; left out where it can have none, such as a note to self. */
+  onReply?: (() => void) | undefined;
   /** Left out where the message cannot start a chapter, such as a chapter's first. */
   onSplit?: (() => void) | undefined;
 }) {
@@ -54,6 +57,7 @@ export function MessageMenu({
           >
             {pinLabel(pending, pinned)}
           </DropdownMenuItem>
+          {onReply && <DropdownMenuItem onSelect={onReply}>{copy.reply}</DropdownMenuItem>}
           {onSplit && <DropdownMenuItem onSelect={onSplit}>{copy.split}</DropdownMenuItem>}
         </DropdownMenuContent>
       </DropdownMenu>

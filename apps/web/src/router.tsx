@@ -253,9 +253,10 @@ const archivedChannelsRoute = createRoute({
   },
 });
 
-// `?message=` names a message to scroll to, as a search result does. `?quest=` opens a quest of the
-// channel in its sheet, and with `tab` its Workbench beside the chat instead, with the `task` whose
-// hob's work it shows, the `attempt` it shows and the `file` a tab shows first (ADR 037).
+// `?message=` names a message to scroll to, as a search result does, and `?thread=` the message whose
+// reply thread is open beside the chat. `?quest=` opens a quest of the channel in its sheet, and with
+// `tab` its Workbench beside the chat instead, with the `task` whose hob's work it shows, the
+// `attempt` it shows and the `file` a tab shows first (ADR 037).
 const channelRoute = createRoute({
   getParentRoute: () => shellRoute,
   errorComponent: (props) => <PageError error={props.error} way="hobs" />,
@@ -263,6 +264,8 @@ const channelRoute = createRoute({
   validateSearch: Schema.toStandardSchemaV1(
     Schema.Struct({
       message: searchParam(Schema.String),
+      // The reply thread open beside the chat, by its root message (ADR 039, Reply threads).
+      thread: searchParam(Schema.String),
       ...QuestSearch,
     }),
   ),

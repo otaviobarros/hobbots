@@ -51,6 +51,17 @@ A message's @mentions ([ADR 039](../decisions/039-shared-camps.md#who-answers)) 
 - Mentions of you are yours alone. `ChannelMemberRepository.unreadMentions(actor)` counts, per channel the person is an active member of, the messages that mention them past their own read marker. Their own messages, notes to self and a lead's quiet progress never count.
 - Migration (20261114003022): `messages.mentions` is JSON, empty for messages from before, and `messages.mentions_through` is how much of the text was parsed, in UTF-16 code units.
 
+### Reply threads
+
+Any main-line message of a chat or camp can have a reply thread, as in Slack ([ADR 039](../decisions/039-shared-camps.md#reply-threads)). Built in [#1484](https://github.com/otaviobarros/hobbots/issues/1484).
+
+- A reply is an ordinary message of the channel with `Message.rootMessageId`, the main-line message its thread hangs from. A thread never hangs from a reply: a reply to a reply goes to that reply's thread. `alsoInMainLine` marks a reply also sent to the main line, where it shows with From a thread, which opens its thread. `inMainLine` in `@hobbots/domain` says which messages the main line shows: those with no root, and replies also sent there.
+- `POST /api/channels/:channelId/messages/:messageId/replies` writes your reply under the request's `key`, which becomes its id (`ReplyThreads` in `packages/agents/src/reply-threads.ts`), under the channel's lock. A note to self, a queued message and a message of another channel carry no thread (`404 MessageNotFound`); an archived channel takes none. The repository checks the root in the transaction that stores the reply.
+- A reply is filed in its root's chapter, wherever the live chapter is, so a split cuts a chapter only at a main-line message and moves each thread with its root, and merging or moving a chapter takes its threads whole.
+- Until each thread has its own floor, sessions and pack ([#1485](https://github.com/otaviobarros/hobbots/issues/1485)), no hob owes a reply in a thread an answer: it writes no `TurnRequest`, and drops nothing the relay budget paused in the main line. Read markers per thread come with [#1486](https://github.com/otaviobarros/hobbots/issues/1486); until then a reply counts for the channel as any message does.
+- The client groups the channel's messages it already reads: the root shows its thread in one line (who replied, the count, the last reply's time), and the thread opens beside the chat, named by `?thread=` in the address.
+- Migration (20261116224606): `messages.root_message_id`, null for every message from before, `messages.also_in_main_line`, and an index on the root.
+
 ## The floor
 
 Each answer a hob owes a conversation is a `TurnRequest` ([ADR 039](../decisions/039-shared-camps.md#one-hob-speaks-at-a-time)), written in the transaction that stores the message that caused it, one per hob `answerersFor` names, in that order. A conversation is a channel's main line or, once they come, one of its threads.

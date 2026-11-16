@@ -1,4 +1,13 @@
-import { type Agent, type Channel, ChannelLifecycle, ChapterId, ChapterStates, type Message } from "@hobbots/domain";
+import {
+  type Agent,
+  type Channel,
+  ChannelLifecycle,
+  ChapterId,
+  ChapterStates,
+  hobReads,
+  type Message,
+  type MessageId,
+} from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, type ReactNode, useReducer, useState } from "react";
@@ -34,7 +43,7 @@ import { SplitChapterSheet } from "./split-chapter-sheet.tsx";
 /**
  * The transcript under its chapters (ADR 037, #1382): a divider where each chapter starts, resting
  * chapters folded to their summary until you open them, Merge with previous and, in a chat, Make a
- * camp from this chapter on a divider's menu, and Pin and Split here on a message's. The hub's camp
+ * camp from this chapter on a divider's menu, and Pin, Reply in thread and Split here on a message's. The hub's camp
  * suggestions follow the transcript. `renderMessage` draws one message, given its menu. A channel
  * that never changed topic shows no divider.
  */
@@ -44,6 +53,7 @@ export function ChapterTranscript({
   transcript,
   focusMessageId,
   focusPick = 0,
+  onReply,
   renderMessage,
 }: {
   hob: Agent;
@@ -52,6 +62,8 @@ export function ChapterTranscript({
   focusMessageId: string | undefined;
   /** Counts each pick of a search result, so picking the same one again opens its chapter again. */
   focusPick?: number;
+  /** Opens the reply thread of a message, which its menu offers (ADR 039, Reply threads). */
+  onReply?: ((messageId: MessageId) => void) | undefined;
   renderMessage: (message: Message, split: ReactNode) => ReactNode;
 }) {
   const chapters = useQuery(chaptersQuery(channel.id));
@@ -142,9 +154,12 @@ export function ChapterTranscript({
                 <MessageMenu
                   channelId={channel.id}
                   messageId={message.id}
-                  // A chapter's first message already starts it, so it splits nothing.
+                  // A note to self is yours alone, so it carries no thread.
+                  onReply={onReply !== undefined && hobReads(message) ? () => onReply(message.id) : undefined}
+                  // A chapter's first message already starts it, so it splits nothing, and a reply
+                  // also sent from a thread stays in its root's chapter.
                   onSplit={
-                    at > 0 && section.chapter !== null
+                    at > 0 && section.chapter !== null && message.rootMessageId === null
                       ? () => dispatchSplit({ _tag: "Open", messageId: message.id })
                       : undefined
                   }

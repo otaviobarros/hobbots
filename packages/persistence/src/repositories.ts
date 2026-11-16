@@ -203,6 +203,13 @@ const lastMessageJoin = (sql: SqlClient.SqlClient) =>
 const lastMessageColumns = (sql: SqlClient.SqlClient) =>
   sql`substr(last_message.content, 1, 600) AS last_content,
     last_message.actor_kind AS last_author_kind, last_message.actor_id AS last_author_id`;
+/**
+ * The chapter of a reply's thread root, which the reply joins wherever the live chapter is, so a
+ * chapter keeps its threads whole when it is split, merged or moved (ADR 039, Reply threads). Null
+ * for a main-line message.
+ */
+const rootChapterOf = (sql: SqlClient.SqlClient, message: Message) =>
+  sql`(SELECT r.chapter_id FROM messages r WHERE r.id = ${message.rootMessageId} AND r.channel_id = ${message.channelId})`;
 /** The live chapter of `channelId`, which a new message joins. */
 const liveChapterOf = (sql: SqlClient.SqlClient, channelId: ChannelId) =>
   sql`(SELECT c.id FROM chapters c WHERE c.channel_id = ${channelId} AND c.state = 'live')`;
@@ -243,6 +250,8 @@ export const messageRows = (rows: ReadonlyArray<Readonly<Record<string, unknown>
     steps: JSON.parse(String(row.steps ?? "[]")),
     usage: usageOf(row),
     quiet: Number(row.quiet ?? 0) === 1,
+    rootMessageId: row.rootMessageId ?? null,
+    alsoInMainLine: Number(row.alsoInMainLine ?? 0) === 1,
     skills: row.skills === null || row.skills === undefined ? null : JSON.parse(String(row.skills)),
     skillsUsed: JSON.parse(String(row.skillsUsed ?? "[]")),
     askedSkill: row.askedSkill ?? null,
@@ -580,9 +589,11 @@ export const HobbotsRepositoryLive = Layer.effect(
             }>`INSERT INTO messages (id, channel_id, chapter_id, actor_kind, actor_id, role, content, status, error, config_version, runtime, model,
           time_to_request_ms, time_to_first_stream_ms, time_to_first_token_ms,
           input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-          resets_at, steps, prompt_id, quiet, skills, skills_used, asked_skill, mentions, mentions_through, read_web, created_at, revision, seq)
+          resets_at, steps, prompt_id, quiet, skills, skills_used, asked_skill, mentions, mentions_through, read_web,
+          root_message_id, also_in_main_line, created_at, revision, seq)
         VALUES (
-          ${message.id}, ${message.channelId}, COALESCE(${message.chapterId}, ${liveChapterOf(sql, message.channelId)}),
+          ${message.id}, ${message.channelId},
+          COALESCE(${message.chapterId}, ${rootChapterOf(sql, message)}, ${liveChapterOf(sql, message.channelId)}),
           ${author?.kind ?? "hob"},
           COALESCE(${author?.id ?? null},
             (SELECT t.agent_id FROM channels t WHERE t.id = ${message.channelId})),
@@ -595,6 +606,7 @@ export const HobbotsRepositoryLive = Layer.effect(
           ${message.skills === null ? null : JSON.stringify(message.skills)},
           ${JSON.stringify(message.skillsUsed)}, ${message.askedSkill}, ${JSON.stringify(mentions)}, ${through},
           ${message.readWeb === null ? null : JSON.stringify(message.readWeb)},
+          ${message.rootMessageId}, ${message.alsoInMainLine ? 1 : 0},
           ${message.createdAt}, ${message.revision},
           (SELECT COALESCE(MAX(seq), 0) + 1 FROM messages WHERE channel_id = ${message.channelId})
         )
@@ -655,6 +667,17 @@ export const HobbotsRepositoryLive = Layer.effect(
         }),
       );
 
+    // A reply's root is a main-line message of its channel when the reply is stored, checked in the
+    // transaction that writes it, so a chapter moved meanwhile never leaves a reply without its root.
+    const requireRoot = (message: Message) =>
+      Effect.gen(function* () {
+        const [root] = yield* sql`SELECT 1 FROM messages WHERE id = ${message.rootMessageId}
+          AND channel_id = ${message.channelId} AND root_message_id IS NULL`;
+        if (root === undefined) {
+          return yield* Effect.die(new Error(`Message ${message.rootMessageId} has no thread in ${message.channelId}`));
+        }
+      });
+
     // Who answers is decided after the journal's head is locked, so a member added or a Quest
     // started at the same moment commits wholly before this reads or wholly after it (ADR 039).
     const sendMessage = (input: Message, to: SentTo) =>
@@ -667,13 +690,17 @@ export const HobbotsRepositoryLive = Layer.effect(
           const found = yield* mentionsToStore(sql, input);
           const parsed = { ...found, mentions: joinedMentions(found.mentions, to.mentions) };
           const said = { ...input, mentions: parsed.mentions, repliesTo: to.repliesTo };
-          const answerers = yield* answerersIn(sql, { id: input.channelId, kind: channel.kind }, said);
+          // A reply thread is its own conversation, whose floor and sessions come with #1485: until
+          // then no hob owes a reply there an answer, and nothing in the main line changes for it.
+          const inThread = input.rootMessageId !== null;
+          if (inThread) yield* requireRoot(input);
+          const answerers = inThread ? [] : yield* answerersIn(sql, { id: input.channelId, kind: channel.kind }, said);
           // A message nobody answers starts no turn, so it never waits in the queue.
           const status = answerers.length === 0 && input.status === "queued" ? "complete" : input.status;
           const message = yield* writeMessage(new Message({ ...input, status, revision }), parsed);
           const author = message.actor ?? (yield* sessionActor);
           // A person who writes takes over from the hobs the relay budget paused there (ADR 039).
-          if (author.kind === "user" && message.role !== "note") {
+          if (author.kind === "user" && message.role !== "note" && !inThread) {
             const open = yield* selectOpenRequests(sql, mainLine(message.channelId));
             yield* stepRequests(sql, TurnRequests.paused(open), { _tag: "Drop", by: author });
           }

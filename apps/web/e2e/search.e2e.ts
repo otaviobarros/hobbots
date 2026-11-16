@@ -75,7 +75,7 @@ test("⌘K finds a channel by a word from its messages", async ({ page }) => {
 
   await page.keyboard.press("ControlOrMeta+k");
   const finder = page.getByRole("dialog", { name: "Jump anywhere" });
-  await finder.getByRole("combobox", { name: "Find a hob, thread or message" }).fill("lanterns");
+  await finder.getByRole("combobox", { name: "Find a hob, chat or message" }).fill("lanterns");
   await expect(finder.getByRole("option")).toHaveCount(1);
   await expect(finder.getByRole("option")).toContainText("Where did I put the lanterns?");
   await page.keyboard.press("Enter");

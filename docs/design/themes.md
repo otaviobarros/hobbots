@@ -86,6 +86,7 @@ Every size in `size` is a `--spacing-*` token in `styles.css`, so Tailwind reads
 | `room-rail` | 52px | The folded chat's rail in the Quest room |
 | `lane-min` | 320px | The narrowest a lane in the Quest room gets |
 | `dock` | 340px | The Workbench docked under the lanes, while open |
+| `thread` | 400px | A reply thread open beside the chat |
 | `chat-min` | 360px | The narrowest the chat gets |
 | `measure` | 70ch | The longest line of reply prose, the tray and the composer |
 | `bubble-max` | 460px | Your own message bubble and what waits beside it; the hob profile dialog |

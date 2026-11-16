@@ -16,6 +16,7 @@ export const messages = {
   menu: {
     more: "More for this message",
     split: "Split here",
+    reply: "Reply in thread",
     pin: "Pin",
     unpin: "Unpin",
     pinning: "Pinning…",

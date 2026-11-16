@@ -83,6 +83,7 @@ import { SkillTrialsGroup } from "./skill-trials.ts";
 import { SkillUpdatesGroup } from "./skill-updates.ts";
 import { SkillsGroup } from "./skills.ts";
 import { QuestionsGroup, TaskControlsGroup, TasksGroup } from "./tasks.ts";
+import { ThreadsGroup } from "./threads.ts";
 import { UsageGroup } from "./usage.ts";
 import { DeviceSession } from "./user-session.ts";
 import { WebGroup } from "./web.ts";
@@ -509,6 +510,7 @@ export class HobbotsApi extends HttpApi.make("hobbots")
   .add(RecordsGroup)
   .add(CampSuggestionsGroup)
   .add(NotesGroup)
+  .add(ThreadsGroup)
   .add(ForYouGroup)
   .add(SidebarGroup)
   .add(MembersGroup)
