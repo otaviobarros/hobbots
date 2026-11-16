@@ -19,7 +19,7 @@ const TONE: Readonly<Record<WorkQuest["state"], { readonly text: string; readonl
  * place as the Quest changes. It shows the state, the title, the goal, the "Done when" lines and who
  * runs it, and once done, the result and what the work made.
  */
-export function WorkQuestCard({ quest, owner }: { quest: WorkQuest; owner: Agent | undefined }) {
+function WorkQuestCard({ quest, owner }: { quest: WorkQuest; owner: Agent | undefined }) {
   const tone = TONE[quest.state];
   const ready = quest.state === "done";
   return (

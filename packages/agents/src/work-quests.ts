@@ -1,4 +1,4 @@
-import { ChannelNotFound } from "@hobbots/api";
+import type { ChannelNotFound } from "@hobbots/api";
 import {
   type AgentId,
   type ChannelId,
@@ -21,7 +21,6 @@ import {
 import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import type { CharmTurn } from "./charms.ts";
 import { announcer, announcing, EventPublisher } from "./ports.ts";
-import { HobbotsRepository } from "./repository.ts";
 import type { HubTool, HubToolAnswer, HubTools } from "./runtime.ts";
 
 /**
@@ -80,7 +79,7 @@ export class WorkQuestRepository extends Context.Service<
      */
     readonly finish: (request: WorkQuestFinishRequest) => Effect.Effect<Committed<WorkQuest>, WorkQuestRefused>;
     /** The channel's Quests, oldest first. */
-    readonly list: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<WorkQuest>>;
+    readonly list: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<WorkQuest>, ChannelNotFound>;
   }
 >()("@hobbots/agents/WorkQuestRepository") {}
 
@@ -100,17 +99,12 @@ export class WorkQuests extends Context.Service<
     WorkQuests,
     Effect.gen(function* () {
       const quests = yield* WorkQuestRepository;
-      const repo = yield* HobbotsRepository;
       const announced = announcing(announcer(yield* Effect.serviceOption(EventPublisher), "a Quest"));
       const now = Effect.map(DateTime.now, DateTime.formatIso);
-      const known = (channelId: ChannelId) =>
-        Effect.flatMap(repo.findChannel(channelId), (found) =>
-          Option.isNone(found) ? Effect.fail(new ChannelNotFound({ channelId })) : Effect.void,
-        );
       return WorkQuests.of({
         start: (request) => Effect.flatMap(now, (at) => announced(quests.start({ ...request, at }))),
         finish: (request) => Effect.flatMap(now, (at) => announced(quests.finish({ ...request, at }))),
-        of: (channelId) => Effect.andThen(known(channelId), quests.list(channelId)),
+        of: quests.list,
       });
     }),
   );
@@ -223,31 +217,32 @@ export const WorkToolsLive = Layer.effect(
         return { text: turn.redactor.text(finishedText(quest)), refused: false };
       }).pipe(Effect.catchTag("WorkQuestRefused", (refused) => Effect.succeed(refusedAnswer(refused))));
 
-    const call = (turn: CharmTurn, channelId: ChannelId, messageId: MessageId, name: string, raw: unknown) =>
-      (name === START_WORK_TOOL
-        ? start(turn, channelId, messageId, raw)
-        : name === FINISH_WORK_TOOL
-          ? finish(turn, channelId, messageId, raw)
-          : Effect.succeed<HubToolAnswer>({ text: `${name} is not one of the Quest tools.`, refused: true })
-      ).pipe(
-        Effect.catchCause((cause) =>
+    /** What a turn's call answers: a failure the hub did not expect is logged, and the hob reads that it failed. */
+    const answer = (name: string, run: Effect.Effect<HubToolAnswer>): Effect.Effect<HubToolAnswer> =>
+      Effect.provideContext(
+        Effect.catchCause(run, (cause) =>
           Effect.as(Effect.logError(`A ${name} call failed`, cause), {
             text: "Hobbots could not change the Quest. Try again later.",
             refused: true,
           }),
         ),
-        Effect.provideContext(context),
+        context,
       );
 
-    const offer = (turn: CharmTurn): HubTools | null => {
-      const { channelId, messageId } = turn;
-      if (channelId === null || messageId === null) return null;
-      return {
-        tools: [START_WORK, FINISH_WORK],
-        call: (name, input) => call(turn, channelId, messageId, name, input),
-      };
-    };
-
-    return WorkTools.of({ forTurn: (turn) => Effect.succeed(offer(turn)) });
+    return WorkTools.of({
+      forTurn: (turn) => {
+        const { channelId, messageId } = turn;
+        if (channelId === null || messageId === null) return Effect.succeed(null);
+        return Effect.succeed({
+          tools: [START_WORK, FINISH_WORK],
+          call: (name, raw) =>
+            name === START_WORK_TOOL
+              ? answer(name, start(turn, channelId, messageId, raw))
+              : name === FINISH_WORK_TOOL
+                ? answer(name, finish(turn, channelId, messageId, raw))
+                : Effect.succeed({ text: `${name} is not one of the Quest tools.`, refused: true }),
+        });
+      },
+    });
   }),
 );

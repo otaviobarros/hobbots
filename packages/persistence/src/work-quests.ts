@@ -178,10 +178,13 @@ export const WorkQuestRepositoryLive = Layer.effect(
       );
 
     const list = (channelId: ChannelId) =>
-      sql<WorkQuestRow>`SELECT * FROM work_quests WHERE channel_id = ${channelId} ORDER BY created_at, id`.pipe(
-        Effect.flatMap((rows) => Effect.forEach(rows, questFromRow)),
-        Effect.orDie,
-      );
+      Effect.gen(function* () {
+        const [channel] = yield* sql`SELECT id FROM channels WHERE id = ${channelId}`.pipe(Effect.orDie);
+        if (channel === undefined) return yield* new ChannelNotFound({ channelId });
+        const rows =
+          yield* sql<WorkQuestRow>`SELECT * FROM work_quests WHERE channel_id = ${channelId} ORDER BY created_at, id`;
+        return yield* Effect.forEach(rows, questFromRow);
+      }).pipe(Effect.catchTag("SqlError", Effect.die));
 
     return WorkQuestRepository.of({ start, finish, list });
   }),
