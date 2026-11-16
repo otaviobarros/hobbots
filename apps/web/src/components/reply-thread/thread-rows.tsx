@@ -25,17 +25,21 @@ export const useThreadRows = (
   cast: Cast,
   thread: OpenThread,
   focusMessageId: string | undefined,
+  /** Which pick of `focusMessageId` this is: each search pick of it counts anew. */
+  focusPick: number,
 ): ThreadRows => {
   const lines = threadLines(said ?? []);
   const focusRoot = said?.find((message) => message.id === focusMessageId && !inMainLine(message))?.rootMessageId;
-  // Each search pick of a reply opens its thread once, so closing it leaves it closed.
+  // Each search pick of a reply opens its thread once, so closing it leaves it closed until it is
+  // picked again.
   const opened = useRef<string>(undefined);
+  const pick = `${focusMessageId}#${focusPick}`;
   const { show } = thread;
   useEffect(() => {
-    if (focusRoot === undefined || focusRoot === null || opened.current === focusMessageId) return;
-    opened.current = focusMessageId;
+    if (focusRoot === undefined || focusRoot === null || opened.current === pick) return;
+    opened.current = pick;
     show(focusRoot);
-  }, [focusRoot, focusMessageId, show]);
+  }, [focusRoot, pick, show]);
   return {
     line: (message) => {
       const line = lines.get(message.id);

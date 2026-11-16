@@ -3,6 +3,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { Textarea } from "@hobbots/ui/components/textarea";
 import { useQuery } from "@tanstack/react-query";
 import { type KeyboardEvent, useState } from "react";
+import { readDraft, useDraft, writeDraft } from "../../api/drafts.ts";
 import { sidebarQuery } from "../../api/sidebar.ts";
 import { useReplyInThread } from "../../api/threads.ts";
 import { repliesIn } from "../../lib/reply-threads.ts";
@@ -105,12 +106,15 @@ function ThreadMessage({ message, cast, channel }: { message: Message; cast: Cas
 }
 
 /**
- * The box under a thread: your reply, Also send to the camp, and Send. A reply keeps its key until it
- * is written, so sending again after a lost answer writes it once; a refused one keeps its text.
+ * The box under a thread: your reply, Also send to the camp, and Send. Its unsent text is a draft kept
+ * outside the panel, as the chat's is (ADR 016), so closing the thread or reloading keeps it. A reply
+ * keeps its key until it is written, so sending again after a lost answer writes it once; a refused
+ * one keeps its text, and what you typed while it was sending stays.
  */
 function ThreadComposer({ channel, rootId }: { channel: Channel; rootId: MessageId }) {
   const send = useReplyInThread(channel.id, rootId);
-  const [draft, setDraft] = useState("");
+  const place = `thread-${rootId}` as const;
+  const draft = useDraft(place);
   const [also, setAlso] = useState(false);
   const [key, setKey] = useState(() => MessageId.make(crypto.randomUUID()));
   const content = draft.trim();
@@ -120,7 +124,7 @@ function ThreadComposer({ channel, rootId }: { channel: Channel; rootId: Message
       { key, content, alsoInMainLine: also },
       {
         onSuccess: () => {
-          setDraft("");
+          if (readDraft(place).trim() === content) writeDraft(place, "");
           setAlso(false);
           setKey(MessageId.make(crypto.randomUUID()));
         },
@@ -142,7 +146,7 @@ function ThreadComposer({ channel, rootId }: { channel: Channel; rootId: Message
           aria-label={copy.placeholder}
           placeholder={copy.placeholder}
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => writeDraft(place, event.target.value)}
           onKeyDown={onKeyDown}
         />
         <div className="flex flex-wrap items-center gap-2">

@@ -74,12 +74,19 @@ export class ReplyThreads extends Context.Service<
         const session = yield* UserSession;
         const stored = yield* repo.findMessage(reply.key);
         if (Option.isSome(stored)) {
+          // The same reply sent again: the same author, words and thread, sent where it was.
+          const was = stored.value;
+          const root = yield* Effect.option(rootOf(channel.id, rootId));
           const same =
-            stored.value.channelId === channel.id &&
-            stored.value.rootMessageId !== null &&
-            stored.value.role === "user" &&
-            stored.value.content === reply.content;
-          return same ? stored.value : yield* new MessageKeyReused({ messageId: reply.key });
+            was.channelId === channel.id &&
+            was.role === "user" &&
+            Option.isSome(root) &&
+            was.rootMessageId === root.value.id &&
+            was.alsoInMainLine === reply.alsoInMainLine &&
+            was.content === reply.content &&
+            was.actor?.kind === session.actor.kind &&
+            was.actor?.id === session.actor.id;
+          return same ? was : yield* new MessageKeyReused({ messageId: reply.key });
         }
         if (channel.archivedAt !== null) {
           return yield* new ChannelArchived({ channelId: channel.id, archivedAt: channel.archivedAt });

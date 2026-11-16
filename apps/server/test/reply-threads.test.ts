@@ -91,7 +91,9 @@ describe("replying in a thread", () => {
       const first = yield* reply("question", "r1");
       const toReply = yield* reply("r1", "r2", true);
       const again = yield* reply("question", "r1");
-      return { first, toReply, again, owed: yield* repo.openTurnRequests(mainLine(CHAT)) };
+      // Sent again from the thread's other message, it is still the same reply.
+      const againFromReply = yield* reply("r2", "r1");
+      return { first, toReply, again, againFromReply, owed: yield* repo.openTurnRequests(mainLine(CHAT)) };
     }).pipe(Effect.provide(layer), Effect.runPromise);
 
     expect(result.first).toMatchObject({ rootMessageId: "question", alsoInMainLine: false, actor: OWNER_ACTOR });
@@ -99,6 +101,7 @@ describe("replying in a thread", () => {
     expect([result.first, result.toReply].map(inMainLine)).toEqual([false, true]);
     // The same reply sent again is the one written.
     expect(result.again.revision).toBe(result.first.revision);
+    expect(result.againFromReply.revision).toBe(result.first.revision);
     expect(result.owed).toEqual([]);
   });
 
@@ -112,6 +115,8 @@ describe("replying in a thread", () => {
         queued: yield* Effect.exit(reply("waiting", "r3")),
         missing: yield* Effect.exit(reply("elsewhere", "r4")),
         reused: yield* Effect.exit(reply("question", "r1", false, "Something else")),
+        // The same words sent again, now also to the main line, are not the reply that was written.
+        alsoNow: yield* Effect.exit(reply("question", "r1", true)),
       };
       yield* repo.upsertChannel(
         new Channel({ id: CHAT, ownerHobId: ada.id, title: "Chat", createdAt: NOW, updatedAt: NOW, archivedAt: NOW }),
@@ -130,6 +135,7 @@ describe("replying in a thread", () => {
       value: new MessageNotFound({ channelId: CHAT, messageId: MessageId.make("elsewhere") }),
     });
     expect(failure(result.reused)).toMatchObject({ value: new MessageKeyReused({ messageId: MessageId.make("r1") }) });
+    expect(failure(result.alsoNow)).toMatchObject({ value: new MessageKeyReused({ messageId: MessageId.make("r1") }) });
     expect(failure(result.archived)).toMatchObject({
       value: new ChannelArchived({ channelId: CHAT, archivedAt: NOW }),
     });

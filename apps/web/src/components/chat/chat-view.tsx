@@ -202,7 +202,6 @@ export function ChatView({
   // The reply thread open beside the chat, and what the main line shows of each (ADR 039).
   const thread = useOpenThread(hobId, channelId);
   const cast = useCast(allHobs);
-  const threads = useThreadRows(said, cast, thread, focusMessageId);
   const latestAuthor =
     latest !== undefined && hob.data !== undefined ? replyAuthor(latest, hob.data, allHobs) : undefined;
   const resumable =
@@ -216,6 +215,7 @@ export function ChatView({
   // Each pick of a search result counts, so picking the same one again opens and scrolls to it again.
   const [picks, setPicks] = useState(0);
   const focusKey = focusMessageId === undefined ? undefined : `${focusMessageId}#${picks}`;
+  const threads = useThreadRows(said, cast, thread, focusMessageId, picks);
   // The search box under the header, opened from its magnifier, belongs to the channel it opened in.
   const [findingIn, setFindingIn] = useState<string>();
   const finding = channelId !== undefined && findingIn === channelId;

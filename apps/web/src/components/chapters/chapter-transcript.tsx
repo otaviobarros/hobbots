@@ -155,7 +155,11 @@ export function ChapterTranscript({
                   channelId={channel.id}
                   messageId={message.id}
                   // A note to self is yours alone, so it carries no thread.
-                  onReply={onReply !== undefined && hobReads(message) ? () => onReply(message.id) : undefined}
+                  onReply={
+                    onReply !== undefined && hobReads(message)
+                      ? () => onReply(message.rootMessageId ?? message.id)
+                      : undefined
+                  }
                   // A chapter's first message already starts it, so it splits nothing, and a reply
                   // also sent from a thread stays in its root's chapter.
                   onSplit={

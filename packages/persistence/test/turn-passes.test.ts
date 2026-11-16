@@ -242,6 +242,41 @@ describe("passing", () => {
     expect(result.messages).toEqual(["plan", "reply-pip"]);
   });
 
+  // covers ADR 039 (One hob speaks at a time, Reply threads)
+  it("keeps a reply someone replied to in a thread, and answers its request instead of passing it (#1484)", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const repo = yield* HobbotsRepository;
+        yield* asked;
+        const replyId = yield* pipSpeaks;
+        // You reply in the thread of Pip's reply while it is still being written.
+        yield* repo.sendMessage(
+          new Message({
+            id: MessageId.make("aside"),
+            channelId: CAMP,
+            actor: OWNER_ACTOR,
+            role: "user",
+            content: "Tomatoes, maybe?",
+            status: "complete",
+            error: null,
+            configVersion: null,
+            rootMessageId: replyId,
+            createdAt: NOW,
+          }),
+          { mentions: [], repliesTo: null },
+        );
+        const passed = yield* repo.passTurnRequests(replyId, "Quill covered it");
+        return { passed, rows: yield* stored, messages: (yield* repo.listMessages(CAMP)).map((m) => m.id) };
+      }),
+    );
+    expect(result.passed.value).toEqual([]);
+    expect(result.rows.map((r) => [r.hobId, r.state])).toEqual([
+      [PIP, "answered"],
+      [QUILL, "waiting"],
+    ]);
+    expect(result.messages).toEqual(["plan", "reply-pip", "aside"]);
+  });
+
   // covers ADR 039 (One hob speaks at a time), STD-DATA-001
   it("passes, when the hub starts again, a turn whose hob passed before the hub stopped (#1462)", async () => {
     const result = await run(
