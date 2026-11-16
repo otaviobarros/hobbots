@@ -115,25 +115,31 @@ function WorkQuestCard({ quest, context }: { quest: WorkQuest; context: CardCont
 
 const chipClass = "block max-w-full truncate rounded-tag bg-deep px-2 py-0.5 text-meta text-text-strong";
 
-/** One "Read first" chip: a link to its memory page, a jump to its message, or plain once that is gone. */
+/**
+ * One "Read first" chip: the shared chip control, as a link to its memory page or a jump to its
+ * message, or plain text once there is nothing left to open.
+ */
 function ReadFirst({ chip, onJump }: { chip: ReadFirstChip; onJump: (messageId: MessageId) => void }) {
   const { opens } = chip;
   if (opens === null) return <span className={chipClass}>{chip.label}</span>;
   const label = messages.readFirst.open({ label: chip.label });
-  const link = cn(chipClass, "text-link no-underline hover:bg-hover");
   return opens._tag === "Memory" ? (
-    <Link to="/memory" search={opens.search} aria-label={label} className={link}>
-      {chip.label}
-    </Link>
+    <Button asChild variant="chip" size="xs" className="max-w-full">
+      <Link to="/memory" search={opens.search} aria-label={label}>
+        <span className="truncate">{chip.label}</span>
+      </Link>
+    </Button>
   ) : (
-    <button
+    <Button
       type="button"
+      variant="chip"
+      size="xs"
       aria-label={label}
+      className="max-w-full"
       onClick={() => onJump(opens.messageId)}
-      className={cn(link, "cursor-pointer border-0 font-[inherit]")}
     >
-      {chip.label}
-    </button>
+      <span className="truncate">{chip.label}</span>
+    </Button>
   );
 }
 

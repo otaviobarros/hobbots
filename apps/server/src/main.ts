@@ -613,8 +613,6 @@ const ServerLive = Layer.unwrap(
       // floor a hob taken out leaves.
       .pipe(Layer.provideMerge(CampMembers.layer))
       .pipe(Layer.provideMerge(ChatService.layer))
-      // Before the chat service: the report of the context pack each channel's last new session read (ADR 037).
-      .pipe(Layer.provideMerge(PackReports.layer))
       // Before the chat service: every turn you did not start with Send starts from the backpack, and
       // at start the dispatcher expires the claims an earlier process held (ADR 019).
       .pipe(Layer.provideMerge(ContinuationsLive))
@@ -709,8 +707,12 @@ const ServerLive = Layer.unwrap(
       // A channel's chapters: start, split and merge (ADR 037), and the Chapter tools a turn offers,
       // `start_chapter` and `read_message`, before the chat service and the sessions of Tasks.
       .pipe(Layer.provideMerge(ChapterToolsLive.pipe(Layer.provideMerge(ChapterService.layer))))
-      // Quests (ADR 041) and the Quest tools a chat turn offers, `start_work` and `finish_work`.
-      .pipe(Layer.provideMerge(WorkToolsLive.pipe(Layer.provideMerge(WorkQuests.layer))))
+      // Quests (ADR 041) and the Quest tools a chat turn offers, `start_work` and `finish_work`, with
+      // the report of the context pack each channel's and each hob's last new session read (ADR 037),
+      // below both the chat service, which records it, and `start_work`, which keeps it as Read first.
+      .pipe(
+        Layer.provideMerge(WorkToolsLive.pipe(Layer.provideMerge(Layer.mergeAll(WorkQuests.layer, PackReports.layer)))),
+      )
       // Keep in chat and the chat's camp suggestions (ADR 037).
       .pipe(Layer.provideMerge(CampSuggestionService.layer))
       // Notes to self, pins and catch-up (ADR 037).
