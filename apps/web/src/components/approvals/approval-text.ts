@@ -1,4 +1,4 @@
-import type { ApprovalRequest } from "@hobbots/domain";
+import { type ApprovalRequest, offersAlwaysAllow } from "@hobbots/domain";
 import { ApiError } from "../../api/client.ts";
 import { formatTime } from "../../lib/time.ts";
 import { messages } from "../messages.ts";
@@ -9,7 +9,11 @@ const copy = messages.approval;
 export const resultText = (approval: ApprovalRequest, name: string): string => {
   switch (approval.state) {
     case "approved":
-      if (approval.lifetime === "always") return copy.approvedAlways({ name });
+      if (approval.lifetime === "always") {
+        return offersAlwaysAllow(approval.operation)
+          ? copy.approvedAlwaysAllow({ name })
+          : copy.approvedAlways({ name });
+      }
       return approval.lifetime === "task" ? copy.approvedForTask({ name }) : copy.approved({ name });
     case "denied":
       return approval.denyReason === null

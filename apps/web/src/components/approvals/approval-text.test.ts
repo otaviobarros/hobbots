@@ -43,6 +43,14 @@ describe("resultText", () => {
   });
 });
 
+describe("resultText for Start a Quest", () => {
+  // covers ADR 041 (Starting)
+  it("says Always allow set the hob's answer on its Permissions tab rather than saving a rule (#1597)", () => {
+    const quest = request({ tool: "start_work", operation: "start-quest", state: "approved", lifetime: "always" });
+    expect(resultText(quest, "Pip")).toBe("✓ Allowed, and set to Allow on Pip's Permissions tab. Pip carries on.");
+  });
+});
+
 describe("expiryText", () => {
   it("says when a pending request expires, today or tomorrow", () => {
     const now = new Date(2026, 9, 31, 9, 0);

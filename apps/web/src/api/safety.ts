@@ -177,6 +177,11 @@ export const RULES: ReadonlyArray<RuleInfo> = [
     label: "Read other hobs",
     note: "See their names, roles, what they are good at, the AI they think with and their Charms. Never their instructions or work.",
   },
+  {
+    operation: "start-quest",
+    label: "Start a Quest",
+    note: "Turn big work into a Quest with its own card. Under Ask it suggests the Quest first.",
+  },
 ];
 
 /** The operations the GitHub Charm card sets, in its order. Permissions lists the others. */

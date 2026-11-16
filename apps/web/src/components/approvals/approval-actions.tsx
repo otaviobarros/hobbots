@@ -1,8 +1,9 @@
-import type { Agent, ApprovalRequest, GrantRule } from "@hobbots/domain";
+import { type Agent, type ApprovalRequest, type GrantRule, offersAlwaysAllow } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { type RefObject, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { Decision } from "../../api/approvals.ts";
+import { operationLabel } from "../../lib/reply-steps.ts";
 import { messages } from "../messages.ts";
 import {
   alwaysLabel,
@@ -106,8 +107,7 @@ export function ApprovalActions({
   }
   const { onceOnly } = approval;
   const always = offersAlways(approval);
-  // A high-risk request explains itself through its check box; any other says why it offers no rule.
-  const noRule = !onceOnly && !always;
+  const note = ruleNote(approval, hob.name);
   const tray = look === "tray";
   const variant = VARIANTS[look];
   return (
@@ -129,12 +129,47 @@ export function ApprovalActions({
             {alwaysLabel(approval)}
           </Button>
         )}
+        <AlwaysAllow approval={approval} pending={pending} onAllow={send} />
         <Button ref={denyButton} variant={variant.deny} aria-disabled={pending} onClick={open("deny")}>
           {copy.deny}
         </Button>
       </div>
-      {noRule && <p className="m-0 text-meta text-label">{copy.noRule}</p>}
+      {note !== null && <p className="m-0 text-meta text-label">{note}</p>}
     </div>
+  );
+}
+
+/** Whether an Ask offers Always allow, which sets the hob's own answer to Allow (ADR 041); never for a high-risk one. */
+const offersAllow = (approval: ApprovalRequest) => !approval.onceOnly && offersAlwaysAllow(approval.operation);
+
+/**
+ * What the card says under its buttons: what Always allow changes, or why no rule is offered. A
+ * high-risk request explains itself through its check box, and one that offers a rule needs neither.
+ */
+const ruleNote = (approval: ApprovalRequest, name: string): string | null => {
+  if (offersAllow(approval)) return copy.alwaysAllowNote({ name, rule: operationLabel(approval.operation) });
+  return approval.onceOnly || offersAlways(approval) ? null : copy.noRule;
+};
+
+/** Always allow, for an action no saved rule could name (ADR 041): approves it and sets the hob's answer to Allow. */
+function AlwaysAllow({
+  approval,
+  pending,
+  onAllow,
+}: {
+  approval: ApprovalRequest;
+  pending: boolean;
+  onAllow: (decision: Decision) => void;
+}) {
+  if (!offersAllow(approval)) return null;
+  return (
+    <Button
+      variant="outline"
+      aria-disabled={pending}
+      onClick={() => onAllow({ decision: "approve", lifetime: "always" })}
+    >
+      {copy.alwaysAllow}
+    </Button>
   );
 }
 

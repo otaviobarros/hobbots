@@ -30,6 +30,7 @@ const lead: Authority = {
     "skill-feedback": "allow",
     "read-hobs": "allow",
     "search-web": "allow",
+    "start-quest": "allow",
   },
   // Its own override asks before a push; the other Asks are the preset's.
   fixed: ["push"],

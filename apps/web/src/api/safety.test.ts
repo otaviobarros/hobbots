@@ -68,6 +68,7 @@ describe("per-hob rules", () => {
       "search-skills",
       "search-web",
       "skill-feedback",
+      "start-quest",
       "use-web",
     ]);
   });
@@ -134,6 +135,7 @@ describe("per-hob rules", () => {
       "skill-feedback": "allow",
       "read-hobs": "allow",
       "search-web": "allow",
+      "start-quest": "allow",
     } as const;
     expect(enforcement("delete-files", balanced)).toBe("checked");
     expect(enforcement("push", balanced)).toBe("checked");
@@ -163,6 +165,7 @@ describe("per-hob rules", () => {
       "skill-feedback": "allow",
       "read-hobs": "allow",
       "search-web": "allow",
+      "start-quest": "allow",
     } as const;
     expect(enforcement("local-git", balanced)).toBe("enforced");
     expect(enforcement("local-git", { ...balanced, "local-git": "deny" })).toBe("checked");

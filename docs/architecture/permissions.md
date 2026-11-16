@@ -30,9 +30,10 @@ Trusted Workspace is the default. The [design](../decisions/008-design.md) names
 | Propose a skill (always waits for you) | Allow | Allow | Allow |
 | Note a problem with a skill | Allow | Allow | Allow |
 | Read other hobs | Allow | Allow | Allow |
+| Start a Quest | Allow | Allow | Allow |
 | Anything outside the hob's folders | Deny | Deny | Deny |
 
-The skill rows are Hobbots' own tools ([ADR 029](../decisions/029-skills.md)): a proposal is let through to your Inbox under every preset, but nothing it holds reaches the library until you add it. Read other hobs is the hob directory ([ADR 032](../decisions/032-hob-directory.md)): the roster each turn carries and `read_hob`. Under an override of Ask the roster is left out and `read_hob` asks once each time; under Never neither is offered.
+The skill rows are Hobbots' own tools ([ADR 029](../decisions/029-skills.md)): a proposal is let through to your Inbox under every preset, but nothing it holds reaches the library until you add it. Read other hobs is the hob directory ([ADR 032](../decisions/032-hob-directory.md)): the roster each turn carries and `read_hob`. Under an override of Ask the roster is left out and `read_hob` asks once each time; under Never neither is offered. Start a Quest decides `start_work` ([ADR 041](../decisions/041-quests-as-work-threads.md)): under an override of Ask the approval card shows the Quest the hob suggests and offers **Always allow**, which takes the hob's own Ask away rather than saving a rule, so its Permissions tab reads Allow; under Never `start_work` is still offered and refused with the reason, so the hob can say why.
 
 Careful keeps investigation automatic and asks before modifications and consequential work. Trusting is deliberately broad inside the hob's folders and the sandbox, with clear disclosure of actual runtime privileges; it never grants self-approval or Hobbots administration. Per-hob overrides only narrow the table; a widening needs a separately recorded user grant. The UI says **Never** for Deny.
 

@@ -1,4 +1,5 @@
 import { type ApprovalRequest, exactAction } from "@hobbots/domain";
+import { questSuggestion, SuggestedQuest } from "../work-quest/suggested-quest.tsx";
 import { messages } from "./messages.ts";
 import { type WebAsk, webAskOf } from "./web-ask.ts";
 import { WebIcon } from "./web-icon.tsx";
@@ -34,6 +35,15 @@ export function WebAskNotes({ ask, name }: { ask: WebAsk; name: string }) {
 export function TrayAction({ request, name }: { request: ApprovalRequest; name: string }) {
   const web = webAskOf(request, name);
   const page = web?.kind != null && web.url !== null ? web.url : null;
+  // A suggested Quest shows as the Quest it starts, rather than as a call's arguments (ADR 041).
+  const quest = questSuggestion(request);
+  if (quest !== null)
+    return (
+      <>
+        <p className="m-0 text-text">{request.reason}</p>
+        <SuggestedQuest quest={quest} />
+      </>
+    );
   return (
     <>
       {page === null && <p className="m-0 text-text">{request.reason}</p>}

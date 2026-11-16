@@ -19,7 +19,9 @@ import {
   type WorkQuestRefused,
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
+import type { AskableVerdict } from "./asking.ts";
 import type { CharmTurn } from "./charms.ts";
+import { type HubActionsOptions, hubAction, makeHubActions } from "./hub-actions.ts";
 import { announcer, announcing, EventPublisher } from "./ports.ts";
 import type { HubTool, HubToolAnswer, HubTools } from "./runtime.ts";
 
@@ -128,8 +130,12 @@ export const runsQuestIn = (quests: Option.Option<WorkQuests["Service"]>, hobId:
 
 /**
  * The Quest tools (ADR 041): `start_work` and `finish_work`, for a turn that writes a reply in a chat
- * or camp, whatever the hob's tool access, since they reach nothing outside the hub's own records.
- * A session outside any chat, a Task step's, is offered neither. Absent, a turn offers neither.
+ * or camp. `start_work` is decided under the hob's Start a Quest answer: Allow starts the Quest at
+ * once, Ask shows you the Quest it suggests first, and Never refuses it with the reason. It is
+ * offered under every answer, so a hob under Never can still say why it cannot start one, and a
+ * session that keeps its tools (Codex) never misses it once the answer changes. `finish_work` reaches
+ * nothing outside the hub's own records, so no policy decides it. A session outside any chat, a Task
+ * step's, is offered neither. Absent, a turn offers neither.
  */
 export class WorkTools extends Context.Service<
   WorkTools,
@@ -172,7 +178,16 @@ export const startedText = (quest: WorkQuest): string =>
 export const finishedText = (quest: WorkQuest): string =>
   `Finished the Quest "${quest.title}". Its card now shows it done for the person who asked to review.`;
 
-const decodeStart = Schema.decodeUnknownEffect(StartWorkInput);
+/**
+ * The request a `start_work` call is decided as (ADR 041): no folder, no site, and the Quest's title
+ * for the approval card. No grant answers an Ask; Always allow sets the hob's own answer instead.
+ */
+export interface QuestRequest {
+  readonly _tag: "Quest";
+  readonly operation: "start-quest";
+  readonly title: string;
+}
+
 const decodeFinish = Schema.decodeUnknownEffect(FinishWorkInput);
 
 const refusedAnswer = (refused: WorkQuestRefused): HubToolAnswer => ({
@@ -180,22 +195,33 @@ const refusedAnswer = (refused: WorkQuestRefused): HubToolAnswer => ({
   refused: true,
 });
 
-/** `start_work` and `finish_work` for a turn, through `WorkQuests`, as the turn's hob, from its reply. */
-export const WorkToolsLive = Layer.effect(
-  WorkTools,
+/** What the approval card shows of a Quest a hob suggests: what it is for and when it is done. */
+const suggested = (input: StartWorkInput): Readonly<Record<string, unknown>> => ({
+  title: input.title,
+  goal: input.goal,
+  done_when: input.done_when,
+  ...(input.expected_by === undefined ? {} : { expected_by: input.expected_by }),
+  ...(input.repository === undefined ? {} : { repository: input.repository }),
+});
+
+/**
+ * `start_work` and `finish_work` for a turn, through `WorkQuests`, as the turn's hob, from its reply,
+ * with each `start_work` call decided by `decide` under the hob's Start a Quest answer and run on the
+ * hub action pipeline (ADR 031): recorded before the Quest starts, asked about on its step under Ask.
+ */
+export const makeWorkTools = <V extends AskableVerdict>(
+  decide: HubActionsOptions<QuestRequest, V>["decide"],
+): Effect.Effect<WorkTools["Service"], never, WorkQuests> =>
   Effect.gen(function* () {
     const quests = yield* WorkQuests;
     // A runtime runs each call on its own, so it carries the hub's services, its logger included.
     const context = yield* Effect.context<never>();
 
-    const start = (turn: CharmTurn, channelId: ChannelId, messageId: MessageId, raw: unknown) =>
-      Effect.gen(function* () {
-        const decoded = yield* decodeStart(raw).pipe(Effect.option);
-        if (Option.isNone(decoded)) return { text: START_WORK_UNREADABLE, refused: true };
-        const input = decoded.value;
-        // What a hob wrote is redacted before it is kept, as everything the journal holds is.
-        const kept = turn.redactor.text;
-        const quest = yield* quests.start({
+    const start = (turn: CharmTurn, channelId: ChannelId, messageId: MessageId, input: StartWorkInput) => {
+      // What a hob wrote is redacted before it is kept, as everything the journal holds is.
+      const kept = turn.redactor.text;
+      return quests
+        .start({
           id: replyQuestId(messageId),
           channelId,
           // Every turn runs in a channel's main line until reply threads come (#1484).
@@ -207,15 +233,33 @@ export const WorkToolsLive = Layer.effect(
           ownerHobId: turn.agentId,
           repository: input.repository === undefined ? null : kept(input.repository),
           startedFrom: messageId,
-        });
-        return { text: turn.redactor.text(startedText(quest)), refused: false };
-      }).pipe(
-        Effect.catchTags({
-          WorkQuestRefused: (refused) => Effect.succeed(refusedAnswer(refused)),
-          ChannelNotFound: () =>
-            Effect.succeed({ text: "This chat or camp is gone, so no Quest started.", refused: true }),
-        }),
-      );
+        })
+        .pipe(
+          Effect.map((quest): HubToolAnswer => ({ text: startedText(quest), refused: false })),
+          Effect.catchTags({
+            WorkQuestRefused: (refused) => Effect.succeed(refusedAnswer(refused)),
+            ChannelNotFound: () =>
+              Effect.succeed<HubToolAnswer>({ text: "This chat or camp is gone, so no Quest started.", refused: true }),
+          }),
+          Effect.provideContext(context),
+        );
+    };
+
+    const startAction = (turn: CharmTurn, channelId: ChannelId, messageId: MessageId) =>
+      hubAction({
+        tool: START_WORK,
+        input: StartWorkInput,
+        effect: "write",
+        otherwise: "no Quest starts",
+        unreadable: () => START_WORK_UNREADABLE,
+        plan: (input) =>
+          Effect.succeed({
+            request: { _tag: "Quest", operation: "start-quest", title: turn.redactor.text(input.title) } as const,
+            // Under Ask the card shows the Quest the hob suggests, so you see what you start.
+            card: { arguments: suggested(input) },
+            send: start(turn, channelId, messageId, input),
+          }),
+      });
 
     const finish = (turn: CharmTurn, channelId: ChannelId, messageId: MessageId, raw: unknown) =>
       Effect.gen(function* () {
@@ -231,34 +275,36 @@ export const WorkToolsLive = Layer.effect(
           from: messageId,
         });
         return { text: turn.redactor.text(finishedText(quest)), refused: false };
-      }).pipe(Effect.catchTag("WorkQuestRefused", (refused) => Effect.succeed(refusedAnswer(refused))));
-
-    /** What a turn's call answers: a failure the hub did not expect is logged, and the hob reads that it failed. */
-    const answer = (name: string, run: Effect.Effect<HubToolAnswer>): Effect.Effect<HubToolAnswer> =>
-      Effect.provideContext(
-        Effect.catchCause(run, (cause) =>
-          Effect.as(Effect.logError(`A ${name} call failed`, cause), {
+      }).pipe(
+        Effect.catchTag("WorkQuestRefused", (refused) => Effect.succeed(refusedAnswer(refused))),
+        // A failure the hub did not expect is logged, and the hob reads that it failed.
+        Effect.catchCause((cause) =>
+          Effect.as(Effect.logError(`A ${FINISH_WORK_TOOL} call failed`, cause), {
             text: "Hobbots could not change the Quest. Try again later.",
             refused: true,
           }),
         ),
-        context,
+        Effect.provideContext(context),
       );
 
     return WorkTools.of({
       forTurn: (turn) => {
         const { channelId, messageId } = turn;
         if (channelId === null || messageId === null) return Effect.succeed(null);
+        const starting = makeHubActions({
+          owner: { _tag: "BuiltIn" },
+          actions: [startAction(turn, channelId, messageId)],
+          decide,
+        })(turn);
         return Effect.succeed({
           tools: [START_WORK, FINISH_WORK],
-          call: (name, raw) =>
+          call: (name, raw, step) =>
             name === START_WORK_TOOL
-              ? answer(name, start(turn, channelId, messageId, raw))
+              ? starting.call(name, raw, step)
               : name === FINISH_WORK_TOOL
-                ? answer(name, finish(turn, channelId, messageId, raw))
+                ? finish(turn, channelId, messageId, raw)
                 : Effect.succeed({ text: `${name} is not one of the Quest tools.`, refused: true }),
         });
       },
     });
-  }),
-);
+  });

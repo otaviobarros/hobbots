@@ -28,6 +28,7 @@ export const PolicyOperation = Schema.Literals([
   "skill-feedback",
   "read-hobs",
   "search-web",
+  "start-quest",
 ]);
 export type PolicyOperation = typeof PolicyOperation.Type;
 
@@ -52,6 +53,24 @@ export type SkillOperation = typeof SkillOperation.Type;
  */
 export const DirectoryOperation = Schema.Literals(["read-hobs"]);
 export type DirectoryOperation = typeof DirectoryOperation.Type;
+
+/**
+ * Start a Quest (ADR 041): whether a hob's `start_work` starts a Quest at once (Allow), asks you
+ * first with the Quest it suggests (Ask), or is refused (Never). Every preset allows it, so the
+ * Always allow an Ask offers sets the hob's own answer back to Allow and never widens a preset.
+ */
+export const QuestOperation = Schema.Literals(["start-quest"]);
+export type QuestOperation = typeof QuestOperation.Type;
+
+/**
+ * The built-in operations whose Ask offers Always allow (ADR 041), which sets the hob's own answer
+ * for the operation to Allow rather than saving a rule: the call names nothing narrower to save.
+ */
+export const ALWAYS_ALLOW_OPERATIONS: ReadonlyArray<PolicyOperation> = ["start-quest"];
+
+/** Whether an Ask for `operation` offers Always allow, which sets the hob's own answer (ADR 041). */
+export const offersAlwaysAllow = (operation: AnyOperation): operation is PolicyOperation =>
+  (ALWAYS_ALLOW_OPERATIONS as ReadonlyArray<AnyOperation>).includes(operation);
 
 /**
  * Search the web (ADR 036), in the Web group beside Use the web: the runtime's own search, run on its
@@ -101,6 +120,7 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "skill-feedback": "allow",
     "read-hobs": "allow",
     "search-web": "allow",
+    "start-quest": "allow",
   },
   balanced: {
     "read-files": "allow",
@@ -119,6 +139,7 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "skill-feedback": "allow",
     "read-hobs": "allow",
     "search-web": "allow",
+    "start-quest": "allow",
   },
   trusting: {
     "read-files": "allow",
@@ -137,6 +158,7 @@ export const PRESET_DECISIONS: Record<SafetyPreset, Record<PolicyOperation, Poli
     "skill-feedback": "allow",
     "read-hobs": "allow",
     "search-web": "allow",
+    "start-quest": "allow",
   },
 };
 
@@ -329,6 +351,7 @@ export const PolicyOverrides = Schema.Struct({
   "skill-feedback": Schema.optionalKey(PolicyDecision),
   "read-hobs": Schema.optionalKey(PolicyDecision),
   "search-web": Schema.optionalKey(PolicyDecision),
+  "start-quest": Schema.optionalKey(PolicyDecision),
 });
 export type PolicyOverrides = typeof PolicyOverrides.Type;
 

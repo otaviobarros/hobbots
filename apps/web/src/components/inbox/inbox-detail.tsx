@@ -56,6 +56,7 @@ import { messages as skillCopy } from "../skill-review/messages.ts";
 import { ProposalDecision, ProposalDiff } from "../skill-review/proposal-card.tsx";
 import { proposalFoot } from "../skill-review/proposal-model.ts";
 import { webAskOf } from "../web/web-ask.ts";
+import { questSuggestion, SuggestedQuest } from "../work-quest/suggested-quest.tsx";
 import { EntryPortrait } from "./entry-portrait.tsx";
 import { entryChannel, entryRow, type InboxEntry, type InboxRow } from "./inbox-entries.ts";
 import { InboxIcon } from "./inbox-icons.tsx";
@@ -131,6 +132,8 @@ function ApprovalDetail({
   const task = request.taskId ?? request.rootTaskId;
   const expiry = pending ? expiryText(request.expiresAt, now) : "";
   const asked = formatWhen(request.createdAt, now);
+  // A suggested Quest shows as the Quest it starts, rather than as a call's arguments (ADR 041).
+  const quest = questSuggestion(request);
   return (
     <DetailFrame
       label={copy.detail.label({ name: hob.name, action: row.what })}
@@ -144,7 +147,11 @@ function ApprovalDetail({
           : chatLink(chatHob, request.channelId, request.messageId === null ? null : { messageId: request.messageId })
       }
     >
-      <ActionBlock action={exactAction(request)} command={COMMANDS.has(request.operation)} />
+      {quest !== null ? (
+        <SuggestedQuest quest={quest} />
+      ) : (
+        <ActionBlock action={exactAction(request)} command={COMMANDS.has(request.operation)} />
+      )}
       <Facts
         rows={[
           [copy.detail.quest, questName(task === null ? undefined : questOf(task), directory)],

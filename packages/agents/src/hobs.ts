@@ -36,6 +36,7 @@ import {
   isNarrowerOrEqual,
   normalizeGoodAt,
   POLICY_OPERATIONS,
+  type PolicyOperation,
   PRESET_DECISIONS,
   type RoleId,
   RUNTIME_NAMES,
@@ -399,6 +400,17 @@ export class HobService extends Context.Service<
       AgentNotFound | InvalidFolder | OverrideWidens | UndeclaredOperation | UnknownCharm | UnofferedAnswer
     >;
     /**
+     * Takes the hob's own answer for one built-in operation away, as its next configuration version
+     * made by `actor`, so the preset answers it (ADR 041). Read under the hob's lock, so no change in
+     * between is lost. The hob's other answers are kept as stored and not checked again: falling back
+     * to the preset never allows more. A hob with no answer of its own for it adds no version.
+     */
+    readonly dropOverride: (
+      id: AgentId,
+      operation: PolicyOperation,
+      actor: ChangeActor,
+    ) => Effect.Effect<Agent, AgentNotFound>;
+    /**
      * `update` and `updatePolicy` as one configuration version, made by `actor`: both are checked
      * before either is stored, so a change one of them refuses stores nothing (ADR 034).
      */
@@ -604,6 +616,23 @@ export class HobService extends Context.Service<
         return yield* nextVersion(id, applyPolicy(payload, canonical), actor);
       });
 
+      const dropOverride = Effect.fn("HobService.dropOverride")(function* (
+        id: AgentId,
+        operation: PolicyOperation,
+        actor: ChangeActor,
+      ) {
+        return yield* nextVersion(
+          id,
+          (agent) => {
+            const { [operation]: dropped, ...overrides } = agent.policy.overrides;
+            return Effect.succeed(
+              dropped === undefined ? agent : new Agent({ ...agent, policy: { ...agent.policy, overrides } }),
+            );
+          },
+          actor,
+        );
+      });
+
       const change = Effect.fn("HobService.change")(function* (id: AgentId, change: HobChange, actor: ChangeActor) {
         const canonical = change.permissions && (yield* canonicalPolicy(change.permissions));
         const permissions = change.permissions;
@@ -666,7 +695,7 @@ export class HobService extends Context.Service<
         );
       });
 
-      return HobService.of({ create, update, updateThen, updatePolicy, change, revert });
+      return HobService.of({ create, update, updateThen, updatePolicy, dropOverride, change, revert });
     }),
   );
 }
