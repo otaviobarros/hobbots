@@ -3,7 +3,7 @@ import { type MemorySearch, memorySearchOf, scopeName } from "../memory/memory-m
 import { messages } from "./messages.ts";
 
 /** Where a "Read first" chip opens: a page in Memory, or the message a record was made in. */
-export type ReadFirstOpens =
+type ReadFirstOpens =
   | { readonly _tag: "Memory"; readonly search: MemorySearch }
   | { readonly _tag: "Message"; readonly messageId: MessageId };
 
