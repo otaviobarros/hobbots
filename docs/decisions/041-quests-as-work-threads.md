@@ -69,6 +69,8 @@ Two hub tools, `start_work` and `finish_work`, replace `start_quest`, `delegate_
 
 A hob may start a Quest on its own or suggest one first. A new permission, **Start a Quest**, decides which, with Always allow, Ask or Never, like the other permissions. When it is Ask, the first ask offers an Always allow button. A person can also start one from any message.
 
+Every preset answers Allow ([#1597](https://github.com/otaviobarros/hobbots/issues/1597)), so Ask and Never are the hob's own answers. Under Ask, `start_work` waits on an approval card that shows the Quest the hob suggests: its title, goal and "Done when" lines. Always allow on that card takes the hob's own Ask away, so its Permissions tab reads Allow and the next `start_work` asks nobody; it never widens a preset, and no rule is saved, since the call names nothing narrower. Under Never, `start_work` is still offered and refused with the reason, so the hob can say why, and a Codex session that keeps its tools never misses it once the answer changes.
+
 ### Worktrees
 
 - The hub owns every worktree; a hob never runs `git worktree` or picks a branch name. A Quest with no repository gets no worktree.

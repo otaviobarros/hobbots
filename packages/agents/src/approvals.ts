@@ -25,14 +25,17 @@ import {
   type GrantRule,
   INBOX_HISTORY,
   type MessageId,
+  offersAlwaysAllow,
   offersThisTask,
   ruleOperation,
   stableJson,
   type TaskId,
+  YOU,
 } from "@hobbots/domain";
 import { Context, DateTime, Deferred, Duration, Effect, Layer, Option, Semaphore } from "effect";
 import { unguarded, type WriteGuard } from "./devices.ts";
 import { actsAsIdentity, CharmDeclarations, CharmIdentityPin, GrantService, ruleHolds, ruleOffered } from "./grants.ts";
+import { HobService } from "./hobs.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import type { ApprovalAction, ApprovalOutcome, PendingApproval, ToolAccess, TurnApprovals } from "./runtime.ts";
@@ -134,15 +137,21 @@ interface Waiter {
 type RefusedDecision = ApprovalActionChanged | ApprovalNotConfirmed | ApprovalNotGrantable | GrantRuleRefused;
 
 /**
- * Why a pending request cannot take this decision: another action, a high-risk one unconfirmed, a
- * lifetime it does not offer, or a rule the card did not offer (ADR 015).
+ * Why a lifetime longer than once is refused, or null when the request offers it: This Task for a
+ * request made in a Task, Always for one a saved rule could answer, never for a high-risk one, and
+ * only the rules the card offered (ADR 015). An operation whose call names nothing narrower to save
+ * offers Always allow alone, which sets the hob's own answer and takes no rule (ADR 041).
  */
-const refusedDecision = (approval: ApprovalRequest, input: ApprovalDecisionInput): RefusedDecision | null => {
-  if (input.actionDigest !== approval.actionDigest) return new ApprovalActionChanged({ approvalId: approval.id });
-  if (input.decision !== "approve") return null;
-  if (approval.onceOnly && input.confirmed !== true) return new ApprovalNotConfirmed({ approvalId: approval.id });
-  const lifetime = input.lifetime ?? "once";
-  if (lifetime === "once") return null;
+const refusedLifetime = (
+  approval: ApprovalRequest,
+  input: ApprovalDecisionInput,
+  lifetime: Exclude<ApprovalLifetime, "once">,
+): RefusedDecision | null => {
+  if (offersAlwaysAllow(approval.operation)) {
+    return lifetime === "always" && input.rules === undefined
+      ? null
+      : new ApprovalNotGrantable({ approvalId: approval.id, lifetime });
+  }
   // This Task binds to the Task the request came from, so a request from outside one offers none.
   const offered = lifetime === "task" ? offersThisTask(approval) : approval.grantable && approval.rules.length > 0;
   if (!offered || approval.onceOnly) return new ApprovalNotGrantable({ approvalId: approval.id, lifetime });
@@ -153,6 +162,18 @@ const refusedDecision = (approval: ApprovalRequest, input: ApprovalDecisionInput
         approvalId: approval.id,
         message: "The rule is not one this request offers, or allows more than it does.",
       });
+};
+
+/**
+ * Why a pending request cannot take this decision: another action, a high-risk one unconfirmed, a
+ * lifetime it does not offer, or a rule the card did not offer (ADR 015).
+ */
+const refusedDecision = (approval: ApprovalRequest, input: ApprovalDecisionInput): RefusedDecision | null => {
+  if (input.actionDigest !== approval.actionDigest) return new ApprovalActionChanged({ approvalId: approval.id });
+  if (input.decision !== "approve") return null;
+  if (approval.onceOnly && input.confirmed !== true) return new ApprovalNotConfirmed({ approvalId: approval.id });
+  const lifetime = input.lifetime ?? "once";
+  return lifetime === "once" ? null : refusedLifetime(approval, input, lifetime);
 };
 
 /** Whether a decided request already took this decision, lifetime included, so deciding again changes nothing. */
@@ -627,3 +648,21 @@ export class ApprovalService extends Context.Service<
     }),
   );
 }
+
+/**
+ * Sets the hob's own answer back to Allow for a request you approved with Always allow (ADR 041), an
+ * operation whose call names nothing narrower to save, such as Start a Quest. Every preset allows
+ * such an operation, so taking the hob's own Ask or Never away is what allows it, as a change you
+ * made: it shows on the hob's Permissions tab and in its history. Anything else changes nothing.
+ */
+export const saveAlwaysAllow = (approval: ApprovalRequest) =>
+  Effect.gen(function* () {
+    const { operation } = approval;
+    if (approval.state !== "approved" || approval.lifetime !== "always" || !offersAlwaysAllow(operation)) return;
+    const found = yield* (yield* HobbotsRepository).findAgent(approval.agentId);
+    if (Option.isNone(found)) return;
+    const own = found.value.policy.overrides;
+    if (!(operation in own)) return;
+    const overrides = Object.fromEntries(Object.entries(own).filter(([name]) => name !== operation));
+    yield* (yield* HobService).updatePolicy(found.value.id, { overrides }, YOU);
+  });

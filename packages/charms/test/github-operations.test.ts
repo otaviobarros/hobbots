@@ -53,7 +53,7 @@ describe("a hob's card with the GitHub Charm", () => {
     const card = hobCard(pip, ["GitHub"], cardAnswers("balanced", pip.policy, GITHUB_CHARM.operations));
     const text = readHobAnswer("Pip", { cards: [card], shared: new Set() });
     expect(text).toContain(
-      "| search-web | Allow |\n| github.read | Allow |\n| github.open-pull-request | Ask |\n| github.comment | Never (override) |",
+      "| search-web | Allow |\n| start-quest | Allow |\n| github.read | Allow |\n| github.open-pull-request | Ask |\n| github.comment | Never (override) |",
     );
   });
 });

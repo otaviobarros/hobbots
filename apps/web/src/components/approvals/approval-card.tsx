@@ -14,6 +14,7 @@ import { messages as plainCopy } from "../plain-words/messages.ts";
 import { approvalAction, capitalized } from "../plain-words/plain-words.ts";
 import { webAskOf } from "../web/web-ask.ts";
 import { WebAskNotes } from "../web/web-ask-parts.tsx";
+import { questSuggestion, SuggestedQuest } from "../work-quest/suggested-quest.tsx";
 import { ApprovalActions } from "./approval-actions.tsx";
 import { riskOf } from "./approval-rules.ts";
 import { decisionErrorText, expiryText, resultText } from "./approval-text.ts";
@@ -133,6 +134,8 @@ function ApprovalDetails({ approval, hob }: { approval: ApprovalRequest; hob: Ag
   const action = exactAction(approval);
   // A web ask names what it is about the web, and says why a page like it asks (ADR 036).
   const web = webAskOf(approval, hob.name);
+  // A suggested Quest shows as the Quest it starts, rather than as a call's arguments (ADR 041).
+  const quest = questSuggestion(approval);
   return (
     <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-ui">
       <dt className="text-label">{copy.action}</dt>
@@ -140,9 +143,13 @@ function ApprovalDetails({ approval, hob }: { approval: ApprovalRequest; hob: Ag
         <span className="font-bold">
           {web?.title ?? plainCopy.question({ what: capitalized(approvalAction(approval)) })}
         </span>
-        <code className="bg-deep px-2 py-1 font-mono text-code break-all whitespace-pre-wrap">
-          {web?.kind != null && web.url !== null ? web.url : action}
-        </code>
+        {quest !== null ? (
+          <SuggestedQuest quest={quest} />
+        ) : (
+          <code className="bg-deep px-2 py-1 font-mono text-code break-all whitespace-pre-wrap">
+            {web?.kind != null && web.url !== null ? web.url : action}
+          </code>
+        )}
         {web !== null && <WebAskNotes ask={web} name={hob.name} />}
       </dd>
       <dt className="text-label">{copy.target}</dt>

@@ -81,6 +81,7 @@ const RULE_GROUPS: ReadonlyArray<readonly [keyof typeof messages.permissions.gro
     ["memory", ["search-memory", "save-memory"]],
     ["skills", ["search-skills", "request-skill", "propose-skill", "skill-feedback"]],
     ["hobs", ["read-hobs"]],
+    ["quests", ["start-quest"]],
     ["commands", ["run-commands", "local-git"]],
     ["web", ["search-web", "use-web"]],
     ["outside", ["outside-folders"]],

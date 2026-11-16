@@ -9,7 +9,6 @@ import {
   HobTools,
   PermissionSummary,
   WorkQuests,
-  WorkToolsLive,
 } from "@hobbots/agents";
 import { type Agent, type Message, roleFields } from "@hobbots/domain";
 import {
@@ -33,6 +32,7 @@ import { NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
 import { RetireWhenDone } from "../src/retire.ts";
+import { WorkToolsLive } from "../src/work-tools.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
 const hob = {
@@ -46,6 +46,29 @@ const hob = {
   instructions: "",
 };
 
+/**
+ * Every turn chat-only, with no folder, under the hob's own answers on Balanced, so `start_work` is
+ * decided under its Start a Quest answer as on any hub (#1597).
+ */
+const ChatOnlyTools = Layer.succeed(
+  HobTools,
+  HobTools.of({
+    access: (agent) =>
+      Effect.succeed({
+        policy: {
+          preset: "balanced",
+          sharedFolders: [],
+          hob: agent.policy,
+          dataFolder: "/hobbots-data",
+          restrictions: [],
+        },
+        folders: [],
+        runtimeFolder: `/hobbots-data/runtimes/${agent.id}`,
+        commitsAs: { _tag: "UserConfig", config: { name: agent.name, email: "hob@example.com" } },
+      }),
+  }),
+);
+
 let handler: (request: Request) => Promise<Response>;
 let dispose: () => Promise<void>;
 
@@ -56,7 +79,7 @@ beforeEach(() => {
     Layer.provideMerge(
       Layer.mergeAll(
         ChatService.layer.pipe(
-          Layer.provide(HobTools.chatOnly),
+          Layer.provide(ChatOnlyTools),
           Layer.provideMerge(WorkToolsLive.pipe(Layer.provideMerge(WorkQuests.layer))),
         ),
         ApprovalService.layer,

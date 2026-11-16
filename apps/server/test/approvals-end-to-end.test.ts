@@ -11,7 +11,9 @@ import {
   HobService,
   PermissionSummary,
   SecretRedaction,
+  WorkQuests,
 } from "@hobbots/agents";
+import type { HobPermissions } from "@hobbots/api";
 import {
   type Agent,
   type ApprovalRequest,
@@ -21,6 +23,8 @@ import {
   type Message,
   type ReplyStep,
   roleFields,
+  START_WORK_TOOL,
+  type WorkQuest,
 } from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import {
@@ -32,6 +36,7 @@ import {
   SearchIndex,
   SetupRepository,
   TaskRepositoryLive,
+  WorkQuestRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
@@ -44,6 +49,7 @@ import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
 import { ToolLogsLive } from "../src/tool-logs.ts";
 import { HobToolsLive } from "../src/tools.ts";
+import { WorkToolsLive } from "../src/work-tools.ts";
 import { movableClock } from "./movable-clock.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
@@ -68,6 +74,8 @@ beforeEach(() => {
   const App = HobLifecycle.layer
     .pipe(Layer.provideMerge(Layer.mergeAll(HobService.layer, PermissionSummary.layer)))
     .pipe(Layer.provideMerge(ChatService.layer))
+    // The Quest tools a chat turn offers (ADR 041), whose start_work asks under Start a Quest Ask.
+    .pipe(Layer.provideMerge(WorkToolsLive.pipe(Layer.provideMerge(WorkQuests.layer))))
     .pipe(Layer.provideMerge(ApprovalService.layer))
     .pipe(Layer.provideMerge(GrantService.layer))
     .pipe(Layer.provideMerge(HobToolsLive))
@@ -80,6 +88,7 @@ beforeEach(() => {
             ApprovalRepositoryLive,
             GrantRepositoryLive,
             TaskRepositoryLive,
+            WorkQuestRepositoryLive,
             EventJournal.layer,
             BackpackLive,
             SetupRepository.layer,
@@ -319,5 +328,63 @@ describe("approvals, end to end", () => {
       const [inChannel] = await forChannel(channel);
       expect(after.find((approval) => approval.id === inChannel?.id)).toEqual(inChannel);
     }
+  });
+
+  // covers ADR 041 (Starting)
+  it("under Start a Quest Ask the hob suggests its Quest, Always allow starts it and sets the answer to Allow, and Never refuses (#1597)", async () => {
+    const hob = await hobInProject();
+    const answer = (overrides: object) => request("PATCH", `/api/agents/${hob.id}/permissions`, { overrides });
+    expect((await answer({ "start-quest": "ask" })).status).toBe(200);
+    const quest = {
+      title: "Winter market page",
+      goal: "A landing page for the winter market.",
+      done_when: ["The page is live"],
+    };
+    const startIn = async () => {
+      const channel = (await request<Channel>("POST", `/api/agents/${hob.id}/channels`)).body;
+      const line = `fake:hub ${START_WORK_TOOL} ${JSON.stringify(quest)}`;
+      expect((await request("POST", `/api/channels/${channel.id}/messages`, { content: `Go\n${line}` })).status).toBe(
+        200,
+      );
+      return channel;
+    };
+    const questsOf = async (channel: Channel) =>
+      (await request<ReadonlyArray<WorkQuest>>("GET", `/api/channels/${channel.id}/work-quests`)).body;
+
+    // Ask: the request shows the Quest the hob suggests, and no rule could answer it.
+    const asking = await startIn();
+    const asked = await eventually(async () => (await forChannel(asking)).find((each) => each.state === "pending"));
+    expect(asked).toMatchObject({
+      tool: START_WORK_TOOL,
+      operation: "start-quest",
+      targets: [quest.title],
+      arguments: quest,
+      grantable: false,
+      rules: [],
+    });
+    // This Task names nothing, so only Always allow saves anything.
+    expect((await decide(asked, { decision: "approve", lifetime: "task" })).body).toMatchObject({
+      _tag: "ApprovalNotGrantable",
+    });
+    const approved = await decide(asked, { decision: "approve", lifetime: "always" });
+    expect(approved.body).toMatchObject({ state: "approved", lifetime: "always" });
+    expect(toolSteps(await settled(asking))).toMatchObject([{ state: "done", call: { tool: START_WORK_TOOL } }]);
+    expect(await questsOf(asking)).toMatchObject([{ title: quest.title, state: "active" }]);
+
+    // Always allow took the hob's own Ask away: its permissions read Allow, and the next start asks nobody.
+    const permissions = await request<HobPermissions>("GET", `/api/agents/${hob.id}/permissions`);
+    expect(permissions.body.decisions["start-quest"]).toBe("allow");
+    expect(permissions.body.policy.overrides).not.toHaveProperty("start-quest");
+    const allowed = await startIn();
+    expect(toolSteps(await settled(allowed))).toMatchObject([{ state: "done" }]);
+    expect(await forChannel(allowed)).toEqual([]);
+    expect(await questsOf(allowed)).toHaveLength(1);
+
+    // Never: the call is refused with the reason, and no Quest starts.
+    expect((await answer({ "start-quest": "deny" })).status).toBe(200);
+    const never = await startIn();
+    expect(toolSteps(await settled(never))).toMatchObject([{ state: "denied" }]);
+    expect(await forChannel(never)).toEqual([]);
+    expect(await questsOf(never)).toEqual([]);
   });
 });

@@ -334,6 +334,7 @@ describe("read_hob's answer", () => {
           "| skill-feedback | Allow |",
           "| read-hobs | Allow |",
           "| search-web | Allow |",
+          "| start-quest | Allow |",
         ].join("\n"),
       ].join("\n\n"),
     );

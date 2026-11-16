@@ -12,7 +12,7 @@ import {
 import { GIT_IDENTITY_VARIABLES } from "./sandbox.ts";
 
 /** A request a runtime tool call becomes: every kind but a Charm's, which the hub makes itself. */
-type ToolRequest = Exclude<PolicyRequest, { readonly _tag: "Charm" | "Memory" | "Skills" | "Directory" }>;
+type ToolRequest = Exclude<PolicyRequest, { readonly _tag: "Charm" | "Memory" | "Skills" | "Directory" | "Quest" }>;
 
 /** A request a command line makes: anything on the hub or the network, never a runtime's search. */
 type CommandRequest = Exclude<ToolRequest, { readonly _tag: "Search" }>;

@@ -19,6 +19,8 @@ export const messages = {
   label: ({ title }: { title: string }) => `Quest: ${title}`,
   owner: ({ hob }: { hob: string }) => `${hob} runs it`,
   doneWhen: "Done when",
+  /** The eyebrow of a Quest a hob suggests, on its approval card. */
+  suggested: "Suggested Quest",
   result: "Result",
   made: "Made",
   started: ({ time }: { time: string }) => `Started ${formatTime(time)}`,

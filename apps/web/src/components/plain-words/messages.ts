@@ -39,6 +39,7 @@ export const messages = {
     "skill-feedback": "Reporting a skill problem",
     "read-hobs": "Reading another hob's card",
     "search-web": "Searching the web",
+    "start-quest": "Starting a Quest",
   },
   /** A command that only looks around, while it runs. */
   looking: "Looking through the files",

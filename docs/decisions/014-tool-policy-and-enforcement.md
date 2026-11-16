@@ -1,6 +1,6 @@
 # ADR 014 — Tool policy and enforcement
 
-Status: **Accepted.** Refines the [permissions contract](../architecture/permissions.md) and the [runtime adapters](../architecture/runtime-adapters.md) for Slice 7, and closes the open preset mapping of [ADR 003](003-autonomy.md). [ADR 020](020-github-charm.md) extends its Charms section for the GitHub Charm. Amended by [ADR 031](031-charm-actions-and-registry.md): Charm operations are declared by their Charm, every hub tool call runs through one pipeline and is recorded before it runs, and Read GitHub can ask. [ADR 032](032-hob-directory.md) adds Read other hobs. Amended by [ADR 036](036-web-search-and-pages.md): Search the web is a built-in operation, and searching and reading public pages are built in rather than a Charm. Amended below for read-only commands under Edit files Never ([#1344](https://github.com/otaviobarros/hobbots/issues/1344)).
+Status: **Accepted.** Refines the [permissions contract](../architecture/permissions.md) and the [runtime adapters](../architecture/runtime-adapters.md) for Slice 7, and closes the open preset mapping of [ADR 003](003-autonomy.md). [ADR 020](020-github-charm.md) extends its Charms section for the GitHub Charm. Amended by [ADR 031](031-charm-actions-and-registry.md): Charm operations are declared by their Charm, every hub tool call runs through one pipeline and is recorded before it runs, and Read GitHub can ask. [ADR 032](032-hob-directory.md) adds Read other hobs. [ADR 041](041-quests-as-work-threads.md) adds Start a Quest. Amended by [ADR 036](036-web-search-and-pages.md): Search the web is a built-in operation, and searching and reading public pages are built in rather than a Charm. Amended below for read-only commands under Edit files Never ([#1344](https://github.com/otaviobarros/hobbots/issues/1344)).
 
 ## Context
 
@@ -60,6 +60,7 @@ Allow proceeds without asking, Ask pauses the turn for an approval, Deny refuses
 | Search skills, Propose a skill, Note a skill problem | Allow | Allow | Allow |
 | Ask for a skill in the library | Ask | Ask | Allow |
 | Read other hobs | Allow | Allow | Allow |
+| Start a Quest ([ADR 041](041-quests-as-work-threads.md)) | Allow | Allow | Allow |
 | Anything outside the hob's folders | Deny | Deny | Deny |
 
 - Under Careful, Local Git asks because it is a command; reading needs no approval so investigation stays automatic, as the contract requires.

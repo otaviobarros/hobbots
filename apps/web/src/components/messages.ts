@@ -682,6 +682,10 @@ export const messages = {
     exactFiles: "Only the files of this action",
     saveRule: "Save the rule and allow",
     noRule: "No saved rule can answer this action, so Hobbots asks each time.",
+    /** Always allow (ADR 041): sets the hob's own answer to Allow, for an action no rule could name. */
+    alwaysAllow: "Always allow",
+    alwaysAllowNote: ({ name, rule }: { name: string; rule: string }) =>
+      `Always allow sets ${rule} to Allow on ${name}'s Permissions tab, so ${name} stops asking.`,
     rule: {
       folder: {
         "read-files": ({ name, folder }: { name: string; folder: string }) =>
@@ -722,6 +726,8 @@ export const messages = {
     sending: "Sending your decision…",
     approved: ({ name }: { name: string }) => `✓ Allowed once. ${name} carries on.`,
     approvedAlways: ({ name }: { name: string }) => `✓ Allowed, and the rule is saved. ${name} carries on.`,
+    approvedAlwaysAllow: ({ name }: { name: string }) =>
+      `✓ Allowed, and set to Allow on ${name}'s Permissions tab. ${name} carries on.`,
     approvedForTask: ({ name }: { name: string }) =>
       `✓ Allowed for the rest of this task. ${name} carries on, and asks again once the task ends.`,
     denied: ({ name }: { name: string }) => `✕ Denied. ${name} was told it may not.`,
@@ -754,6 +760,7 @@ export const messages = {
       "skill-feedback": "Leaves a note on a skill. Nothing changes.",
       "read-hobs": "Reads only. Nothing changes.",
       "search-web": "Sends the search to its AI's provider. Nothing changes.",
+      "start-quest": "Posts a Quest card in this conversation. You can stop it.",
     },
   },
   charms: {
@@ -1231,6 +1238,7 @@ export const messages = {
       memory: "Memory",
       skills: "Skills",
       hobs: "Other hobs",
+      quests: "Quests",
       commands: "Commands",
       web: "Web",
       outside: "Outside its folders",

@@ -19,6 +19,7 @@ import {
   type PolicyLayer,
   type PolicyOperation,
   presetDecision,
+  QuestOperation,
   ruleEnforcement,
   type SafetyPreset,
   type SandboxState,
@@ -196,6 +197,12 @@ export const PolicyRequest = Schema.TaggedUnion({
    * must act the same. `query` is the search, for the step.
    */
   Search: { operation: SearchOperation, query: Schema.String },
+  /**
+   * A Quest a hob starts with `start_work` (ADR 041), a record the hub keeps of its own, so it is
+   * decided on the hob's answers alone. `title` names the Quest, for the approval card. No grant
+   * answers an Ask: Always allow sets the hob's own answer instead.
+   */
+  Quest: { operation: QuestOperation, title: Schema.String },
 });
 export type PolicyRequest = typeof PolicyRequest.Type;
 
@@ -301,7 +308,8 @@ export type ResolvedRequest =
   | Extract<PolicyRequest, { readonly _tag: "Memory" }>
   | Extract<PolicyRequest, { readonly _tag: "Skills" }>
   | Extract<PolicyRequest, { readonly _tag: "Directory" }>
-  | Extract<PolicyRequest, { readonly _tag: "Search" }>;
+  | Extract<PolicyRequest, { readonly _tag: "Search" }>
+  | Extract<PolicyRequest, { readonly _tag: "Quest" }>;
 
 /**
  * A digest of the rules version and every policy input, so an approval binds to the exact policy.
@@ -363,6 +371,7 @@ const OPERATION_WORDS: Record<PolicyOperation, string> = {
   "skill-feedback": "reporting a skill problem",
   "read-hobs": "reading other hobs",
   "search-web": "searching the web",
+  "start-quest": "starting a Quest",
 };
 
 /** The words for an operation in a reason: a built-in one's own, or the ones its Charm declares. */
@@ -814,6 +823,8 @@ const evaluateParts = (context: PolicyContext, scope: ResolvedScope, request: Re
       return { targets: [request.hob], answers: [fromLayers(context, request.operation)] };
     case "Search":
       return { targets: [request.query], answers: [allowOrNever(fromLayers(context, request.operation))] };
+    case "Quest":
+      return { targets: [request.title], answers: [fromLayers(context, request.operation)] };
   }
 };
 
@@ -1037,7 +1048,7 @@ export class PolicyEngine extends Context.Service<
                 );
           }
           default:
-            // Web, Memory, Skills, Directory and Search name no path to resolve.
+            // Web, Memory, Skills, Directory, Search and Quest name no path to resolve.
             return Effect.succeed(request);
         }
       };

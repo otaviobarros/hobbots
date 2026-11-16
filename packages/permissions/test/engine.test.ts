@@ -49,6 +49,7 @@ const requests = (h: Home): Record<PolicyOperation | GitHubOperation, PolicyRequ
   "propose-skill": { _tag: "Skills", operation: "propose-skill", skill: "release-steps" },
   "skill-feedback": { _tag: "Skills", operation: "skill-feedback", skill: "release-steps" },
   "search-web": { _tag: "Search", operation: "search-web", query: "effect 4 release notes" },
+  "start-quest": { _tag: "Quest", operation: "start-quest", title: "Winter market page" },
 });
 
 type GitHubOperation = "github.read" | "github.open-pull-request" | "github.comment";
@@ -79,6 +80,8 @@ const ADR_014: Record<PolicyOperation | GitHubOperation, readonly [PolicyDecisio
   "read-hobs": ["allow", "allow", "allow"],
   // ADR 036's Search the web, in the Web group.
   "search-web": ["allow", "allow", "allow"],
+  // ADR 041's Start a Quest: every preset allows it, so Always allow from an Ask never widens one.
+  "start-quest": ["allow", "allow", "allow"],
 };
 
 /** Ways a path can name something outside the hob's folders. */
@@ -695,6 +698,31 @@ describe("the hob directory", () => {
     for (const answer of ["ask", "deny"] as const) {
       const narrowed = contextFor(home, "trusting", {
         hob: { ownFolders: [], hiddenSharedFolders: [], overrides: { "read-hobs": answer } },
+      });
+      expect(await decide(narrowed, request)).toMatchObject({
+        decision: answer,
+        reason: { code: "override" },
+        grantable: false,
+        rules: [],
+      });
+    }
+  });
+});
+
+describe("starting a Quest", () => {
+  // covers ADR 041 (Starting)
+  it("decides start_work on the hob's answers alone, and an Ask is never answered by a rule (#1597)", async () => {
+    const request: PolicyRequest = { _tag: "Quest", operation: "start-quest", title: "Winter market page" };
+    for (const preset of ["careful", "balanced", "trusting"] as const) {
+      expect(await decide(contextFor(home, preset), request)).toMatchObject({
+        decision: "allow",
+        operation: "start-quest",
+        targets: ["Winter market page"],
+      });
+    }
+    for (const answer of ["ask", "deny"] as const) {
+      const narrowed = contextFor(home, "trusting", {
+        hob: { ownFolders: [], hiddenSharedFolders: [], overrides: { "start-quest": answer } },
       });
       expect(await decide(narrowed, request)).toMatchObject({
         decision: answer,

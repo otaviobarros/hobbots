@@ -52,7 +52,6 @@ import {
   TurnSlots,
   UnattendedSummonLimits,
   WorkQuests,
-  WorkToolsLive,
 } from "@hobbots/agents";
 import {
   GitHubAccountLive,
@@ -209,6 +208,7 @@ import { ToolLogsLive } from "./tool-logs.ts";
 import { HobToolsLive } from "./tools.ts";
 import { OwnHostsOnly, WebClientRoutes } from "./web.ts";
 import { WebToolsLive, WebToolsWith } from "./web-access.ts";
+import { WorkToolsLive } from "./work-tools.ts";
 import { ActivityRetention, OverlappingChanges } from "./workbench.ts";
 import { WorkbenchStreamRoute } from "./workbench-stream.ts";
 
