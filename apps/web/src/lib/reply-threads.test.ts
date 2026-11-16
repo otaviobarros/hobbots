@@ -1,13 +1,28 @@
-import { type Actor, ChannelId, hobActor, Message, MessageId, type MessageStatus, OWNER_ACTOR } from "@hobbots/domain";
+import {
+  type Actor,
+  AgentId,
+  ChannelId,
+  hobActor,
+  Message,
+  MessageId,
+  type MessageStatus,
+  OWNER_ACTOR,
+} from "@hobbots/domain";
 import { describe, expect, it } from "vitest";
 import { chatLines, repliesIn, threadLines } from "./reply-threads.ts";
 
 const LEO: Actor = { kind: "user", id: "leo" };
-const QUILL = hobActor("quill");
+const QUILL = hobActor(AgentId.make("quill"));
 
 const message = (
   id: string,
-  { root = null, also = false, actor = OWNER_ACTOR, status = "complete" as MessageStatus, minute = 0 } = {},
+  {
+    root = null,
+    also = false,
+    actor = OWNER_ACTOR,
+    status = "complete",
+    minute = 0,
+  }: { root?: string | null; also?: boolean; actor?: Actor; status?: MessageStatus; minute?: number } = {},
 ) =>
   new Message({
     id: MessageId.make(id),
