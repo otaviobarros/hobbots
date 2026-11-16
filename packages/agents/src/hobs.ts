@@ -29,6 +29,7 @@ import {
   goodAtFromInstructions,
   type HobCharms,
   type HobPolicy,
+  type PolicyOperation,
   heldCharms,
   hobAnswers,
   hobBehind,
@@ -388,17 +389,27 @@ export class HobService extends Context.Service<
     /**
      * Changes the hob's own folders, hidden shared folders or overrides as its next configuration
      * version, checked against the installation's current preset and shared folders (ADR 014).
-     * A change that changes nothing adds no version. Made by `actor`, you when left out. Given as a
-     * function, the change is built from the hob as stored under its lock, so no change in between is lost.
+     * A change that changes nothing adds no version. Made by `actor`, you when left out.
      */
     readonly updatePolicy: (
       id: AgentId,
-      payload: UpdateHobPermissionsPayload | ((agent: Agent) => UpdateHobPermissionsPayload),
+      payload: UpdateHobPermissionsPayload,
       actor?: ChangeActor,
     ) => Effect.Effect<
       Agent,
       AgentNotFound | InvalidFolder | OverrideWidens | UndeclaredOperation | UnknownCharm | UnofferedAnswer
     >;
+    /**
+     * Takes the hob's own answer for one built-in operation away, as its next configuration version
+     * made by `actor`, so the preset answers it (ADR 041). Read under the hob's lock, so no change in
+     * between is lost. The hob's other answers are kept as stored and not checked again: falling back
+     * to the preset never allows more. A hob with no answer of its own for it adds no version.
+     */
+    readonly dropOverride: (
+      id: AgentId,
+      operation: PolicyOperation,
+      actor: ChangeActor,
+    ) => Effect.Effect<Agent, AgentNotFound>;
     /**
      * `update` and `updatePolicy` as one configuration version, made by `actor`: both are checked
      * before either is stored, so a change one of them refuses stores nothing (ADR 034).
@@ -598,19 +609,25 @@ export class HobService extends Context.Service<
 
       const updatePolicy = Effect.fn("HobService.updatePolicy")(function* (
         id: AgentId,
-        payload: UpdateHobPermissionsPayload | ((agent: Agent) => UpdateHobPermissionsPayload),
+        payload: UpdateHobPermissionsPayload,
         actor: ChangeActor = YOU,
       ) {
-        if (typeof payload !== "function") {
-          const canonical = yield* canonicalPolicy(payload);
-          return yield* nextVersion(id, applyPolicy(payload, canonical), actor);
-        }
-        // Built from the hob as stored, under its lock, so a change that landed since it was read is kept.
+        const canonical = yield* canonicalPolicy(payload);
+        return yield* nextVersion(id, applyPolicy(payload, canonical), actor);
+      });
+
+      const dropOverride = Effect.fn("HobService.dropOverride")(function* (
+        id: AgentId,
+        operation: PolicyOperation,
+        actor: ChangeActor,
+      ) {
         return yield* nextVersion(
           id,
           (agent) => {
-            const built = payload(agent);
-            return Effect.flatMap(canonicalPolicy(built), (canonical) => applyPolicy(built, canonical)(agent));
+            const { [operation]: dropped, ...overrides } = agent.policy.overrides;
+            return Effect.succeed(
+              dropped === undefined ? agent : new Agent({ ...agent, policy: { ...agent.policy, overrides } }),
+            );
           },
           actor,
         );
@@ -678,7 +695,7 @@ export class HobService extends Context.Service<
         );
       });
 
-      return HobService.of({ create, update, updateThen, updatePolicy, change, revert });
+      return HobService.of({ create, update, updateThen, updatePolicy, dropOverride, change, revert });
     }),
   );
 }

@@ -69,7 +69,7 @@ export type QuestOperation = typeof QuestOperation.Type;
 export const ALWAYS_ALLOW_OPERATIONS: ReadonlyArray<PolicyOperation> = ["start-quest"];
 
 /** Whether an Ask for `operation` offers Always allow, which sets the hob's own answer (ADR 041). */
-export const offersAlwaysAllow = (operation: AnyOperation): boolean =>
+export const offersAlwaysAllow = (operation: AnyOperation): operation is PolicyOperation =>
   (ALWAYS_ALLOW_OPERATIONS as ReadonlyArray<AnyOperation>).includes(operation);
 
 /**

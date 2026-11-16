@@ -334,7 +334,9 @@ describe("approvals, end to end", () => {
   it("under Start a Quest Ask the hob suggests its Quest, Always allow starts it and sets the answer to Allow, and Never refuses (#1597)", async () => {
     const hob = await hobInProject();
     const answer = (overrides: object) => request("PATCH", `/api/agents/${hob.id}/permissions`, { overrides });
-    expect((await answer({ "start-quest": "ask" })).status).toBe(200);
+    // The hob also keeps an answer that Careful, picked later, no longer allows it to set.
+    expect((await answer({ "start-quest": "ask", "use-web": "allow" })).status).toBe(200);
+    expect((await request("PATCH", "/api/setup", { safetyPreset: "careful" })).status).toBe(200);
     const quest = {
       title: "Winter market page",
       goal: "A landing page for the winter market.",
@@ -375,6 +377,8 @@ describe("approvals, end to end", () => {
     const permissions = await request<HobPermissions>("GET", `/api/agents/${hob.id}/permissions`);
     expect(permissions.body.decisions["start-quest"]).toBe("allow");
     expect(permissions.body.policy.overrides).not.toHaveProperty("start-quest");
+    expect(permissions.body.policy.overrides).toMatchObject({ "use-web": "allow" });
+    expect((await request("PATCH", "/api/setup", { safetyPreset: "balanced" })).status).toBe(200);
     const allowed = await startIn();
     expect(toolSteps(await settled(allowed))).toMatchObject([{ state: "done" }]);
     expect(await forChannel(allowed)).toEqual([]);
