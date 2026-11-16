@@ -97,7 +97,7 @@ test("a channel archived from its menu is found in the Archive and in search, op
   await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
   await page.keyboard.press("ControlOrMeta+k");
   const finder = page.getByRole("dialog", { name: "Jump anywhere" });
-  await finder.getByRole("combobox", { name: "Find a hob, channel or message" }).fill("newsletter");
+  await finder.getByRole("combobox", { name: "Find a hob, thread or message" }).fill("newsletter");
   const result = finder.getByRole("option", { name: /Rename the newsletter/ });
   await expect(result).toContainText("Archived");
   await result.click();

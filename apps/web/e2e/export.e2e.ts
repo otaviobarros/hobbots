@@ -106,8 +106,8 @@ test("Settings › Export saves a hob's export as a folder that opens without Ho
   const { paths, text } = exported(out);
   expect(paths).toEqual([
     "README.md",
-    "export.json",
     expect.stringMatching(/^channels\/\d{4}-\d{2}-\d{2} Tagline ideas/),
+    "export.json",
   ]);
   expect(text).toContain("Tagline ideas");
   expect(text).toContain("[redacted: GitHub token]");
