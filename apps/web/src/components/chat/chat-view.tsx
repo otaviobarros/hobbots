@@ -331,6 +331,7 @@ export function ChatView({
             cast={cast}
             thread={thread}
             focus={{ messageId: focusMessageId, pick: picks }}
+            read={{ failed: messages.isError, retry: () => void messages.refetch() }}
           />
         }
       >

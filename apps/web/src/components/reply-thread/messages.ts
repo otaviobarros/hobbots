@@ -33,6 +33,8 @@ export const messages = {
       "Your last reply may have gone through without an answer. Check the thread; Send again sends this one as a new reply.",
   },
   gone: "This thread's message is no longer here.",
+  loading: "Loading the thread…",
+  readFailed: "Couldn't load the thread.",
   you: "You",
   /** On a reply also sent to the main line, which opens its thread. */
   fromThread: "From a thread",

@@ -3,7 +3,7 @@ import { Button } from "@hobbots/ui/components/button";
 import { Textarea } from "@hobbots/ui/components/textarea";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useState } from "react";
 import { ApiError } from "../../api/client.ts";
 import { readDraft, useDraft, writeDraft } from "../../api/drafts.ts";
 import { sidebarQuery } from "../../api/sidebar.ts";
@@ -12,7 +12,9 @@ import { repliesIn } from "../../lib/reply-threads.ts";
 import { formatTime } from "../../lib/time.ts";
 import { messageElementId, useScrollToMessage } from "../chat/message-row.tsx";
 import { ReplyMarkdown } from "../markdown/reply-markdown.tsx";
+import { MessageMenu } from "../notes/message-menu.tsx";
 import { FaceTile } from "../sidebar/sidebar-faces.tsx";
+import { ReadFailed } from "../web/read-failed.tsx";
 import { messages as copy } from "./messages.ts";
 import { replyKey, settleReply } from "./pending-reply.ts";
 import { type Cast, whoIs } from "./thread-faces.ts";
@@ -35,6 +37,7 @@ export function ThreadPanel({
   cast,
   thread,
   focus,
+  read,
 }: {
   channel: Channel | undefined;
   messages: ReadonlyArray<Message> | undefined;
@@ -42,6 +45,8 @@ export function ThreadPanel({
   thread: OpenThread;
   /** The reply a search result opened, and which pick of it, scrolled into view and marked. */
   focus: { readonly messageId: string | undefined; readonly pick: number };
+  /** Whether reading the channel's messages failed, and how to try again (STD-REACT-015). */
+  read: { readonly failed: boolean; readonly retry: () => void };
 }) {
   const replies = messages === undefined || thread.open === undefined ? [] : repliesIn(messages, thread.open);
   useScrollToMessage(replies, focus.messageId, focus.pick);
@@ -65,7 +70,7 @@ export function ThreadPanel({
       </header>
       <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-[18px] pt-3 pb-4 wrap-anywhere">
         {root === undefined ? (
-          messages !== undefined && <p className="m-0 text-ui text-text-secondary">{copy.gone}</p>
+          <ThreadAbsent loaded={messages !== undefined} read={read} />
         ) : (
           <>
             <ThreadMessage message={root} cast={cast} />
@@ -79,6 +84,7 @@ export function ThreadPanel({
                 cast={cast}
                 channel={channel}
                 focused={reply.id === focus.messageId}
+                menu={ChannelLifecycle.isOpen(channel) && <MessageMenu channelId={channel.id} messageId={reply.id} />}
               />
             ))}
           </>
@@ -91,6 +97,13 @@ export function ThreadPanel({
   );
 }
 
+/** No root to show: still loading, a read that failed with Try again, or a root that is gone. */
+function ThreadAbsent({ loaded, read }: { loaded: boolean; read: { failed: boolean; retry: () => void } }) {
+  if (loaded) return <p className="m-0 text-ui text-text-secondary">{copy.gone}</p>;
+  if (read.failed) return <ReadFailed text={copy.readFailed} onRetry={read.retry} />;
+  return <p className="m-0 text-ui text-text-secondary">{copy.loading}</p>;
+}
+
 /**
  * One message of the thread: who wrote it and when, then its text; a reply also sent says where. A
  * reply only here is where a search result finds it, outlined when the result opened it.
@@ -100,11 +113,14 @@ function ThreadMessage({
   cast,
   channel,
   focused = false,
+  menu,
 }: {
   message: Message;
   cast: Cast;
   channel?: Channel;
   focused?: boolean;
+  /** A reply's ⋯ menu: Pin, as in the main line; a thread has no chapters to split. */
+  menu?: ReactNode;
 }) {
   const who = whoIs(cast, message.actor);
   return (
@@ -122,6 +138,7 @@ function ThreadMessage({
         <span className="flex items-baseline gap-1.5">
           <b className="text-ui font-bold text-text-strong">{who.name}</b>
           <span className="text-meta text-label">{formatTime(message.createdAt)}</span>
+          {menu && <span className="ms-auto flex items-center gap-1">{menu}</span>}
         </span>
         {message.role === "assistant" ? (
           <ReplyMarkdown content={message.content} streaming={false} caret={false} />
