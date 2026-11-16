@@ -46,9 +46,11 @@ export class ReplyThreads extends Context.Service<
       const announced = announcing(announcer(yield* Effect.serviceOption(EventPublisher), "a reply in a thread"));
       const now = Effect.map(DateTime.now, DateTime.formatIso);
       const channelOf = (channelId: ChannelId): Effect.Effect<Channel, ChannelNotFound> =>
-        repo.findChannel(channelId).pipe(
-          Effect.flatMap(Option.match({ onNone: () => new ChannelNotFound({ channelId }), onSome: Effect.succeed })),
-        );
+        repo
+          .findChannel(channelId)
+          .pipe(
+            Effect.flatMap(Option.match({ onNone: () => new ChannelNotFound({ channelId }), onSome: Effect.succeed })),
+          );
 
       // The message a thread on `messageId` hangs from: itself when it is in the main line, or the
       // root of the thread it is a reply in, which is always in the main line.
