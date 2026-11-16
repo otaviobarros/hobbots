@@ -242,7 +242,7 @@ describe("retiring hobs", () => {
     const { agent } = await summon();
     expect(await request("GET", `/api/agents/${agent.id}/open-work?handOverTo=${agent.id}`)).toMatchObject({
       status: 200,
-      body: { agentId: agent.id, tasks: [], approvals: [], backpackItems: [] },
+      body: { agentId: agent.id, tasks: [], quests: [], approvals: [], backpackItems: [] },
     });
     expect((await request("GET", "/api/agents/hob_nobody/open-work")).status).toBe(404);
 
@@ -284,6 +284,14 @@ describe("retiring hobs", () => {
     const quests = await request("GET", `/api/channels/${channel.id}/work-quests`);
     expect(quests.body).toMatchObject([{ title: "Winter market page", state: "active" }]);
 
+    const work = await request("GET", `/api/agents/${agent.id}/open-work`);
+    expect(work.body).toMatchObject({ tasks: [], quests: [{ title: "Winter market page", channelId: channel.id }] });
+    const other: Agent = (await request("POST", "/api/agents", { ...hob, name: "Rook" })).body;
+    const handOver = await request("POST", `/api/agents/${agent.id}/retire`, {
+      openWork: "hand-over",
+      handOverTo: other.id,
+    });
+    expect(handOver).toMatchObject({ status: 409, body: { _tag: "HandOverRefused" } });
     const waiting = await request("POST", `/api/agents/${agent.id}/retire`, { openWork: "finish-first" });
     expect(waiting).toMatchObject({ status: 200, body: { id: agent.id, status: "active", retiring: { by: {} } } });
     // It goes on where it runs the Quest, and finishing it is what retires it.
@@ -299,5 +307,17 @@ describe("retiring hobs", () => {
       ),
     );
     expect((await request("GET", `/api/channels/${channel.id}/work-quests`)).body).toMatchObject([{ state: "done" }]);
+  });
+
+  it("stops the Quests a hob runs when it retires at once, and starts none for a hob that is leaving (#1596)", async () => {
+    const { agent, channel } = await summon();
+    const start = `fake:hub start_work ${JSON.stringify({ title: "Winter market page", goal: "A page.", done_when: ["Live"] })}`;
+    await request("POST", `/api/channels/${channel.id}/messages`, { content: start });
+    await settled(channel.id);
+    expect((await request("POST", `/api/agents/${agent.id}/retire`, { activeWork: "stop" })).status).toBe(200);
+    expect((await request("GET", `/api/channels/${channel.id}/work-quests`)).body).toMatchObject([
+      { state: "stopped" },
+    ]);
+    expect((await request("GET", `/api/agents/${agent.id}/open-work`)).body).toMatchObject({ quests: [] });
   });
 });

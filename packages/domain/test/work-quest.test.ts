@@ -39,6 +39,7 @@ const draft = (overrides: Partial<WorkQuestDraft> = {}): WorkQuestDraft => ({
   startedFrom: MessageId.make("reply-1"),
   at: at(0),
   channelOpen: true,
+  ownerTakesWork: true,
   running: null,
   ...overrides,
 });
@@ -142,16 +143,17 @@ describe("planWorkQuestStart", () => {
     expect((refused as WorkQuestRefused).reason).toBe("busy");
   });
 
-  it("refuses a closed chat, empty fields, no Done when line and a day that does not exist", () => {
+  it("refuses a closed chat, a hob that is leaving, empty fields, no Done when line and a day that does not exist", () => {
     const reasons = [
       draft({ channelOpen: false }),
+      draft({ ownerTakesWork: false }),
       draft({ title: "  " }),
       draft({ goal: "" }),
       draft({ doneWhen: [" ", ""] }),
       draft({ expectedBy: "2026-02-30" }),
       draft({ expectedBy: "next Friday" }),
     ].map((d) => (planWorkQuestStart(d) as WorkQuestRefused).reason);
-    expect(reasons).toEqual(["channel-closed", "invalid", "invalid", "invalid", "invalid", "invalid"]);
+    expect(reasons).toEqual(["channel-closed", "owner-leaving", "invalid", "invalid", "invalid", "invalid", "invalid"]);
   });
 
   it("reads only real calendar days", () => {

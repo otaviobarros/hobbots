@@ -9,7 +9,7 @@ Its state is in the `state` field.
 | active | Someone is working on it, or a reply is owed |
 | waiting | Its owner asked the requester something or needs an approval: the card shows Needs you |
 | done | Its owner said the Done when lines hold, with a short result |
-| stopped | The requester or the camp's owner pressed Stop |
+| stopped | The requester or the camp's owner pressed Stop, or its hob retired at once |
 
 ```mermaid
 stateDiagram-v2

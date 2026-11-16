@@ -1,4 +1,4 @@
-import { ApprovalService, HobbotsRepository, HobLifecycle, TaskRepository } from "@hobbots/agents";
+import { ApprovalService, HobbotsRepository, HobLifecycle, TaskRepository, WorkQuests } from "@hobbots/agents";
 import {
   AgentNotFound,
   type HandOverRefused,
@@ -27,8 +27,8 @@ export const retireAs = (
 
 /**
  * What the hob still has open, as Retire lists it before you choose (#408): its open Tasks, each
- * checked against `handOverTo` when one is named, the approvals its work waits on, and its open
- * backpack items.
+ * checked against `handOverTo` when one is named, the Quests it runs, the approvals its work waits
+ * on, and its open backpack items.
  */
 export const openWork = (agentId: AgentId, handOverTo: AgentId | undefined) =>
   Effect.gen(function* () {
@@ -48,11 +48,14 @@ export const openWork = (agentId: AgentId, handOverTo: AgentId | undefined) =>
             handOver: refused === null ? null : { reason: refused.reason, message: refused.message },
           })),
     );
+    const workQuests = yield* Effect.serviceOption(WorkQuests);
+    const quests = Option.isSome(workQuests) ? yield* workQuests.value.runningOwnedBy(agentId) : [];
     const pending = (yield* approvals.listInbox).filter((each) => each.agentId === agentId && each.state === "pending");
     const items = yield* backpack.listOpen({ _tag: "Hob", agentId });
     return {
       agentId,
       tasks: checked,
+      quests: quests.map((quest) => ({ id: quest.id, title: quest.title, channelId: quest.channelId })),
       approvals: pending.map((each) => ({ id: each.id, label: each.label, channelId: each.channelId })),
       backpackItems: items.map((each) => ({ id: each.id, kind: each.kind, taskId: each.taskId })),
     } satisfies OpenWork;

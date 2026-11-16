@@ -1,4 +1,4 @@
-import type { HandOverBlock, RetireAgentPayload, UpdateAgentPayload } from "@hobbots/api";
+import type { HandOverBlock, OpenWork, RetireAgentPayload, UpdateAgentPayload } from "@hobbots/api";
 import {
   type Agent,
   type AgentId,
@@ -242,12 +242,22 @@ export const summonerOf = (
  */
 export type RetireChoice = RetireWork | RetireOpenWork;
 
+/** How many things the hob still has open: Tasks, Quests, approvals and backpack items. */
+export const openCount = (work: OpenWork): number =>
+  work.tasks.length + work.quests.length + work.approvals.length + work.backpackItems.length;
+
 /**
- * The ways Retire offers, in the order shown. With no open Task, only what happens to running
- * replies; with open Tasks, finishing them first (unless the hob already is), handing them over,
- * or stopping, which fails them.
+ * The ways Retire offers, in the order shown. With no open Task or Quest, only what happens to
+ * running replies; with open Tasks, finishing them first (unless the hob already is), handing them
+ * over, or stopping, which fails them. A Quest stays with the hob that runs it (ADR 041), so with
+ * one running, only finishing first or stopping it.
  */
-export const retireChoices = (openTasks: number, retiring: boolean): ReadonlyArray<RetireChoice> => {
+export const retireChoices = (
+  openTasks: number,
+  openQuests: number,
+  retiring: boolean,
+): ReadonlyArray<RetireChoice> => {
+  if (openQuests > 0) return retiring ? ["stop"] : ["finish-first", "stop"];
   if (openTasks === 0) return ["finish", "stop"];
   return retiring ? ["hand-over", "stop"] : ["finish-first", "hand-over", "stop"];
 };
@@ -262,7 +272,7 @@ export const retirePayload = (choice: RetireChoice, handOverTo: AgentId | null):
 export const retireChoiceCopy = (
   choice: RetireChoice,
   name: string,
-  hasOpenTasks: boolean,
+  hasOpenWork: boolean,
 ): { readonly title: string; readonly note: string } => {
   switch (choice) {
     case "finish":
@@ -272,8 +282,8 @@ export const retireChoiceCopy = (
       };
     case "finish-first":
       return {
-        title: `Let ${name} finish its Tasks first`,
-        note: `${name} takes no new work, keeps working its open Tasks, and retires when the last one ends.`,
+        title: `Let ${name} finish its work first`,
+        note: `${name} takes no new work, keeps working its open Tasks and Quests, and retires when the last one ends.`,
       };
     case "hand-over":
       return {
@@ -283,8 +293,8 @@ export const retireChoiceCopy = (
     case "stop":
       return {
         title: `Stop ${name}'s work now`,
-        note: hasOpenTasks
-          ? "Running replies stop and its open Tasks fail. Their leads hear of it."
+        note: hasOpenWork
+          ? "Running replies stop, its open Tasks fail and its Quests stop. Their leads hear of it."
           : "Running replies stop where they are. What they wrote so far is kept.",
       };
   }

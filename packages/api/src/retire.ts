@@ -8,6 +8,7 @@ import {
   TaskId,
   TaskRefusal,
   TaskState,
+  WorkQuestId,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 
@@ -40,10 +41,15 @@ export const OpenBackpackItem = Schema.Struct({
 });
 export type OpenBackpackItem = typeof OpenBackpackItem.Type;
 
+/** A Quest the hob runs (ADR 041). It stays with the hob, so it can only be finished first or stopped. */
+export const OpenQuest = Schema.Struct({ id: WorkQuestId, title: Schema.String, channelId: ChannelId });
+export type OpenQuest = typeof OpenQuest.Type;
+
 /** What a hob still has open, which Retire lists before you choose how it retires (#408). */
 export const OpenWork = Schema.Struct({
   agentId: AgentId,
   tasks: Schema.Array(OpenTask),
+  quests: Schema.Array(OpenQuest),
   approvals: Schema.Array(OpenApproval),
   backpackItems: Schema.Array(OpenBackpackItem),
 });

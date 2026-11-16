@@ -144,6 +144,8 @@ export class HobLifecycle extends Context.Service<
         // A retired hob keeps none of its rules, and coming back would not restore them (ADR 015).
         if (Option.isSome(grants)) yield* grants.value.revokeForAgent(agentId, "retired");
         if (activeWork === "stop") yield* chat.interruptAgent(agentId);
+        // A Quest stays with its hob (ADR 041), so one it still runs stops with it.
+        if (Option.isSome(quests)) yield* quests.value.stopOwnedBy(agentId);
         return retired;
       });
 
@@ -239,6 +241,10 @@ export class HobLifecycle extends Context.Service<
             const target = yield* repo.findAgent(to);
             if (Option.isNone(target) || !takesNewWork(target.value)) {
               return yield* refuse(`The hob ${to} does not take new work, so it cannot take ${agent.name}'s Tasks.`);
+            }
+            // A Quest stays with the hob that runs it (ADR 041), so none can be handed over.
+            if (Option.isSome(quests) && (yield* quests.value.runningOwnedBy(agentId)).length > 0) {
+              return yield* refuse(`${agent.name} runs a Quest, which cannot be handed over. Let it finish first.`);
             }
             const blocked = yield* handOverBlocks(yield* openTasks(agentId), to);
             if (blocked.length > 0) {

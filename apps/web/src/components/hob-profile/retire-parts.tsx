@@ -2,7 +2,7 @@ import type { OpenWork } from "@hobbots/api";
 import type { Agent, AgentId } from "@hobbots/domain";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useId } from "react";
-import { handOverBlockText } from "../../api/profile.ts";
+import { handOverBlockText, openCount } from "../../api/profile.ts";
 import { messages } from "../messages.ts";
 import { taskTitle } from "../quest/work-model.ts";
 
@@ -20,10 +20,9 @@ export function OpenWorkList({
   blockedTaker: Agent | null;
 }) {
   const copy = messages.profile.retire;
-  const tasks = work?.tasks ?? [];
   const approvals = work?.approvals.length ?? 0;
   const items = work?.backpackItems.length ?? 0;
-  if (running.length === 0 && tasks.length === 0 && approvals === 0 && items === 0) return null;
+  if (running.length === 0 && (work === undefined || openCount(work) === 0)) return null;
   return (
     <div className="flex flex-col gap-1 rounded-control bg-deep px-3 py-2 text-ui">
       {running.length > 0 && <span className="lbl text-label">{copy.runningHeading}</span>}
@@ -35,7 +34,21 @@ export function OpenWorkList({
           </li>
         ))}
       </ul>
-      {tasks.length > 0 && <span className="lbl text-label">{copy.tasksHeading({ count: tasks.length })}</span>}
+      <OpenTasks tasks={work?.tasks ?? []} blockedTaker={blockedTaker} />
+      <OpenQuests quests={work?.quests ?? []} />
+      {(approvals > 0 || items > 0) && (
+        <span className="text-detail text-text-secondary">{copy.waitingOn({ approvals, items })}</span>
+      )}
+    </div>
+  );
+}
+
+/** The hob's open Tasks, each with why it cannot go to the hob picked for a hand-over. */
+function OpenTasks({ tasks, blockedTaker }: { tasks: OpenWork["tasks"]; blockedTaker: Agent | null }) {
+  if (tasks.length === 0) return null;
+  return (
+    <>
+      <span className="lbl text-label">{messages.profile.retire.tasksHeading({ count: tasks.length })}</span>
       <ul className="m-0 flex list-none flex-col gap-1 p-0">
         {tasks.map((task) => (
           <li key={task.id} className="flex min-w-0 flex-col">
@@ -46,10 +59,24 @@ export function OpenWorkList({
           </li>
         ))}
       </ul>
-      {(approvals > 0 || items > 0) && (
-        <span className="text-detail text-text-secondary">{copy.waitingOn({ approvals, items })}</span>
-      )}
-    </div>
+    </>
+  );
+}
+
+/** The Quests the hob runs, which stay with it (ADR 041). */
+function OpenQuests({ quests }: { quests: OpenWork["quests"] }) {
+  if (quests.length === 0) return null;
+  return (
+    <>
+      <span className="lbl text-label">{messages.profile.retire.questsHeading({ count: quests.length })}</span>
+      <ul className="m-0 flex list-none flex-col gap-1 p-0">
+        {quests.map((quest) => (
+          <li key={quest.id} className="truncate">
+            {quest.title}
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 

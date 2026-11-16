@@ -2,6 +2,7 @@ import type { HobProposalRow } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
 import { useChannelReplies } from "../../api/hub-status.ts";
+import { openCount } from "../../api/profile.ts";
 import { channelsQuery, openWorkQuery } from "../../api/queries.ts";
 import { OpenWorkList } from "../hob-profile/retire-parts.tsx";
 import { messages } from "./messages.ts";
@@ -69,7 +70,7 @@ function WhatIsOpen({ hob, review }: { hob: string; review: RetireReview }) {
     );
   }
   const work = review.work;
-  const open = (work?.tasks.length ?? 0) + (work?.approvals.length ?? 0) + (work?.backpackItems.length ?? 0);
+  const open = work === undefined ? 0 : openCount(work);
   return review.running.length === 0 && open === 0 ? (
     <span className="text-detail text-text-secondary">{copy.nothingOpen({ hob })}</span>
   ) : (

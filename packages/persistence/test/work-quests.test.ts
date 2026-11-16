@@ -11,6 +11,7 @@ import {
   TurnRequest,
   TurnRequestId,
   WorkQuestId,
+  YOU,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -205,5 +206,29 @@ describe("Quests as work threads", () => {
     );
     expect(result.passed.value).toEqual([]);
     expect(Option.isSome(result.reply)).toBe(true);
+  });
+
+  // covers ADR 041 (The record), #408 (Retire)
+  it("refuses a Quest to a retiring hob, and stops every Quest a hob runs as it retires at once (#1596)", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const repo = yield* HobbotsRepository;
+        const quests = yield* WorkQuestRepository;
+        yield* quests.start(start());
+        const stopped = yield* quests.stopOwnedBy(ADA, NOW);
+        const again = yield* quests.stopOwnedBy(ADA, NOW);
+        yield* repo.setAgentRetiring(ADA, { since: NOW, by: YOU }, YOU);
+        const leaving = yield* Effect.exit(
+          quests.start(start({ id: WorkQuestId.make("quest-2"), startedFrom: MessageId.make("reply-2") })),
+        );
+        return { stopped, again, leaving, running: yield* quests.runningOwnedBy(ADA) };
+      }),
+    );
+    expect(result.stopped.value).toMatchObject([{ id: "quest-1", state: "stopped" }]);
+    expect(result.stopped.entries.map((entry) => entry.type)).toEqual(["WorkQuestChanged"]);
+    expect(result.again.entries).toEqual([]);
+    expect(Exit.isFailure(result.leaving) && JSON.stringify(result.leaving.cause)).toContain("owner-leaving");
+    expect(result.running).toEqual([]);
   });
 });

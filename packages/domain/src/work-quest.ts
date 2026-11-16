@@ -77,7 +77,7 @@ export type WorkQuestEvent =
       readonly made: ReadonlyArray<string>;
       readonly from: MessageId;
     }
-  /** The requester or the camp's owner pressed Stop. */
+  /** The requester or the camp's owner pressed Stop, or its hob retired at once. */
   | { readonly _tag: "Stop"; readonly at: string }
   /** Someone reopened it after a Stop. */
   | { readonly _tag: "Reopen"; readonly at: string };
@@ -101,7 +101,7 @@ export const WorkQuestMachine = defineMachine<WorkQuestState, WorkQuestEvent, Wo
     active: "Someone is working on it, or a reply is owed",
     waiting: "Its owner asked the requester something or needs an approval: the card shows Needs you",
     done: "Its owner said the Done when lines hold, with a short result",
-    stopped: "The requester or the camp's owner pressed Stop",
+    stopped: "The requester or the camp's owner pressed Stop, or its hob retired at once",
   },
   field: "state",
   events: {
@@ -137,9 +137,10 @@ export const WorkQuests = {
 /**
  * Why a Quest command changed nothing. `invalid`: a field is empty, too long or not a date.
  * `channel-closed`: its chat or camp is archived. `busy`: the conversation already runs a Quest.
+ * `owner-leaving`: the hob is retired or retiring, so it takes no new work (#408).
  * `none-running`: there is no running Quest of the hob's in the conversation to finish.
  */
-export const WorkQuestRefusal = Schema.Literals(["invalid", "channel-closed", "busy", "none-running"]);
+export const WorkQuestRefusal = Schema.Literals(["invalid", "channel-closed", "busy", "owner-leaving", "none-running"]);
 export type WorkQuestRefusal = typeof WorkQuestRefusal.Type;
 
 export class WorkQuestRefused extends Schema.TaggedError<WorkQuestRefused>()("WorkQuestRefused", {
@@ -185,6 +186,8 @@ export interface WorkQuestDraft {
   readonly at: string;
   /** Whether its chat or camp is open. */
   readonly channelOpen: boolean;
+  /** Whether the hob takes new work: neither retired nor retiring. */
+  readonly ownerTakesWork: boolean;
   /** The Quest the conversation already runs, if any. */
   readonly running: WorkQuest | null;
 }
@@ -215,6 +218,12 @@ export const planWorkQuestStart = (draft: WorkQuestDraft): WorkQuest | WorkQuest
     return new WorkQuestRefused({
       reason: "channel-closed",
       message: "This chat or camp is closed, so no Quest starts here.",
+    });
+  }
+  if (!draft.ownerTakesWork) {
+    return new WorkQuestRefused({
+      reason: "owner-leaving",
+      message: "You are retiring, so you start no new Quest. Finish the work you already have.",
     });
   }
   if (draft.running !== null) {
