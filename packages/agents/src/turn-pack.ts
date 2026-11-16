@@ -1,4 +1,11 @@
-import { type Channel, type ChannelId, isActiveQuest, type Message, type PackReport } from "@hobbots/domain";
+import {
+  type Channel,
+  type ChannelId,
+  isActiveQuest,
+  type Message,
+  type PackReport,
+  WorkQuests as WorkQuestsRules,
+} from "@hobbots/domain";
 import { Context, Effect, HashMap, Layer, Option, Ref } from "effect";
 import { BriefLog } from "./brief-log.ts";
 import { ChapterRepository } from "./chapters.ts";
@@ -13,6 +20,7 @@ import {
 import { type PackPeople, reasonLine, type TurnReason } from "./pack-people.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { TaskRepository } from "./tasks.ts";
+import { WorkQuests } from "./work-quests.ts";
 
 // What a new session's turn reads its context pack from (ADR 037, #1380), and the reports of the
 // packs turns read.
@@ -71,6 +79,23 @@ export const makePackSources = Effect.gen(function* () {
   const records = yield* Effect.serviceOption(PackRecordSource);
   const briefs = yield* Effect.serviceOption(BriefLog);
   const tasks = yield* Effect.serviceOption(TaskRepository);
+  const workQuests = yield* Effect.serviceOption(WorkQuests);
+  // The channel's Quests as work threads still running (ADR 041), with their goal and "Done when" lines.
+  const workQuestsIn = (channel: Channel, people: PackPeople) =>
+    Option.isNone(workQuests)
+      ? Effect.succeed([])
+      : workQuests.value.of(channel.id).pipe(
+          Effect.map((all) =>
+            all.filter(WorkQuestsRules.isRunning).map((quest) => ({
+              title: quest.title,
+              owner: people.nameOf({ kind: "hob", id: quest.ownerHobId }),
+              state: quest.state,
+              goal: quest.goal,
+              doneWhen: quest.doneWhen,
+            })),
+          ),
+          Effect.orElseSucceed(() => []),
+        );
   // The Quests under way in the channel, named by their Task's brief, oldest first.
   const questsIn = (channel: Channel, people: PackPeople) =>
     Effect.gen(function* () {
@@ -118,6 +143,7 @@ export const makePackSources = Effect.gen(function* () {
           : null,
         work: yield* repo.listOpenWork(channel.id),
         quests: yield* questsIn(channel, people),
+        workQuests: yield* workQuestsIn(channel, people),
         carried: channel.origin === null || replied ? [] : yield* repo.listCarriedOver(channel.id),
         artifacts: Option.isNone(records) ? [] : yield* records.value.artifactsIndex(channel.id),
         chapters: packChapters(stored, transcript),

@@ -100,7 +100,9 @@ export const makeTurnRequestWrites = (
   // Whether `hobId` leads a top-level Quest in the channel that has not ended.
   const leadsOpenQuest = (channelId: ChannelId, hobId: string) =>
     sql`SELECT 1 FROM tasks WHERE channel_id = ${channelId} AND owner_id = ${hobId} AND parent_id IS NULL
-      AND state NOT IN ('completed', 'failed', 'cancelled') LIMIT 1`.pipe(Effect.map((rows) => rows.length > 0));
+      AND state NOT IN ('completed', 'failed', 'cancelled')
+      UNION ALL SELECT 1 FROM work_quests WHERE channel_id = ${channelId} AND owner_hob_id = ${hobId}
+      AND state IN ('active', 'waiting')`.pipe(Effect.map((rows) => rows.length > 0));
 
   // Drops every request `hobId` still waits to answer in the channel, on any of its lines.
   const dropWaitingOf = (channelId: ChannelId, hobId: string, by: Actor) =>

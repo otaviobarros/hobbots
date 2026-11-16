@@ -1206,7 +1206,7 @@ describe("camp suggestions", () => {
 });
 
 /** A Quest as work thread (ADR 041) Aldric started from the reply `from` in `channelId`. */
-const workQuest = (id: string, channelId: ChannelId, from: string) =>
+const workQuest = (id: string, channelId: ChannelId, from: string, ownerHobId: AgentId = ALDRIC) =>
   WorkQuestRepository.use((quests) =>
     quests.start({
       id: WorkQuestId.make(id),
@@ -1216,7 +1216,7 @@ const workQuest = (id: string, channelId: ChannelId, from: string) =>
       goal: `Do ${id}`,
       doneWhen: ["It is done"],
       expectedBy: null,
-      ownerHobId: ALDRIC,
+      ownerHobId,
       repository: null,
       startedFrom: MessageId.make(from),
       at: tick(),
@@ -1224,6 +1224,18 @@ const workQuest = (id: string, channelId: ChannelId, from: string) =>
   );
 
 describe("a Quest as a work thread whose chapter moves into a camp", () => {
+  // covers ADR 041 (The record), ADR 039 (members)
+  it("holds the chapter while a hob the camp would not admit runs a Quest started in it (#1596)", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { first } = yield* chatWithTwoChapters;
+        yield* workQuest("pips-page", CHAT, "reply-1", AgentId.make("pip"));
+        return yield* Effect.exit(move(first, intoNew()));
+      }),
+    );
+    expect(Exit.isFailure(result) && JSON.stringify(result.cause)).toContain("reply-running");
+  });
+
   // covers ADR 041 (The record), ADR 037 (moving a chapter)
   it("follows the reply it started from, journaled, and is refused where the camp runs one (#1596)", async () => {
     const result = await run(

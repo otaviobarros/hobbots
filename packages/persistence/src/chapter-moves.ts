@@ -104,7 +104,12 @@ export const makeChapterMoves = (
       AND t.parent_id IS NULL AND t.state NOT IN ('completed', 'failed', 'cancelled')
       AND t.owner_id <> ${camp.ownerHobId} AND NOT EXISTS (SELECT 1 FROM channel_members m
         WHERE m.channel_id = ${camp.id} AND m.actor_kind = 'hob' AND m.actor_id = t.owner_id
-        AND m.state = 'active') LIMIT 1`.pipe(Effect.map((rows) => rows.length > 0));
+        AND m.state = 'active')
+      UNION ALL SELECT 1 FROM work_quests q JOIN messages s ON s.id = q.started_from
+      WHERE s.chapter_id = ${chapterId} AND q.channel_id = ${from} AND q.state IN ('active', 'waiting')
+        AND q.owner_hob_id <> ${camp.ownerHobId} AND NOT EXISTS (SELECT 1 FROM channel_members m
+        WHERE m.channel_id = ${camp.id} AND m.actor_kind = 'hob' AND m.actor_id = q.owner_hob_id
+        AND m.state = 'active')`.pipe(Effect.map((rows) => rows.length > 0));
 
   // The channel as this transaction wrote it.
   const shown = (id: ChannelId) => readChannel(id).pipe(Effect.flatMap(Effect.fromNullishOr), Effect.orDie);

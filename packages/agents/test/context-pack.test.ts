@@ -426,6 +426,25 @@ describe("the pack with several hobs", () => {
   });
 
   // covers ADR 039 (The context pack with several hobs), ADR 037 (The context pack)
+  // covers ADR 041 (The record), STD-ARCH-018
+  it("keeps a running Quest's goal and Done when lines in a new session's open work (#1596)", () => {
+    const pack = buildPack({
+      ...empty,
+      workQuests: [
+        {
+          title: "Winter market page",
+          owner: "Quill",
+          state: "active",
+          goal: "A landing page for the winter market.",
+          doneWhen: ["The page is live", "It shows the map"],
+        },
+      ],
+    });
+    expect(pack.text?.split("\n")).toContain(
+      "- Quest: Winter market page (run by Quill, active). Goal: A landing page for the winter market. Done when: The page is live; It shows the map",
+    );
+  });
+
   it("lists the Quests under way here with the open work, before the Tasks (#1465)", () => {
     const pack = buildPack({
       ...empty,

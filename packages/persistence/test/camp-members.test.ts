@@ -239,6 +239,24 @@ describe("a camp's hobs", () => {
         yield* sql`INSERT INTO tasks ${sql.insert({ ...quest, state: "active", ...at })}`;
         const leading = yield* reason(CAMP, hobActor(PIP));
         yield* sql`UPDATE tasks SET state = 'completed' WHERE id = 'task-pip'`;
+        // So does a Quest as a work thread Pip runs here (ADR 041), until it is done.
+        yield* sql`INSERT INTO work_quests ${sql.insert({
+          id: "quest-pip",
+          channel_id: CAMP,
+          title: "Plan",
+          goal: "Plan it",
+          done_when: "[]",
+          owner_hob_id: PIP,
+          requested_by_kind: "hob",
+          requested_by_id: PIP,
+          started_from: "reply-pip",
+          state: "active",
+          made: "[]",
+          revision: 0,
+          ...{ created_at: at.created_at, changed_at: at.updated_at },
+        })}`;
+        const runsWork = yield* reason(CAMP, hobActor(PIP));
+        yield* sql`UPDATE work_quests SET state = 'done' WHERE id = 'quest-pip'`;
         // One who is not in the camp, as the change is written, changes no one in it.
         const outsider = [
           refusal(yield* Effect.flip(repo.removeMember(CAMP, hobActor(PIP), BRUNA))),
@@ -259,6 +277,7 @@ describe("a camp's hobs", () => {
           outsider,
           archived,
           leading,
+          runsWork,
           back: types(back.entries),
           bruna: shown(bruna.value),
           members: before,
@@ -271,6 +290,7 @@ describe("a camp's hobs", () => {
     expect(result.archived).toEqual(["ChannelArchived", "ChannelArchived"]);
     expect(result.after).toEqual(result.members);
     expect(result.leading).toBe("leads-quest");
+    expect(result.runsWork).toBe("leads-quest");
     expect(result.back).toEqual(["ChannelMemberChanged"]);
     expect(result.bruna).toBe("user:bruna:active");
     expect(result.members).toEqual([
