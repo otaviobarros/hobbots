@@ -52,6 +52,7 @@ import {
   type Reply,
   runStatus,
 } from "./channel-run.ts";
+import { hubToolOffer } from "./charms.ts";
 import { type CarriedEnd, type CarriedWork, Continuations } from "./continuations.ts";
 import { makePackPeople, type TurnReason, turnReasonOf } from "./pack-people.ts";
 import { passStands } from "./pass-tool.ts";
@@ -61,7 +62,7 @@ import { runtimeAdapters } from "./runtime.ts";
 import { type Speaker, speakerIn } from "./speaker.ts";
 import { stoppedCommands, uncertainCalls } from "./steps.ts";
 import { TaskTurns } from "./task-turns.ts";
-import { TaskRepository } from "./tasks.ts";
+import { callScope, TaskRepository } from "./tasks.ts";
 import type { makeTurnInputs } from "./turn-inputs.ts";
 import { makePackSources } from "./turn-pack.ts";
 import { type Carry, makeTurnRunner, type TurnRunnerDeps } from "./turn-runner.ts";
@@ -186,20 +187,53 @@ export const makeChannelRunner = (deps: ChannelRunnerDeps) =>
     const offersTaskTools = Option.isSome(yield* Effect.serviceOption(TaskTurns));
     // Without the Quest tools, as in tests of one part, a chat's turns offer neither (ADR 041).
     const offered = { taskTools: offersTaskTools, workTools: Option.isSome(yield* Effect.serviceOption(WorkTools)) };
+    // The hub tools a chat turn is offered beside the Task tools and `pass`, as the turn reads them.
+    const hubOffer = yield* hubToolOffer;
     /**
-     * `channel` as a turn of `agent` on `runtime` sees it (#1543). A runtime that keeps the hub tools a
-     * session started with, as Codex does (ADR 024), never gets a Task tool its session lacks, so a
-     * hob in a channel that started before that tool existed could never call it. Such a session, or
-     * one without `pass` (ADR 039) or the Quest tools (ADR 041), or one whose tools are not known, is
-     * left out: the turn starts a new session from the context pack in its place, as in a new chapter,
-     * and the new one is recorded over it.
+     * Whether a session that holds `held` holds every hub tool a turn of `agentId` writing `messageId`
+     * in `channelId` is offered beside the Task tools and `pass` (#1245): read under the hob's access
+     * now, as the turn reads its own, so a Charm granted or a tool whose answer turned Allow since the
+     * session started counts.
      */
-    const withoutStaleSession = (channel: Channel, runtime: Brain["runtime"], agentId: AgentId): Channel => {
-      if (adapters(runtime)?.resumeKeepsHubTools !== true) return channel;
-      const live = liveSession(channel, runtime, agentId);
-      if (live === undefined || holdsEveryChatTool(live.taskTools, offered)) return channel;
-      return new Channel({ ...channel, sessions: channel.sessions.filter((session) => session !== live) });
-    };
+    const holdsTurnOffer = (
+      held: ReadonlyArray<string>,
+      channelId: ChannelId,
+      agentId: AgentId,
+      messageId: MessageId,
+    ) =>
+      hubOffer({
+        agentId,
+        channelId,
+        messageId,
+        scope: () => callScope.reply(messageId),
+        currentAccess: grants.currentAccess(agentId),
+        redactor,
+        approvals: null,
+      }).pipe(Effect.map(({ hubTools }) => (hubTools?.tools ?? []).every((tool) => held.includes(tool.name))));
+    /**
+     * `channel` as the turn of `agent` on `runtime` writing `messageId` sees it (#1543, #1245). A
+     * runtime that keeps the hub tools a session started with, as Codex does (ADR 024), never gets a
+     * hub tool its session lacks, so a hob granted a Charm, or whose `read_hob` answer turned Allow,
+     * after its session started could never call it. A session without every hub tool the turn offers,
+     * `pass` (ADR 039) and the Task tools included, or one whose tools are not known, is left out: the
+     * turn starts a new session from the context pack in its place, as in a new chapter, and the new
+     * one is recorded over it.
+     */
+    const withoutStaleSession = (channel: Channel, runtime: Brain["runtime"], agentId: AgentId, messageId: MessageId) =>
+      Effect.gen(function* () {
+        if (adapters(runtime)?.resumeKeepsHubTools !== true) return channel;
+        const live = liveSession(channel, runtime, agentId);
+        if (live === undefined) return channel;
+        const held = live.hubTools;
+        if (
+          held !== undefined &&
+          holdsEveryChatTool(held, offered) &&
+          (yield* holdsTurnOffer(held, channel.id, agentId, messageId))
+        ) {
+          return channel;
+        }
+        return new Channel({ ...channel, sessions: channel.sessions.filter((session) => session !== live) });
+      });
     const scope = yield* Effect.scope;
     const turns = yield* FiberMap.make<ChannelId>();
     // The hob of each channel's turn, from when `TurnStarted` announces it until `TurnEnded` does, so
@@ -398,7 +432,12 @@ export const makeChannelRunner = (deps: ChannelRunnerDeps) =>
       Effect.gen(function* () {
         const launchedAt = yield* nowMillis;
         const { agent } = given;
-        const channel = withoutStaleSession(given.channel, brainFor(given.channel, config).runtime, agent.id);
+        const channel = yield* withoutStaleSession(
+          given.channel,
+          brainFor(given.channel, config).runtime,
+          agent.id,
+          saved.id,
+        );
         const speaker: Speaker = { ...given, channel };
         const brain = brainFor(channel, config);
         // A note to self never reaches a turn (ADR 037).

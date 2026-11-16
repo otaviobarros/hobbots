@@ -86,7 +86,7 @@ export type RuntimeEvent =
       readonly organizationSkills?: ReadonlyArray<string>;
       /**
        * The names of the hub tools a session the runtime started this turn holds for good, on a
-       * runtime that keeps them (`resumeKeepsHubTools`, #1543). Absent on a resumed session, on a
+       * runtime that keeps them (`resumeKeepsHubTools`, #1543, #1245). Absent on a resumed session, on a
        * new one that holds none, and on a runtime offered each turn's tools.
        */
       readonly hubTools?: ReadonlyArray<string>;
@@ -651,7 +651,7 @@ export interface RuntimeAdapterShape {
    * Whether a resumed session keeps the hub tools it started with, whatever a later turn offers, as
    * a Codex thread does (ADR 024). The hub then tells a resumed session only of the hub tools it
    * holds, such as `read_hob` in the roster (ADR 032), and never resumes a chat session that lacks
-   * a Task tool the turn offers (#1543). Absent, a session is offered each turn's own.
+   * a hub tool the turn offers (#1543, #1245). Absent, a session is offered each turn's own.
    */
   readonly resumeKeepsHubTools?: boolean;
   /**

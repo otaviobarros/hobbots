@@ -1,5 +1,5 @@
 import type { AgentId, MessageId, RuntimeKind, RuntimeSession, TaskBriefMark, WebReadMark } from "@hobbots/domain";
-import { Channel, isSessionOf, isTaskToolName, isWorkToolName, liveSession, PASS_TOOL } from "@hobbots/domain";
+import { Channel, isSessionOf, liveSession } from "@hobbots/domain";
 import { DateTime, Effect, type Option } from "effect";
 import { deliveredRoster, rosterAtStart, sameRoster, type TurnRoster } from "./hob-directory.ts";
 import { deliveredMemoryBrief, startedMemoryBrief, type TurnMemoryBrief } from "./memory-brief.ts";
@@ -26,31 +26,24 @@ const withSession = (
 
 /**
  * What a started session keeps of the session the channel knew: what it was told of its Task
- * (#1027), its read-the-web mark (ADR 036) and the Task tools it holds (#1543) hold only for the
- * same session.
+ * (#1027), its read-the-web mark (ADR 036) and the hub tools it holds (#1543, #1245) hold only for
+ * the same session.
  */
 const carriedMarks = (
   known: RuntimeSession | undefined,
   sessionId: string,
-): Pick<RuntimeSession, "taskBrief" | "readWeb" | "taskTools"> => {
+): Pick<RuntimeSession, "taskBrief" | "readWeb" | "hubTools"> => {
   if (known?.sessionId !== sessionId) return {};
   return {
     ...(known.taskBrief === undefined ? {} : { taskBrief: known.taskBrief }),
     ...(known.readWeb == null ? {} : { readWeb: known.readWeb }),
-    ...(known.taskTools === undefined ? {} : { taskTools: known.taskTools }),
+    ...(known.hubTools === undefined ? {} : { hubTools: known.hubTools }),
   };
 };
 
 /** Whether two lists of tool names are the same, both unknown included. */
 const sameTools = (a: ReadonlyArray<string> | undefined, b: ReadonlyArray<string> | undefined) =>
   a === b || (a !== undefined && b !== undefined && a.length === b.length && a.every((name, i) => name === b[i]));
-
-/**
- * The Task tools, `pass` and the Quest tools among the hub tools a new session holds for good, or
- * undefined when not known (#1543, ADR 039, ADR 041).
- */
-const heldTaskTools = (hubTools: ReadonlyArray<string> | undefined) =>
-  hubTools?.filter((name) => isTaskToolName(name) || name === PASS_TOOL || isWorkToolName(name));
 
 /** Whether recording `next` over `known` would change nothing the channel keeps of the session. */
 const sameSession = (known: RuntimeSession, next: RuntimeSession) =>
@@ -60,7 +53,7 @@ const sameSession = (known: RuntimeSession, next: RuntimeSession) =>
   known.seenThrough === next.seenThrough &&
   known.memoryBrief === next.memoryBrief &&
   sameRoster(known.roster, next.roster) &&
-  sameTools(known.taskTools, next.taskTools) &&
+  sameTools(known.hubTools, next.hubTools) &&
   known.readWeb?.since === next.readWeb?.since &&
   known.readWeb?.source === next.readWeb?.source;
 
@@ -168,7 +161,6 @@ export const makeTurnSession = ({ channel, runtime, agentId, changeChannel, told
         // Without memory, a session keeps whatever brief it was last told of.
         const memoryBrief = memory === null ? known?.memoryBrief : startedMemoryBrief(memory, expected, started);
         const rosterMark = rosterAtStart(roster, known, expected, started);
-        const taskTools = heldTaskTools(startedWith);
         const session: RuntimeSession = {
           runtime,
           agentId,
@@ -181,7 +173,7 @@ export const makeTurnSession = ({ channel, runtime, agentId, changeChannel, told
           ...carriedMarks(known, started),
           ...(readWeb === null ? {} : { readWeb }),
           ...(rosterMark === undefined ? {} : { roster: rosterMark }),
-          ...(taskTools === undefined ? {} : { taskTools }),
+          ...(startedWith === undefined ? {} : { hubTools: startedWith }),
         };
         if (known !== undefined && sameSession(known, session)) return null;
         const sessions =

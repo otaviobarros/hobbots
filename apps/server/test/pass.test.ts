@@ -142,6 +142,6 @@ describe("pass", () => {
     // Codex keeps a thread's first tools, so the second turn starts a new thread that holds pass.
     expect(requests[1]?.sessionId).toBeNull();
     expect(offered(requests[1])).toContain(PASS_TOOL);
-    expect(liveSession(channel, "codex", FRODO)?.taskTools).toContain(PASS_TOOL);
+    expect(liveSession(channel, "codex", FRODO)?.hubTools).toContain(PASS_TOOL);
   }, 30_000);
 });
