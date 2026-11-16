@@ -32,6 +32,7 @@ import {
   Channel,
   ChannelId,
   EMPTY_HOB_POLICY,
+  type HobPolicy,
   type Message,
   OWNER_ACTOR,
   OWNER_USER_ID,
@@ -179,6 +180,8 @@ export const partyHub = (
      * neither lists them nor reaches the hub with them.
      */
     readonly withholds?: (request: PromptRequest) => ReadonlyArray<string>;
+    /** Every hob's own answers, read again each time the hub reads a hob's access, so a test can change them. */
+    readonly hob?: () => HobPolicy;
   } = {},
 ) => {
   const temp = realpathSync(mkdtempSync(join(tmpdir(), "hobbots-party-")));
@@ -199,7 +202,7 @@ export const partyHub = (
           policy: {
             preset: options.preset ?? "balanced",
             sharedFolders: [project],
-            hob: EMPTY_HOB_POLICY,
+            hob: options.hob?.() ?? EMPTY_HOB_POLICY,
             dataFolder: join(temp, "data"),
             restrictions: [],
           },
