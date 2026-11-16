@@ -14,11 +14,16 @@ export interface ReadFirstChip {
   readonly opens: ReadFirstOpens | null;
 }
 
-const atMessage = (messageId: MessageId | null): ReadFirstOpens | null =>
-  messageId === null ? null : { _tag: "Message", messageId };
+/** The jump to a message, only while it is in the transcript shown: one moved elsewhere opens nothing here. */
+const atMessage = (messageId: MessageId | null, here: ReadonlySet<MessageId>): ReadFirstOpens | null =>
+  messageId !== null && here.has(messageId) ? { _tag: "Message", messageId } : null;
 
 /** A record's chip: its label and where it opens. */
-const chipOf = (each: PackRead, hobs: ReadonlyMap<AgentId, Agent>): Omit<ReadFirstChip, "key"> => {
+const chipOf = (
+  each: PackRead,
+  hobs: ReadonlyMap<AgentId, Agent>,
+  here: ReadonlySet<MessageId>,
+): Omit<ReadFirstChip, "key"> => {
   switch (each._tag) {
     case "MemoryPage": {
       const owner = scopeName(each.scope, hobs);
@@ -34,16 +39,16 @@ const chipOf = (each: PackRead, hobs: ReadonlyMap<AgentId, Agent>): Omit<ReadFir
       };
     }
     case "Decision":
-      return { label: messages.readFirst.decision({ title: each.title }), opens: atMessage(each.messageId) };
+      return { label: messages.readFirst.decision({ title: each.title }), opens: atMessage(each.messageId, here) };
     case "Artifact":
       return {
         label: messages.readFirst.artifact({ title: each.title, version: each.version }),
-        opens: atMessage(each.messageId),
+        opens: atMessage(each.messageId, here),
       };
     case "Chapter":
       return {
         label: messages.readFirst.chapter({ number: each.number, title: each.title }),
-        opens: atMessage(each.messageId),
+        opens: atMessage(each.messageId, here),
       };
   }
 };
@@ -51,12 +56,14 @@ const chipOf = (each: PackRead, hobs: ReadonlyMap<AgentId, Agent>): Omit<ReadFir
 /**
  * The chips a Quest's card lists as "Read first" (ADR 039), in the order its owner's pack carried
  * them: memory pages open in Memory, and decisions, artifacts and chapters at the message they were
- * made in, when it is still there. They come from the pack's report, so no model is asked.
+ * made in, when that message is in the transcript shown (`here`), as it is not once its chapter moved. They come from the pack's report, so no model is asked.
  */
 export const readFirstChips = (
   read: ReadonlyArray<PackRead>,
   hobs: ReadonlyMap<AgentId, Agent>,
-): ReadonlyArray<ReadFirstChip> => read.map((each, index) => ({ key: `${index}:${each._tag}`, ...chipOf(each, hobs) }));
+  here: ReadonlySet<MessageId>,
+): ReadonlyArray<ReadFirstChip> =>
+  read.map((each, index) => ({ key: `${index}:${each._tag}`, ...chipOf(each, hobs, here) }));
 
 /**
  * Who the card says asked for the Quest: "you", a person's or a hob's name. Null when its owner

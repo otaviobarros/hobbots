@@ -1,4 +1,4 @@
-import type { Agent, AgentId, ChannelId, MessageId, WorkQuest } from "@hobbots/domain";
+import type { Agent, AgentId, ChannelId, Message, MessageId, WorkQuest } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -24,6 +24,8 @@ interface CardContext {
   readonly asker: string | null;
   readonly hobs: ReadonlyMap<AgentId, Agent>;
   readonly onJump: (messageId: MessageId) => void;
+  /** The messages of the transcript shown, which a chip may jump to. */
+  readonly here: ReadonlySet<MessageId>;
 }
 
 /**
@@ -34,7 +36,7 @@ interface CardContext {
  */
 function WorkQuestCard({ quest, context }: { quest: WorkQuest; context: CardContext }) {
   const { owner, asker } = context;
-  const read = readFirstChips(quest.readFirst, context.hobs);
+  const read = readFirstChips(quest.readFirst, context.hobs, context.here);
   const tone = TONE[quest.state];
   const ready = quest.state === "done";
   return (
@@ -166,12 +168,13 @@ function FinishedLine({ quest, owner }: { quest: WorkQuest; owner: Agent | undef
 /**
  * The chat's Quests (ADR 041), placed in the transcript: each card under the reply that started it,
  * and the line a finished one leaves under the reply that finished it, when that is another reply.
- * A card's "Read first" chip that names a message jumps to it with `onJump`.
+ * A card's "Read first" chip that names a message of `transcript` jumps to it with `onJump`.
  */
 export const useWorkQuestCards = (
   channelId: ChannelId | undefined,
   hobs: ReadonlyArray<Agent> | undefined,
   onJump: (messageId: MessageId) => void,
+  transcript: ReadonlyArray<Message>,
 ) => {
   const query = useQuery({
     ...workQuestsQuery(channelId ?? ("" as ChannelId)),
@@ -182,6 +185,7 @@ export const useWorkQuestCards = (
   const quests = query.data;
   const directory = new Map((hobs ?? []).map((hob) => [hob.id, hob] as const));
   const ownerOf = (quest: WorkQuest) => directory.get(quest.ownerHobId);
+  const here = new Set(transcript.map((message) => message.id));
   const contextOf = (quest: WorkQuest): CardContext => ({
     owner: ownerOf(quest),
     asker: requesterName({
@@ -193,6 +197,7 @@ export const useWorkQuestCards = (
     }),
     hobs: directory,
     onJump,
+    here,
   });
   return {
     /** Shown after the transcript when the Quests could not be read, with a way to read them again. */

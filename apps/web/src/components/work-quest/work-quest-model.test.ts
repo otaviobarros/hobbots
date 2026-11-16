@@ -48,7 +48,12 @@ describe("readFirstChips", () => {
       { _tag: "Chapter", number: 2, title: "Market", messageId: MessageId.make("m4") },
       { _tag: "Chapter", number: 1, title: null, messageId: null },
     ];
-    expect(readFirstChips(read, hobs).map(({ label, opens }) => [label, opens])).toEqual([
+    expect(
+      readFirstChips(read, hobs, new Set([MessageId.make("m1"), MessageId.make("m4")])).map(({ label, opens }) => [
+        label,
+        opens,
+      ]),
+    ).toEqual([
       [
         "Aldric's memory: The shop's look",
         { _tag: "Memory", search: { scope: `hob:${ALDRIC}`, page: "shop/look.md" } },
@@ -63,7 +68,14 @@ describe("readFirstChips", () => {
   });
 
   it("lists nothing when no pack is known", () => {
-    expect(readFirstChips([], hobs)).toEqual([]);
+    expect(readFirstChips([], hobs, new Set())).toEqual([]);
+  });
+
+  it("opens a decision or chapter only while its message is in the transcript shown, not once it moved away", () => {
+    const read: ReadonlyArray<PackRead> = [
+      { _tag: "Decision", id: "d1", title: "Sign-ups stop at 200", messageId: MessageId.make("moved") },
+    ];
+    expect(readFirstChips(read, hobs, new Set([MessageId.make("m1")]))[0]?.opens).toBeNull();
   });
 });
 
