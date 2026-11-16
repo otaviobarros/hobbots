@@ -51,6 +51,8 @@ import {
   TaskFiles,
   TurnSlots,
   UnattendedSummonLimits,
+  WorkQuests,
+  WorkToolsLive,
 } from "@hobbots/agents";
 import {
   GitHubAccountLive,
@@ -138,6 +140,7 @@ import {
   UserRepositoryLive,
   WebFoundUrlsLive,
   WebRecordsLive,
+  WorkQuestRepositoryLive,
 } from "@hobbots/persistence";
 import {
   ClaudeCodeLayer,
@@ -368,6 +371,8 @@ const ServerLive = Layer.unwrap(
       ClaimRegisterLive,
       // Decisions and the artifacts registry of every chat and camp (ADR 037).
       RecordRepositoryLive,
+      // Quests as work threads (ADR 041).
+      WorkQuestRepositoryLive,
       // Pins, and what catch-up reads: your read marker and the Quests of each chat and camp (ADR 037).
       PinRepositoryLive,
       CatchUpRepositoryLive,
@@ -704,6 +709,8 @@ const ServerLive = Layer.unwrap(
       // A channel's chapters: start, split and merge (ADR 037), and the Chapter tools a turn offers,
       // `start_chapter` and `read_message`, before the chat service and the sessions of Tasks.
       .pipe(Layer.provideMerge(ChapterToolsLive.pipe(Layer.provideMerge(ChapterService.layer))))
+      // Quests (ADR 041) and the Quest tools a chat turn offers, `start_work` and `finish_work`.
+      .pipe(Layer.provideMerge(WorkToolsLive.pipe(Layer.provideMerge(WorkQuests.layer))))
       // Keep in chat and the chat's camp suggestions (ADR 037).
       .pipe(Layer.provideMerge(CampSuggestionService.layer))
       // Notes to self, pins and catch-up (ADR 037).

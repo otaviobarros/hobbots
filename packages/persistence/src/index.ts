@@ -46,3 +46,4 @@ export * from "./usage.ts";
 export * from "./users.ts";
 export * from "./web-found-urls.ts";
 export * from "./web-records.ts";
+export { WorkQuestRepositoryLive } from "./work-quests.ts";

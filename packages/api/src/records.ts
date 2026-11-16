@@ -11,6 +11,7 @@ import {
   DecisionId,
   DecisionRefusal,
   RegisteredArtifactId,
+  WorkQuest,
 } from "@hobbots/domain";
 import { Schema } from "effect";
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
@@ -67,7 +68,7 @@ export class ArtifactContentUnavailable extends Schema.TaggedError<ArtifactConte
 
 /**
  * A chat's or camp's records (ADR 037): its decisions, crossed-out ones kept, its artifacts, each
- * once at its latest version, and its brief, which the hub writes. You record a decision or cross one out; a changed decision is a new one
+ * once at its latest version, its Quests (ADR 041) and its brief, which the hub writes. You record a decision or cross one out; a changed decision is a new one
  * that replaces it, never an edit.
  */
 export class RecordsGroup extends HttpApiGroup.make("records")
@@ -121,6 +122,13 @@ export class RecordsGroup extends HttpApiGroup.make("records")
       },
       success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array({ contentType: "application/octet-stream" })),
       error: [ArtifactNotFound, ArtifactContentUnavailable],
+    }),
+    // The chat's or camp's Quests (ADR 041), oldest first, each shown as a card at the reply that
+    // started it.
+    HttpApiEndpoint.get("workQuests", "/channels/:channelId/work-quests", {
+      params: { channelId: ChannelId },
+      success: Schema.Array(WorkQuest),
+      error: ChannelNotFound,
     }),
     // Null until the brief projector first writes one, at a chapter end or a Quest step; its text
     // is empty once nothing it said holds any more.

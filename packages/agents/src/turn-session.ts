@@ -1,5 +1,5 @@
 import type { AgentId, MessageId, RuntimeKind, RuntimeSession, TaskBriefMark, WebReadMark } from "@hobbots/domain";
-import { Channel, isSessionOf, isTaskToolName, liveSession, PASS_TOOL } from "@hobbots/domain";
+import { Channel, isSessionOf, isTaskToolName, isWorkToolName, liveSession, PASS_TOOL } from "@hobbots/domain";
 import { DateTime, Effect, type Option } from "effect";
 import { deliveredRoster, rosterAtStart, sameRoster, type TurnRoster } from "./hob-directory.ts";
 import { deliveredMemoryBrief, startedMemoryBrief, type TurnMemoryBrief } from "./memory-brief.ts";
@@ -46,11 +46,11 @@ const sameTools = (a: ReadonlyArray<string> | undefined, b: ReadonlyArray<string
   a === b || (a !== undefined && b !== undefined && a.length === b.length && a.every((name, i) => name === b[i]));
 
 /**
- * The Task tools and `pass` among the hub tools a new session holds for good, or undefined when not
- * known (#1543, ADR 039).
+ * The Task tools, `pass` and the Quest tools among the hub tools a new session holds for good, or
+ * undefined when not known (#1543, ADR 039, ADR 041).
  */
 const heldTaskTools = (hubTools: ReadonlyArray<string> | undefined) =>
-  hubTools?.filter((name) => isTaskToolName(name) || name === PASS_TOOL);
+  hubTools?.filter((name) => isTaskToolName(name) || name === PASS_TOOL || isWorkToolName(name));
 
 /** Whether recording `next` over `known` would change nothing the channel keeps of the session. */
 const sameSession = (known: RuntimeSession, next: RuntimeSession) =>

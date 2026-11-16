@@ -71,6 +71,7 @@ import { SkillUsedLines } from "../skill-line/skill-used-line.tsx";
 import { TrialNotice } from "../skills/trial-notice.tsx";
 import { useSteerReceipts } from "../steer-receipt/steer-receipt.tsx";
 import { repliesWeb, replyWebOf } from "../web/web-model.ts";
+import { useWorkQuestCards } from "../work-quest/work-quest-card.tsx";
 import { ChatHeader } from "./chat-header.tsx";
 import { Composer } from "./composer.tsx";
 import { EmptyChannel } from "./empty-channel.tsx";
@@ -529,6 +530,8 @@ function Transcript({
   const catchUpAt = <CatchUpAt hob={hob} view={catchUp} onJump={onJump} />;
   // In a camp a member answers as itself, so each reply shows the hob that wrote it (ADR 039).
   const hobs = useEveryHob();
+  // Each Quest's card under the reply that started it (ADR 041).
+  const quests = useWorkQuestCards(channelId, hobs);
   const row = (message: Message, split: ReactNode) => {
     const author = replyAuthor(message, hob, hobs);
     return (
@@ -557,6 +560,7 @@ function Transcript({
           </MessageRow>
         )}
         {receipts.of(message)}
+        {quests.after(message.id)}
         {work.after(message.id)}
         {headsUps.after(message.id)}
       </>

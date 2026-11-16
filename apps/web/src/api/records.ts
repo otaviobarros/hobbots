@@ -22,6 +22,8 @@ export const recordKeys = {
   decisions: (channelId: ChannelId) => ["channels", channelId, "decisions"] as const,
   artifacts: (channelId: ChannelId) => ["channels", channelId, "artifacts"] as const,
   brief: (channelId: ChannelId) => ["channels", channelId, "brief"] as const,
+  /** The chat's or camp's Quests (ADR 041). */
+  workQuests: (channelId: ChannelId) => ["channels", channelId, "work-quests"] as const,
   /** Every artifact's versions and contents read in the channel, so a moved chapter drops them all. */
   artifactReads: (channelId: ChannelId) => ["channels", channelId, "artifact"] as const,
   /** One artifact's versions and their contents, under one key so a new version reads them again. */
@@ -38,6 +40,14 @@ export const decisionsQuery = (channelId: ChannelId) =>
   queryOptions({
     queryKey: recordKeys.decisions(channelId),
     queryFn: () => call((c) => c.records.decisions({ params: { channelId } })),
+    ...followsEvents,
+  });
+
+/** The chat's or camp's Quests (ADR 041), oldest first, each shown as a card at the reply that started it. */
+export const workQuestsQuery = (channelId: ChannelId) =>
+  queryOptions({
+    queryKey: recordKeys.workQuests(channelId),
+    queryFn: () => call((c) => c.records.workQuests({ params: { channelId } })),
     ...followsEvents,
   });
 
@@ -142,7 +152,9 @@ type RecordEvent = Extract<
       | "DecisionSuperseded"
       | "ArtifactRegistered"
       | "ArtifactReviewSettled"
-      | "BriefWritten";
+      | "BriefWritten"
+      | "WorkQuestStarted"
+      | "WorkQuestChanged";
   }
 >;
 const RECORD_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
@@ -151,10 +163,12 @@ const RECORD_EVENTS: ReadonlySet<HobbotsEvent["_tag"]> = new Set([
   "ArtifactRegistered",
   "ArtifactReviewSettled",
   "BriefWritten",
+  "WorkQuestStarted",
+  "WorkQuestChanged",
 ]);
 export const isRecordEvent = (event: HobbotsEvent): event is RecordEvent => RECORD_EVENTS.has(event._tag);
 
-/** A decision, an artifact or a brief changed (ADR 037): its list is read again. */
+/** A decision, an artifact, a brief (ADR 037) or a Quest (ADR 041) changed: its list is read again. */
 export const applyRecordEvent = (queryClient: QueryClient, event: RecordEvent): Promise<void> => {
   switch (event._tag) {
     case "DecisionRecorded":
@@ -171,6 +185,9 @@ export const applyRecordEvent = (queryClient: QueryClient, event: RecordEvent): 
       return readListAgain(queryClient, recordKeys.artifacts(event.artifact.channelId));
     case "BriefWritten":
       return readListAgain(queryClient, recordKeys.brief(event.brief.channelId));
+    case "WorkQuestStarted":
+    case "WorkQuestChanged":
+      return readListAgain(queryClient, recordKeys.workQuests(event.workQuest.channelId));
   }
 };
 

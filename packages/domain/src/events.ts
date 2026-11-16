@@ -54,6 +54,7 @@ import { Supervision } from "./supervision.ts";
 import { Attempt, AttemptId, Task, TaskId } from "./task.ts";
 import { TurnRequest, TurnRequestId } from "./turn-request.ts";
 import { HobWebLimits, WebFetchRecord, WebSearchRecord, WebSettings } from "./web-usage.ts";
+import { WorkQuest } from "./work-quest.ts";
 
 /**
  * A hob was created, changed, paused, woken, retired or brought back, by `actor` (ADR 034). Events
@@ -327,6 +328,10 @@ const ArtifactRegistered = Schema.TaggedStruct("ArtifactRegistered", { artifact:
  * request merged or closed. The artifact as it now stands.
  */
 const ArtifactReviewSettled = Schema.TaggedStruct("ArtifactReviewSettled", { artifact: Artifact });
+/** A hob started a Quest with `start_work` (ADR 041): the whole record, active. */
+const WorkQuestStarted = Schema.TaggedStruct("WorkQuestStarted", { workQuest: WorkQuest });
+/** A Quest's state changed (ADR 041): it waited, woke, finished, stopped or reopened. The whole record. */
+const WorkQuestChanged = Schema.TaggedStruct("WorkQuestChanged", { workQuest: WorkQuest });
 /**
  * The brief projector wrote a chat's or camp's brief (#1384), at a chapter end or a Quest step. A
  * private camp's stays in that camp: memory capture takes nothing from it.
@@ -586,6 +591,8 @@ export const JournaledEvent = Schema.Union([
   DecisionSuperseded,
   ArtifactRegistered,
   ArtifactReviewSettled,
+  WorkQuestStarted,
+  WorkQuestChanged,
   BriefWritten,
   MessagePinned,
   MessageUnpinned,
@@ -769,6 +776,8 @@ export const EVENT_SCHEMA_VERSIONS: Record<JournaledEvent["_tag"], number> = {
   ArtifactRegistered: 2,
   // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
   ArtifactReviewSettled: 2,
+  WorkQuestStarted: 1,
+  WorkQuestChanged: 1,
   // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).
   BriefWritten: 2,
   // 2: a thread's names read as a channel's, and a chat is `direct` (#1610).

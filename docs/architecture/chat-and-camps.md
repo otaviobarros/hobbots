@@ -200,6 +200,15 @@ Each part has a share of the budget (`PACK_BUDGET`: 12,000 tokens, counted as fo
   - **The snapshot.** `GET /api/quest-summaries` lists every active Quest's summary, and `?channelId=` every Quest followed in that chat or camp, ended ones included, with the stream cursor. The web client renders it ([#1374](https://github.com/otaviobarros/hobbots/issues/1374)): the quest pill, the quest's pane, the ticket, the finished banner, a hob's page and Home read their counts from it, the pill shows what is ready for review, and a `QuestSummaryChanged` replaces a Quest's summary when its revision is newer.
 - Slice: [#1365](https://github.com/otaviobarros/hobbots/issues/1365).
 
+### Quests as work threads
+
+[ADR 041](../decisions/041-quests-as-work-threads.md) replaces the Quests above step by step. Step 1, built in [#1596](https://github.com/otaviobarros/hobbots/issues/1596), adds the new record beside them; in code it is `WorkQuest` until [#1602](https://github.com/otaviobarros/hobbots/issues/1602) retires the old one.
+
+- **The record.** `WorkQuest` and its [WorkQuest](machines/work-quest.md) machine in `packages/domain/src/work-quest.ts`, kept in `work_quests` (migration 20261116004540) by `WorkQuestRepositoryLive` in `packages/persistence/src/work-quests.ts`. It holds its title, goal, "Done when" lines, optional expected day and repository, its owner, who asked for it (the actor of the turn request its starting reply answers, or the hob itself when none does), its state (`active`, `waiting`, `done`, `stopped`), and once done its result and what it made. A conversation (a channel's main line, or a reply thread once those come) runs at most one Quest that is active or waiting, held by a partial unique index.
+- **The tools.** `start_work` and `finish_work` (`packages/agents/src/work-quests.ts`) are hub tools every chat turn is offered on every runtime that serves hub tools, Claude Code, Codex and the fake one alike. `start_work` takes a title, a goal, the "Done when" lines and an optional `expected_by` day and repository, and starts the Quest where the hob is talking; a second running Quest there is refused as `busy`. `finish_work` takes a result and what the work made and moves the hob's own running Quest to done. Each is written with its journal entry in one transaction, and the same reply calling again gets the same Quest back and journals nothing. A Codex session started without them is not resumed.
+- **The card.** `apps/web/src/components/work-quest/` shows the Quest as one living card under the reply that started it, and a finished one leaves one line under the reply that finished it. `GET /api/channels/:channelId/work-quests` lists a channel's Quests, oldest first.
+- **Not yet.** Waiting, waking, stopping and reopening are machine rules only until reply threads ([#1484](https://github.com/otaviobarros/hobbots/issues/1484)) wire them.
+
 ## The claims register
 
 Built in [#1388](https://github.com/otaviobarros/hobbots/issues/1388): `Claim` and its machine in `packages/domain/src/claim.ts`, the register in `packages/persistence/src/claims.ts` (migration 0098), and `claim` with the Task tools on every runtime.

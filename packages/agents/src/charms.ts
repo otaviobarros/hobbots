@@ -4,6 +4,7 @@ import {
   type AttemptId,
   type ChannelId,
   type CharmDeclaration,
+  FINISH_WORK_TOOL,
   GIT_INIT_TOOL,
   holdsCharm,
   MEMORY_SAVE_TOOL,
@@ -16,6 +17,7 @@ import {
   RECORD_DECISION_TOOL,
   SKILL_TOOL_DESCRIPTIONS,
   START_CHAPTER_TOOL,
+  START_WORK_TOOL,
   TASK_TOOLS,
   type TaskId,
   WEB_FETCH_TOOL,
@@ -48,6 +50,7 @@ import type {
 import type { Redactor } from "./secrets.ts";
 import { SkillTools } from "./skill-proposals.ts";
 import { operationDecision } from "./tools.ts";
+import { WORK_TOOLS_OWNER, WorkTools } from "./work-quests.ts";
 
 /** The chat, Task and Attempt a turn's web records name. */
 export interface WebRecordPlace {
@@ -102,7 +105,7 @@ export interface HubToolOwner {
 /**
  * The hub's built-in tool sets beside the Charms (ADR 031), whose names no Charm may take: Local Git,
  * Memory, Skills, the Directory (ADR 032), the Web tools (ADR 036), the Chapter tools (ADR 037), the
- * Task tools and the Turn tools' `pass` (ADR 039).
+ * Task tools, the Turn tools' `pass` (ADR 039) and the Quest tools (ADR 041).
  */
 export const BUILT_IN_HUB_TOOLS: ReadonlyArray<HubToolOwner> = [
   { owner: "Local Git", names: [GIT_INIT_TOOL] },
@@ -114,6 +117,7 @@ export const BUILT_IN_HUB_TOOLS: ReadonlyArray<HubToolOwner> = [
   { owner: "the Chapter tools", names: [START_CHAPTER_TOOL, READ_MESSAGE_TOOL] },
   { owner: "the Task tools", names: TASK_TOOLS.map((tool) => tool.name) },
   { owner: "the Turn tools", names: [PASS_TOOL] },
+  { owner: WORK_TOOLS_OWNER, names: [START_WORK_TOOL, FINISH_WORK_TOOL] },
 ];
 
 /**
@@ -530,6 +534,7 @@ export const hubToolOffer = Effect.gen(function* () {
   const web = yield* Effect.serviceOption(WebTools);
   const records = yield* Effect.serviceOption(RecordTools);
   const chapters = yield* Effect.serviceOption(ChapterTools);
+  const work = yield* Effect.serviceOption(WorkTools);
   const none = Effect.succeed(null);
   // Each reads the turn's access itself, so they are read side by side.
   return (turn: CharmTurn, offer?: CharmOffer): Effect.Effect<HubOffer> =>
@@ -543,22 +548,26 @@ export const hubToolOffer = Effect.gen(function* () {
         Option.isSome(web) ? web.value.forTurn(turn) : none,
         Option.isSome(records) ? records.value.forTurn(turn) : none,
         Option.isSome(chapters) ? chapters.value.forTurn(turn) : none,
+        Option.isSome(work) ? work.value.forTurn(turn) : none,
       ],
       { concurrency: "unbounded" },
     ).pipe(
-      Effect.map(([git, charmSets, memoryTools, skillTools, directoryTools, webTools, recordTools, chapterTools]) => {
-        const sets = [
-          { owner: "Local Git", tools: git },
-          ...charmSets,
-          { owner: "Memory", tools: memoryTools },
-          { owner: "Skills", tools: skillTools },
-          { owner: "the Directory", tools: directoryTools },
-          { owner: "the Web tools", tools: webTools },
-          { owner: "the Records", tools: recordTools },
-          { owner: "the Chapter tools", tools: chapterTools },
-        ];
-        return { hubTools: joinHubTools(sets), steering: steeringOf(sets) };
-      }),
+      Effect.map(
+        ([git, charmSets, memoryTools, skillTools, directoryTools, webTools, recordTools, chapterTools, workTools]) => {
+          const sets = [
+            { owner: "Local Git", tools: git },
+            ...charmSets,
+            { owner: "Memory", tools: memoryTools },
+            { owner: "Skills", tools: skillTools },
+            { owner: "the Directory", tools: directoryTools },
+            { owner: "the Web tools", tools: webTools },
+            { owner: "the Records", tools: recordTools },
+            { owner: "the Chapter tools", tools: chapterTools },
+            { owner: WORK_TOOLS_OWNER, tools: workTools },
+          ];
+          return { hubTools: joinHubTools(sets), steering: steeringOf(sets) };
+        },
+      ),
     );
 });
 

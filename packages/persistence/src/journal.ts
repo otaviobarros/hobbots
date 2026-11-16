@@ -245,7 +245,9 @@ type RecordEvent = Extract<
       | "BriefWritten"
       | "MessagePinned"
       | "ChannelMemberAdded"
-      | "ChannelMemberChanged";
+      | "ChannelMemberChanged"
+      | "WorkQuestStarted"
+      | "WorkQuestChanged";
   }
 >;
 const RECORD_EVENTS: ReadonlySet<string> = new Set([
@@ -263,13 +265,16 @@ const RECORD_EVENTS: ReadonlySet<string> = new Set([
   "MessagePinned",
   "ChannelMemberAdded",
   "ChannelMemberChanged",
+  "WorkQuestStarted",
+  "WorkQuestChanged",
 ]);
 const isRecordEvent = (event: JournaledEventType): event is RecordEvent => RECORD_EVENTS.has(event._tag);
 
 /**
  * ADR 037's records: a claim names its Task, whose owner and channel the row takes; a decision its
  * channel and the reply that recorded it; an artifact its channel, and the hob that made its latest
- * version; a brief its channel; a pin the message it pins and its channel; a member its channel (ADR 039).
+ * version; a brief its channel; a pin the message it pins and its channel; a member its channel (ADR 039);
+ * a Quest its owner, its channel and the reply that started it (ADR 041).
  */
 const recordCorrelationOf = (event: RecordEvent): RowCorrelation => {
   if ("claim" in event) return { ...NONE, taskId: event.claim.taskId };
@@ -277,6 +282,11 @@ const recordCorrelationOf = (event: RecordEvent): RowCorrelation => {
   // A member names its channel, and its hob when it is one (ADR 039).
   if ("member" in event) return memberCorrelation(event.member);
   if ("brief" in event) return { ...NONE, channelId: event.brief.channelId };
+  // A Quest names its owner hob, its channel and the reply that started it (ADR 041).
+  if ("workQuest" in event) {
+    const quest = event.workQuest;
+    return { ...NONE, agentId: quest.ownerHobId, channelId: quest.channelId, messageId: quest.startedFrom };
+  }
   if ("decision" in event) {
     return { ...NONE, channelId: event.decision.channelId, messageId: event.decision.sourceMessageId };
   }

@@ -67,6 +67,7 @@ import { makePackSources } from "./turn-pack.ts";
 import { type Carry, makeTurnRunner, type TurnRunnerDeps } from "./turn-runner.ts";
 import { type TurnSlot, takeSlot, turnSlots } from "./turn-slots.ts";
 import { workHeld } from "./work-hold.ts";
+import { WorkTools } from "./work-quests.ts";
 
 // Every channel's run (#1397): when its turns start and end, what queued behind them, and the work
 // the backpack carries into them. ChatService decides what you asked for; this runs it.
@@ -182,18 +183,20 @@ export const makeChannelRunner = (deps: ChannelRunnerDeps) =>
     const adapters = yield* runtimeAdapters;
     // Without Task tools, as in tests of one part, a chat's turns offer none.
     const offersTaskTools = Option.isSome(yield* Effect.serviceOption(TaskTurns));
+    // Without the Quest tools, as in tests of one part, a chat's turns offer neither (ADR 041).
+    const offered = { taskTools: offersTaskTools, workTools: Option.isSome(yield* Effect.serviceOption(WorkTools)) };
     /**
      * `channel` as a turn of `agent` on `runtime` sees it (#1543). A runtime that keeps the hub tools a
      * session started with, as Codex does (ADR 024), never gets a Task tool its session lacks, so a
      * hob in a channel that started before that tool existed could never call it. Such a session, or
-     * one without `pass` (ADR 039), or one whose tools are not known, is
+     * one without `pass` (ADR 039) or the Quest tools (ADR 041), or one whose tools are not known, is
      * left out: the turn starts a new session from the context pack in its place, as in a new chapter,
      * and the new one is recorded over it.
      */
     const withoutStaleSession = (channel: Channel, runtime: Brain["runtime"], agentId: AgentId): Channel => {
       if (adapters(runtime)?.resumeKeepsHubTools !== true) return channel;
       const live = liveSession(channel, runtime, agentId);
-      if (live === undefined || holdsEveryChatTool(live.taskTools, offersTaskTools)) return channel;
+      if (live === undefined || holdsEveryChatTool(live.taskTools, offered)) return channel;
       return new Channel({ ...channel, sessions: channel.sessions.filter((session) => session !== live) });
     };
     const scope = yield* Effect.scope;
