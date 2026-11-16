@@ -1,5 +1,72 @@
 # Changelog
 
+## [0.0.6](https://github.com/otaviobarros/hobbots/compare/v0.0.5...v0.0.6) (2026-11-16)
+
+
+### Features
+
+* add the Quest record and the start_work and finish_work tools ([#1613](https://github.com/otaviobarros/hobbots/issues/1613)) ([601b9d3](https://github.com/otaviobarros/hobbots/commit/601b9d38c40897362761ba06282f8c095f897322))
+* **agents:** build each person's For you list from the records past their read markers ([#1530](https://github.com/otaviobarros/hobbots/issues/1530)) ([9982522](https://github.com/otaviobarros/hobbots/commit/998252217e6addb0fe1664e07962aae80a423f56))
+* **agents:** build the context pack for several hobs ([#1532](https://github.com/otaviobarros/hobbots/issues/1532)) ([be37ae7](https://github.com/otaviobarros/hobbots/commit/be37ae750925d9050dc48073bddc0fcd42ba3395))
+* **agents:** decide each line's floor in one place ([#1562](https://github.com/otaviobarros/hobbots/issues/1562)) ([467a586](https://github.com/otaviobarros/hobbots/commit/467a58651481d8641026d9176a6667448b7c2612))
+* **agents:** give back a Task's files and branches you took over ([#1552](https://github.com/otaviobarros/hobbots/issues/1552)) ([6ca531f](https://github.com/otaviobarros/hobbots/commit/6ca531f424727cc1b2b415d4b79f1180e01758b1))
+* **agents:** give each device a user and put the user on the session ([#1510](https://github.com/otaviobarros/hobbots/issues/1510)) ([7682f46](https://github.com/otaviobarros/hobbots/commit/7682f46df91f4a35d4fdd130310c16640403d56d))
+* **agents:** key runtime sessions by hob ([#1520](https://github.com/otaviobarros/hobbots/issues/1520)) ([8e6dd57](https://github.com/otaviobarros/hobbots/commit/8e6dd57336bb6456a21db6ad7e8d77651b37d5ac))
+* **agents:** let a hob pass its turn with no message ([#1571](https://github.com/otaviobarros/hobbots/issues/1571)) ([fa53b7c](https://github.com/otaviobarros/hobbots/commit/fa53b7c0f33ffd30b977d2ca07a44a533ebf23c7))
+* **agents:** limit active turns per hob, runtime and Quest ([#1521](https://github.com/otaviobarros/hobbots/issues/1521)) ([0ed37d1](https://github.com/otaviobarros/hobbots/commit/0ed37d1dfe51c11f9325fd8f76dc8f50747e88f4))
+* **agents:** pause hob relays after the relay budget and let a person go on ([#1575](https://github.com/otaviobarros/hobbots/issues/1575)) ([5ed80f5](https://github.com/otaviobarros/hobbots/commit/5ed80f5180f3ce52306677a5ae07c61180d60837))
+* **agents:** queue each answer owed as a TurnRequest and give each line one floor ([#1527](https://github.com/otaviobarros/hobbots/issues/1527)) ([dd867a0](https://github.com/otaviobarros/hobbots/commit/dd867a0b8d642aa1017d9bd59a6c8e6f8ce5dfeb))
+* **agents:** show a hob's operation answers on its card ([#1526](https://github.com/otaviobarros/hobbots/issues/1526)) ([638c9dd](https://github.com/otaviobarros/hobbots/commit/638c9dd9e0cc7a2d503d7b31253c584d14e51e42))
+* **agents:** take over a Task's files and branches, and show a Quest's cost per accepted outcome ([#1536](https://github.com/otaviobarros/hobbots/issues/1536)) ([6bf0547](https://github.com/otaviobarros/hobbots/commit/6bf05473da2f97f9c79bf799b0ff46b19204f7c7))
+* **charms:** let hobs open GitHub issues and sub-issues ([#1519](https://github.com/otaviobarros/hobbots/issues/1519)) ([420e422](https://github.com/otaviobarros/hobbots/commit/420e4224c8b55cb74c5f080fa6144af19630a865))
+* check a Quest's acceptance criteria against evidence ([#1509](https://github.com/otaviobarros/hobbots/issues/1509)) ([3962c64](https://github.com/otaviobarros/hobbots/commit/3962c648656fac337eca87e955981d71a0573115))
+* **domain:** decide who answers a message with answerersFor ([#1514](https://github.com/otaviobarros/hobbots/issues/1514)) ([63ba420](https://github.com/otaviobarros/hobbots/commit/63ba4206e0e3f70bb6f791c3314b99ac14ee3518))
+* keep a history of settings that change what hobs may do ([#1535](https://github.com/otaviobarros/hobbots/issues/1535)) ([a387b14](https://github.com/otaviobarros/hobbots/commit/a387b1493164d3f0946ede73d8c396af395b102d))
+* **memory:** capture each hob's own part of a shared thread in its own memory ([#1539](https://github.com/otaviobarros/hobbots/issues/1539)) ([882f6ad](https://github.com/otaviobarros/hobbots/commit/882f6ad75bab1992f9f3c113416e017e5d89c4be))
+* move unread markers to each member's read marker ([#1517](https://github.com/otaviobarros/hobbots/issues/1517)) ([4bfb093](https://github.com/otaviobarros/hobbots/commit/4bfb093c0436408b767ba2f3ddbf2fd3f13d33c5))
+* **orchestration:** pause a Quest or Task, let leads retry and reassign, and send your note to a member ([#1523](https://github.com/otaviobarros/hobbots/issues/1523)) ([5533357](https://github.com/otaviobarros/hobbots/commit/5533357c933c93eea60eb7e32f32b0736331df3a))
+* **orchestration:** show a member's tools and answers before it starts ([#1512](https://github.com/otaviobarros/hobbots/issues/1512)) ([78ad478](https://github.com/otaviobarros/hobbots/commit/78ad4786d4a6a6108a7551044ca464ead91d44f5))
+* **persistence:** add the User record and make the owner a user ([#1506](https://github.com/otaviobarros/hobbots/issues/1506)) ([0a6f93f](https://github.com/otaviobarros/hobbots/commit/0a6f93faf4c3c2c1462800b32abd65dfcd9bcb2b)), closes [#1451](https://github.com/otaviobarros/hobbots/issues/1451)
+* **persistence:** add thread members, owner and hob in every thread ([#1511](https://github.com/otaviobarros/hobbots/issues/1511)) ([36dbc65](https://github.com/otaviobarros/hobbots/commit/36dbc65ec9b3b6959ee27f2fa099578ccfc5d690))
+* **persistence:** name migrations by second, and run slower CI suites only where needed ([#1518](https://github.com/otaviobarros/hobbots/issues/1518)) ([6664a67](https://github.com/otaviobarros/hobbots/commit/6664a675b56e6297ad9ed76dfbf2419ab71f2695))
+* **persistence:** store each message's mentions and count unread mentions per person ([#1516](https://github.com/otaviobarros/hobbots/issues/1516)) ([6a11154](https://github.com/otaviobarros/hobbots/commit/6a11154f097035c152a39d94b203d65ecf645530))
+* pick hobs for a camp and manage them in the members sheet ([#1573](https://github.com/otaviobarros/hobbots/issues/1573)) ([50c326f](https://github.com/otaviobarros/hobbots/commit/50c326f4c72fb4be33b97d95ffedb58193ab8b2b))
+* **runtimes:** close taken files in every hob turn's sandbox ([#1559](https://github.com/otaviobarros/hobbots/issues/1559)) ([bc21cba](https://github.com/otaviobarros/hobbots/commit/bc21cbab0c9d18d3cd1dbe1c22d02172212e0e88))
+* **runtimes:** record a call to a tool the turn was not offered as a refusal ([#1522](https://github.com/otaviobarros/hobbots/issues/1522)) ([ed9c7ce](https://github.com/otaviobarros/hobbots/commit/ed9c7ce93737af1264a7a3393f153035860dfc2c))
+* **runtimes:** steer gh commands to the GitHub Charm ([#1513](https://github.com/otaviobarros/hobbots/issues/1513)) ([403dc40](https://github.com/otaviobarros/hobbots/commit/403dc40246461d973d1001b734c0fcd5d8730ac5))
+* say when a change to a hob applies, and what a session still misses ([#1508](https://github.com/otaviobarros/hobbots/issues/1508)) ([bbd7f7a](https://github.com/otaviobarros/hobbots/commit/bbd7f7a595f33b24881e3de1f14b24141ca12bbe))
+* **sidebar:** show who wrote a shared camp's last line ([#1566](https://github.com/otaviobarros/hobbots/issues/1566)) ([3908549](https://github.com/otaviobarros/hobbots/commit/39085496fd085c3d953798d7ef95a58d1275eeec))
+* **sidebar:** sort the sidebar into Camps and Direct messages ([#1558](https://github.com/otaviobarros/hobbots/issues/1558)) ([fa7841b](https://github.com/otaviobarros/hobbots/commit/fa7841b735545f5cdb827566415fd567a03a8165))
+* **supervision:** build the supervisor for deadlines and deterministic recovery ([#1545](https://github.com/otaviobarros/hobbots/issues/1545)) ([db4a34d](https://github.com/otaviobarros/hobbots/commit/db4a34d8f208041a0246fee2678a9862e5ad825a))
+* **web:** scope the Needs-you tray and the Inbox to the open chat or camp ([#1433](https://github.com/otaviobarros/hobbots/issues/1433)) ([88dc428](https://github.com/otaviobarros/hobbots/commit/88dc428aed20b6285facd1017ab405fb0890f91e))
+
+
+### Bug Fixes
+
+* **agents:** make camps from one topic's chapter, named as the hub suggests ([#1561](https://github.com/otaviobarros/hobbots/issues/1561)) ([61d67cb](https://github.com/otaviobarros/hobbots/commit/61d67cb4259f2f0154ccd0cc40844b102df892be))
+* **agents:** record a turn's session with its read-the-web mark in one write ([#1580](https://github.com/otaviobarros/hobbots/issues/1580)) ([b722a05](https://github.com/otaviobarros/hobbots/commit/b722a055857b02412485c3b65180c6baae52122c))
+* **orchestration:** brief a Quest lead on its criteria by id in every session ([#1556](https://github.com/otaviobarros/hobbots/issues/1556)) ([f4b90e2](https://github.com/otaviobarros/hobbots/commit/f4b90e27058b688737cb28303cfb5a6b0996b2dd))
+* **persistence:** check member reads at the versions its migration writes ([#1531](https://github.com/otaviobarros/hobbots/issues/1531)) ([796d353](https://github.com/otaviobarros/hobbots/commit/796d353d4b05e0ca9942b7722b7f70c88ced7c5e))
+* **runtime:** give a Codex Quest lead the Task tools its thread started without ([#1544](https://github.com/otaviobarros/hobbots/issues/1544)) ([54197c4](https://github.com/otaviobarros/hobbots/commit/54197c4b4295396bc938e47e47ee460ab454cda5))
+* **summoning:** keep a hob's other answers when a change sets only some ([#1529](https://github.com/otaviobarros/hobbots/issues/1529)) ([6489c19](https://github.com/otaviobarros/hobbots/commit/6489c19aae921a9836b27c4645a6e7addfcc85aa))
+* **web:** hold camp suggestions and Make a camp while a reply runs in the chat ([#1554](https://github.com/otaviobarros/hobbots/issues/1554)) ([1c7648b](https://github.com/otaviobarros/hobbots/commit/1c7648b0496c8f153563e27d79efce803110f5e5))
+* **web:** leave Quests in archived camps out of Pick up where you left off ([#1568](https://github.com/otaviobarros/hobbots/issues/1568)) ([8910336](https://github.com/otaviobarros/hobbots/commit/8910336ff1eecc3346ebfaffeff1c7203b7debd8))
+* **web:** wrap long messages inside the archived chat's column ([#1565](https://github.com/otaviobarros/hobbots/issues/1565)) ([3f8fb9f](https://github.com/otaviobarros/hobbots/commit/3f8fb9f53d1cff361a6dcf32535367be9778c7df))
+
+
+### Performance Improvements
+
+* **orchestration:** find taken files from their claimed checkout, walking no folder ([#1579](https://github.com/otaviobarros/hobbots/issues/1579)) ([7296a13](https://github.com/otaviobarros/hobbots/commit/7296a13170ef46820711bb691b0820274b59703e))
+
+
+### Code Refactoring
+
+* **agents:** give every turn its Speaker and lint thread.agentId reads ([#1553](https://github.com/otaviobarros/hobbots/issues/1553)) ([662af6e](https://github.com/otaviobarros/hobbots/commit/662af6e462674473232f953303ad7d436c9e91d0))
+* read all Markdown with the CommonMark parser (STD-DUP-008) ([#1528](https://github.com/otaviobarros/hobbots/issues/1528)) ([16a4c55](https://github.com/otaviobarros/hobbots/commit/16a4c55c44d91b87a9d89457f0370c1065289025))
+* remove Quest acceptance criteria ([#1589](https://github.com/otaviobarros/hobbots/issues/1589)) ([2a2bb8b](https://github.com/otaviobarros/hobbots/commit/2a2bb8b40b449cba3a8d296ee6c2de5e4bea9c74))
+* rename threads to channels in code ([#1611](https://github.com/otaviobarros/hobbots/issues/1611)) ([f79f755](https://github.com/otaviobarros/hobbots/commit/f79f75573c7ec11337ba11d558909f9258134836))
+* replace turn limits with one hub-wide cap of 4 ([#1591](https://github.com/otaviobarros/hobbots/issues/1591)) ([589f24c](https://github.com/otaviobarros/hobbots/commit/589f24cb36dfcbaebc3195419002d1a4cbe58738))
+
 ## [0.0.5](https://github.com/otaviobarros/hobbots/compare/v0.0.4...v0.0.5) (2026-11-13)
 
 
