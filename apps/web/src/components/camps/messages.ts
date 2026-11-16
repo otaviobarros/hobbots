@@ -129,6 +129,7 @@ export const messages = {
       "approval-pending": ({ name }: Named) => `${name} is waiting for your approval here. Answer it first.`,
       "hob-retired": ({ name }: Named) => `${name} is retired, so this chat stays as it is.`,
       "not-open-chat": () => "This chat was already started fresh or archived.",
+      "quest-running": ({ name }: Named) => `${name} is still running a Quest here. Start fresh once it's done.`,
       unreachable: () => "Couldn't start fresh. Hobbots may be reconnecting; try again in a moment.",
     } satisfies Record<StartFreshError, (named: Named) => string>,
   },

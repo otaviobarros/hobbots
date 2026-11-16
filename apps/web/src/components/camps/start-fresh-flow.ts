@@ -36,6 +36,7 @@ const REFUSALS: ReadonlySet<string> = new Set<StartFreshRefusal>([
   "approval-pending",
   "hob-retired",
   "not-open-chat",
+  "quest-running",
 ]);
 
 /** The failure a refused or lost request shows. */
