@@ -52,7 +52,7 @@ function WorkQuestCard({ quest, owner }: { quest: WorkQuest; owner: Agent | unde
                 <span
                   aria-hidden
                   className={cn(
-                    "mt-1 size-3 shrink-0 rounded-dot border-2",
+                    "mt-1 size-3 shrink-0 rounded-dot border-(length:--edge)",
                     ready ? "border-mint bg-mint" : "border-line-2",
                   )}
                 />
