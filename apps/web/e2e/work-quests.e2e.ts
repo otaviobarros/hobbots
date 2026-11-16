@@ -37,5 +37,7 @@ test("a hob starts a Quest with its card, and a later reply finishes it (#1596)"
   await composer.press("Enter");
   await expect(card).toContainText("Quest · Ready for review", { timeout: 30_000 });
   await expect(card).toContainText("The page is live with the map.");
-  await expect(main.getByRole("status").filter({ hasText: "Aldric finished Winter market page · PR #12" })).toBeVisible();
+  await expect(
+    main.getByRole("status").filter({ hasText: "Aldric finished Winter market page · PR #12" }),
+  ).toBeVisible();
 });
