@@ -82,8 +82,6 @@ export class WorkQuestRepository extends Context.Service<
     readonly list: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<WorkQuest>, ChannelNotFound>;
     /** The Quests the hob runs, active or waiting, in every channel, oldest first. */
     readonly runningOwnedBy: (ownerHobId: AgentId) => Effect.Effect<ReadonlyArray<WorkQuest>>;
-    /** Stops every Quest the hob runs, each journaled as `WorkQuestChanged`, as a hob retiring at once does. */
-    readonly stopOwnedBy: (ownerHobId: AgentId, at: string) => Effect.Effect<Committed<ReadonlyArray<WorkQuest>>>;
   }
 >()("@hobbots/agents/WorkQuestRepository") {}
 
@@ -99,11 +97,6 @@ export class WorkQuests extends Context.Service<
     readonly of: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<WorkQuest>, ChannelNotFound>;
     /** The Quests the hob runs, which a hob that retires once its work is done waits for (#408). */
     readonly runningOwnedBy: (ownerHobId: AgentId) => Effect.Effect<ReadonlyArray<WorkQuest>>;
-    /**
-     * Stops every Quest the hob runs, as it retires at once: no other hob may finish them (ADR 041),
-     * so none is left running under a hob that is gone.
-     */
-    readonly stopOwnedBy: (ownerHobId: AgentId) => Effect.Effect<ReadonlyArray<WorkQuest>>;
   }
 >()("@hobbots/agents/WorkQuests") {
   static readonly layer = Layer.effect(
@@ -117,7 +110,6 @@ export class WorkQuests extends Context.Service<
         finish: (request) => Effect.flatMap(now, (at) => announced(quests.finish({ ...request, at }))),
         of: quests.list,
         runningOwnedBy: quests.runningOwnedBy,
-        stopOwnedBy: (ownerHobId) => Effect.flatMap(now, (at) => announced(quests.stopOwnedBy(ownerHobId, at))),
       });
     }),
   );

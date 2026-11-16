@@ -209,26 +209,26 @@ describe("Quests as work threads", () => {
   });
 
   // covers ADR 041 (The record), #408 (Retire)
-  it("refuses a Quest to a retiring hob, and stops every Quest a hob runs as it retires at once (#1596)", async () => {
+  it("refuses a Quest to a retiring hob, and stops its Quests in the transaction that retires it (#1596)", async () => {
     const result = await run(
       Effect.gen(function* () {
         yield* seed;
         const repo = yield* HobbotsRepository;
         const quests = yield* WorkQuestRepository;
         yield* quests.start(start());
-        const stopped = yield* quests.stopOwnedBy(ADA, NOW);
-        const again = yield* quests.stopOwnedBy(ADA, NOW);
         yield* repo.setAgentRetiring(ADA, { since: NOW, by: YOU }, YOU);
         const leaving = yield* Effect.exit(
           quests.start(start({ id: WorkQuestId.make("quest-2"), startedFrom: MessageId.make("reply-2") })),
         );
-        return { stopped, again, leaving, running: yield* quests.runningOwnedBy(ADA) };
+        const ada = Option.getOrThrow(yield* repo.findAgent(ADA));
+        const retired = yield* repo.setAgentStatus(new Agent({ ...ada, status: "retired", retiredAt: NOW }), "active");
+        return { leaving, retired, quests: yield* quests.list(CHANNEL) };
       }),
     );
-    expect(result.stopped.value).toMatchObject([{ id: "quest-1", state: "stopped" }]);
-    expect(result.stopped.entries.map((entry) => entry.type)).toEqual(["WorkQuestChanged"]);
-    expect(result.again.entries).toEqual([]);
     expect(Exit.isFailure(result.leaving) && JSON.stringify(result.leaving.cause)).toContain("owner-leaving");
-    expect(result.running).toEqual([]);
+    const entries = Option.getOrThrow(result.retired).entries;
+    expect(entries.map((entry) => entry.type).slice(0, 2)).toEqual(["AgentUpserted", "WorkQuestChanged"]);
+    expect(result.quests).toMatchObject([{ id: "quest-1", state: "stopped", changedAt: NOW }]);
+    expect(result.quests[0]?.revision).toBe(entries[1]?.sequence);
   });
 });

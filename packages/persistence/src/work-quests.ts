@@ -105,6 +105,27 @@ const at = (quest: WorkQuest, revision: number) => new WorkQuest({ ...quest, rev
 
 const unchanged = (quest: WorkQuest) => ({ value: quest, events: [] as ReadonlyArray<JournaledEvent> });
 
+/**
+ * Stops every Quest the hob runs, in the caller's transaction, as its retirement commits: a Quest
+ * stays with its hob (ADR 041), so none is left running under a hob that is gone. Returns their
+ * `WorkQuestChanged` events, numbered from `first`.
+ */
+export const stopWorkQuestsOf = (sql: SqlClient.SqlClient, ownerHobId: AgentId, stoppedAt: string, first: number) =>
+  Effect.gen(function* () {
+    const rows = yield* sql<WorkQuestRow>`SELECT * FROM work_quests
+      WHERE owner_hob_id = ${ownerHobId} AND state IN ('active', 'waiting') ORDER BY created_at, id`;
+    const running = yield* Effect.forEach(rows, questFromRow);
+    const stopped = running.flatMap((quest, index) => {
+      const next = WorkQuests.transition(quest, { _tag: "Stop", at: stoppedAt });
+      return next instanceof WorkQuest ? [at(next, first + index)] : [];
+    });
+    for (const quest of stopped) {
+      yield* sql`UPDATE work_quests SET state = ${quest.state}, changed_at = ${quest.changedAt},
+        revision = ${quest.revision} WHERE id = ${quest.id}`;
+    }
+    return stopped.map((quest) => ({ _tag: "WorkQuestChanged" as const, workQuest: quest }));
+  });
+
 export const WorkQuestRepositoryLive = Layer.effect(
   WorkQuestRepository,
   Effect.gen(function* () {
@@ -231,25 +252,6 @@ export const WorkQuestRepositoryLive = Layer.effect(
         return yield* Effect.forEach(rows, questFromRow);
       }).pipe(Effect.catchTag("SqlError", Effect.die));
 
-    const stopOwnedBy = (ownerHobId: AgentId, stoppedAt: string) =>
-      change<ReadonlyArray<WorkQuest>, never>((first) =>
-        Effect.gen(function* () {
-          const running = yield* runningOwnedBy(ownerHobId);
-          const stopped = running.flatMap((quest, index) => {
-            const next = WorkQuests.transition(quest, { _tag: "Stop", at: stoppedAt });
-            return next instanceof WorkQuest ? [at(next, first + index)] : [];
-          });
-          for (const quest of stopped) {
-            yield* sql`UPDATE work_quests SET state = ${quest.state}, changed_at = ${quest.changedAt},
-              revision = ${quest.revision} WHERE id = ${quest.id}`;
-          }
-          return {
-            value: stopped,
-            events: stopped.map((quest) => ({ _tag: "WorkQuestChanged" as const, workQuest: quest })),
-          };
-        }),
-      );
-
-    return WorkQuestRepository.of({ start, finish, list, runningOwnedBy, stopOwnedBy });
+    return WorkQuestRepository.of({ start, finish, list, runningOwnedBy });
   }),
 );

@@ -144,8 +144,6 @@ export class HobLifecycle extends Context.Service<
         // A retired hob keeps none of its rules, and coming back would not restore them (ADR 015).
         if (Option.isSome(grants)) yield* grants.value.revokeForAgent(agentId, "retired");
         if (activeWork === "stop") yield* chat.interruptAgent(agentId);
-        // A Quest stays with its hob (ADR 041), so one it still runs stops with it.
-        if (Option.isSome(quests)) yield* quests.value.stopOwnedBy(agentId);
         return retired;
       });
 
