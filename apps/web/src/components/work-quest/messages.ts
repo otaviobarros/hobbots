@@ -27,4 +27,7 @@ export const messages = {
   finished: ({ hob, title }: { hob: string; title: string }) => `${hob} finished ${title}`,
   /** Between the parts of a line, as "Winter market page · PR #12". */
   dot: " · ",
+  /** When the chat's Quests could not be read: the transcript still shows, without their cards. */
+  unread: "Couldn't load this chat's Quests, so their cards are missing.",
+  retry: "Try again",
 };

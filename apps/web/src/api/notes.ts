@@ -17,9 +17,12 @@ import { recordMessage } from "./sync.ts";
 export const recordsMoved = (queryClient: QueryClient, channels: ReadonlyArray<ChannelId>): Promise<unknown> =>
   Promise.all(
     channels.flatMap((channelId) => [
-      ...[recordKeys.decisions(channelId), recordKeys.artifacts(channelId), pinsKey(channelId)].map((queryKey) =>
-        readListAgain(queryClient, queryKey),
-      ),
+      ...[
+        recordKeys.decisions(channelId),
+        recordKeys.artifacts(channelId),
+        recordKeys.workQuests(channelId),
+        pinsKey(channelId),
+      ].map((queryKey) => readListAgain(queryClient, queryKey)),
       forgetArtifactReads(queryClient, channelId),
     ]),
   );

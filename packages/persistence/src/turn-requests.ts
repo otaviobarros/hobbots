@@ -116,7 +116,10 @@ export const makeTurnRequestWrites = (
     Effect.gen(function* () {
       const none = { value: [] as ReadonlyArray<TurnRequest>, events: [] as ReadonlyArray<JournaledEvent> };
       if (speaking.length === 0) return none;
-      const named = yield* sql`SELECT 1 AS named FROM approval_requests WHERE message_id = ${replyId}`;
+      // A reply an approval names, or the one a Quest started or finished from (ADR 041), anchors a
+      // card, so its turn is answered rather than passed.
+      const named = yield* sql`SELECT 1 AS named FROM approval_requests WHERE message_id = ${replyId}
+        UNION ALL SELECT 1 AS named FROM work_quests WHERE started_from = ${replyId} OR finished_from = ${replyId}`;
       if (named.length > 0) {
         yield* stepRequests(sql, speaking, { _tag: "Answer" });
         return none;

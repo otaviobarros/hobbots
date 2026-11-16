@@ -587,6 +587,7 @@ function Transcript({
       <HobsPaused channel={channel} hobs={hobs} />
       {caughtAt === null && catchUpAt}
       {headsUps.failed}
+      {quests.unread}
       {saves.isError && saves.data === undefined && (
         <MemorySavesUnread name={hob.name} retry={() => void saves.refetch()} />
       )}

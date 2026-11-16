@@ -71,6 +71,34 @@ const questFromRow = (row: WorkQuestRow) =>
     revision: Number(row.revision),
   }).pipe(Effect.orDie);
 
+/**
+ * Moves the Quests started from a reply that moved from `from` into `to` with its chapter (ADR 037,
+ * ADR 041): each follows its card, journaled as `WorkQuestChanged` from `first` on. A running one
+ * that meets a running Quest in the camp's main line is refused, since a conversation runs one.
+ */
+export const moveWorkQuests = (
+  sql: SqlClient.SqlClient,
+  move: { readonly from: ChannelId; readonly to: ChannelId; readonly at: string; readonly first: number },
+) =>
+  Effect.gen(function* () {
+    const rows = yield* sql<WorkQuestRow>`SELECT * FROM work_quests WHERE channel_id = ${move.from}
+      AND started_from IN (SELECT id FROM messages WHERE channel_id = ${move.to}) ORDER BY created_at, id`;
+    const quests = yield* Effect.forEach(rows, questFromRow);
+    const running = yield* sql`SELECT id FROM work_quests WHERE channel_id = ${move.to}
+      AND root_message_id IS NULL AND state IN ('active', 'waiting')`;
+    const meets =
+      running.length > 0 && quests.some((quest) => quest.rootMessageId === null && WorkQuests.isRunning(quest));
+    if (meets) return null;
+    return yield* Effect.forEach(quests, (quest, index) =>
+      Effect.gen(function* () {
+        const moved = new WorkQuest({ ...quest, channelId: move.to, changedAt: move.at, revision: move.first + index });
+        yield* sql`UPDATE work_quests SET channel_id = ${moved.channelId}, changed_at = ${moved.changedAt},
+          revision = ${moved.revision} WHERE id = ${moved.id}`;
+        return { _tag: "WorkQuestChanged" as const, workQuest: moved };
+      }),
+    );
+  });
+
 /** A Quest at the revision of the event that journals it. */
 const at = (quest: WorkQuest, revision: number) => new WorkQuest({ ...quest, revision });
 

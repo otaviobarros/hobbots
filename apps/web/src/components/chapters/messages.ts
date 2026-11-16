@@ -60,6 +60,7 @@ export const messages = {
     "not-a-camp": () => "Pick one of this hob's open camps.",
     "reply-running": () => "Wait for the reply to finish, then try again.",
     "chapter-changed": () => "The chapters changed meanwhile. Try again.",
+    "quest-running": () => "That camp is already running a Quest. Move this chapter once it's done.",
     unreachable: () => "Couldn't change the chapters. Hobbots may be reconnecting; try again in a moment.",
   } satisfies Record<ChapterChangeError, () => string>,
   dismiss: "Dismiss",

@@ -12,7 +12,7 @@ import {
   TurnRequestId,
   WorkQuestId,
 } from "@hobbots/domain";
-import { Effect, Exit, Layer } from "effect";
+import { Effect, Exit, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { describe, expect, it } from "vitest";
 import { HobbotsRepositoryLive, WorkQuestRepositoryLive } from "../src/index.ts";
@@ -190,5 +190,20 @@ describe("Quests as work threads", () => {
     expect(result.done.entries.map((entry) => entry.type)).toEqual(["WorkQuestChanged"]);
     expect(result.retried.entries).toEqual([]);
     expect(Exit.isFailure(result.again) && JSON.stringify(result.again.cause)).toContain("none-running");
+  });
+
+  // covers ADR 041 (The record), ADR 039 (pass)
+  it("keeps a reply that started a Quest when its hob passes, since the card hangs from it (#1596)", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const repo = yield* HobbotsRepository;
+        yield* (yield* WorkQuestRepository).start(start());
+        const passed = yield* repo.passTurnRequests(MessageId.make("reply-1"), "Nothing to add");
+        return { passed, reply: yield* repo.findMessage(MessageId.make("reply-1")) };
+      }),
+    );
+    expect(result.passed.value).toEqual([]);
+    expect(Option.isSome(result.reply)).toBe(true);
   });
 });

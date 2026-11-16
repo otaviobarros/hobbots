@@ -1,4 +1,5 @@
 import type { Agent, ChannelId, MessageId, WorkQuest } from "@hobbots/domain";
+import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -111,12 +112,23 @@ function FinishedLine({ quest, owner }: { quest: WorkQuest; owner: Agent | undef
  * and the line a finished one leaves under the reply that finished it, when that is another reply.
  */
 export const useWorkQuestCards = (channelId: ChannelId | undefined, hobs: ReadonlyArray<Agent> | undefined) => {
-  const quests = useQuery({
+  const query = useQuery({
     ...workQuestsQuery(channelId ?? ("" as ChannelId)),
     enabled: channelId !== undefined,
-  }).data;
+  });
+  const quests = query.data;
   const ownerOf = (quest: WorkQuest) => hobs?.find((hob) => hob.id === quest.ownerHobId);
   return {
+    /** Shown after the transcript when the Quests could not be read, with a way to read them again. */
+    unread:
+      query.isError && quests === undefined ? (
+        <p role="alert" className="m-0 flex items-center gap-3 rounded-card bg-notice px-4 py-3 text-detail text-text">
+          <span className="min-w-0 flex-1">{messages.unread}</span>
+          <Button variant="outline" size="xs" onClick={() => void query.refetch()}>
+            {messages.retry}
+          </Button>
+        </p>
+      ) : null,
     after: (messageId: MessageId): ReactNode =>
       quests?.map((quest) =>
         quest.startedFrom === messageId ? (
