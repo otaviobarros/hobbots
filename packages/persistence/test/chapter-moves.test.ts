@@ -1229,6 +1229,7 @@ describe("a Quest as a work thread whose chapter moves into a camp", () => {
     const result = await run(
       Effect.gen(function* () {
         const { first } = yield* chatWithTwoChapters;
+        yield* (yield* HobbotsRepository).insertAgent(hob(AgentId.make("pip"), "Pip"));
         yield* workQuest("pips-page", CHAT, "reply-1", AgentId.make("pip"));
         return yield* Effect.exit(move(first, intoNew()));
       }),
