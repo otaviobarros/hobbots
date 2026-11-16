@@ -8,10 +8,12 @@ import {
   type ChapterId,
   DEFAULT_CHANNEL_TITLE,
   StartedFresh,
+  WorkQuests as WorkQuestsRules,
 } from "@hobbots/domain";
 import { Data, DateTime, Effect, Option, Schedule } from "effect";
 import { archiveBlockersOf, type ChannelCommandsDeps } from "./channel-commands.ts";
 import { type ChapterMoveTarget, HobbotsRepository } from "./repository.ts";
+import { WorkQuests } from "./work-quests.ts";
 
 // Make a camp and Start fresh (ADR 037, #1376). Each is a command: it reads under the hob's lock,
 // runs the channel's lifecycle where one changes, and commits the channels, what moves and the journal
@@ -60,6 +62,18 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
     const { requireActive, withHob, withChannelHob, announce } = deps;
     const repo = yield* HobbotsRepository;
     const archiveBlockers = yield* archiveBlockersOf;
+    // Without Quests as work threads, none runs in a chat, so none stops its Start fresh.
+    const workQuests = yield* Effect.serviceOption(WorkQuests);
+
+    // A Quest still running in the chat stays with its card's reply, which stays behind, so Start
+    // fresh waits until it is done or stopped. Only a turn starts one, and none starts under the lock.
+    const questRunning = (channel: Channel) =>
+      Option.isNone(workQuests)
+        ? Effect.succeed(false)
+        : workQuests.value.of(channel.id).pipe(
+            Effect.map((quests) => quests.some(WorkQuestsRules.isRunning)),
+            Effect.orDie,
+          );
 
     // Another hob a camp is made with: one the hub knows that takes new work. A retirement that
     // lands before the camp is stored leaves it a member that left.
@@ -122,6 +136,9 @@ export const makeCampCommands = (deps: CampCommandsDeps) =>
           return yield* new StartFreshRefused({ channelId: channel.id, reason: "not-open-chat" });
         }
         const at = yield* nowIso;
+        if (yield* questRunning(channel)) {
+          return yield* new StartFreshRefused({ channelId: channel.id, reason: "quest-running" });
+        }
         const superseded = ChannelLifecycle.transition(channel, {
           _tag: "Supersede",
           at,

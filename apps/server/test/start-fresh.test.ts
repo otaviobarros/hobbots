@@ -9,6 +9,7 @@ import {
   RuntimeAdapter,
   TaskControls,
   TaskRepository,
+  WorkQuests,
 } from "@hobbots/agents";
 import { ChannelKeyReused, StartFreshRefused, UserSession } from "@hobbots/api";
 import {
@@ -22,6 +23,7 @@ import {
   OWNER_USER_ID,
   TaskId,
   WINDOW_DEVICE_ID,
+  WorkQuestId,
 } from "@hobbots/domain";
 import { Backpack, DEFAULT_DISPATCH_LIMITS, Dispatcher } from "@hobbots/inbox";
 import { StepRunnerLive, TaskSignal, TaskTools } from "@hobbots/orchestration";
@@ -32,6 +34,7 @@ import {
   HobbotsRepositoryLive,
   TaskRepositoryLive,
   TaskToolCallsLive,
+  WorkQuestRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
@@ -111,6 +114,7 @@ const makeApp = (requests: Array<PromptRequest>) =>
       StepRunnerLive().pipe(Layer.provideMerge(TaskTools.layer("/")), Layer.provideMerge(TaskSignal.layer)),
     ),
     Layer.provideMerge(ApprovalService.layer),
+    Layer.provideMerge(WorkQuests.layer),
     Layer.provideMerge(Frodo),
     Layer.provideMerge(
       Layer.mergeAll(
@@ -118,6 +122,7 @@ const makeApp = (requests: Array<PromptRequest>) =>
         TaskRepositoryLive,
         TaskToolCallsLive,
         ApprovalRepositoryLive,
+        WorkQuestRepositoryLive,
         BackpackLive,
         EventJournal.layer,
         EventBus.layer,
@@ -290,5 +295,54 @@ describe("Start fresh", () => {
     expect(refusal(result.superseded)).toEqual(new StartFreshRefused({ channelId: SHIRE, reason: "not-open-chat" }));
     // The chat it replaced is read-only for good.
     expect(refusal(result.sent)).toMatchObject({ _tag: "ChannelArchived", channelId: SHIRE });
+  });
+
+  it("refuses while a Quest runs in the chat, and starts fresh once it is done (#1596)", async () => {
+    const { run } = setUp();
+    const result = await run(
+      Effect.gen(function* () {
+        const chat = yield* ChatService;
+        const quests = yield* WorkQuests;
+        const replies = (count: number) =>
+          waitFor(
+            messagesOf(SHIRE).pipe(
+              Effect.map((all) => all.filter((m) => m.role === "assistant")),
+              Effect.flatMap((all) => {
+                const reply = all[count - 1];
+                return reply !== undefined && ended(all) ? Effect.succeed(reply.id) : Effect.fail("not yet" as const);
+              }),
+            ),
+          );
+        yield* chat.sendPrompt(SHIRE, "Make the winter market page");
+        const started = yield* replies(1);
+        yield* quests.start({
+          id: WorkQuestId.make("winter"),
+          channelId: SHIRE,
+          rootMessageId: null,
+          title: "Winter market page",
+          goal: "A landing page for the winter market.",
+          doneWhen: ["The page is live"],
+          expectedBy: null,
+          ownerHobId: FRODO,
+          repository: null,
+          startedFrom: started,
+        });
+        const running = yield* Effect.exit(chat.startFresh(SHIRE, ChannelId.make("k1")));
+        yield* chat.sendPrompt(SHIRE, "Is it up?");
+        const finished = yield* replies(2);
+        yield* quests.finish({
+          channelId: SHIRE,
+          rootMessageId: null,
+          ownerHobId: FRODO,
+          result: "The page is live.",
+          made: [],
+          from: finished,
+        });
+        const fresh = yield* chat.startFresh(SHIRE, ChannelId.make("k1"));
+        return { running, fresh };
+      }),
+    );
+    expect(refusal(result.running)).toEqual(new StartFreshRefused({ channelId: SHIRE, reason: "quest-running" }));
+    expect(result.fresh.chat.id).toBe(ChannelId.make("k1"));
   });
 });

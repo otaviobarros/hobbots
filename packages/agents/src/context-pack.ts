@@ -92,6 +92,15 @@ export interface PackQuest {
   readonly readyForReview: number;
 }
 
+/** A Quest as a work thread under way in the channel (ADR 041), with what it is for and when it is done. */
+export interface PackWorkQuest {
+  readonly title: string;
+  readonly owner: string;
+  readonly state: string;
+  readonly goal: string;
+  readonly doneWhen: ReadonlyArray<string>;
+}
+
 /** The transcript's name for a message's author, as `PackPeople.speaker` gives it. */
 export type SpeakerOf = (message: Message) => string;
 
@@ -109,6 +118,8 @@ export interface PackRecords {
   readonly work: ChatWork;
   /** The Quests under way in the channel, oldest first, listed with its open work. */
   readonly quests: ReadonlyArray<PackQuest>;
+  /** Its Quests as work threads under way (ADR 041), first in its open work, so a new session keeps their goal. */
+  readonly workQuests?: ReadonlyArray<PackWorkQuest>;
   /** What Start fresh carried into this chat, told in its first turn. */
   readonly carried: ReadonlyArray<CarriedOver>;
   /** The artifacts index, newest first. */
@@ -263,9 +274,17 @@ const questLine = (quest: PackQuest): string => {
   return `- Quest: ${clip(oneLine(quest.title), 120)} (led by ${quest.lead}, ${quest.state}; ${counts.join(", ")})`;
 };
 
+const workQuestLine = (quest: PackWorkQuest): string =>
+  `- Quest: ${clip(oneLine(quest.title), 120)} (run by ${quest.owner}, ${quest.state}). Goal: ${clip(oneLine(quest.goal), 300)} Done when: ${quest.doneWhen.map((line) => clip(oneLine(line), 120)).join("; ")}`;
+
 /** The open work, which never drops silently: what does not fit is counted. Quests come first. */
-const fitWork = (work: ChatWork, quests: ReadonlyArray<PackQuest>, limit: number): Fitted => {
-  const lines = [...quests.map(questLine), ...workLines(work)];
+const fitWork = (
+  work: ChatWork,
+  quests: ReadonlyArray<PackQuest>,
+  workQuests: ReadonlyArray<PackWorkQuest>,
+  limit: number,
+): Fitted => {
+  const lines = [...workQuests.map(workQuestLine), ...quests.map(questLine), ...workLines(work)];
   return fitCount(lines.length, limit, (kept) =>
     [
       "## Open work",
@@ -466,7 +485,7 @@ const fitFixed = (records: PackRecords, budget: PackBudget) => {
     members: fitMembers(records.members, share("members")),
     "camp-brief": fitText(CAMP_BRIEF_HEADING, records.campBrief, share("camp-brief")),
     decisions: fitDecisions(records.decisions, share("decisions")),
-    "open-work": fitWork(records.work, records.quests, share("open-work")),
+    "open-work": fitWork(records.work, records.quests, records.workQuests ?? [], share("open-work")),
     carried: fitCarried(records.carried, share("carried")),
   };
 };

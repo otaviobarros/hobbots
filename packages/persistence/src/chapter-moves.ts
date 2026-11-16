@@ -32,6 +32,7 @@ import { chapterRows } from "./chapter-rows.ts";
 import { writeChapters } from "./chapters.ts";
 import { makeJournaledChange } from "./journal.ts";
 import { oldestFirst } from "./order.ts";
+import { moveWorkQuests } from "./work-quests.ts";
 
 // Moving a chapter into a camp (ADR 037, #1385): one transaction that runs the pure `planMove` on
 // the chapters as stored, re-parents the chapter's messages, decisions, artifacts and the quests
@@ -103,7 +104,12 @@ export const makeChapterMoves = (
       AND t.parent_id IS NULL AND t.state NOT IN ('completed', 'failed', 'cancelled')
       AND t.owner_id <> ${camp.ownerHobId} AND NOT EXISTS (SELECT 1 FROM channel_members m
         WHERE m.channel_id = ${camp.id} AND m.actor_kind = 'hob' AND m.actor_id = t.owner_id
-        AND m.state = 'active') LIMIT 1`.pipe(Effect.map((rows) => rows.length > 0));
+        AND m.state = 'active')
+      UNION ALL SELECT 1 FROM work_quests q JOIN messages s ON s.id = q.started_from
+      WHERE s.chapter_id = ${chapterId} AND q.channel_id = ${from} AND q.state IN ('active', 'waiting')
+        AND q.owner_hob_id <> ${camp.ownerHobId} AND NOT EXISTS (SELECT 1 FROM channel_members m
+        WHERE m.channel_id = ${camp.id} AND m.actor_kind = 'hob' AND m.actor_id = q.owner_hob_id
+        AND m.state = 'active')`.pipe(Effect.map((rows) => rows.length > 0));
 
   // The channel as this transaction wrote it.
   const shown = (id: ChannelId) => readChannel(id).pipe(Effect.flatMap(Effect.fromNullishOr), Effect.orDie);
@@ -301,6 +307,13 @@ export const makeChapterMoves = (
         const accepted = yield* acceptSuggestion(input.chapterId, made.camp.id, input.at, revision + 1);
         const items = yield* moveQuests(from.id, plan, input.at, revision + 1 + accepted.length);
         const reviews = yield* settleCarried(carried, revision + 1 + accepted.length + items.length);
+        const quests = yield* moveWorkQuests(sql, {
+          from: from.id,
+          to: made.camp.id,
+          at: input.at,
+          first: revision + 1 + accepted.length + items.length + reviews.length,
+        });
+        if (quests === null) return yield* new ChapterRefused({ channelId: from.id, reason: "quest-running" });
         const value = new ChapterMove({
           channel: yield* shown(from.id),
           camp: yield* shown(made.camp.id),
@@ -309,7 +322,7 @@ export const makeChapterMoves = (
           campChapters: plan.camp.chapters,
         });
         const moved: JournaledEvent = { _tag: "ChapterMoved", channelId: from.id, ...value, chapter: plan.landed };
-        return { value, events: [...made.events, moved, ...accepted, ...items, ...reviews] };
+        return { value, events: [...made.events, moved, ...accepted, ...items, ...reviews, ...quests] };
       }),
     );
 

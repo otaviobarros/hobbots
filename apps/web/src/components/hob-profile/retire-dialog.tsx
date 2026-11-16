@@ -1,4 +1,4 @@
-import type { RetireAgentPayload } from "@hobbots/api";
+import type { OpenWork, RetireAgentPayload } from "@hobbots/api";
 import { type Agent, type AgentId, takesNewWork } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { Dialog, DialogContent, DialogTitle } from "@hobbots/ui/components/dialog";
@@ -24,6 +24,12 @@ export interface Retired {
   readonly taker: string | null;
 }
 
+/** How many open Tasks and Quests the hob has, none until its open work is read. */
+const openLists = (work: OpenWork | undefined) => ({
+  tasks: work?.tasks.length ?? 0,
+  quests: work?.quests.length ?? 0,
+});
+
 /** Which way to retire is picked, what it would send, and whether it can be sent yet. */
 function useRetirePlan(hob: Agent) {
   const [handOverTo, setHandOverTo] = useState<AgentId | null>(null);
@@ -31,8 +37,8 @@ function useRetirePlan(hob: Agent) {
   const work = useQuery(openWorkQuery(hob.id, handOverTo));
   const hobs = useQuery(agentsQuery);
   const takers = (hobs.data ?? []).filter((each) => each.id !== hob.id && takesNewWork(each));
-  const openTasks = work.data?.tasks.length ?? 0;
-  const offered = retireChoices(openTasks, hob.retiring !== null);
+  const { tasks: openTasks, quests: openQuests } = openLists(work.data);
+  const offered = retireChoices(openTasks, openQuests, hob.retiring !== null);
   const choice = picked !== null && offered.includes(picked) ? picked : (offered[0] ?? "finish");
   const handingOver = choice === "hand-over";
   const blocked = handingOver ? (work.data?.tasks ?? []).filter((each) => each.handOver != null) : [];
@@ -42,7 +48,7 @@ function useRetirePlan(hob: Agent) {
   return {
     work,
     takers,
-    openTasks,
+    openWork: openTasks + openQuests,
     offered,
     choice,
     setPicked,
@@ -134,7 +140,7 @@ function RetireAsk({
   const copy = messages.profile.retire;
   const name = hob.name;
   const busy = running.length > 0;
-  const lead = plan.openTasks > 0 ? copy.open({ name }) : busy ? copy.busy({ name }) : copy.idle({ name });
+  const lead = plan.openWork > 0 ? copy.open({ name }) : busy ? copy.busy({ name }) : copy.idle({ name });
   const confirm = () => {
     if (plan.payload !== null) onSend({ choice: plan.choice, busy, taker: plan.taker?.name ?? null }, plan.payload);
   };
@@ -158,7 +164,7 @@ function RetireAsk({
           <RetireChoiceRow
             key={each}
             checked={plan.choice === each}
-            {...retireChoiceCopy(each, name, plan.openTasks > 0)}
+            {...retireChoiceCopy(each, name, plan.openWork > 0)}
             onPick={() => plan.setPicked(each)}
           />
         ))}

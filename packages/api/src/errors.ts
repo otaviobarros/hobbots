@@ -56,10 +56,10 @@ export class ChannelArchiveRefused extends Schema.TaggedError<ChannelArchiveRefu
 ) {}
 
 /**
- * Why Start fresh did nothing: the channel is not its hob's open chat (`not-open-chat`), or what
- * stops an archive stops it too.
+ * Why Start fresh did nothing: the channel is not its hob's open chat (`not-open-chat`), a Quest
+ * still runs in it (`quest-running`), or what stops an archive stops it too.
  */
-export const StartFreshRefusal = Schema.Literals([...ChannelArchiveRefusal.literals, "not-open-chat"]);
+export const StartFreshRefusal = Schema.Literals([...ChannelArchiveRefusal.literals, "not-open-chat", "quest-running"]);
 export type StartFreshRefusal = typeof StartFreshRefusal.Type;
 
 /** Start fresh was refused for `reason`; nothing changed. */

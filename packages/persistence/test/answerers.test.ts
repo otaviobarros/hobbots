@@ -171,6 +171,40 @@ describe("deciding who answers as a message is stored", () => {
     expect(answered(result.after)).toEqual([]);
   });
 
+  // covers ADR 041 (Who works on it), ADR 039 (Who answers, rule 5)
+  it("reaches the owner of a Quest as a work thread running in the camp with no mention (#1596)", async () => {
+    const camp = ChannelId.make("work-camp");
+    const result = await run(
+      Effect.gen(function* () {
+        yield* setUp(camp);
+        yield* addPip(camp);
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`INSERT INTO work_quests ${sql.insert({
+          id: "quest-pip",
+          channel_id: camp,
+          title: "Plan the week",
+          goal: "A plan for the week",
+          done_when: "[]",
+          owner_hob_id: PIP,
+          requested_by_kind: "user",
+          requested_by_id: "owner",
+          started_from: "reply-pip",
+          state: "active",
+          made: "[]",
+          created_at: NOW,
+          changed_at: NOW,
+          revision: 0,
+        })}`;
+        const plain = yield* send(yours(camp), NOBODY);
+        yield* sql`UPDATE work_quests SET state = 'done' WHERE id = 'quest-pip'`;
+        const after = yield* send(yours(camp), NOBODY);
+        return { plain, after };
+      }),
+    );
+    expect(result.plain.value.answerers).toEqual([{ hobId: PIP, cause: "lead" }]);
+    expect(answered(result.after)).toEqual([]);
+  });
+
   // covers ADR 039 (Who answers), STD-ARCH-014
   it("decides from the members as the journal orders them when a hob joins at the same moment (#1460)", async () => {
     const camps = Array.from({ length: 12 }, (_, index) => ChannelId.make(`race-${index}`));

@@ -48,6 +48,7 @@ import {
   stepRequests,
 } from "./turn-request-rows.ts";
 import { makeTurnRequestWrites, speakFor } from "./turn-requests.ts";
+import { stopWorkQuestsOf } from "./work-quests.ts";
 
 const decodeActor = Schema.decodeUnknownSync(Actor);
 
@@ -415,10 +416,11 @@ export const HobbotsRepositoryLive = Layer.effect(
         Effect.catchTag("SchemaError", Effect.die),
       );
 
-    // A retirement ends any wait to retire. Other moves leave that wait as stored, so a move computed
-    // from a read made before it began never undoes it.
+    // A retirement ends any wait to retire, and stops the Quests the hob still runs in the same
+    // transaction (ADR 041). Other moves leave that wait as stored, so a move computed from a read
+    // made before it began never undoes it.
     const setAgentStatus = (input: Agent, from: AgentStatus, actor: ChangeActor = YOU) =>
-      journaled(1, (revision) =>
+      journaledChange<Agent | null, never>((revision) =>
         Effect.gen(function* () {
           const updated =
             input.status === "retired"
@@ -428,7 +430,7 @@ export const HobbotsRepositoryLive = Layer.effect(
               : yield* sql`UPDATE agents
                   SET status = ${input.status}, retired_at = ${input.retiredAt}, revision = ${revision}
                   WHERE id = ${input.id} AND status = ${from} RETURNING id`;
-          if (updated.length === 0) return null;
+          if (updated.length === 0) return { value: null, events: [] };
           const agent = yield* storedAgent(input.id);
           // Kept for the hob's History and the Changes log, which outlive the journal (migration 0085).
           yield* sql`INSERT INTO agent_status_changes ${sql.insert({
@@ -439,8 +441,23 @@ export const HobbotsRepositoryLive = Layer.effect(
             actor: JSON.stringify(actor),
             created_at: DateTime.formatIso(yield* DateTime.now),
           })}`;
-          return { value: agent, events: [{ _tag: "AgentUpserted", agent, actor }] };
+          const stopped =
+            agent.status === "retired"
+              ? yield* stopWorkQuestsOf(
+                  sql,
+                  agent.id,
+                  agent.retiredAt ?? DateTime.formatIso(yield* DateTime.now),
+                  revision + 1,
+                )
+              : [];
+          return { value: agent, events: [{ _tag: "AgentUpserted" as const, agent, actor }, ...stopped] };
         }),
+      ).pipe(
+        Effect.map((committed) =>
+          committed.value === null
+            ? Option.none()
+            : Option.some({ value: committed.value, entries: committed.entries }),
+        ),
       );
 
     // Only a hob that is not retired and not already waiting starts waiting to retire.

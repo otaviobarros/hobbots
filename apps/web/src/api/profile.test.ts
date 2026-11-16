@@ -177,16 +177,20 @@ describe("hob profile", () => {
   });
 
   it("offers handing over or finishing first only for a hob with open Tasks, and sends the choice made", () => {
-    expect(retireChoices(0, false)).toEqual(["finish", "stop"]);
-    expect(retireChoices(2, false)).toEqual(["finish-first", "hand-over", "stop"]);
+    expect(retireChoices(0, 0, false)).toEqual(["finish", "stop"]);
+    expect(retireChoices(2, 0, false)).toEqual(["finish-first", "hand-over", "stop"]);
     // A hob already finishing first can still be handed over or stopped.
-    expect(retireChoices(2, true)).toEqual(["hand-over", "stop"]);
+    expect(retireChoices(2, 0, true)).toEqual(["hand-over", "stop"]);
+    // A Quest stays with its hob: it finishes first or stops, never goes to another hob.
+    expect(retireChoices(0, 1, false)).toEqual(["finish-first", "stop"]);
+    expect(retireChoices(2, 1, false)).toEqual(["finish-first", "stop"]);
+    expect(retireChoices(0, 1, true)).toEqual(["stop"]);
     const rook = AgentId.make("rook");
     expect(retirePayload("hand-over", null)).toBeNull();
     expect(retirePayload("hand-over", rook)).toEqual({ openWork: "hand-over", handOverTo: rook });
     expect(retirePayload("finish-first", null)).toEqual({ openWork: "finish-first" });
     expect(retirePayload("stop", rook)).toEqual({ activeWork: "stop" });
-    expect(retireChoiceCopy("stop", "Pip", true).note).toMatch(/open Tasks fail/);
+    expect(retireChoiceCopy("stop", "Pip", true).note).toMatch(/open Tasks fail and its Quests stop/);
     expect(handOverBlockText({ reason: "lineage-owner", message: "" }, "Rook")).toBe(
       "Rook already works on the Task above this one.",
     );

@@ -83,4 +83,5 @@ export * from "./web-fetch.ts";
 export * from "./web-mark.ts";
 export * from "./web-usage.ts";
 export * from "./work-hold.ts";
+export * from "./work-quests.ts";
 export * from "./workspace.ts";

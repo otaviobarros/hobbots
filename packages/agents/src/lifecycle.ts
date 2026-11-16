@@ -21,6 +21,7 @@ import { EventPublisher, RetiredHobGitHubApp } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { TaskTurns } from "./task-turns.ts";
 import { TaskRepository } from "./tasks.ts";
+import { WorkQuests } from "./work-quests.ts";
 
 /**
  * Pauses, wakes, retires and brings back hobs (AG-006), each journaled with who did it, you when
@@ -84,6 +85,13 @@ export class HobLifecycle extends Context.Service<
       const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
       const openTasks = (agentId: AgentId) =>
         Option.match(tasks, { onNone: () => Effect.succeed([]), onSome: (each) => each.listOpenTasks(agentId) });
+      const quests = yield* Effect.serviceOption(WorkQuests);
+      // What a hob that retires once its work is done still has: its open Tasks and the Quests it runs.
+      const hasOpenWork = (agentId: AgentId) =>
+        Effect.gen(function* () {
+          if ((yield* openTasks(agentId)).length > 0) return true;
+          return Option.isSome(quests) && (yield* quests.value.runningOwnedBy(agentId)).length > 0;
+        });
 
       const findAgent = (agentId: AgentId) => repo.findAgent(agentId).pipe(Effect.flatMap(foundAgent(agentId)));
 
@@ -232,6 +240,10 @@ export class HobLifecycle extends Context.Service<
             if (Option.isNone(target) || !takesNewWork(target.value)) {
               return yield* refuse(`The hob ${to} does not take new work, so it cannot take ${agent.name}'s Tasks.`);
             }
+            // A Quest stays with the hob that runs it (ADR 041), so none can be handed over.
+            if (Option.isSome(quests) && (yield* quests.value.runningOwnedBy(agentId)).length > 0) {
+              return yield* refuse(`${agent.name} runs a Quest, which cannot be handed over. Let it finish first.`);
+            }
             const blocked = yield* handOverBlocks(yield* openTasks(agentId), to);
             if (blocked.length > 0) {
               return yield* refuse(`Some of ${agent.name}'s open Tasks cannot go to ${target.value.name}.`, blocked);
@@ -268,7 +280,7 @@ export class HobLifecycle extends Context.Service<
             const committed = yield* repo.setAgentRetiring(agentId, { since: yield* nowIso, by: actor }, actor);
             if (Option.isNone(committed)) return { agent: yield* findAgent(agentId), retired: false };
             yield* bus.publish(committed.value.entries);
-            if ((yield* openTasks(agentId)).length === 0) {
+            if (!(yield* hasOpenWork(agentId))) {
               return { agent: yield* retireHeld(agentId, "finish", actor), retired: true };
             }
             return { agent: committed.value.value, retired: false };
@@ -284,7 +296,7 @@ export class HobLifecycle extends Context.Service<
           Effect.gen(function* () {
             const agent = yield* repo.findAgent(agentId);
             if (Option.isNone(agent) || agent.value.status === "retired" || agent.value.retiring === null) return false;
-            if ((yield* openTasks(agentId)).length > 0) return false;
+            if (yield* hasOpenWork(agentId)) return false;
             yield* retireHeld(agentId, "finish", agent.value.retiring.by);
             return true;
           }).pipe(Effect.catchTag("AgentNotFound", () => Effect.succeed(false))),

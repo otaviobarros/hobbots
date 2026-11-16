@@ -1,4 +1,5 @@
 import {
+  AgentId,
   Artifact,
   CampSuggestion,
   CampSuggestionId,
@@ -9,6 +10,8 @@ import {
   MessageId,
   MessagePin,
   RegisteredArtifactId,
+  WorkQuest,
+  WorkQuestId,
 } from "@hobbots/domain";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
@@ -53,6 +56,27 @@ const artifact = new Artifact({
   revision: 4,
 });
 
+const workQuest = new WorkQuest({
+  id: WorkQuestId.make("quest-1"),
+  channelId,
+  rootMessageId: null,
+  title: "Winter market page",
+  goal: "A landing page for the winter market.",
+  doneWhen: ["The page is live"],
+  expectedBy: null,
+  ownerHobId: AgentId.make("ada"),
+  requestedBy: { kind: "user", id: "owner" },
+  repository: null,
+  startedFrom: MessageId.make("m1"),
+  state: "active",
+  result: null,
+  made: [],
+  finishedFrom: null,
+  createdAt: at,
+  changedAt: at,
+  revision: 6,
+});
+
 /** The calls each spy saw for `key`, in order. */
 const watch = (client: QueryClient, key: ReadonlyArray<unknown>) => {
   const calls: Array<string> = [];
@@ -66,7 +90,7 @@ const watch = (client: QueryClient, key: ReadonlyArray<unknown>) => {
 };
 
 describe("record events", () => {
-  it("reads the channel's decisions, artifacts and brief again, cancelling a read on its way first (#1387)", async () => {
+  it("reads the channel's decisions, artifacts, brief and Quests again, cancelling a read on its way first (#1387, #1596)", async () => {
     for (const [event, key] of [
       [{ _tag: "DecisionRecorded", decision } as const, recordKeys.decisions(channelId)],
       [{ _tag: "DecisionSuperseded", decision } as const, recordKeys.decisions(channelId)],
@@ -78,6 +102,8 @@ describe("record events", () => {
         recordKeys.artifacts(channelId),
       ],
       [{ _tag: "ArtifactReviewSettled", artifact } as const, recordKeys.artifacts(channelId)],
+      [{ _tag: "WorkQuestStarted", workQuest } as const, recordKeys.workQuests(channelId)],
+      [{ _tag: "WorkQuestChanged", workQuest } as const, recordKeys.workQuests(channelId)],
     ] as const) {
       const client = new QueryClient();
       const calls = watch(client, key);

@@ -30,6 +30,8 @@ describe("Start fresh", () => {
     expect(refused("reply-running")).toBe("reply-running");
     expect(refused("approval-pending")).toBe("approval-pending");
     expect(refused("not-open-chat")).toBe("not-open-chat");
+    expect(refused("quest-running")).toBe("quest-running");
+    expect(canRetry("quest-running")).toBe(true);
     expect(refused("something-new")).toBe("unreachable");
     expect(startFreshError(new TypeError("Failed to fetch"))).toBe("unreachable");
     expect(canRetry("reply-running")).toBe(true);

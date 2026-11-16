@@ -293,6 +293,7 @@ export const messages = {
       unread: ({ name }: { name: string }) => `Hobbots could not read ${name}'s open work. Close and try again.`,
       runningHeading: "Writing now",
       tasksHeading: ({ count }: { count: number }) => (count === 1 ? "1 open Task" : `${count} open Tasks`),
+      questsHeading: ({ count }: { count: number }) => (count === 1 ? "1 running Quest" : `${count} running Quests`),
       waitingOn: ({ approvals, items }: { approvals: number; items: number }) =>
         [
           ...(approvals > 0 ? [approvals === 1 ? "1 approval waits" : `${approvals} approvals wait`] : []),

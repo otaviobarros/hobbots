@@ -7,6 +7,7 @@ import {
   type NewTask,
   RecordRepository,
   TaskRepository,
+  WorkQuestRepository,
 } from "@hobbots/agents";
 import {
   Agent,
@@ -31,6 +32,7 @@ import {
   QuestId,
   QuestionId,
   TaskId,
+  WorkQuestId,
 } from "@hobbots/domain";
 import { Effect, Exit, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
@@ -44,6 +46,7 @@ import {
   HobbotsRepositoryLive,
   RecordRepositoryLive,
   TaskRepositoryLive,
+  WorkQuestRepositoryLive,
 } from "../src/index.ts";
 import { TestDatabase } from "../src/testing.ts";
 
@@ -61,6 +64,7 @@ const TestLayer = Layer.mergeAll(
   RecordRepositoryLive,
   ChapterRepositoryLive,
   CampSuggestionRepositoryLive,
+  WorkQuestRepositoryLive,
 ).pipe(Layer.provideMerge(EventJournal.layer), Layer.provideMerge(TestDatabase));
 
 type Services =
@@ -70,6 +74,7 @@ type Services =
   | RecordRepository
   | ChapterRepository
   | CampSuggestionRepository
+  | WorkQuestRepository
   | EventJournal
   | SqlClient.SqlClient;
 
@@ -1197,5 +1202,61 @@ describe("camp suggestions", () => {
       }),
     );
     expect(result).toEqual({ open: "reply-running", after: "moved" });
+  });
+});
+
+/** A Quest as work thread (ADR 041) Aldric started from the reply `from` in `channelId`. */
+const workQuest = (id: string, channelId: ChannelId, from: string, ownerHobId: AgentId = ALDRIC) =>
+  WorkQuestRepository.use((quests) =>
+    quests.start({
+      id: WorkQuestId.make(id),
+      channelId,
+      rootMessageId: null,
+      title: `Quest ${id}`,
+      goal: `Do ${id}`,
+      doneWhen: ["It is done"],
+      expectedBy: null,
+      ownerHobId,
+      repository: null,
+      startedFrom: MessageId.make(from),
+      at: tick(),
+    }),
+  );
+
+describe("a Quest as a work thread whose chapter moves into a camp", () => {
+  // covers ADR 041 (The record), ADR 039 (members)
+  it("holds the chapter while a hob the camp would not admit runs a Quest started in it (#1596)", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { first } = yield* chatWithTwoChapters;
+        yield* (yield* HobbotsRepository).insertAgent(hob(AgentId.make("pip"), "Pip"));
+        yield* workQuest("pips-page", CHAT, "reply-1", AgentId.make("pip"));
+        return yield* Effect.exit(move(first, intoNew()));
+      }),
+    );
+    expect(Exit.isFailure(result) && JSON.stringify(result.cause)).toContain("reply-running");
+  });
+
+  // covers ADR 041 (The record), ADR 037 (moving a chapter)
+  it("follows the reply it started from, journaled, and is refused where the camp runs one (#1596)", async () => {
+    const result = await run(
+      Effect.gen(function* () {
+        const { first, billing } = yield* chatWithTwoChapters;
+        const repo = yield* HobbotsRepository;
+        const quests = yield* WorkQuestRepository;
+        yield* workQuest("launch-page", CHAT, "reply-1");
+        const moved = yield* repo.moveChapter({ channelId: CHAT, chapterId: first, target: intoNew(), at: LATER });
+        // The camp now runs that Quest, so a chapter whose running Quest would join it is refused.
+        yield* workQuest("billing-page", CHAT, "reply-2");
+        const busy = yield* Effect.exit(move(billing, intoCamp(CAMP)));
+        return { moved, busy, camp: yield* quests.list(CAMP), chat: yield* quests.list(CHAT) };
+      }),
+    );
+    expect(result.camp.map((quest) => [quest.id, quest.state])).toEqual([["launch-page", "active"]]);
+    const changed = result.moved.entries.filter((entry) => entry.type === "WorkQuestChanged");
+    expect(changed).toHaveLength(1);
+    expect(result.camp[0]?.revision).toBe(changed[0]?.sequence);
+    expect(Exit.isFailure(result.busy) && JSON.stringify(result.busy.cause)).toContain("quest-running");
+    expect(result.chat.map((quest) => quest.id)).toEqual(["billing-page"]);
   });
 });

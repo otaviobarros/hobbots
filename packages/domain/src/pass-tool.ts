@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { holdsEveryTaskTool, toolInputJsonSchema } from "./task-tools.ts";
+import { FINISH_WORK_TOOL, START_WORK_TOOL } from "./work-tools.ts";
 
 /**
  * The `pass` tool (ADR 039, One hob speaks at a time): Hobbots' own hub tool, served on every
@@ -28,10 +29,19 @@ export const passJsonSchema = (): Record<string, unknown> => toolInputJsonSchema
 /** How a pass reads in the conversation: "Pip passed: Quill covered it". */
 export const passLine = (hobName: string, reason: string): string => `${hobName} passed: ${reason}`;
 
+/** Whether `name` is one of the Quest tools (ADR 041), which every chat turn offers. */
+export const isWorkToolName = (name: string): boolean => name === START_WORK_TOOL || name === FINISH_WORK_TOOL;
+
 /**
  * Whether a session that keeps the hub tools it started with, as Codex does (ADR 024), holds what
- * every chat turn offers: `pass`, and every Task tool when the hub offers them (#1543). One that
- * started before `pass` existed, or whose tools are not known, does not, and is not resumed.
+ * every chat turn offers: `pass`, the Quest tools when the hub offers them (ADR 041), and every Task
+ * tool when the hub offers them (#1543). One that started before one of them existed, or whose tools
+ * are not known, does not, and is not resumed.
  */
-export const holdsEveryChatTool = (held: ReadonlyArray<string> | undefined, withTaskTools: boolean): boolean =>
-  held?.includes(PASS_TOOL) === true && (!withTaskTools || holdsEveryTaskTool(held));
+export const holdsEveryChatTool = (
+  held: ReadonlyArray<string> | undefined,
+  offered: { readonly taskTools: boolean; readonly workTools: boolean },
+): boolean =>
+  held?.includes(PASS_TOOL) === true &&
+  (!offered.workTools || (held.includes(START_WORK_TOOL) && held.includes(FINISH_WORK_TOOL))) &&
+  (!offered.taskTools || holdsEveryTaskTool(held));

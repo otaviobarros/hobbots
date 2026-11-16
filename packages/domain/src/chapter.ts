@@ -148,6 +148,7 @@ export const ChapterRefusal = Schema.Literals([
   "not-a-camp",
   "reply-running",
   "chapter-changed",
+  "quest-running",
 ]);
 export type ChapterRefusal = typeof ChapterRefusal.Type;
 

@@ -21,12 +21,21 @@ import { selectMembers } from "./channel-member-rows.ts";
 const RUNNING = QuestState.literals.filter(isActiveQuest);
 
 /** The latest top Quest under way in the channel, with the hobs it brought in, or null. */
+// A Quest as a work thread running in the main line (ADR 041): its owner answers what nobody else is asked.
+const runningWorkQuest = (sql: SqlClient.SqlClient, channelId: ChannelId) =>
+  Effect.map(
+    sql<{ readonly ownerHobId: string }>`SELECT owner_hob_id FROM work_quests WHERE channel_id = ${channelId}
+      AND root_message_id IS NULL AND state IN ('active', 'waiting') LIMIT 1`,
+    ([quest]) =>
+      quest === undefined ? null : ({ leadId: AgentId.make(quest.ownerHobId), party: [] } satisfies RunningQuest),
+  );
+
 const runningQuest = (sql: SqlClient.SqlClient, channelId: ChannelId) =>
   Effect.gen(function* () {
     const [quest] = yield* sql<{ readonly id: string; readonly leadId: string }>`SELECT id, lead_id FROM quests
       WHERE channel_id = ${channelId} AND parent_quest_id IS NULL AND ${sql.in("state", RUNNING)}
       ORDER BY created_at DESC, id DESC LIMIT 1`;
-    if (quest === undefined) return null;
+    if (quest === undefined) return yield* runningWorkQuest(sql, channelId);
     const party = yield* sql<{ readonly memberId: string }>`SELECT member_id FROM delegations
       WHERE quest_id = ${quest.id} ORDER BY created_at, id`;
     return {
