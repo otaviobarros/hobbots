@@ -19,7 +19,7 @@ import { SettleCharmCall } from "./settle-charm-call.tsx";
 const copy = messages.reply;
 
 /** The element id of a message's row, for scrolling to it. */
-const messageElementId = (id: string) => `message-${id}`;
+export const messageElementId = (id: string) => `message-${id}`;
 
 /**
  * Scrolls the message a search opened into the middle of the view once a transcript holds it, and

@@ -323,7 +323,17 @@ export function ChatView({
       {channelId && <PinNotes channelId={channelId} pins={pins} />}
 
       {/* The transcript and the composer, with a reply thread open beside them (ADR 039). */}
-      <ChatBody aside={<ThreadPanel channel={channel.data} messages={said} cast={cast} thread={thread} />}>
+      <ChatBody
+        aside={
+          <ThreadPanel
+            channel={channel.data}
+            messages={said}
+            cast={cast}
+            thread={thread}
+            focus={{ messageId: focusMessageId, pick: picks }}
+          />
+        }
+      >
         <section
           onScroll={(event) => {
             const view = event.currentTarget;

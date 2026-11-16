@@ -2,7 +2,7 @@ import type { ChannelId, Message, MessageId } from "@hobbots/domain";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { call } from "./client.ts";
 import { queryKeys } from "./queries.ts";
-import { recordMessage } from "./sync.ts";
+import { recordedMessage, recordMessage } from "./sync.ts";
 
 /** A reply you write in a thread (ADR 039, Reply threads). */
 export interface ThreadReplyDraft {
@@ -30,6 +30,8 @@ export const useReplyInThread = (channelId: ChannelId, rootId: MessageId) => {
       ),
     onSuccess: (reply) => {
       recordMessage(queryClient, reply);
+      // A late answer never undoes what the channel learned since, as a chapter moved with the reply.
+      if (recordedMessage(queryClient, reply.id) !== reply) return;
       queryClient.setQueryData<ReadonlyArray<Message>>(queryKeys.messages(channelId), (old) =>
         old === undefined || old.some((each) => each.id === reply.id) ? old : [...old, reply],
       );

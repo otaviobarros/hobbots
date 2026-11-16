@@ -101,6 +101,12 @@ export const recordMovedMessages = (
     );
   }
 };
+/** The message as this generation last recorded it, or undefined when a newer version or its removal won. */
+export const recordedMessage = (client: QueryClient, messageId: string): Message | undefined => {
+  const entry = syncState(client).overlay.get(`message:${messageId}`);
+  return entry !== undefined && isEntry(entry, "message") ? entry.value : undefined;
+};
+
 /** A removed message never returns (IDs are not reused), so its tombstone outranks every version. */
 export const recordRemovedMessage = (client: QueryClient, messageId: string) =>
   record(client, `message:${messageId}`, { kind: "removed", revision: Number.POSITIVE_INFINITY });

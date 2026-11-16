@@ -24,7 +24,14 @@ export const messages = {
   noHobAnswers: "No hob will answer",
   send: "Send",
   sending: "Sending…",
-  failed: "Couldn't send the reply. Your text is still in the box; try again in a moment.",
+  /** Why a reply was not sent, and what to do; the text stays in the box (STD-UI-009). */
+  failed: {
+    retry: "Couldn't send the reply. Your text is still in the box; try again in a moment.",
+    archived: "This chat is archived, so its threads take no new replies.",
+    gone: "The message this thread hangs from is no longer here, so the reply wasn't sent.",
+    changed:
+      "Your last reply may have gone through without an answer. Check the thread; Send again sends this one as a new reply.",
+  },
   gone: "This thread's message is no longer here.",
   you: "You",
   /** On a reply also sent to the main line, which opens its thread. */
