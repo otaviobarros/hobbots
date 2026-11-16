@@ -83,7 +83,8 @@ const backupCounts = (schema: CopySchema): Effect.Effect<BackupCounts, SqlError.
         : Effect.succeed(0);
     return {
       hobs: yield* count("agents"),
-      channels: yield* count("channels"),
+      // A copy made before the rename to channels (#1610), as an update backs up, still has threads.
+      channels: yield* count(schema.has("channels") ? "channels" : "threads"),
       quests: yield* count("quests"),
       tasks: yield* count("tasks"),
       skills: schema.has("skills", "removed_at")

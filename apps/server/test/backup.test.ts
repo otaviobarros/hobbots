@@ -766,6 +766,42 @@ describe("backup and restore", () => {
     }
   });
 
+  it("counts the threads of a data folder backed up before the rename to channels (#1610)", async () => {
+    const older = Object.fromEntries(
+      Object.entries(migrations).filter(([id]) => id < "20261115225102"),
+    ) as typeof migrations;
+    const at = "2026-11-15T00:00:00.000Z";
+    const seedThread = Effect.gen(function* () {
+      const sql = (yield* SqlClient.SqlClient).withoutTransforms();
+      yield* sql`INSERT INTO agents ${sql.insert({
+        id: "ada",
+        name: "Ada",
+        runtime: "claude-code",
+        role_title: "Guide",
+        instructions: "",
+        look_seed: 1,
+        look_color: "moss",
+        created_at: at,
+      })}`;
+      yield* sql`INSERT INTO threads ${sql.insert({
+        id: "lamps",
+        agent_id: "ada",
+        title: "Lamps",
+        kind: "chat",
+        state: "open",
+        sessions: "[]",
+        created_at: at,
+        updated_at: at,
+        revision: 1,
+      })}`;
+    });
+    await Effect.runPromise(Effect.provide(seedThread, SqliteLive(databaseOf(dataDir), older)));
+    const made = await Effect.runPromise(backupBeforeMigrations(dataDir, "0.15.0"));
+    expect(made).not.toBeNull();
+    const manifest = await readBackup(made as string, knownSchemaVersion());
+    expect(manifest.counts).toEqual({ hobs: 1, threads: 1, quests: 0, tasks: 0, skills: 0 });
+  });
+
   // covers ADR 028 (Backups)
   it("keeps memory in the backup with no bearer, restores it with new bearers, and stops when memory cannot be saved", async () => {
     await onHub(dataDir, seed);
