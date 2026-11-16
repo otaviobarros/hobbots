@@ -653,16 +653,18 @@ export class ApprovalService extends Context.Service<
  * Sets the hob's own answer back to Allow for a request you approved with Always allow (ADR 041), an
  * operation whose call names nothing narrower to save, such as Start a Quest. Every preset allows
  * such an operation, so taking the hob's own Ask or Never away is what allows it, as a change you
- * made: it shows on the hob's Permissions tab and in its history. Anything else changes nothing.
+ * made: it shows on the hob's Permissions tab and in its history. The answer is taken away from the
+ * hob as stored under its lock, so no other change to it is lost. Anything else changes nothing.
  */
 export const saveAlwaysAllow = (approval: ApprovalRequest) =>
   Effect.gen(function* () {
     const { operation } = approval;
     if (approval.state !== "approved" || approval.lifetime !== "always" || !offersAlwaysAllow(operation)) return;
-    const found = yield* (yield* HobbotsRepository).findAgent(approval.agentId);
-    if (Option.isNone(found)) return;
-    const own = found.value.policy.overrides;
-    if (!(operation in own)) return;
-    const overrides = Object.fromEntries(Object.entries(own).filter(([name]) => name !== operation));
-    yield* (yield* HobService).updatePolicy(found.value.id, { overrides }, YOU);
+    yield* (yield* HobService).updatePolicy(
+      approval.agentId,
+      (agent) => ({
+        overrides: Object.fromEntries(Object.entries(agent.policy.overrides).filter(([name]) => name !== operation)),
+      }),
+      YOU,
+    );
   });

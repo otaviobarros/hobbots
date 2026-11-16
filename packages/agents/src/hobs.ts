@@ -388,11 +388,12 @@ export class HobService extends Context.Service<
     /**
      * Changes the hob's own folders, hidden shared folders or overrides as its next configuration
      * version, checked against the installation's current preset and shared folders (ADR 014).
-     * A change that changes nothing adds no version. Made by `actor`, you when left out.
+     * A change that changes nothing adds no version. Made by `actor`, you when left out. Given as a
+     * function, the change is built from the hob as stored under its lock, so no change in between is lost.
      */
     readonly updatePolicy: (
       id: AgentId,
-      payload: UpdateHobPermissionsPayload,
+      payload: UpdateHobPermissionsPayload | ((agent: Agent) => UpdateHobPermissionsPayload),
       actor?: ChangeActor,
     ) => Effect.Effect<
       Agent,
@@ -597,11 +598,22 @@ export class HobService extends Context.Service<
 
       const updatePolicy = Effect.fn("HobService.updatePolicy")(function* (
         id: AgentId,
-        payload: UpdateHobPermissionsPayload,
+        payload: UpdateHobPermissionsPayload | ((agent: Agent) => UpdateHobPermissionsPayload),
         actor: ChangeActor = YOU,
       ) {
-        const canonical = yield* canonicalPolicy(payload);
-        return yield* nextVersion(id, applyPolicy(payload, canonical), actor);
+        if (typeof payload !== "function") {
+          const canonical = yield* canonicalPolicy(payload);
+          return yield* nextVersion(id, applyPolicy(payload, canonical), actor);
+        }
+        // Built from the hob as stored, under its lock, so a change that landed since it was read is kept.
+        return yield* nextVersion(
+          id,
+          (agent) => {
+            const built = payload(agent);
+            return Effect.flatMap(canonicalPolicy(built), (canonical) => applyPolicy(built, canonical)(agent));
+          },
+          actor,
+        );
       });
 
       const change = Effect.fn("HobService.change")(function* (id: AgentId, change: HobChange, actor: ChangeActor) {

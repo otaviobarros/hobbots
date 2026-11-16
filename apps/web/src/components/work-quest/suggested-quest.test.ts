@@ -21,6 +21,8 @@ describe("questSuggestion", () => {
     expect(
       questSuggestion({ tool: "start_work", arguments: { ...suggested, done_when: "The page is live" } }),
     ).toBeNull();
+    expect(questSuggestion({ tool: "start_work", arguments: { ...suggested, done_when: [] } })).toBeNull();
+    expect(questSuggestion({ tool: "start_work", arguments: { ...suggested, goal: "" } })).toBeNull();
     expect(questSuggestion({ tool: "read_hob", arguments: suggested })).toBeNull();
   });
 });

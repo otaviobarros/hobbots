@@ -1,4 +1,5 @@
-import { START_WORK_TOOL } from "@hobbots/domain";
+import { START_WORK_TOOL, StartWorkInput } from "@hobbots/domain";
+import { Option, Schema } from "effect";
 import { messages } from "./messages.ts";
 
 /** A Quest a hob suggests with `start_work` (ADR 041), as its approval request carries it. */
@@ -9,7 +10,7 @@ export interface QuestSuggestion {
   readonly expectedBy: string | null;
 }
 
-const isText = (value: unknown): value is string => typeof value === "string" && value.trim() !== "";
+const decodeSuggestion = Schema.decodeUnknownOption(StartWorkInput);
 
 /** The Quest a `start_work` request suggests, or null for any other request or arguments it cannot read. */
 export const questSuggestion = (approval: {
@@ -17,9 +18,15 @@ export const questSuggestion = (approval: {
   readonly arguments: Readonly<Record<string, unknown>>;
 }): QuestSuggestion | null => {
   if (approval.tool !== START_WORK_TOOL) return null;
-  const { title, goal, done_when: doneWhen, expected_by: expectedBy } = approval.arguments;
-  if (!isText(title) || !isText(goal) || !Array.isArray(doneWhen) || !doneWhen.every(isText)) return null;
-  return { title, goal, doneWhen, expectedBy: isText(expectedBy) ? expectedBy : null };
+  return Option.match(decodeSuggestion(approval.arguments), {
+    onNone: () => null,
+    onSome: (input) => ({
+      title: input.title,
+      goal: input.goal,
+      doneWhen: input.done_when,
+      expectedBy: input.expected_by ?? null,
+    }),
+  });
 };
 
 /**

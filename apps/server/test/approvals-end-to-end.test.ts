@@ -380,6 +380,14 @@ describe("approvals, end to end", () => {
     expect(await forChannel(allowed)).toEqual([]);
     expect(await questsOf(allowed)).toHaveLength(1);
 
+    // A retried Always allow changes nothing: an Ask set since then stays.
+    expect((await answer({ "start-quest": "ask" })).status).toBe(200);
+    expect((await decide(asked, { decision: "approve", lifetime: "always" })).body).toMatchObject({
+      state: "approved",
+    });
+    const kept = await request<HobPermissions>("GET", `/api/agents/${hob.id}/permissions`);
+    expect(kept.body.decisions["start-quest"]).toBe("ask");
+
     // Never: the call is refused with the reason, and no Quest starts.
     expect((await answer({ "start-quest": "deny" })).status).toBe(200);
     const never = await startIn();
