@@ -72,6 +72,7 @@ import { makeTurnGrants } from "./turn-grants.ts";
 import { makeTurnInputs } from "./turn-inputs.ts";
 import { makePackSources, PackReports } from "./turn-pack.ts";
 import { sessionActor } from "./users.ts";
+import { runsQuestIn, WorkQuests } from "./work-quests.ts";
 
 /**
  * The skill a message asks for: the one you picked with `/`, or one its text names. A skill of a set
@@ -323,6 +324,7 @@ export class ChatService extends Context.Service<
       // Without Task work, turns offer no Task tools and hobs run no steps.
       const taskTurns = yield* Effect.serviceOption(TaskTurns);
       const taskRecords = yield* Effect.serviceOption(TaskRepository);
+      const workQuests = yield* Effect.serviceOption(WorkQuests);
       const inputs = yield* makeTurnInputs(repo, hobTools, redactor);
       const { acceptedIn } = inputs;
       // Without a backpack, a channel starts only your queued messages.
@@ -353,13 +355,17 @@ export class ChatService extends Context.Service<
           ? Effect.void
           : Effect.fail(new HobUnavailable({ agentId: agent.id, status: hobStanding(agent) }));
 
-      // A hob finishing its open Tasks before it retires takes messages only in a channel where one
-      // of them is open, since they go on with it; anywhere else a message would be new work (#408).
+      // A hob finishing its open Tasks and Quests before it retires takes messages only in a channel
+      // where one of them is open, since they go on with it; anywhere else a message would be new
+      // work (#408).
       const requireOpenTaskWhileRetiring = (agent: Agent, channelId: ChannelId) =>
         Effect.gen(function* () {
           if (agent.retiring === null || agent.status === "retired") return;
           const trees = Option.isSome(taskRecords) ? yield* taskRecords.value.readChannelTrees(channelId) : [];
-          if (openChannelTask(trees, agent.id) === undefined) {
+          if (
+            openChannelTask(trees, agent.id) === undefined &&
+            !(yield* runsQuestIn(workQuests, agent.id, channelId))
+          ) {
             return yield* new HobUnavailable({ agentId: agent.id, status: "retiring" });
           }
         });

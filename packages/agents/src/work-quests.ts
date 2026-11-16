@@ -80,6 +80,8 @@ export class WorkQuestRepository extends Context.Service<
     readonly finish: (request: WorkQuestFinishRequest) => Effect.Effect<Committed<WorkQuest>, WorkQuestRefused>;
     /** The channel's Quests, oldest first. */
     readonly list: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<WorkQuest>, ChannelNotFound>;
+    /** The Quests the hob runs, active or waiting, in every channel, oldest first. */
+    readonly runningOwnedBy: (ownerHobId: AgentId) => Effect.Effect<ReadonlyArray<WorkQuest>>;
   }
 >()("@hobbots/agents/WorkQuestRepository") {}
 
@@ -93,6 +95,8 @@ export class WorkQuests extends Context.Service<
     readonly finish: (request: Omit<WorkQuestFinishRequest, "at">) => Effect.Effect<WorkQuest, WorkQuestRefused>;
     /** A channel's Quests, oldest first, for its cards. */
     readonly of: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<WorkQuest>, ChannelNotFound>;
+    /** The Quests the hob runs, which a hob that retires once its work is done waits for (#408). */
+    readonly runningOwnedBy: (ownerHobId: AgentId) => Effect.Effect<ReadonlyArray<WorkQuest>>;
   }
 >()("@hobbots/agents/WorkQuests") {
   static readonly layer = Layer.effect(
@@ -105,10 +109,22 @@ export class WorkQuests extends Context.Service<
         start: (request) => Effect.flatMap(now, (at) => announced(quests.start({ ...request, at }))),
         finish: (request) => Effect.flatMap(now, (at) => announced(quests.finish({ ...request, at }))),
         of: quests.list,
+        runningOwnedBy: quests.runningOwnedBy,
       });
     }),
   );
 }
+
+/**
+ * Whether the hob runs a Quest in the channel, which a hob retiring once its work is done goes on
+ * with there (#408). Without Quests it runs none.
+ */
+export const runsQuestIn = (quests: Option.Option<WorkQuests["Service"]>, hobId: AgentId, channelId: ChannelId) =>
+  Option.isNone(quests)
+    ? Effect.succeed(false)
+    : Effect.map(quests.value.runningOwnedBy(hobId), (running) =>
+        running.some((quest) => quest.channelId === channelId),
+      );
 
 /**
  * The Quest tools (ADR 041): `start_work` and `finish_work`, for a turn that writes a reply in a chat

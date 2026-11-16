@@ -2,6 +2,7 @@ import { type WorkQuestFinishRequest, WorkQuestRepository, type WorkQuestStart }
 import { ChannelNotFound } from "@hobbots/api";
 import {
   type Actor,
+  type AgentId,
   type ChannelId,
   hobActor,
   type JournaledEvent,
@@ -214,6 +215,13 @@ export const WorkQuestRepositoryLive = Layer.effect(
         return yield* Effect.forEach(rows, questFromRow);
       }).pipe(Effect.catchTag("SqlError", Effect.die));
 
-    return WorkQuestRepository.of({ start, finish, list });
+    const runningOwnedBy = (ownerHobId: AgentId) =>
+      Effect.gen(function* () {
+        const rows = yield* sql<WorkQuestRow>`SELECT * FROM work_quests
+          WHERE owner_hob_id = ${ownerHobId} AND state IN ('active', 'waiting') ORDER BY created_at, id`;
+        return yield* Effect.forEach(rows, questFromRow);
+      }).pipe(Effect.catchTag("SqlError", Effect.die));
+
+    return WorkQuestRepository.of({ start, finish, list, runningOwnedBy });
   }),
 );

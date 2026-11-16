@@ -8,6 +8,8 @@ import {
   HobService,
   HobTools,
   PermissionSummary,
+  WorkQuests,
+  WorkToolsLive,
 } from "@hobbots/agents";
 import { type Agent, type Message, roleFields } from "@hobbots/domain";
 import {
@@ -19,6 +21,7 @@ import {
   SearchIndex,
   SetupRepository,
   TaskRepositoryLive,
+  WorkQuestRepositoryLive,
 } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
 import { FakeRuntimeLayer } from "@hobbots/runtimes";
@@ -29,6 +32,7 @@ import { EventBus } from "../src/event-bus.ts";
 import { NodeFolderChecks } from "../src/folders.ts";
 import { ApiRoutes } from "../src/http.ts";
 import { Installation } from "../src/installation.ts";
+import { RetireWhenDone } from "../src/retire.ts";
 import { AS_WINDOW, TestDevices } from "./window-device.ts";
 
 const hob = {
@@ -47,10 +51,14 @@ let dispose: () => Promise<void>;
 
 beforeEach(() => {
   // Slow enough that a reply is still running when the test retires its hob.
-  const App = HobLifecycle.layer.pipe(
+  const App = RetireWhenDone.pipe(
+    Layer.provideMerge(HobLifecycle.layer),
     Layer.provideMerge(
       Layer.mergeAll(
-        ChatService.layer.pipe(Layer.provide(HobTools.chatOnly)),
+        ChatService.layer.pipe(
+          Layer.provide(HobTools.chatOnly),
+          Layer.provideMerge(WorkToolsLive.pipe(Layer.provideMerge(WorkQuests.layer))),
+        ),
         ApprovalService.layer,
         GrantService.layer,
         HobService.layer,
@@ -64,6 +72,7 @@ beforeEach(() => {
           ApprovalRepositoryLive,
           GrantRepositoryLive,
           TaskRepositoryLive,
+          WorkQuestRepositoryLive,
           EventJournal.layer,
           BackpackLive,
           SetupRepository.layer,
@@ -262,5 +271,33 @@ describe("retiring hobs", () => {
     expect((await messages(channel.id)).at(-1)?.status).toBe("streaming");
     await settled(channel.id);
     expect((await messages(channel.id)).at(-1)).toMatchObject({ content: "Echo: hello", status: "complete" });
+  });
+
+  it("waits for the hob's running Quest when retiring with finish first, and retires it once the Quest is done (#1596)", async () => {
+    const { agent, channel } = await summon();
+    const hub = (tool: string, input: object) => `fake:hub ${tool} ${JSON.stringify(input)}`;
+    const send = async (content: string) => {
+      await request("POST", `/api/channels/${channel.id}/messages`, { content });
+      await settled(channel.id);
+    };
+    await send(hub("start_work", { title: "Winter market page", goal: "A landing page.", done_when: ["It is live"] }));
+    const quests = await request("GET", `/api/channels/${channel.id}/work-quests`);
+    expect(quests.body).toMatchObject([{ title: "Winter market page", state: "active" }]);
+
+    const waiting = await request("POST", `/api/agents/${agent.id}/retire`, { openWork: "finish-first" });
+    expect(waiting).toMatchObject({ status: 200, body: { id: agent.id, status: "active", retiring: { by: {} } } });
+    // It goes on where it runs the Quest, and finishing it is what retires it.
+    await send(hub("finish_work", { result: "The page is live.", made: [] }));
+    await Effect.runPromise(
+      Effect.promise(() => request("GET", "/api/agents?status=retired")).pipe(
+        Effect.flatMap(({ body }) =>
+          body.some((each: Agent) => each.id === agent.id && each.status === "retired")
+            ? Effect.void
+            : Effect.fail("not yet"),
+        ),
+        Effect.retry({ schedule: Schedule.spaced("10 millis"), times: 300 }),
+      ),
+    );
+    expect((await request("GET", `/api/channels/${channel.id}/work-quests`)).body).toMatchObject([{ state: "done" }]);
   });
 });

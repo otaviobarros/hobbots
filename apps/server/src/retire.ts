@@ -59,8 +59,8 @@ export const openWork = (agentId: AgentId, handOverTo: AgentId | undefined) =>
   });
 
 /**
- * Retires a hob finishing its open Tasks first once the last of them ends or leaves it, as it
- * happens, and at start for any whose last Task ended while the hub was down (#408).
+ * Retires a hob finishing its open Tasks and Quests first once the last of them ends or leaves it,
+ * as it happens, and at start for any whose last one ended while the hub was down (#408).
  */
 export const RetireWhenDone = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -77,6 +77,12 @@ export const RetireWhenDone = Layer.effectDiscard(
       Stream.runForEach((event) => {
         if (event._tag !== "Journaled") return Effect.void;
         const payload = event.entry.payload;
+        // A Quest that is done or stopped leaves its owner, and only the owner, with less to finish.
+        if (payload._tag === "WorkQuestChanged") {
+          return check(payload.workQuest.ownerHobId).pipe(
+            Effect.catchCause((cause) => Effect.logWarning("Could not retire a hob that finished its work", cause)),
+          );
+        }
         if (payload._tag !== "TaskStateChanged" && payload._tag !== "TaskCompleted") return Effect.void;
         const control = payload._tag === "TaskStateChanged" ? payload.control : undefined;
         const owners = control?._tag === "Reassigned" ? [payload.task.ownerId, control.from] : [payload.task.ownerId];

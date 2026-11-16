@@ -67,7 +67,7 @@ import { makePackSources } from "./turn-pack.ts";
 import { type Carry, makeTurnRunner, type TurnRunnerDeps } from "./turn-runner.ts";
 import { type TurnSlot, takeSlot, turnSlots } from "./turn-slots.ts";
 import { workHeld } from "./work-hold.ts";
-import { WorkTools } from "./work-quests.ts";
+import { runsQuestIn, WorkQuests, WorkTools } from "./work-quests.ts";
 
 // Every channel's run (#1397): when its turns start and end, what queued behind them, and the work
 // the backpack carries into them. ChatService decides what you asked for; this runs it.
@@ -180,6 +180,7 @@ export const makeChannelRunner = (deps: ChannelRunnerDeps) =>
     const slots = yield* turnSlots;
     // Without Task records, a chat's turns are in no Quest.
     const taskRecords = yield* Effect.serviceOption(TaskRepository);
+    const workQuests = yield* Effect.serviceOption(WorkQuests);
     const adapters = yield* runtimeAdapters;
     // Without Task tools, as in tests of one part, a chat's turns offer none.
     const offersTaskTools = Option.isSome(yield* Effect.serviceOption(TaskTurns));
@@ -575,14 +576,16 @@ export const makeChannelRunner = (deps: ChannelRunnerDeps) =>
         );
         const trees =
           retiringMember && Option.isSome(taskRecords) ? yield* taskRecords.value.readChannelTrees(channel.id) : [];
+        // A retiring member goes on where it has an open Task or runs a Quest (#408).
         const mayWork = (agent: Agent) =>
-          agent.retiring === null || agent.id === owner || openChannelTask(trees, agent.id) !== undefined;
-        const takesWork = (agent: Agent) => agent.status === "active" && mayWork(agent);
-        return new Map(
-          found.flatMap((agent) =>
-            Option.isSome(agent) && takesWork(agent.value) ? [[agent.value.id, agent.value] as const] : [],
-          ),
+          agent.retiring === null || agent.id === owner || openChannelTask(trees, agent.id) !== undefined
+            ? Effect.succeed(true)
+            : runsQuestIn(workQuests, agent.id, channel.id);
+        const working = yield* Effect.filter(
+          found.flatMap((agent) => (Option.isSome(agent) && agent.value.status === "active" ? [agent.value] : [])),
+          mayWork,
         );
+        return new Map(working.map((agent) => [agent.id, agent] as const));
       });
 
     // The hobs that speak in the channel: its own hob, then its active member hobs as they joined.
