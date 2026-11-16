@@ -1,23 +1,25 @@
 import {
+  type AgentId,
   type Channel,
   type ChannelId,
   isActiveQuest,
   type Message,
-  type PackReport,
   WorkQuests as WorkQuestsRules,
 } from "@hobbots/domain";
-import { Context, Effect, HashMap, Layer, Option, Ref } from "effect";
+import { Context, Effect, Option } from "effect";
 import { BriefLog } from "./brief-log.ts";
 import { ChapterRepository } from "./chapters.ts";
 import {
   buildPack,
   type PackArtifact,
   type PackDecision,
+  type PackMemoryPage,
   type PackQuest,
   type PackRecords,
   packChapters,
 } from "./context-pack.ts";
 import { type PackPeople, reasonLine, type TurnReason } from "./pack-people.ts";
+import type { PackReports } from "./pack-reports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { TaskRepository } from "./tasks.ts";
 import { WorkQuests } from "./work-quests.ts";
@@ -26,7 +28,7 @@ import { WorkQuests } from "./work-quests.ts";
 // packs turns read.
 
 /** What a pack is built from before the turn knows its memory brief. */
-export type PackSources = Omit<PackRecords, "memoryBrief">;
+export type PackSources = Omit<PackRecords, "memoryBrief" | "memoryPages">;
 
 /**
  * The channel's active decisions and its artifacts index, both newest first (#1383). Without it, a
@@ -39,30 +41,6 @@ export class PackRecordSource extends Context.Service<
     readonly artifactsIndex: (channelId: ChannelId) => Effect.Effect<ReadonlyArray<PackArtifact>>;
   }
 >()("@hobbots/agents/PackRecordSource") {}
-
-/**
- * The report of the last pack each channel's turn read, for the Focus chip and the dev-only endpoint.
- * Kept in memory: after a restart, a channel's next new session reports again.
- */
-export class PackReports extends Context.Service<
-  PackReports,
-  {
-    readonly record: (channelId: ChannelId, report: PackReport) => Effect.Effect<void>;
-    readonly last: (channelId: ChannelId) => Effect.Effect<Option.Option<PackReport>>;
-  }
->()("@hobbots/agents/PackReports") {
-  static readonly layer = Layer.effect(
-    PackReports,
-    Effect.gen(function* () {
-      // standards-allow STD-ARCH-013: the last report per channel, a log for review, not lifecycle state.
-      const reports = yield* Ref.make(HashMap.empty<ChannelId, PackReport>());
-      return PackReports.of({
-        record: (channelId, report) => Ref.update(reports, HashMap.set(channelId, report)),
-        last: (channelId) => Ref.get(reports).pipe(Effect.map(HashMap.get(channelId))),
-      });
-    }),
-  );
-}
 
 /**
  * Reads a channel's records for its pack: the resting chapters with their summaries, the plain one
@@ -154,20 +132,35 @@ export const makePackSources = Effect.gen(function* () {
     });
 });
 
-/** The pack a turn reads, logged with its report and kept for the Focus chip. */
+/** What a turn tells its session from memory, as its pack reads it. */
+export interface PackMemory {
+  readonly text: string | null;
+  readonly pages: ReadonlyArray<PackMemoryPage>;
+}
+
+/** A pack's records: its sources, with the memory brief the turn sends and the pages it carries. */
+export const packRecords = (sources: PackSources, memory: PackMemory | null): PackRecords => ({
+  ...sources,
+  memoryBrief: memory?.text ?? null,
+  // A brief not sent this turn carries no page into this pack.
+  memoryPages: memory === null || memory.text === null ? [] : memory.pages,
+});
+
+/** The pack a turn reads, logged with its report and kept for the Focus chip and the hob's next Quest. */
 export const packTurn = (
   reports: Option.Option<PackReports["Service"]>,
   channelId: ChannelId,
+  hobId: AgentId,
   sources: PackSources | null,
-  memory: { readonly text: string | null } | null,
+  memory: PackMemory | null,
 ) =>
   Effect.gen(function* () {
     // A resumed session has no pack: it already holds what the pack would tell it.
     if (sources === null) return null;
-    const pack = buildPack({ ...sources, memoryBrief: memory?.text ?? null });
+    const pack = buildPack(packRecords(sources, memory));
     yield* Effect.logInfo("Built a context pack").pipe(
       Effect.annotateLogs({ channelId, packTokens: pack.report.tokens, packReport: JSON.stringify(pack.report) }),
     );
-    if (Option.isSome(reports)) yield* reports.value.record(channelId, pack.report);
+    if (Option.isSome(reports)) yield* reports.value.record(channelId, hobId, pack.report);
     return pack.text;
   });

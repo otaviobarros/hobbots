@@ -3,6 +3,7 @@ import {
   type HubToolAnswer,
   type HubTools,
   makeRedactor,
+  PackReports,
   WorkQuests,
   WorkTools,
   WorkToolsLive,
@@ -13,8 +14,10 @@ import {
   Channel,
   ChannelId,
   FINISH_WORK_TOOL,
+  MemoryPath,
   Message,
   MessageId,
+  type PackRead,
   roleFields,
   START_WORK_TOOL,
 } from "@hobbots/domain";
@@ -27,14 +30,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 // `start_work` and `finish_work` on each runtime that serves hub tools (ADR 041): the fake runtime,
 // and an installed Claude Code and Codex where HOBBOTS_CLAUDE_CODE and HOBBOTS_CODEX name them, each
 // with a stand-in model. One turn starts a Quest in the camp's main line, and a second start in the
-// same conversation is refused; the next turn finishes it, and the card reads it done.
+// same conversation is refused; the next turn finishes it, and the card reads it done. The Quest lists
+// what Ada's session read first, from the report of the pack it started from (#1487).
 
 const NOW = "2026-11-16T00:00:00.000Z";
 const ADA = AgentId.make("ada");
 
 const hub = ManagedRuntime.make(
   WorkToolsLive.pipe(
-    Layer.provideMerge(WorkQuests.layer),
+    Layer.provideMerge(Layer.mergeAll(WorkQuests.layer, PackReports.layer)),
     Layer.provideMerge(Layer.mergeAll(HobbotsRepositoryLive, WorkQuestRepositoryLive)),
     Layer.provideMerge(TestDatabase),
   ),
@@ -81,12 +85,27 @@ const turnIn = (channelId: ChannelId, id: string) =>
     }),
   );
 
+/** What Ada's session read first in a camp: a memory page and a decision. */
+const READ_FIRST: ReadonlyArray<PackRead> = [
+  {
+    _tag: "MemoryPage",
+    scope: { _tag: "Hob", agentId: ADA },
+    path: MemoryPath.make("shop/look.md"),
+    title: "The shop's look",
+  },
+  { _tag: "Decision", id: "decision-1", title: "Sign-ups stop at 200", messageId: null },
+];
+
 const campOf = (name: string) =>
   hub.runPromise(
     Effect.gen(function* () {
       const channelId = ChannelId.make(`camp-${name}`);
       yield* (yield* HobbotsRepository).upsertChannel(
         new Channel({ id: channelId, ownerHobId: ADA, title: name, createdAt: NOW, updatedAt: NOW }),
+      );
+      // The pack Ada's session started from in the camp, as its turn reported it.
+      yield* PackReports.use((reports) =>
+        reports.record(channelId, ADA, { budget: 12_000, tokens: 100, parts: [], read: READ_FIRST }),
       );
       return channelId;
     }),
@@ -160,7 +179,7 @@ const work = async (runtime: HubCallRuntime) => {
 
 describe("start_work and finish_work on every runtime", () => {
   // covers ADR 041 (Tools)
-  it("each runtime starts a Quest where the hob talks, refuses a second, and finishes it (#1596)", {
+  it("each runtime starts a Quest where the hob talks, with what it read first, refuses a second, and finishes it (#1596, #1487)", {
     timeout: 240_000,
   }, async () => {
     expect(runtimes.runtimes.map((runtime) => runtime.name)).toEqual(expectedRuntimes);
@@ -172,9 +191,16 @@ describe("start_work and finish_work on every runtime", () => {
       ).toEqual([false, true]);
       expect(first.answers[1]?.text, runtime.name).toContain("busy");
       expect(
-        running.map((quest) => ({ title: quest.title, state: quest.state, startedFrom: quest.startedFrom })),
+        running.map((quest) => ({
+          title: quest.title,
+          state: quest.state,
+          startedFrom: quest.startedFrom,
+          readFirst: quest.readFirst,
+        })),
         runtime.name,
-      ).toEqual([{ title: "Winter market page", state: "active", startedFrom: first.messageId }]);
+      ).toEqual([
+        { title: "Winter market page", state: "active", startedFrom: first.messageId, readFirst: READ_FIRST },
+      ]);
       expect(
         second.answers.map((answer) => answer.refused),
         runtime.name,

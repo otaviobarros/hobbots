@@ -6,9 +6,14 @@ import {
   type ChatWork,
   carriedOverBriefing,
   carriedOverFrom,
+  type MemoryPath,
+  type MemoryScope,
   type Message,
+  type MessageId,
+  PACK_READ_MAX,
   type PackPart,
   type PackPartName,
+  type PackRead,
   type PackReport,
   type PackTrim,
   type QuestState,
@@ -56,10 +61,15 @@ export interface PackDecision {
   readonly id: string;
   readonly text: string;
   readonly recordedAt: string;
+  /** The message whose turn recorded it, or null for one recorded in the app. */
+  readonly messageId: MessageId | null;
 }
 
 /** An artifact as the pack's index lists it (#1383). */
 export interface PackArtifact {
+  readonly id: string;
+  /** The message that made its latest version, or null when a Task's work did. */
+  readonly messageId: MessageId | null;
   readonly kind: string;
   readonly title: string;
   readonly latestVersion: number;
@@ -71,6 +81,15 @@ export interface PackChapter {
   readonly number: number;
   readonly title: string | null;
   readonly summary: string;
+  /** Its first message still in the channel, or null when it has none left. */
+  readonly firstMessageId: MessageId | null;
+}
+
+/** A page the memory brief carries, as Memory opens it (ADR 028). */
+export interface PackMemoryPage {
+  readonly scope: MemoryScope;
+  readonly path: MemoryPath;
+  readonly title: string;
 }
 
 /** Who is in the channel and why the turn runs (ADR 039, The context pack with several hobs). */
@@ -108,6 +127,8 @@ export type SpeakerOf = (message: Message) => string;
 export interface PackRecords {
   /** The memory brief's text as the turn sends it beside the pack, or null without one. */
   readonly memoryBrief: string | null;
+  /** The pages the memory brief carries, in its order; none without one. */
+  readonly memoryPages: ReadonlyArray<PackMemoryPage>;
   /** Who is here and why the turn runs, or null to say nothing of it. */
   readonly members: PackWhoIsHere | null;
   /** The camp's brief, written by the hub (ADR 037), or null. */
@@ -526,6 +547,41 @@ const flexibleRoom = (records: PackRecords, budget: PackBudget, fixedSize: numbe
   return room;
 };
 
+/** How many of `count` items a part kept, whole or by title; none when it only counted them. */
+const keptOf = (fitted: Fitted, count: number) =>
+  fitted.text === null ? 0 : fitted.trimmed === null ? count : fitted.trimmed.full + fitted.trimmed.titlesOnly;
+
+/**
+ * The records the pack carried, as its report lists them (ADR 039): the memory brief's pages, then
+ * the decisions and artifacts it kept, newest first, then the earlier chapters it kept, newest first,
+ * at most `PACK_READ_MAX`. What a part only counted is not read, so it is not listed.
+ */
+const readOf = (records: PackRecords, fitted: Record<PackPartName, Fitted>): ReadonlyArray<PackRead> => {
+  const pages = fitted["memory-brief"].text === null ? [] : records.memoryPages;
+  const decisions = records.decisions.slice(0, keptOf(fitted.decisions, records.decisions.length));
+  const artifacts = records.artifacts.slice(0, keptOf(fitted.artifacts, records.artifacts.length));
+  const chapters = records.chapters.slice(records.chapters.length - keptOf(fitted.chapters, records.chapters.length));
+  return [
+    ...pages.map((page): PackRead => ({ _tag: "MemoryPage", scope: page.scope, path: page.path, title: page.title })),
+    ...decisions.map(
+      (d): PackRead => ({ _tag: "Decision", id: d.id, title: decisionTitle(d), messageId: d.messageId }),
+    ),
+    ...artifacts.map(
+      (a): PackRead => ({
+        _tag: "Artifact",
+        id: a.id,
+        kind: a.kind,
+        title: a.title,
+        version: a.latestVersion,
+        messageId: a.messageId,
+      }),
+    ),
+    ...[...chapters]
+      .reverse()
+      .map((c): PackRead => ({ _tag: "Chapter", number: c.number, title: c.title, messageId: c.firstMessageId })),
+  ].slice(0, PACK_READ_MAX);
+};
+
 const ORDER: ReadonlyArray<PackPartName> = [
   "memory-brief",
   "members",
@@ -564,7 +620,7 @@ export const buildPack = (records: PackRecords, budget: PackBudget = PACK_BUDGET
   const total = ORDER.reduce((sum, part) => sum + sizeOf(fitted[part]), 0);
   return {
     text: texts.length === 0 ? null : texts.join(SEPARATOR),
-    report: { budget: budget.total, tokens: tokensOf(total), parts },
+    report: { budget: budget.total, tokens: tokensOf(total), parts, read: readOf(records, fitted) },
   };
 };
 
@@ -582,8 +638,12 @@ export const packChapters = (
 ): ReadonlyArray<PackChapter> =>
   chapters
     .filter((chapter) => ChapterStates.isInChannel(chapter) && !ChapterStates.isLive(chapter))
-    .map((chapter) => ({
-      number: chapter.number,
-      title: chapter.title,
-      summary: chapter.summary ?? plainChapterSummary(messages.filter((m) => m.chapterId === chapter.id)),
-    }));
+    .map((chapter) => {
+      const its = messages.filter((m) => m.chapterId === chapter.id);
+      return {
+        number: chapter.number,
+        title: chapter.title,
+        summary: chapter.summary ?? plainChapterSummary(its),
+        firstMessageId: its[0]?.id ?? null,
+      };
+    });

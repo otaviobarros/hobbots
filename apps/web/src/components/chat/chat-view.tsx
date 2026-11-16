@@ -531,7 +531,7 @@ function Transcript({
   // In a camp a member answers as itself, so each reply shows the hob that wrote it (ADR 039).
   const hobs = useEveryHob();
   // Each Quest's card under the reply that started it (ADR 041).
-  const quests = useWorkQuestCards(channelId, hobs);
+  const quests = useWorkQuestCards(channelId, hobs, onJump);
   const row = (message: Message, split: ReactNode) => {
     const author = replyAuthor(message, hob, hobs);
     return (

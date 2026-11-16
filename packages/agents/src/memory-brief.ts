@@ -1,6 +1,7 @@
 import type { MemoryActor, MemoryPage, MemoryScope } from "@hobbots/domain";
 import { Context, Effect, Layer, Option } from "effect";
 import { clip, oneLine, quote } from "./briefing.ts";
+import type { PackMemoryPage } from "./context-pack.ts";
 import {
   MemoryProjects,
   type MemoryProjectsShape,
@@ -88,20 +89,30 @@ const render = (entries: ReadonlyArray<BriefEntry>, omitted: number) => {
   return parts.join("\n\n");
 };
 
+/** A brief with the pages it carries, in its order, which a turn's pack lists as read (ADR 039). */
+export interface MemoryBriefRead {
+  readonly text: string | null;
+  readonly pages: ReadonlyArray<PackMemoryPage>;
+}
+
+const UNAVAILABLE: MemoryBriefRead = { text: MEMORY_UNAVAILABLE, pages: [] };
+
 /**
- * The hob's memory brief, or null when its memory holds nothing it may read. Pages are added in
- * priority order while the section stays within its budget; the first that does not fit ends it, so
- * the lowest-priority pages are the ones dropped. When memory does not answer, the section says so.
+ * The hob's memory brief and the pages it carries; no text when its memory holds nothing it may
+ * read. Pages are added in priority order while the section stays within its budget; the first that
+ * does not fit ends it, so the lowest-priority pages are the ones dropped. When memory does not
+ * answer, the section says so and carries no page.
  */
-export const buildMemoryBrief = (
+export const readMemoryBrief = (
   store: MemoryStoreShape,
   actor: Extract<MemoryActor, { _tag: "Hob" }>,
-): Effect.Effect<string | null> =>
+): Effect.Effect<MemoryBriefRead> =>
   Effect.gen(function* () {
     const listed = (yield* Effect.forEach(briefScopes(actor), (scope) =>
       store.list(actor, scope, MEMORY_BRIEF_LIMITS.pages),
     )).flat();
     const kept: Array<BriefEntry> = [];
+    const pages: Array<PackMemoryPage> = [];
     let gone = 0;
     for (const summary of listed) {
       const page = yield* store.page(actor, summary.scope, summary.path);
@@ -114,15 +125,24 @@ export const buildMemoryBrief = (
       // Checked with every listed page counted as left out, so the note that follows always fits.
       if (render([...kept, entry], listed.length).length > MEMORY_BRIEF_LIMITS.total) break;
       kept.push(entry);
+      pages.push({ scope: summary.scope, path: page.path, title: oneLine(summary.title) || page.path });
     }
-    return kept.length === 0 && listed.length === gone ? null : render(kept, listed.length - gone - kept.length);
+    return kept.length === 0 && listed.length === gone
+      ? { text: null, pages: [] }
+      : { text: render(kept, listed.length - gone - kept.length), pages };
   }).pipe(
     Effect.timeoutOrElse({
       duration: MEMORY_BRIEF_WAIT,
-      orElse: () => Effect.succeed(MEMORY_UNAVAILABLE),
+      orElse: () => Effect.succeed(UNAVAILABLE),
     }),
-    Effect.catchTag("MemoryUnavailable", () => Effect.succeed(MEMORY_UNAVAILABLE)),
+    Effect.catchTag("MemoryUnavailable", () => Effect.succeed(UNAVAILABLE)),
   );
+
+/** The hob's memory brief, or null when its memory holds nothing it may read (`readMemoryBrief`'s text). */
+export const buildMemoryBrief = (
+  store: MemoryStoreShape,
+  actor: Extract<MemoryActor, { _tag: "Hob" }>,
+): Effect.Effect<string | null> => Effect.map(readMemoryBrief(store, actor), (brief) => brief.text);
 
 /**
  * A short fingerprint of a brief (53-bit cyrb53, as hex), stored with the session that received it
@@ -151,6 +171,8 @@ export interface TurnMemoryBrief {
   readonly digest: string;
   /** Whether the turn sends it: a session that already received this brief is not told it again. */
   readonly sent: boolean;
+  /** The pages the brief carries, which the turn's pack lists as read when it sends the brief. */
+  readonly pages: ReadonlyArray<PackMemoryPage>;
 }
 
 /**
@@ -166,10 +188,10 @@ export const turnMemoryBrief = (
 ): Effect.Effect<TurnMemoryBrief> =>
   Effect.gen(function* () {
     const actor = yield* memoryActorFor(projects, agentId, folders);
-    const brief = yield* buildMemoryBrief(store, actor);
-    const digest = memoryBriefDigest(brief);
+    const brief = yield* readMemoryBrief(store, actor);
+    const digest = memoryBriefDigest(brief.text);
     const sent = received !== digest;
-    return { text: sent ? brief : null, digest, sent };
+    return { text: sent ? brief.text : null, digest, sent, pages: brief.pages };
   });
 
 /**

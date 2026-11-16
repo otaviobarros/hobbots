@@ -38,6 +38,7 @@ const lastTopicCosts = () => {
   const first = (TOPICS.length - 1) * PER_TOPIC;
   const pack = buildPack({
     memoryBrief: null,
+    memoryPages: [],
     members: null,
     quests: [],
     speaker: (m) => (m.role === "user" ? "Marina (person)" : "You"),
@@ -50,6 +51,7 @@ const lastTopicCosts = () => {
       number: index + 1,
       title,
       summary: plainChapterSummary(chat.slice(index * PER_TOPIC, (index + 1) * PER_TOPIC)),
+      firstMessageId: null,
     })),
     live: [],
   });

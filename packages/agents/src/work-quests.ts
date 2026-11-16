@@ -9,6 +9,7 @@ import {
   FinishWorkInput,
   finishWorkJsonSchema,
   type MessageId,
+  type PackRead,
   START_WORK_DESCRIPTION,
   START_WORK_LABEL,
   START_WORK_TOOL,
@@ -20,6 +21,7 @@ import {
 } from "@hobbots/domain";
 import { Context, DateTime, Effect, Layer, Option, Schema } from "effect";
 import type { CharmTurn } from "./charms.ts";
+import { PackReports } from "./pack-reports.ts";
 import { announcer, announcing, EventPublisher } from "./ports.ts";
 import type { HubTool, HubToolAnswer, HubTools } from "./runtime.ts";
 
@@ -44,6 +46,8 @@ export interface WorkQuestStart {
   readonly repository: string | null;
   /** The reply whose turn starts it: a retried call from the same reply returns the Quest it started. */
   readonly startedFrom: MessageId;
+  /** What the hob's session read first, from the report of the pack it started from (ADR 039). */
+  readonly readFirst: ReadonlyArray<PackRead>;
   readonly at: string;
 }
 
@@ -185,6 +189,15 @@ export const WorkToolsLive = Layer.effect(
   WorkTools,
   Effect.gen(function* () {
     const quests = yield* WorkQuests;
+    const reports = yield* Effect.serviceOption(PackReports);
+    // What the hob's session read first: the pack it last started from in the channel, or nothing
+    // when none is known, as for a session resumed after a restart (ADR 039). No model is asked.
+    const readFirstOf = (channelId: ChannelId, hobId: AgentId) =>
+      Option.isNone(reports)
+        ? Effect.succeed([])
+        : Effect.map(reports.value.lastOf(channelId, hobId), (report) =>
+            Option.match(report, { onNone: () => [], onSome: (each) => each.read }),
+          );
     // A runtime runs each call on its own, so it carries the hub's services, its logger included.
     const context = yield* Effect.context<never>();
 
@@ -207,6 +220,7 @@ export const WorkToolsLive = Layer.effect(
           ownerHobId: turn.agentId,
           repository: input.repository === undefined ? null : kept(input.repository),
           startedFrom: messageId,
+          readFirst: yield* readFirstOf(channelId, turn.agentId),
         });
         return { text: turn.redactor.text(startedText(quest)), refused: false };
       }).pipe(

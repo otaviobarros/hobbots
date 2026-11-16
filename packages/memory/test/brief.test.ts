@@ -5,6 +5,7 @@ import {
   type MemoryStoreShape,
   memoryActorFor,
   memoryBriefDigest,
+  readMemoryBrief,
 } from "@hobbots/agents";
 import { AgentId, type MemoryActor, MemoryPath, type MemoryScope, memoryProjectIdentity } from "@hobbots/domain";
 import { Effect, Option } from "effect";
@@ -67,6 +68,27 @@ describe("the memory brief", () => {
     // The project's older page is the lowest priority, so it is the one left out, and counted.
     expect(text).not.toContain("#### Older fact");
     expect(text).toMatch(/\(1 more page did not fit and is left out\.\)$/);
+  });
+
+  // covers ADR 039 (Asking for a delivery in a shared camp)
+  it("names the pages it carries, in its order, and none it left out, for the pack's Read first (#1487)", async () => {
+    const { store, controls } = makeMemoryStoreFake();
+    await save(store, everyone, "rules/one.md", `# Rule\n\n${"r".repeat(5_000)}`);
+    await save(store, pipsOwn, "notes/own.md", `# Own\n\n${"o".repeat(3_000)}`);
+    await save(store, theApp, "facts/older.md", `# Older fact\n\n${"f".repeat(3_000)}`);
+    await save(store, theApp, "facts/newer.md", `# Newer fact\n\n${"g".repeat(3_000)}`);
+
+    const read = await Effect.runPromise(readMemoryBrief(store, asPip));
+    expect(read.text).toBe(await brief(store));
+    expect(read.pages.map(({ scope, path }) => [scope._tag, path])).toEqual([
+      ["Everyone", "rules/one.md"],
+      ["Hob", "notes/own.md"],
+      ["Project", "facts/newer.md"],
+    ]);
+    expect(read.pages.every((page) => page.title !== "")).toBe(true);
+
+    controls.setDown(true);
+    expect(await Effect.runPromise(readMemoryBrief(store, asPip))).toEqual({ text: MEMORY_UNAVAILABLE, pages: [] });
   });
 
   it("is nothing for an empty memory, and says memory is unavailable during an outage", async () => {

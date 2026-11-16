@@ -1,5 +1,6 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { Actor } from "./actor.ts";
+import { PACK_READ_MAX, PackRead } from "./context-pack.ts";
 import { AgentId, ChannelId, MessageId } from "./ids.ts";
 import { defineMachine } from "./machine.ts";
 import { Revision } from "./revision.ts";
@@ -49,6 +50,14 @@ export class WorkQuest extends Schema.Class<WorkQuest>("WorkQuest")({
   repository: Schema.NullOr(Schema.String),
   /** The reply whose turn started it, where its card shows. */
   startedFrom: MessageId,
+  /**
+   * What the owner's session read first, from the `PackReport` of the pack it started from (ADR 039),
+   * which its card lists as "Read first". Empty when no pack is known, as after a restart.
+   */
+  readFirst: Schema.Array(PackRead).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed([])),
+    Schema.withConstructorDefault(Effect.succeed([])),
+  ),
   /** Only `WorkQuestMachine` changes it, and code outside reads it through `WorkQuests`. */
   state: WorkQuestState,
   /** What the owner said it delivered, once done; null before. */
@@ -183,6 +192,8 @@ export interface WorkQuestDraft {
   readonly requestedBy: Actor;
   readonly repository: string | null;
   readonly startedFrom: MessageId;
+  /** What the owner's session read first, from its pack's report. */
+  readonly readFirst: ReadonlyArray<PackRead>;
   readonly at: string;
   /** Whether its chat or camp is open. */
   readonly channelOpen: boolean;
@@ -257,6 +268,7 @@ export const planWorkQuestStart = (draft: WorkQuestDraft): WorkQuest | WorkQuest
     requestedBy: draft.requestedBy,
     repository,
     startedFrom: draft.startedFrom,
+    readFirst: draft.readFirst.slice(0, PACK_READ_MAX),
     state: "active",
     result: null,
     made: [],

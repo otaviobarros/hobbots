@@ -4,7 +4,8 @@ import { aldricHub, script, stopAldricHub } from "./workbench-hub.ts";
 
 // Issue #1596 (ADR 041): a Quest in the chat, on the fake runtime. One reply starts it with
 // `start_work` and its card shows under that reply; a later reply finishes it with `finish_work`,
-// the same card reads it ready for review, and the finishing reply leaves one line.
+// the same card reads it ready for review, and the finishing reply leaves one line. The card names who
+// asked for it (#1487).
 
 test.afterEach(stopAldricHub);
 
@@ -29,6 +30,9 @@ test("a hob starts a Quest with its card, and a later reply finishes it (#1596)"
   await expect(card).toContainText("Quest · Running", { timeout: 30_000 });
   await expect(card).toContainText("A landing page for the winter market.");
   await expect(card.getByRole("listitem")).toHaveText(["The page is live", "It shows the map"]);
+  // It belongs to the chat it was asked in, and names who runs it and who asked (#1487).
+  await expect(card).toContainText("Aldric runs it");
+  await expect(card).toContainText("Asked by you");
   await expectAccessible(page, card);
 
   await composer.fill(

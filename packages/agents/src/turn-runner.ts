@@ -27,6 +27,7 @@ import type { Reply } from "./channel-run.ts";
 import { type CharmTurn, hubToolOffer, joinHubTools, type WebRecordPlace } from "./charms.ts";
 import { stoppableWait } from "./command-wait.ts";
 import type { CarriedWork } from "./continuations.ts";
+import { PackReports } from "./pack-reports.ts";
 import { PASS_OWNER, passTools } from "./pass-tool.ts";
 import { EventPublisher, ToolLogs } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
@@ -55,7 +56,7 @@ import { keepToolOutput } from "./tool-output.ts";
 import { ActivityRecorder, trackTurn } from "./turn-activity.ts";
 import type { makeTurnGrants } from "./turn-grants.ts";
 import { draftGoneText, type makeTurnInputs, withSkills } from "./turn-inputs.ts";
-import { PackReports, type PackSources, packTurn } from "./turn-pack.ts";
+import { type PackSources, packTurn } from "./turn-pack.ts";
 import { makeTurnSession } from "./turn-session.ts";
 import { makeWebProvenance, webWorkOf } from "./web-fetch.ts";
 import { makeWebMark, webMarkBriefing, withWebMark } from "./web-mark.ts";
@@ -460,7 +461,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
         const memory = yield* memoryBriefFor(agent, tools, expected);
         const roster = yield* rosterFor(agent, tools, expected, adapter);
         session.briefed({ memory, roster });
-        const pack = yield* packTurn(packReports, channel.id, told.pack, memory);
+        const pack = yield* packTurn(packReports, channel.id, agent.id, told.pack, memory);
         const skills = yield* skillsFor(speaker, config, tools, yours);
         // A chat that tries a draft never runs without it: the hub lost its files, as a restore does,
         // so the reply says how to bring it back instead of answering as if it were loaded.

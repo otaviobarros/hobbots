@@ -1,11 +1,14 @@
-import type { Agent, ChannelId, MessageId, WorkQuest } from "@hobbots/domain";
+import type { Agent, AgentId, ChannelId, MessageId, WorkQuest } from "@hobbots/domain";
 import { Button } from "@hobbots/ui/components/button";
 import { cn } from "@hobbots/ui/lib/utils";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { workQuestsQuery } from "../../api/records.ts";
+import { sidebarQuery } from "../../api/sidebar.ts";
 import { HobTile } from "../hob-sprite/hob-sprite.tsx";
 import { messages } from "./messages.ts";
+import { type ReadFirstChip, readFirstChips, requesterName } from "./work-quest-model.ts";
 
 /** The eyebrow's color and dot for each state: mint while it runs, lantern while it needs you. */
 const TONE: Readonly<Record<WorkQuest["state"], { readonly text: string; readonly dot: string }>> = {
@@ -15,12 +18,23 @@ const TONE: Readonly<Record<WorkQuest["state"], { readonly text: string; readonl
   stopped: { text: "text-label", dot: "bg-label" },
 };
 
+/** What a card needs beyond its Quest: who runs it, who asked, the hobs it names, and where a chip jumps. */
+interface CardContext {
+  readonly owner: Agent | undefined;
+  readonly asker: string | null;
+  readonly hobs: ReadonlyMap<AgentId, Agent>;
+  readonly onJump: (messageId: MessageId) => void;
+}
+
 /**
  * A Quest's card (ADR 041): one living card at the reply whose turn started it, which updates in
- * place as the Quest changes. It shows the state, the title, the goal, the "Done when" lines and who
- * runs it, and once done, the result and what the work made.
+ * place as the Quest changes. It shows the state, the title, the goal, the "Done when" lines, who
+ * runs it and who asked, what its owner read first (ADR 039), and once done, the result and what the
+ * work made.
  */
-function WorkQuestCard({ quest, owner }: { quest: WorkQuest; owner: Agent | undefined }) {
+function WorkQuestCard({ quest, context }: { quest: WorkQuest; context: CardContext }) {
+  const { owner, asker } = context;
+  const read = readFirstChips(quest.readFirst, context.hobs);
   const tone = TONE[quest.state];
   const ready = quest.state === "done";
   return (
@@ -77,13 +91,49 @@ function WorkQuestCard({ quest, owner }: { quest: WorkQuest; owner: Agent | unde
             </ul>
           </Part>
         )}
+        {read.length > 0 && (
+          <Part title={messages.readFirst.title}>
+            <ul aria-label={messages.readFirst.title} className="flex flex-wrap gap-1.5">
+              {read.map((chip) => (
+                <li key={chip.key} className="min-w-0">
+                  <ReadFirst chip={chip} onJump={context.onJump} />
+                </li>
+              ))}
+            </ul>
+          </Part>
+        )}
       </div>
       <div className="flex items-center gap-3 border-t border-line bg-[color-mix(in_srgb,var(--color-deep)_40%,transparent)] px-4 py-2.5 text-meta text-label">
         {owner !== undefined && <span>{messages.owner({ hob: owner.name })}</span>}
+        {asker !== null && <span>{messages.askedBy({ who: asker })}</span>}
         <span>{messages.started({ time: quest.createdAt })}</span>
         {quest.expectedBy !== null && <span>{messages.expectedBy({ day: quest.expectedBy })}</span>}
       </div>
     </section>
+  );
+}
+
+const chipClass = "block max-w-full truncate rounded-tag bg-deep px-2 py-0.5 text-meta text-text-strong";
+
+/** One "Read first" chip: a link to its memory page, a jump to its message, or plain once that is gone. */
+function ReadFirst({ chip, onJump }: { chip: ReadFirstChip; onJump: (messageId: MessageId) => void }) {
+  const { opens } = chip;
+  if (opens === null) return <span className={chipClass}>{chip.label}</span>;
+  const label = messages.readFirst.open({ label: chip.label });
+  const link = cn(chipClass, "text-link no-underline hover:bg-hover");
+  return opens._tag === "Memory" ? (
+    <Link to="/memory" search={opens.search} aria-label={label} className={link}>
+      {chip.label}
+    </Link>
+  ) : (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={() => onJump(opens.messageId)}
+      className={cn(link, "cursor-pointer border-0 font-[inherit]")}
+    >
+      {chip.label}
+    </button>
   );
 }
 
@@ -110,14 +160,34 @@ function FinishedLine({ quest, owner }: { quest: WorkQuest; owner: Agent | undef
 /**
  * The chat's Quests (ADR 041), placed in the transcript: each card under the reply that started it,
  * and the line a finished one leaves under the reply that finished it, when that is another reply.
+ * A card's "Read first" chip that names a message jumps to it with `onJump`.
  */
-export const useWorkQuestCards = (channelId: ChannelId | undefined, hobs: ReadonlyArray<Agent> | undefined) => {
+export const useWorkQuestCards = (
+  channelId: ChannelId | undefined,
+  hobs: ReadonlyArray<Agent> | undefined,
+  onJump: (messageId: MessageId) => void,
+) => {
   const query = useQuery({
     ...workQuestsQuery(channelId ?? ("" as ChannelId)),
     enabled: channelId !== undefined,
   });
+  // Who asked is named from the people this client already holds.
+  const sidebar = useQuery(sidebarQuery).data;
   const quests = query.data;
-  const ownerOf = (quest: WorkQuest) => hobs?.find((hob) => hob.id === quest.ownerHobId);
+  const directory = new Map((hobs ?? []).map((hob) => [hob.id, hob] as const));
+  const ownerOf = (quest: WorkQuest) => directory.get(quest.ownerHobId);
+  const contextOf = (quest: WorkQuest): CardContext => ({
+    owner: ownerOf(quest),
+    asker: requesterName({
+      requestedBy: quest.requestedBy,
+      owner: quest.ownerHobId,
+      you: sidebar?.you,
+      people: sidebar?.people ?? [],
+      hobs: directory,
+    }),
+    hobs: directory,
+    onJump,
+  });
   return {
     /** Shown after the transcript when the Quests could not be read, with a way to read them again. */
     unread:
@@ -132,7 +202,7 @@ export const useWorkQuestCards = (channelId: ChannelId | undefined, hobs: Readon
     after: (messageId: MessageId): ReactNode =>
       quests?.map((quest) =>
         quest.startedFrom === messageId ? (
-          <WorkQuestCard key={quest.id} quest={quest} owner={ownerOf(quest)} />
+          <WorkQuestCard key={quest.id} quest={quest} context={contextOf(quest)} />
         ) : quest.finishedFrom === messageId ? (
           <FinishedLine key={quest.id} quest={quest} owner={ownerOf(quest)} />
         ) : null,
