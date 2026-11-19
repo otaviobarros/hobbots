@@ -42,6 +42,7 @@ import {
   Records,
   RecordToolsLive,
   RecoveryLog,
+  ReplyThreads,
   RosterReceipts,
   SecretRedaction,
   SidebarList,
@@ -715,6 +716,8 @@ const ServerLive = Layer.unwrap(
       .pipe(Layer.provideMerge(CampSuggestionService.layer))
       // Notes to self, pins and catch-up (ADR 037).
       .pipe(Layer.provideMerge(Layer.mergeAll(Notes.layer, CatchUps.layer)))
+      // Replies in a thread (ADR 039, Reply threads).
+      .pipe(Layer.provideMerge(ReplyThreads.layer))
       // Before the chat service, whose turns offer it; after the database, which keeps its call records.
       .pipe(
         Layer.provideMerge(

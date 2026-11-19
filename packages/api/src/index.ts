@@ -39,6 +39,7 @@ export * from "./skill-updates.ts";
 export * from "./skills.ts";
 export * from "./tasks.ts";
 export * from "./test-people.ts";
+export * from "./threads.ts";
 export * from "./usage.ts";
 export * from "./user-session.ts";
 export * from "./web.ts";

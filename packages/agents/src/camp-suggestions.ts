@@ -327,7 +327,11 @@ export class CampDrift extends Context.Service<CampDrift, CampDriftShape>()("@ho
           const chapter = (yield* chapters.listChapters(channelId)).find((each) => each.id === chapterId);
           if (chapter === undefined || !ChapterStates.isInChannel(chapter)) return null;
           const all = (yield* repo.listMessages(channelId)).filter((message) => message.chapterId === chapterId);
-          const own = all.filter((message) => message.status !== "queued" && hobReads(message));
+          // The chapter's own lines: what the hob reads of its main line, never a reply in a thread,
+          // which follows its root and is never where a chapter or a camp starts (ADR 039).
+          const own = all.filter(
+            (message) => message.status !== "queued" && hobReads(message) && message.rootMessageId === null,
+          );
           const judged: JudgedRevisions = {
             chapterRevision: chapter.revision,
             messagesRevision: Math.max(0, ...all.map((message) => message.revision)),

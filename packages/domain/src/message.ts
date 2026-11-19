@@ -278,9 +278,33 @@ export class Message extends Schema.Class<Message>("Message")({
     Schema.withDecodingDefaultKey(Effect.succeed(null)),
     Schema.withConstructorDefault(Effect.succeed(null)),
   ),
+  /**
+   * The message whose reply thread this one is in (ADR 039, Reply threads), or null for a message of
+   * the channel's main line, as every message from before reply threads is. A thread hangs from a
+   * main-line message, never from another reply, and its replies are filed in its root's chapter.
+   */
+  rootMessageId: Schema.NullOr(MessageId).pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(null)),
+    Schema.withConstructorDefault(Effect.succeed(null)),
+  ),
+  /**
+   * For a reply in a thread, whether it was also sent to the channel's main line, where it shows
+   * with a link back to its thread (ADR 039, Also send to the camp). False for every other message.
+   */
+  alsoInMainLine: Schema.Boolean.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed(false)),
+    Schema.withConstructorDefault(Effect.succeed(false)),
+  ),
   createdAt: Schema.String,
   revision: Revision,
 }) {}
+
+/**
+ * Whether the channel's main line shows the message (ADR 039, Reply threads): every message with no
+ * thread root, and a reply also sent there. The rest show only in their thread.
+ */
+export const inMainLine = (message: Pick<Message, "rootMessageId" | "alsoInMainLine">): boolean =>
+  message.rootMessageId === null || message.alsoInMainLine;
 
 /**
  * Who wrote `message` (ADR 039, A member hob works as itself): its actor, always, since in a camp a

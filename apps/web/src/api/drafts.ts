@@ -1,4 +1,4 @@
-import type { TaskId } from "@hobbots/domain";
+import type { MessageId, TaskId } from "@hobbots/domain";
 import { useSyncExternalStore } from "react";
 import { readStored, removeStored, writeStored } from "../lib/storage.ts";
 import type { WaitingPlace } from "./outbox.ts";
@@ -11,8 +11,11 @@ import type { WaitingPlace } from "./outbox.ts";
  * Like the outbox, it is a store outside React because it must outlive each channel's chat view
  * (ADR 016).
  */
-/** Where a draft is typed: a channel or fresh page, or the box of a quest's channel (#1390). */
-export type DraftPlace = WaitingPlace | `quest-${TaskId}`;
+/**
+ * Where a draft is typed: a channel or fresh page, the box of a quest's channel (#1390), or the box
+ * under a reply thread, named by its root (ADR 039).
+ */
+export type DraftPlace = WaitingPlace | `quest-${TaskId}` | `thread-${MessageId}`;
 
 const drafts = new Map<DraftPlace, string>();
 const saving = new Map<DraftPlace, ReturnType<typeof setTimeout>>();

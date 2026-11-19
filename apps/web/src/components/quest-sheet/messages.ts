@@ -8,7 +8,7 @@ interface Named {
 export const messages = {
   questEyebrow: ({ name }: Named) => `${name}'s quest`,
   taskEyebrow: ({ name }: Named) => `${name}'s task`,
-  notFound: "This work is not in this thread.",
+  notFound: "This work is not in this chat.",
   readFailed: "The quest could not be opened.",
   tryAgain: "Try again",
   showInWorkbench: "Show in the Workbench",
@@ -56,7 +56,7 @@ export const messages = {
     hobWork: ({ name }: Named) => `${name}'s work`,
     showHob: ({ name }: Named) => `Show ${name}'s work in the Workbench`,
     role: { lead: "leads", leads: "leads a party", member: "" },
-    channel: "Thread",
+    channel: "Chat",
     nothingYet: "Nothing said yet. The lead writes here when something lands or needs you.",
     /** The quest's channel could not read what was said in its chat; what the Tasks hold still shows. */
     channelUnread: "What was said in this quest could not be read.",

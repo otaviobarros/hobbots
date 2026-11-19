@@ -10,9 +10,8 @@ import {
   RUNTIME_NAMES,
   type RuntimeKind,
 } from "@hobbots/domain";
-import { Button } from "@hobbots/ui/components/button";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { useReadChannel } from "../../api/channel-reads.ts";
 import { appendDraft, moveDraft, restoreDraft, writeDraft } from "../../api/drafts.ts";
@@ -43,6 +42,7 @@ import { channelWebQuery } from "../../api/web.ts";
 import { brainSwitches, lastReplyBrain } from "../../lib/brains.ts";
 import { isQuietReply } from "../../lib/quiet-replies.ts";
 import { replyAuthor } from "../../lib/reply-author.ts";
+import { chatLines } from "../../lib/reply-threads.ts";
 import { minutesSince, type ReplyWait, replyRun, replyRuns, replyWait } from "../../lib/reply-wait.ts";
 import { sendErrorText } from "../../lib/send-error.ts";
 import { ReplyApprovals } from "../approvals/reply-approvals.tsx";
@@ -65,6 +65,9 @@ import { BrainSwitchNote, useOtherReadyRuntimes } from "../providers/brain-picke
 import { useWorkMoments } from "../quest/channel-work.tsx";
 import { PinNotes } from "../quest/pin-notes.tsx";
 import type { Pins } from "../quest/use-work.ts";
+import { ThreadPanel, useCast } from "../reply-thread/thread-panel.tsx";
+import { type ThreadRows, useThreadRows } from "../reply-thread/thread-rows.tsx";
+import { useOpenThread } from "../reply-thread/use-thread.ts";
 import { ReconnectingCard } from "../shell/reconnecting.tsx";
 import { skillPicking } from "../skill-line/skill-picker-model.ts";
 import { SkillUsedLines } from "../skill-line/skill-used-line.tsx";
@@ -72,6 +75,7 @@ import { TrialNotice } from "../skills/trial-notice.tsx";
 import { useSteerReceipts } from "../steer-receipt/steer-receipt.tsx";
 import { repliesWeb, replyWebOf } from "../web/web-model.ts";
 import { useWorkQuestCards } from "../work-quest/work-quest-card.tsx";
+import { BrainProblem, ChatBody } from "./chat-body.tsx";
 import { ChatHeader } from "./chat-header.tsx";
 import { Composer } from "./composer.tsx";
 import { EmptyChannel } from "./empty-channel.tsx";
@@ -178,13 +182,14 @@ export function ChatView({
         : queuedCopy.waitsForCommand({ command: waitCommand });
   const now = useNow(wait === null ? null : 60_000);
   // Queued messages wait above the composer, in the order they will start, until they join the transcript.
-  const transcript = messages.data?.filter((m) => m.status !== "queued");
+  // The main line leaves out replies only in a thread, which show beside it (ADR 039).
+  const { said, transcript } = chatLines(messages.data);
   const queued = messages.data?.filter((m) => m.status === "queued") ?? [];
   const lastContent = messages.data?.at(-1)?.content;
   // What changed while you were away is read before the chat marks itself read (ADR 037).
   const catchUp = useCatchUp(channel.data, inView);
   // Reading the chat clears its unread dot on every device, while it is in view (ADR 027).
-  useReadChannel(channel.data, transcript, inView && !catchUp.reading);
+  useReadChannel(channel.data, said, inView && !catchUp.reading);
   // Notes to self go from the composer too, and wake no hob (ADR 037).
   const note = useNoteToSelf(channelId, place);
   // Up brings back the last message that went out; a queued one is still there to remove or edit.
@@ -194,6 +199,9 @@ export function ChatView({
   const latest = transcript?.findLast((m) => m.role !== "note");
   // The hob that wrote it continues it, so its own status decides (ADR 039).
   const allHobs = useEveryHob();
+  // The reply thread open beside the chat, and what the main line shows of each (ADR 039).
+  const thread = useOpenThread(hobId, channelId);
+  const cast = useCast(allHobs);
   const latestAuthor =
     latest !== undefined && hob.data !== undefined ? replyAuthor(latest, hob.data, allHobs) : undefined;
   const resumable =
@@ -207,6 +215,7 @@ export function ChatView({
   // Each pick of a search result counts, so picking the same one again opens and scrolls to it again.
   const [picks, setPicks] = useState(0);
   const focusKey = focusMessageId === undefined ? undefined : `${focusMessageId}#${picks}`;
+  const threads = useThreadRows(said, cast, thread, focusMessageId, picks);
   // The search box under the header, opened from its magnifier, belongs to the channel it opened in.
   const [findingIn, setFindingIn] = useState<string>();
   const finding = channelId !== undefined && findingIn === channelId;
@@ -313,164 +322,161 @@ export function ChatView({
       )}
       {channelId && <PinNotes channelId={channelId} pins={pins} />}
 
-      <section
-        onScroll={(event) => {
-          const view = event.currentTarget;
-          if (holding && view.scrollHeight - view.scrollTop - view.clientHeight < 24) follow();
-        }}
-        ref={stayAtEnd}
-        // A keyboard user scrolls the transcript once it has the focus (WCAG 2.1.1).
-        // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling area must take the focus to scroll from the keyboard
-        tabIndex={0}
-        aria-label={copy.transcript}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-[18px] outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring @max-[480px]/chat:px-4"
+      {/* The transcript and the composer, with a reply thread open beside them (ADR 039). */}
+      <ChatBody
+        aside={
+          <ThreadPanel
+            channel={channel.data}
+            messages={said}
+            cast={cast}
+            thread={thread}
+            focus={{ messageId: focusMessageId, pick: picks }}
+            read={{ failed: messages.isError, retry: () => void messages.refetch() }}
+          />
+        }
       >
-        {/* The transcript, the tray and the composer share one centered column (A2-01). Long words
+        <section
+          onScroll={(event) => {
+            const view = event.currentTarget;
+            if (holding && view.scrollHeight - view.scrollTop - view.clientHeight < 24) follow();
+          }}
+          ref={stayAtEnd}
+          // A keyboard user scrolls the transcript once it has the focus (WCAG 2.1.1).
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling area must take the focus to scroll from the keyboard
+          tabIndex={0}
+          aria-label={copy.transcript}
+          className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-[18px] outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring @max-[480px]/chat:px-4"
+        >
+          {/* The transcript, the tray and the composer share one centered column (A2-01). Long words
             and paths wrap inside it, so nothing in it is wider than the column (#874). */}
-        <div className="mx-auto flex w-full max-w-measure flex-1 flex-col gap-3.5 wrap-anywhere">
-          {channelId && messages.isPending && <TranscriptSkeleton onRetry={() => void messages.refetch()} />}
-          {empty && !messages.isLoading && (
-            <EmptyChannel hob={current} newHob={newHob} onIdea={(idea) => writeDraft(place, idea)} />
-          )}
-          {transcript && (
-            <Transcript
-              transcript={transcript}
-              hob={current}
-              channelId={channelId}
-              channel={channel.data}
-              focusMessageId={focusMessageId}
-              focusPick={picks}
-              streaming={streaming}
-              catchUp={catchUp}
-              onJump={(messageId) =>
-                void navigate({
-                  to: "/hobs/$hobId/channels/$channelId",
-                  params: { hobId, channelId: channelId ?? "" },
-                  search: { message: messageId },
-                })
-              }
-              resume={(message) =>
-                message.id === resumable?.id
-                  ? {
-                      pending: resume.isPending || continueOn.isPending,
-                      onContinue: () => resume.mutate(message.id),
-                      alternatives: continueOn.alternatives(message.id),
-                    }
+          <div className="mx-auto flex w-full max-w-measure flex-1 flex-col gap-3.5 wrap-anywhere">
+            {channelId && messages.isPending && <TranscriptSkeleton onRetry={() => void messages.refetch()} />}
+            {empty && !messages.isLoading && (
+              <EmptyChannel hob={current} newHob={newHob} onIdea={(idea) => writeDraft(place, idea)} />
+            )}
+            {transcript && (
+              <Transcript
+                transcript={transcript}
+                hob={current}
+                channelId={channelId}
+                channel={channel.data}
+                focusMessageId={focusMessageId}
+                focusPick={picks}
+                streaming={streaming}
+                catchUp={catchUp}
+                threads={threads}
+                onJump={(messageId) =>
+                  void navigate({
+                    to: "/hobs/$hobId/channels/$channelId",
+                    params: { hobId, channelId: channelId ?? "" },
+                    search: { message: messageId },
+                  })
+                }
+                resume={(message) =>
+                  message.id === resumable?.id
+                    ? {
+                        pending: resume.isPending || continueOn.isPending,
+                        onContinue: () => resume.mutate(message.id),
+                        alternatives: continueOn.alternatives(message.id),
+                      }
+                    : undefined
+                }
+              />
+            )}
+            {waiting.map((message, index) => (
+              <WaitingRow
+                key={message.id}
+                message={message}
+                refused={outbox.refused && index === 0}
+                live={connection === "live"}
+                sending={outbox.sending === message.id}
+                onEdit={() => {
+                  const content = takeBack(place, message.id);
+                  if (content !== undefined) appendDraft(place, content);
+                }}
+                onTryAgain={() => tryAgain(place)}
+              />
+            ))}
+            {continueOn.isError && (
+              <p role="alert" className="text-ui text-rose">
+                {brainCopy.continueFailed({ name: current.name })}
+              </p>
+            )}
+            {resume.isError && (
+              <p role="alert" className="text-ui text-rose">
+                {copy.continueFailed({ name: current.name, why: sendErrorText(resume.error, current) })}
+              </p>
+            )}
+            {queueError && (
+              <p role="alert" className="text-ui text-rose">
+                {copy.queueGone}
+              </p>
+            )}
+            {error && (
+              <p role="alert" className="text-ui text-rose">
+                {sendErrorText(error, current)}
+              </p>
+            )}
+            {stopWaiting.isError && wait !== null && (
+              <p role="alert" className="text-ui text-rose">
+                {copy.stopWaitingFailed({ name: current.name, command: waitCommand ?? composerCopy.theCommands })}
+              </p>
+            )}
+            {pause.isError && (
+              <p role="alert" className="text-ui text-rose">
+                {copy.wakeFailed(current)}
+              </p>
+            )}
+            <div ref={bottom} />
+          </div>
+        </section>
+
+        {/* Folded away beside the room, the chat leaves its toasts to the room's own place. */}
+        {inView && <ArchiveToastViewport />}
+        <div className="flex-none px-6 pt-2 pb-5 @max-[480px]/chat:px-3 @max-[480px]/chat:pb-3">
+          <div className="mx-auto flex w-full max-w-measure flex-col gap-2.5">
+            {brainProblem !== null && <BrainProblem name={current.name} runtime={runtime} problem={brainProblem} />}
+            <WorkHeldNotice />
+            <TrialNotice channel={channel.data} />
+            {/* What waits on you in this chat or camp, or everywhere, shows in the tray above the composer. */}
+            {channel.data && <ChannelTray key={channel.data.id} channel={channel.data} />}
+            {queued.length > 0 && (
+              <div className="flex max-h-32 flex-col gap-1 overflow-y-auto">
+                {queued.map((message) => (
+                  <QueuedRow
+                    key={message.id}
+                    message={message}
+                    hob={current}
+                    replying={streaming}
+                    waitsFor={waitsFor}
+                    pending={remove.isPending || sendNow.isPending}
+                    onRemove={() => remove.mutate(message.id)}
+                    onSendNow={() => sendNow.mutate(message.id)}
+                  />
+                ))}
+              </div>
+            )}
+            <Composer
+              name={current.name}
+              placeholder={placeholder}
+              place={place}
+              lastSent={lastSent}
+              run={run}
+              sending={start.isPending || send.isPending}
+              onSend={sendDraft}
+              onStop={() => interrupt.mutate()}
+              onStopWaiting={() => stopWaiting.mutate()}
+              skills={skillPicking(skills, current.name, channel.data?.skillTrial)}
+              note={note}
+              paused={
+                paused
+                  ? { name: current.name, waking: pause.isPending, onWake: wake, canQueue: channelId !== undefined }
                   : undefined
               }
             />
-          )}
-          {waiting.map((message, index) => (
-            <WaitingRow
-              key={message.id}
-              message={message}
-              refused={outbox.refused && index === 0}
-              live={connection === "live"}
-              sending={outbox.sending === message.id}
-              onEdit={() => {
-                const content = takeBack(place, message.id);
-                if (content !== undefined) appendDraft(place, content);
-              }}
-              onTryAgain={() => tryAgain(place)}
-            />
-          ))}
-          {continueOn.isError && (
-            <p role="alert" className="text-ui text-rose">
-              {brainCopy.continueFailed({ name: current.name })}
-            </p>
-          )}
-          {resume.isError && (
-            <p role="alert" className="text-ui text-rose">
-              {copy.continueFailed({ name: current.name, why: sendErrorText(resume.error, current) })}
-            </p>
-          )}
-          {queueError && (
-            <p role="alert" className="text-ui text-rose">
-              {copy.queueGone}
-            </p>
-          )}
-          {error && (
-            <p role="alert" className="text-ui text-rose">
-              {sendErrorText(error, current)}
-            </p>
-          )}
-          {stopWaiting.isError && wait !== null && (
-            <p role="alert" className="text-ui text-rose">
-              {copy.stopWaitingFailed({ name: current.name, command: waitCommand ?? composerCopy.theCommands })}
-            </p>
-          )}
-          {pause.isError && (
-            <p role="alert" className="text-ui text-rose">
-              {copy.wakeFailed(current)}
-            </p>
-          )}
-          <div ref={bottom} />
+          </div>
         </div>
-      </section>
-
-      {/* Folded away beside the room, the chat leaves its toasts to the room's own place. */}
-      {inView && <ArchiveToastViewport />}
-      <div className="flex-none px-6 pt-2 pb-5 @max-[480px]/chat:px-3 @max-[480px]/chat:pb-3">
-        <div className="mx-auto flex w-full max-w-measure flex-col gap-2.5">
-          {brainProblem !== null && (
-            <section
-              aria-label={copy.brainUnavailable}
-              className="flex flex-wrap items-center gap-2.5 rounded-card bg-card px-3.5 py-2.5 text-ui"
-            >
-              <span className="flex-1 text-lantern">
-                {copy.brainProblem({
-                  name: current.name,
-                  runtime: RUNTIME_NAMES[runtime],
-                  problem: copy.brain[brainProblem],
-                })}
-              </span>
-              <Button asChild variant="outline" size="xs">
-                <Link to="/settings/$section" params={{ section: "connections" }}>
-                  {copy.fixInSettings}
-                </Link>
-              </Button>
-            </section>
-          )}
-          <WorkHeldNotice />
-          <TrialNotice channel={channel.data} />
-          {/* What waits on you in this chat or camp, or everywhere, shows in the tray above the composer. */}
-          {channel.data && <ChannelTray key={channel.data.id} channel={channel.data} />}
-          {queued.length > 0 && (
-            <div className="flex max-h-32 flex-col gap-1 overflow-y-auto">
-              {queued.map((message) => (
-                <QueuedRow
-                  key={message.id}
-                  message={message}
-                  hob={current}
-                  replying={streaming}
-                  waitsFor={waitsFor}
-                  pending={remove.isPending || sendNow.isPending}
-                  onRemove={() => remove.mutate(message.id)}
-                  onSendNow={() => sendNow.mutate(message.id)}
-                />
-              ))}
-            </div>
-          )}
-          <Composer
-            name={current.name}
-            placeholder={placeholder}
-            place={place}
-            lastSent={lastSent}
-            run={run}
-            sending={start.isPending || send.isPending}
-            onSend={sendDraft}
-            onStop={() => interrupt.mutate()}
-            onStopWaiting={() => stopWaiting.mutate()}
-            skills={skillPicking(skills, current.name, channel.data?.skillTrial)}
-            note={note}
-            paused={
-              paused
-                ? { name: current.name, waking: pause.isPending, onWake: wake, canQueue: channelId !== undefined }
-                : undefined
-            }
-          />
-        </div>
-      </div>
+      </ChatBody>
     </main>
   );
 }
@@ -488,6 +494,7 @@ function Transcript({
   focusPick,
   streaming,
   catchUp,
+  threads,
   onJump,
   resume,
 }: {
@@ -501,6 +508,8 @@ function Transcript({
   streaming: boolean;
   /** What changed while you were away, shown where what you have not read starts. */
   catchUp: CatchUpView;
+  /** Each root's thread line, and From a thread beside a reply also sent here (ADR 039). */
+  threads: ThreadRows;
   onJump: (messageId: MessageId) => void;
   resume: (message: Message) => ContinueReply | undefined;
 }) {
@@ -548,7 +557,12 @@ function Transcript({
             focused={message.id === focusMessageId}
             resume={resume(message)}
             web={{ reply: replyWebOf(web, message.id), usage: webUsage.data }}
-            actions={split}
+            actions={
+              <>
+                {threads.from(message)}
+                {split}
+              </>
+            }
             after={
               <>
                 <SkillUsedLines message={message} hob={author} />
@@ -559,6 +573,7 @@ function Transcript({
             <ReplyApprovals channelId={message.channelId} messageId={message.id} hob={author} />
           </MessageRow>
         )}
+        {threads.line(message)}
         {receipts.of(message)}
         {quests.after(message.id)}
         {work.after(message.id)}
@@ -580,6 +595,7 @@ function Transcript({
           transcript={transcript}
           focusMessageId={focusMessageId}
           focusPick={focusPick}
+          onReply={threads.open}
           renderMessage={row}
         />
       )}

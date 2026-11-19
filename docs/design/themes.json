@@ -646,6 +646,7 @@
     "room-rail": "52px",
     "lane-min": "320px",
     "dock": "340px",
+    "thread": "400px",
     "chat-min": "360px",
     "measure": "70ch",
     "bubble-max": "460px",

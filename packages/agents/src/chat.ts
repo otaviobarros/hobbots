@@ -30,6 +30,7 @@ import {
   hobReads,
   hobStanding,
   type IllegalChapterTransition,
+  inMainLine,
   isResumable,
   type MentionRefused,
   Message,
@@ -757,9 +758,10 @@ export class ChatService extends Context.Service<
       ) {
         return yield* withChannelHob(channelId, (channel, own) =>
           Effect.gen(function* () {
-            // A note to self written since does not stand in the way: the hob never reads it.
+            // A note to self written since does not stand in the way: the hob never reads it. Nor does a
+            // reply only in a thread, which is beside the main line, not after it (ADR 039).
             const transcript = (yield* repo.listMessages(channelId)).filter(
-              (m) => m.status !== "queued" && hobReads(m),
+              (m) => m.status !== "queued" && hobReads(m) && inMainLine(m),
             );
             const message = transcript.at(-1);
             // The hob that wrote the reply goes on with it, in a camp it joined too.

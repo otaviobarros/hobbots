@@ -24,7 +24,7 @@ export function PersonBadge({ person, size }: { person: User; size: "sm" | "md" 
 }
 
 /** One member's face, a hob's tile or a person's badge. */
-function FaceTile({ face, size }: { face: Face; size: "sm" | "md" | "lg" }) {
+export function FaceTile({ face, size }: { face: Face; size: "sm" | "md" | "lg" }) {
   return face._tag === "hob" ? (
     <HobTile hob={face.hob} tile={size} />
   ) : (

@@ -130,10 +130,13 @@ export class ChapterBreaks extends Context.Service<ChapterBreaks, ChapterBreaksS
           if (Option.isNone(channel) || !ChannelLifecycle.isOpenChat(channel.value)) return;
           const messages = yield* repo.listMessages(sent.channelId);
           const message = messages.find((each) => each.id === sent.id);
-          if (message === undefined) return;
+          // A reply in a thread follows its root's chapter and starts none (ADR 039, Reply threads).
+          if (message === undefined || message.rootMessageId !== null) return;
           const chapter = (yield* chapters.listChapters(sent.channelId)).find((each) => each.id === message.chapterId);
           if (chapter === undefined || !ChapterStates.isLive(chapter)) return;
-          const own = messages.filter((m) => m.chapterId === chapter.id && m.status !== "queued" && hobReads(m));
+          const own = messages.filter(
+            (m) => m.chapterId === chapter.id && m.status !== "queued" && hobReads(m) && m.rootMessageId === null,
+          );
           const earlier = own.slice(0, own.indexOf(message));
           if (earlier.length === 0) return;
           const decided = yield* decide(breakJudgment(earlier, message));

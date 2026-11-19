@@ -90,7 +90,7 @@ test("backs up from Settings, and Welcome restores it after the data folder is d
   await dialog.getByRole("textbox", { name: "Backup folder" }).fill(backup);
   await dialog.getByRole("button", { name: "Read the backup" }).click();
   await expect(dialog).toContainText("This backup holds");
-  await expect(dialog).toContainText(/3 hobs, 1 thread, 1 quest, \d+ tasks and 0 skills/);
+  await expect(dialog).toContainText(/3 hobs, 1 chat, 1 quest, \d+ tasks and 0 skills/);
   await expect(dialog).toContainText("Devices, keychain items and runtime sign-ins do not come back");
   // Once the restored hub answers, the page loads again by itself. The test waits for that load
   // before it goes anywhere, since a navigation of its own meanwhile would be aborted (#985).

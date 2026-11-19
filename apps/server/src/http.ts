@@ -63,6 +63,7 @@ import { SkillHealthHandlers, SkillTrialsHandlers } from "./skill-trials.ts";
 import { SkillUpdatesHandlers } from "./skill-updates.ts";
 import { SkillsHandlers } from "./skills.ts";
 import { QuestionsHandlers, TaskControlsHandlers, TasksHandlers } from "./tasks.ts";
+import { ThreadsHandlers } from "./threads.ts";
 import { UsageHandlers } from "./usage.ts";
 import { DeviceSessionLive } from "./user-session.ts";
 import { WebHandlers } from "./web-usage.ts";
@@ -272,6 +273,7 @@ export const ApiRoutes = HttpApiBuilder.layer(HobbotsApi).pipe(
     RecordsHandlers,
     CampSuggestionsHandlers,
     NotesHandlers,
+    ThreadsHandlers,
     ForYouHandlers,
     SidebarHandlers,
     MembersHandlers,

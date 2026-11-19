@@ -66,7 +66,8 @@ Change a row here in the same pull request that renames the word or the code.
 | UI | Code | Never in the UI | Never in the docs |
 | --- | --- | --- | --- |
 | hob | `Agent` | | |
-| chat, camp | `Channel` | `channel`, `thread` | |
+| chat, camp | `Channel` | `channel` | |
+| thread | `ThreadsGroup` | | |
 | chapter | `Chapter` | | |
 | decision | `Decision` | | |
 | artifact | `Artifact` | | |

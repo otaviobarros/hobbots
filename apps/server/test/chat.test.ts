@@ -2,7 +2,16 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Charms, ChatService, HobAdmission, HobbotsRepository, HobTools, type ToolAccess } from "@hobbots/agents";
-import { Agent, AgentId, type ChannelId, EMPTY_HOB_POLICY, isInProgress, Message, MessageId } from "@hobbots/domain";
+import {
+  Agent,
+  AgentId,
+  type ChannelId,
+  EMPTY_HOB_POLICY,
+  isInProgress,
+  Message,
+  MessageId,
+  OWNER_ACTOR,
+} from "@hobbots/domain";
 import { PolicyEngine } from "@hobbots/permissions";
 import { HobbotsRepositoryLive } from "@hobbots/persistence";
 import { TestDatabase } from "@hobbots/persistence/testing";
@@ -240,6 +249,41 @@ describe("a reply that ends early", () => {
       return yield* chat.continueReply(channel.id, cut.id).pipe(Effect.flip);
     }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
     expect(error._tag).toBe("ReplyNotResumable");
+  });
+
+  // covers ADR 039 (Reply threads)
+  it("continues the main line's latest reply past a reply only in a thread (#1484)", async () => {
+    const result = await Effect.gen(function* () {
+      const chat = yield* ChatService;
+      const repo = yield* HobbotsRepository;
+      const channel = yield* chat.createChannel(HOB_ID);
+      const cut = yield* replyTo(channel.id, `${FAKE_DIRECTIVES.cutOff} please`);
+      // You reply in the thread of an earlier message, beside the main line, not after it.
+      const [asked] = yield* repo.listMessages(channel.id);
+      yield* repo.upsertMessage(
+        new Message({
+          ...cut,
+          id: MessageId.make("aside"),
+          actor: OWNER_ACTOR,
+          role: "user",
+          content: "An aside",
+          status: "complete",
+          error: null,
+          rootMessageId: asked?.id ?? null,
+          createdAt: new Date(Date.parse(cut.createdAt) + 1000).toISOString(),
+        }),
+      );
+      const resumed = yield* continueSoon(channel.id, cut.id);
+      // The resumed reply ends before the test lets go of the hub.
+      yield* repo.findMessage(cut.id).pipe(
+        Effect.flatMap((found) =>
+          Option.isSome(found) && !isInProgress(found.value.status) ? Effect.void : Effect.fail("busy" as const),
+        ),
+        Effect.retry(Schedule.spaced("5 millis")),
+      );
+      return { cut, resumed };
+    }).pipe(Effect.provide(TestLayer), Effect.scoped, Effect.runPromise);
+    expect(result.resumed).toMatchObject({ id: result.cut.id, status: "streaming" });
   });
 
   // covers ADR 039 (A member hob works as itself)

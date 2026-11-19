@@ -214,12 +214,14 @@ export const ChapterRepositoryLive = Layer.effect(
             readonly createdAt: string;
             readonly seq: unknown;
             readonly first: unknown;
-          }>`SELECT m.chapter_id, m.created_at, m.seq,
+            readonly rootMessageId: string | null;
+          }>`SELECT m.chapter_id, m.created_at, m.seq, m.root_message_id,
               (CASE WHEN EXISTS (SELECT 1 FROM messages e WHERE e.chapter_id = m.chapter_id AND e.seq < m.seq)
                 THEN 0 ELSE 1 END) AS first
             FROM messages m WHERE m.id = ${input.messageId} AND m.channel_id = ${channelId}`;
+          // A chapter starts at a main-line message: a reply in a thread stays with its root.
           const point: SplitPoint | null =
-            at === undefined
+            at === undefined || at.rootMessageId !== null
               ? null
               : {
                   messageId: input.messageId,
@@ -242,7 +244,14 @@ export const ChapterRepositoryLive = Layer.effect(
           const plan = yield* planOrFail(planSplit(channelId, chapters, point, input), first);
           yield* writeChanged(plan);
           const from = point?.chapterId as ChapterId;
-          yield* moveMessages(channelId, first, input.id, sql`chapter_id = ${from} AND seq >= ${Number(at?.seq)}`);
+          // A thread's replies go where its root goes, however late they were sent (ADR 039).
+          const threadSeq = sql`COALESCE((SELECT r.seq FROM messages r WHERE r.id = messages.root_message_id), seq)`;
+          yield* moveMessages(
+            channelId,
+            first,
+            input.id,
+            sql`chapter_id = ${from} AND ${threadSeq} >= ${Number(at?.seq)}`,
+          );
           yield* moveRecords(first, input.id, from, point?.createdAt ?? null);
           yield* forgetBoundaries(channelId, []);
           const event: JournaledEvent = {

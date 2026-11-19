@@ -35,7 +35,7 @@ export const messages = {
     seeEverywhere: "See everywhere",
   },
   questGroup: ({ name, goal }: { name: string; goal: string }) => `${name}'s quest · ${goal}`,
-  untitledChannel: "A thread",
+  untitledChannel: "A chat",
   unknownHob: "A hob",
   unknownDevice: "a device",
   kind: {
@@ -98,7 +98,7 @@ export const messages = {
   detail: {
     label: ({ name, action }: { name: string; action: string }) => `Request from ${name}: ${action}`,
     quest: "Quest",
-    channel: "Thread",
+    channel: "Chat",
     task: "Task",
     work: "Work",
     tries: "Tries",
