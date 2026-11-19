@@ -18,9 +18,9 @@ import { Effect, Layer, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { makeJournaledChange } from "./journal.ts";
 
-// Quests as work threads (ADR 041, migration 20261116004540_work_quests). The rules are the pure
-// `planWorkQuestStart` and `planWorkQuestFinish` in @hobbots/domain; this runs them on the Quests as
-// stored, in the transaction that writes their result and journals its event, after taking the
+// Quests as work threads (ADR 041, migrations 20261116004540_work_quests and
+// 20261116224747_work_quest_read_first). The rules are the pure `planWorkQuestStart` and
+// `planWorkQuestFinish` in @hobbots/domain; this runs them on the Quests as stored, in the transaction that writes their result and journals its event, after taking the
 // journal's head, so two starts in one conversation cannot both pass the check.
 
 /** A row of `work_quests`, as the SQL client reads it. */
@@ -37,6 +37,7 @@ interface WorkQuestRow {
   readonly requestedById: string;
   readonly repository: string | null;
   readonly startedFrom: string;
+  readonly readFirst: string;
   readonly state: string;
   readonly result: string | null;
   readonly made: string;
@@ -62,6 +63,7 @@ const questFromRow = (row: WorkQuestRow) =>
     requestedBy: { kind: row.requestedByKind, id: row.requestedById },
     repository: row.repository,
     startedFrom: row.startedFrom,
+    readFirst: JSON.parse(row.readFirst),
     state: row.state,
     result: row.result,
     made: JSON.parse(row.made),
@@ -206,6 +208,7 @@ export const WorkQuestRepositoryLive = Layer.effect(
             requested_by_id: quest.requestedBy.id,
             repository: quest.repository,
             started_from: quest.startedFrom,
+            read_first: JSON.stringify(quest.readFirst),
             state: quest.state,
             result: quest.result,
             made: JSON.stringify(quest.made),

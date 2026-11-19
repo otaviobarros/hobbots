@@ -18,6 +18,21 @@ export const messages = {
   /** The card's name for a screen reader. */
   label: ({ title }: { title: string }) => `Quest: ${title}`,
   owner: ({ hob }: { hob: string }) => `${hob} runs it`,
+  /** Who asked for it, beside who runs it: "Asked by Bruna", or "Asked by you". */
+  askedBy: ({ who }: { who: string }) => `Asked by ${who}`,
+  you: "you",
+  /** What the owner's session read first, from its pack (ADR 039): each chip opens where it lives. */
+  readFirst: {
+    title: "Read first",
+    hobMemory: ({ hob }: { hob: string }) => `${hob}'s memory`,
+    memory: ({ where, title }: { where: string; title: string }) => `${where}: ${title}`,
+    decision: ({ title }: { title: string }) => `Decision: ${title}`,
+    artifact: ({ title, version }: { title: string; version: number }) => `${title} v${version}`,
+    chapter: ({ number, title }: { number: number; title: string | null }) =>
+      title === null ? `Chapter ${number}` : `Chapter ${number}: ${title}`,
+    /** A chip's name for a screen reader when it opens something. */
+    open: ({ label }: { label: string }) => `Open ${label}`,
+  },
   doneWhen: "Done when",
   result: "Result",
   made: "Made",

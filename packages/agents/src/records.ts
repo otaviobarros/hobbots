@@ -13,7 +13,7 @@ import {
   type DecisionRefused,
   DecisionStates,
   hobActor,
-  type MessageId,
+  MessageId,
   RECORD_DECISION_DESCRIPTION,
   RECORD_DECISION_LABEL,
   RECORD_DECISION_TOOL,
@@ -352,11 +352,19 @@ export const RecordPackSource = Layer.effect(
     return PackRecordSource.of({
       activeDecisions: (channelId) =>
         Effect.map(records.activeDecisions(channelId), (decisions) =>
-          decisions.map((decision) => ({ id: decision.id, text: decision.text, recordedAt: decision.recordedAt })),
+          decisions.map((decision) => ({
+            id: decision.id,
+            text: decision.text,
+            recordedAt: decision.recordedAt,
+            messageId: decision.sourceMessageId,
+          })),
         ),
       artifactsIndex: (channelId) =>
         Effect.map(records.artifactsOf(channelId), (artifacts) =>
           artifacts.map((artifact) => ({
+            id: artifact.id,
+            // A version a reply made opens at that reply; a Task's work has no message of its own.
+            messageId: artifact.origin.kind === "message" ? MessageId.make(artifact.origin.id) : null,
             kind: artifact.kind,
             title: artifact.title,
             latestVersion: artifact.latestVersion,

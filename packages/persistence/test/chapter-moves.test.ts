@@ -1219,6 +1219,7 @@ const workQuest = (id: string, channelId: ChannelId, from: string, ownerHobId: A
       ownerHobId,
       repository: null,
       startedFrom: MessageId.make(from),
+      readFirst: [],
       at: tick(),
     }),
   );

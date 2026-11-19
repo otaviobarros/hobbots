@@ -326,6 +326,7 @@ describe("Start fresh", () => {
           ownerHobId: FRODO,
           repository: null,
           startedFrom: started,
+          readFirst: [],
         });
         const running = yield* Effect.exit(chat.startFresh(SHIRE, ChannelId.make("k1")));
         yield* chat.sendPrompt(SHIRE, "Is it up?");

@@ -101,6 +101,7 @@ describe("the plain brief", () => {
           expect((text ?? "").length).toBeLessThanOrEqual(CAMP_BRIEF_MAX);
           const pack = buildPack({
             memoryBrief: null,
+            memoryPages: [],
             members: null,
             quests: [],
             speaker: (m) => (m.role === "user" ? "Marina (person)" : "You"),

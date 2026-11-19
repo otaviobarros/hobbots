@@ -426,6 +426,7 @@ export const CONTRACT_PACK = ((): string => {
   const names: Record<string, string> = { marina: "Marina (person)", quill: "Quill (hob)" };
   const pack = buildPack({
     memoryBrief: null,
+    memoryPages: [],
     members: {
       members: [
         { name: "Marina", kind: "person", you: false, owner: true },

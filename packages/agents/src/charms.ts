@@ -15,6 +15,7 @@ import {
   READ_HOB_TOOL,
   READ_MESSAGE_TOOL,
   RECORD_DECISION_TOOL,
+  type RuntimeKind,
   SKILL_TOOL_DESCRIPTIONS,
   START_CHAPTER_TOOL,
   START_WORK_TOOL,
@@ -65,6 +66,11 @@ export interface CharmTurn {
   /** The channel and reply the turn writes, so a Charm call's record names the step it showed as. */
   readonly channelId: ChannelId | null;
   readonly messageId: MessageId | null;
+  /**
+   * The runtime a chat turn runs on: with the hob, it names the session the turn resumes or starts,
+   * whose pack a Quest it starts lists as "Read first" (ADR 039). Absent, that list is empty.
+   */
+  readonly runtime?: RuntimeKind;
   /** The Attempt a turn outside any chat runs as, so a call it makes names the session it belongs to (#1049). */
   readonly attemptId?: AttemptId;
   /** The Task a turn outside any chat works on, whose found URLs it reads (ADR 036). */

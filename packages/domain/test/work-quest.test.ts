@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -8,7 +9,9 @@ import {
   IllegalWorkQuestTransition,
   isCalendarDay,
   MessageId,
+  PACK_READ_MAX,
   PASS_TOOL,
+  type PackRead,
   planWorkQuestFinish,
   planWorkQuestStart,
   START_WORK_TOOL,
@@ -37,6 +40,7 @@ const draft = (overrides: Partial<WorkQuestDraft> = {}): WorkQuestDraft => ({
   requestedBy: { kind: "user", id: "user-1" },
   repository: null,
   startedFrom: MessageId.make("reply-1"),
+  readFirst: [],
   at: at(0),
   channelOpen: true,
   ownerTakesWork: true,
@@ -135,6 +139,23 @@ describe("planWorkQuestStart", () => {
       createdAt: at(0),
       changedAt: at(0),
     });
+  });
+
+  it("keeps the requester and at most PACK_READ_MAX records its owner read first (#1487)", () => {
+    const read: ReadonlyArray<PackRead> = Array.from({ length: PACK_READ_MAX + 3 }, (_, n) => ({
+      _tag: "Decision",
+      id: `decision-${n}`,
+      title: `Decision ${n}`,
+      messageId: null,
+    }));
+    const quest = planWorkQuestStart(draft({ readFirst: read })) as WorkQuest;
+    expect(quest.requestedBy).toEqual({ kind: "user", id: "user-1" });
+    expect(quest.readFirst).toEqual(read.slice(0, PACK_READ_MAX));
+  });
+
+  it("reads a Quest journaled before it listed what was read first as having read nothing", () => {
+    const { readFirst: _, ...before } = Schema.encodeSync(WorkQuest)(started());
+    expect(Schema.decodeUnknownSync(WorkQuest)(before).readFirst).toEqual([]);
   });
 
   it("refuses a second running Quest in the same conversation", () => {

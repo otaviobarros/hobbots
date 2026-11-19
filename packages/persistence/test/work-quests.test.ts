@@ -4,9 +4,11 @@ import {
   AgentId,
   Channel,
   ChannelId,
+  MemoryPath,
   Message,
   MessageId,
   OWNER_ACTOR,
+  type PackRead,
   roleFields,
   TurnRequest,
   TurnRequestId,
@@ -104,6 +106,7 @@ const start = (fields: Partial<WorkQuestStart> = {}): WorkQuestStart => ({
   ownerHobId: ADA,
   repository: null,
   startedFrom: MessageId.make("reply-1"),
+  readFirst: [],
   at: NOW,
   ...fields,
 });
@@ -118,7 +121,34 @@ const finish = (from: string, ownerHobId = ADA) => ({
   at: NOW,
 });
 
+/** What Ada's session read first: a memory page, a decision, an artifact and an earlier chapter. */
+const READ_FIRST: ReadonlyArray<PackRead> = [
+  {
+    _tag: "MemoryPage",
+    scope: { _tag: "Hob", agentId: ADA },
+    path: MemoryPath.make("shop/look.md"),
+    title: "The shop's look",
+  },
+  { _tag: "Decision", id: "decision-1", title: "Sign-ups stop at 200", messageId: MessageId.make("ask-1") },
+  { _tag: "Artifact", id: "artifact-1", kind: "page", title: "Landing page", version: 3, messageId: null },
+  { _tag: "Chapter", number: 1, title: null, messageId: MessageId.make("ask-1") },
+];
+
 describe("Quests as work threads", () => {
+  // covers ADR 039 (Asking for a delivery in a shared camp)
+  it("keeps the camp, its requester and owner, and what its owner read first (#1487)", async () => {
+    const quest = await run(
+      Effect.gen(function* () {
+        yield* seed;
+        const quests = yield* WorkQuestRepository;
+        yield* quests.start(start({ readFirst: READ_FIRST }));
+        return (yield* quests.list(CHANNEL))[0];
+      }),
+    );
+    expect(quest).toMatchObject({ channelId: CHANNEL, ownerHobId: ADA, requestedBy: OWNER_ACTOR });
+    expect(quest?.readFirst).toEqual(READ_FIRST);
+  });
+
   // covers ADR 041 (The record)
   it("starts a Quest asked by the person whose message the reply answers, journaled once (#1596)", async () => {
     const result = await run(

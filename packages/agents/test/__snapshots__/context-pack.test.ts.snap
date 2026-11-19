@@ -104,6 +104,34 @@ exports[`buildPack > is the same for the same records, part by part (#1380) 2`] 
       "trimmed": null,
     },
   ],
+  "read": [
+    {
+      "_tag": "Decision",
+      "id": "d2",
+      "messageId": null,
+      "title": "Grow tomatoes in pots.",
+    },
+    {
+      "_tag": "Decision",
+      "id": "d1",
+      "messageId": null,
+      "title": "No pesticides.",
+    },
+    {
+      "_tag": "Artifact",
+      "id": "a1",
+      "kind": "doc",
+      "messageId": null,
+      "title": "Planting plan",
+      "version": 2,
+    },
+    {
+      "_tag": "Chapter",
+      "messageId": "m0",
+      "number": 1,
+      "title": "The cat",
+    },
+  ],
   "tokens": 394,
 }
 `;

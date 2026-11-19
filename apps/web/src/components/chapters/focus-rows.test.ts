@@ -22,6 +22,7 @@ const report: PackReport = {
     part("chapters", 10),
     part("live-chapter", 1_000, { full: 3, titlesOnly: 0, leftOut: 12, cutCharacters: 400 }),
   ],
+  read: [],
 };
 
 describe("focusRows", () => {

@@ -5,8 +5,10 @@ import {
   Chapter,
   ChapterId,
   type ChatWork,
+  MemoryPath,
   Message,
   MessageId,
+  PACK_READ_MAX,
   Question,
   QuestionId,
   Task,
@@ -70,7 +72,7 @@ const task = (id: string, brief: string, fields: Partial<Task> = {}) =>
 
 const NO_WORK: ChatWork = { tasks: [], trees: [], questions: [], items: [] };
 
-const decision = (n: number, text: string): PackDecision => ({ id: `d${n}`, text, recordedAt: at(n) });
+const decision = (n: number, text: string): PackDecision => ({ id: `d${n}`, text, recordedAt: at(n), messageId: null });
 
 /** Names authors as a two-person, two-hob camp does: the turn is Wren's. */
 const named: SpeakerOf = (m) =>
@@ -82,6 +84,7 @@ const named: SpeakerOf = (m) =>
 
 const empty: PackRecords = {
   memoryBrief: null,
+  memoryPages: [],
   members: null,
   quests: [],
   speaker: named,
@@ -121,6 +124,7 @@ const fixed = (): PackRecords => {
   });
   return {
     memoryBrief: "## What you remember\n\nThe user gardens on a balcony.",
+    memoryPages: [],
     campBrief: "Planning the balcony garden for spring.",
     decisions: [decision(2, "Grow tomatoes in pots.\nThey get the most sun there."), decision(1, "No pesticides.")],
     work: { tasks: [root], trees: [root, step], questions: [question], items: [] },
@@ -133,8 +137,15 @@ const fixed = (): PackRecords => {
         carriedAt: at(0),
       }),
     ],
-    artifacts: [{ kind: "doc", title: "Planting plan", latestVersion: 2, updatedAt: at(6) }],
-    chapters: [{ number: 1, title: "The cat", summary: "Named the cat Miso; she is three." }],
+    artifacts: [{ id: "a1", messageId: null, kind: "doc", title: "Planting plan", latestVersion: 2, updatedAt: at(6) }],
+    chapters: [
+      {
+        number: 1,
+        title: "The cat",
+        summary: "Named the cat Miso; she is three.",
+        firstMessageId: MessageId.make("m0"),
+      },
+    ],
     live: [message(10, "user", "What should I plant first?"), message(11, "assistant", "Tomatoes, in pots.")],
     members: {
       members: [
@@ -176,7 +187,57 @@ describe("buildPack", () => {
       budget: PACK_BUDGET.total,
       tokens: 0,
       parts: Object.entries(PACK_BUDGET.shares).map(([part, share]) => ({ part, share, tokens: 0, trimmed: null })),
+      read: [],
     });
+  });
+
+  // covers ADR 039 (Asking for a delivery in a shared camp)
+  it("lists the records it carried as read: memory pages, decisions, artifacts, then chapters, newest first (#1487)", () => {
+    const page = {
+      scope: { _tag: "Hob" as const, agentId: WREN },
+      path: MemoryPath.make("garden.md"),
+      title: "The balcony",
+    };
+    const pack = buildPack({
+      ...fixed(),
+      memoryPages: [page],
+      decisions: [
+        { ...decision(2, "Grow tomatoes in pots."), messageId: MessageId.make("m2") },
+        decision(1, "No pesticides."),
+      ],
+      chapters: [
+        { number: 1, title: "The cat", summary: "Miso.", firstMessageId: MessageId.make("m0") },
+        { number: 2, title: null, summary: "Seeds.", firstMessageId: null },
+      ],
+    });
+    expect(pack.report.read).toEqual([
+      { _tag: "MemoryPage", ...page },
+      { _tag: "Decision", id: "d2", title: "Grow tomatoes in pots.", messageId: "m2" },
+      { _tag: "Decision", id: "d1", title: "No pesticides.", messageId: null },
+      { _tag: "Artifact", id: "a1", kind: "doc", title: "Planting plan", version: 2, messageId: null },
+      { _tag: "Chapter", number: 2, title: null, messageId: null },
+      { _tag: "Chapter", number: 1, title: "The cat", messageId: "m0" },
+    ]);
+    // A brief the turn does not send carries no page, and what a part only counted was not read.
+    const counted = buildPack(
+      {
+        ...empty,
+        memoryPages: [page],
+        decisions: [decision(1, "No pesticides.")],
+        artifacts: [{ id: "a1", messageId: null, kind: "doc", title: "Plan", latestVersion: 1, updatedAt: at(1) }],
+      },
+      {
+        // Room for the one decision, and no more: the artifact is only counted.
+        total: 30,
+        shares: Object.fromEntries(
+          Object.keys(PACK_BUDGET.shares).map((part) => [part, part === "decisions" ? 30 : 0]),
+        ) as PackBudget["shares"],
+      },
+    );
+    expect(counted.report.read).toEqual([{ _tag: "Decision", id: "d1", title: "No pesticides.", messageId: null }]);
+    // Never more than PACK_READ_MAX.
+    const many = buildPack({ ...empty, decisions: Array.from({ length: 30 }, (_, n) => decision(n, `D${n}`)) });
+    expect(many.report.read).toHaveLength(PACK_READ_MAX);
   });
 
   // covers ADR 037 (The context pack), STD-ARCH-018
@@ -229,8 +290,15 @@ describe("buildPack", () => {
         "live-chapter": 600,
       },
     };
-    const chapters = Array.from({ length: 40 }, (_, n) => ({ number: n + 1, title: null, summary: "x".repeat(80) }));
+    const chapters = Array.from({ length: 40 }, (_, n) => ({
+      number: n + 1,
+      title: null,
+      summary: "x".repeat(80),
+      firstMessageId: null,
+    }));
     const artifacts: Array<PackArtifact> = Array.from({ length: 40 }, (_, n) => ({
+      id: `a${n}`,
+      messageId: null,
       kind: "doc",
       title: `Draft ${40 - n}`,
       latestVersion: 1,
@@ -311,8 +379,15 @@ describe("buildPack", () => {
           campBrief: r.campBrief,
           decisions: r.decisions.map((t, n) => decision(n, t || "d")),
           work: { ...NO_WORK, tasks, trees: tasks },
-          artifacts: r.artifacts.map((title, n) => ({ kind: "file", title, latestVersion: 1, updatedAt: at(n) })),
-          chapters: r.chapters.map((summary, n) => ({ number: n + 1, title: null, summary })),
+          artifacts: r.artifacts.map((title, n) => ({
+            id: `a${n}`,
+            messageId: null,
+            kind: "file",
+            title,
+            latestVersion: 1,
+            updatedAt: at(n),
+          })),
+          chapters: r.chapters.map((summary, n) => ({ number: n + 1, title: null, summary, firstMessageId: null })),
           live: r.live.map((content, n) => message(n, n % 2 === 0 ? "user" : "assistant", content)),
         };
         const pack = buildPack(input);
@@ -362,7 +437,7 @@ describe("buildPack", () => {
             ...empty,
             campBrief: r.campBrief,
             decisions: r.decisions.map((t, n) => decision(n, t || "d")),
-            chapters: r.chapters.map((summary, n) => ({ number: n + 1, title: null, summary })),
+            chapters: r.chapters.map((summary, n) => ({ number: n + 1, title: null, summary, firstMessageId: null })),
             live: r.live.map((content, n) => message(n, n % 2 === 0 ? "user" : "assistant", content)),
           },
           budget,
@@ -517,8 +592,18 @@ describe("chapter summaries in the pack", () => {
       messages,
     );
     expect(listed).toEqual([
-      { number: 1, title: null, summary: "2 messages, starting with “My cat is called Miso.”" },
-      { number: 2, title: "The garden", summary: "Picked tomatoes for the balcony." },
+      {
+        number: 1,
+        title: null,
+        summary: "2 messages, starting with “My cat is called Miso.”",
+        firstMessageId: MessageId.make("m1"),
+      },
+      {
+        number: 2,
+        title: "The garden",
+        summary: "Picked tomatoes for the balcony.",
+        firstMessageId: MessageId.make("m3"),
+      },
     ]);
     expect(plainChapterSummary([message(9, "assistant", "Only me")])).toBe("1 message");
   });

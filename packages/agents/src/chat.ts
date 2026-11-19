@@ -59,6 +59,7 @@ import { buildPack, type Pack } from "./context-pack.ts";
 import { Continuations } from "./continuations.ts";
 import { makeMentionNotes } from "./mention-notes.ts";
 import { makePackPeople } from "./pack-people.ts";
+import { PackReports } from "./pack-reports.ts";
 import { EventPublisher } from "./ports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { makeRedactor, SecretRedaction } from "./secrets.ts";
@@ -70,7 +71,7 @@ import { TaskRepository } from "./tasks.ts";
 import { HobTools } from "./tools.ts";
 import { makeTurnGrants } from "./turn-grants.ts";
 import { makeTurnInputs } from "./turn-inputs.ts";
-import { makePackSources, PackReports } from "./turn-pack.ts";
+import { makePackSources, packRecords } from "./turn-pack.ts";
 import { sessionActor } from "./users.ts";
 import { runsQuestIn, WorkQuests } from "./work-quests.ts";
 
@@ -884,7 +885,7 @@ export class ChatService extends Context.Service<
               );
           const lastTurn = Option.isNone(packReports) ? Option.none() : yield* packReports.value.last(channelId);
           return {
-            next: buildPack({ ...sources, memoryBrief: memory?.text ?? null }),
+            next: buildPack(packRecords(sources, memory)),
             lastTurn: Option.getOrNull(lastTurn),
           };
         });
