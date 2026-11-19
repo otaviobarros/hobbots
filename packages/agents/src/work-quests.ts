@@ -190,12 +190,13 @@ export const WorkToolsLive = Layer.effect(
   Effect.gen(function* () {
     const quests = yield* WorkQuests;
     const reports = yield* Effect.serviceOption(PackReports);
-    // What the hob's session read first: the pack it last started from in the channel, or nothing
-    // when none is known, as for a session resumed after a restart (ADR 039). No model is asked.
-    const readFirstOf = (channelId: ChannelId, hobId: AgentId) =>
-      Option.isNone(reports)
+    // What the turn's session read first: the pack the hob's session on the turn's runtime started
+    // from in the channel, or nothing when none is known, as for a session resumed after a restart
+    // (ADR 039). No model is asked.
+    const readFirstOf = (channelId: ChannelId, turn: CharmTurn) =>
+      Option.isNone(reports) || turn.runtime === undefined
         ? Effect.succeed([])
-        : Effect.map(reports.value.lastOf(channelId, hobId), (report) =>
+        : Effect.map(reports.value.lastOf(channelId, { hobId: turn.agentId, runtime: turn.runtime }), (report) =>
             Option.match(report, { onNone: () => [], onSome: (each) => each.read }),
           );
     // A runtime runs each call on its own, so it carries the hub's services, its logger included.
@@ -220,7 +221,7 @@ export const WorkToolsLive = Layer.effect(
           ownerHobId: turn.agentId,
           repository: input.repository === undefined ? null : kept(input.repository),
           startedFrom: messageId,
-          readFirst: yield* readFirstOf(channelId, turn.agentId),
+          readFirst: yield* readFirstOf(channelId, turn),
         });
         return { text: turn.redactor.text(startedText(quest)), refused: false };
       }).pipe(

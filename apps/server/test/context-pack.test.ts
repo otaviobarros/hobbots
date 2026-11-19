@@ -249,7 +249,12 @@ describe("the context pack", () => {
       expect(pack.next.report.tokens).toBeLessThanOrEqual(pack.next.report.budget);
       // What the hob's session read first, which a Quest it starts lists (#1487): the decision and
       // the last chapter, each at the message it opens at.
-      const read = await run(PackReports.use((reports) => reports.lastOf(id, WREN)));
+      const read = await run(PackReports.use((reports) => reports.lastOf(id, { hobId: WREN, runtime })));
+      // Another runtime's session in the same channel has started from no pack.
+      const other = runtime === "codex" ? "claude-code" : "codex";
+      expect(
+        Option.isNone(await run(PackReports.use((reports) => reports.lastOf(id, { hobId: WREN, runtime: other })))),
+      ).toBe(true);
       expect(Option.getOrNull(read)?.read).toEqual(pack.lastTurn?.read);
       expect(pack.lastTurn?.read.map((each) => each._tag)).toEqual(["Decision", "Chapter"]);
       expect(pack.lastTurn?.read.find((each) => each._tag === "Chapter")?.messageId).not.toBeNull();

@@ -1,5 +1,4 @@
 import {
-  type AgentId,
   type Channel,
   type ChannelId,
   isActiveQuest,
@@ -19,7 +18,7 @@ import {
   packChapters,
 } from "./context-pack.ts";
 import { type PackPeople, reasonLine, type TurnReason } from "./pack-people.ts";
-import type { PackReports } from "./pack-reports.ts";
+import type { PackReports, PackSession } from "./pack-reports.ts";
 import { HobbotsRepository } from "./repository.ts";
 import { TaskRepository } from "./tasks.ts";
 import { WorkQuests } from "./work-quests.ts";
@@ -146,11 +145,14 @@ export const packRecords = (sources: PackSources, memory: PackMemory | null): Pa
   memoryPages: memory === null || memory.text === null ? [] : memory.pages,
 });
 
-/** The pack a turn reads, logged with its report and kept for the Focus chip and the hob's next Quest. */
+/**
+ * The pack a turn's new session reads, logged with its report and kept for the Focus chip and for a
+ * Quest that session starts.
+ */
 export const packTurn = (
   reports: Option.Option<PackReports["Service"]>,
   channelId: ChannelId,
-  hobId: AgentId,
+  session: PackSession,
   sources: PackSources | null,
   memory: PackMemory | null,
 ) =>
@@ -161,6 +163,6 @@ export const packTurn = (
     yield* Effect.logInfo("Built a context pack").pipe(
       Effect.annotateLogs({ channelId, packTokens: pack.report.tokens, packReport: JSON.stringify(pack.report) }),
     );
-    if (Option.isSome(reports)) yield* reports.value.record(channelId, hobId, pack.report);
+    if (Option.isSome(reports)) yield* reports.value.record(channelId, session, pack.report);
     return pack.text;
   });

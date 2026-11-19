@@ -67,6 +67,7 @@ const turnIn = (channelId: ChannelId, id: string) =>
           agentId: ADA,
           channelId,
           messageId: message.id,
+          runtime: "claude-code",
           scope: () => `reply:${message.id}`,
           currentAccess: Effect.succeed(null),
           redactor: makeRedactor([]),
@@ -103,9 +104,21 @@ const campOf = (name: string) =>
       yield* (yield* HobbotsRepository).upsertChannel(
         new Channel({ id: channelId, ownerHobId: ADA, title: name, createdAt: NOW, updatedAt: NOW }),
       );
-      // The pack Ada's session started from in the camp, as its turn reported it.
+      // The pack Ada's Claude Code session started from in the camp, as its turn reported it, and
+      // a later one her Codex session started from, which a switch back to Claude Code does not read.
       yield* PackReports.use((reports) =>
-        reports.record(channelId, ADA, { budget: 12_000, tokens: 100, parts: [], read: READ_FIRST }),
+        Effect.andThen(
+          reports.record(
+            channelId,
+            { hobId: ADA, runtime: "claude-code" },
+            { budget: 12_000, tokens: 100, parts: [], read: READ_FIRST },
+          ),
+          reports.record(
+            channelId,
+            { hobId: ADA, runtime: "codex" },
+            { budget: 12_000, tokens: 100, parts: [], read: READ_FIRST.slice(1) },
+          ),
+        ),
       );
       return channelId;
     }),

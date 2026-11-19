@@ -461,7 +461,13 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
         const memory = yield* memoryBriefFor(agent, tools, expected);
         const roster = yield* rosterFor(agent, tools, expected, adapter);
         session.briefed({ memory, roster });
-        const pack = yield* packTurn(packReports, channel.id, agent.id, told.pack, memory);
+        const pack = yield* packTurn(
+          packReports,
+          channel.id,
+          { hobId: agent.id, runtime: brain.runtime },
+          told.pack,
+          memory,
+        );
         const skills = yield* skillsFor(speaker, config, tools, yours);
         // A chat that tries a draft never runs without it: the hub lost its files, as a restore does,
         // so the reply says how to bring it back instead of answering as if it were loaded.
@@ -520,6 +526,7 @@ export const makeTurnRunner = (deps: TurnRunnerDeps) =>
                   agentId: agent.id,
                   channelId: channel.id,
                   messageId,
+                  runtime: brain.runtime,
                   webPlace: chatWebPlace(channel.id, taskTurn, workingOn),
                   scope: taskTurn?.scope ?? (() => callScope.reply(messageId)),
                   also: callScope.reply(messageId),
