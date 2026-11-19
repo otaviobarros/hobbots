@@ -27,7 +27,9 @@ import {
   ChannelId,
   ChapterId,
   isInProgress,
-  type Message,
+  Message,
+  MessageId,
+  OWNER_ACTOR,
   type RuntimeKind,
   roleFields,
 } from "@hobbots/domain";
@@ -576,6 +578,38 @@ describe("chapters that start on their own", () => {
       expect(await chaptersOf(id)).toHaveLength(2);
     },
   );
+
+  // covers ADR 039 (Chapters run on their own, Reply threads), #1484
+  it("a reply in a thread starts no chapter, so the brain never judges one, even after an idle gap (#1484)", async () => {
+    const id = await start("claude-code", brain({ break: [{ topic: "new", title: "The garden" }] }));
+    const asked = await say(id, "My cat is called Miso.");
+    await idleFor(id, CHAPTER_BREAK_IDLE_MINUTES);
+    const [root] = (await run(HobbotsRepository.use((repo) => repo.listMessages(id)))).filter(
+      (message) => message.role === "user",
+    );
+    await run(
+      HobbotsRepository.use((repo) =>
+        repo.sendMessage(
+          new Message({
+            id: MessageId.make("aside"),
+            channelId: id,
+            actor: OWNER_ACTOR,
+            role: "user",
+            content: "Let us plan the garden.",
+            status: "complete",
+            error: null,
+            configVersion: null,
+            rootMessageId: root?.id ?? asked.id,
+            createdAt: new Date().toISOString(),
+          }),
+          { mentions: [], repliesTo: null },
+        ),
+      ),
+    );
+    await runBreaks();
+    expect(judged).toEqual([]);
+    expect(await chaptersOf(id)).toHaveLength(1);
+  });
 
   // covers ADR 039 (Chapters run on their own), #1557
   it("the hub's brain starts one where a message opens a new topic, titled by it, and never at a chapter's start (#1557)", async () => {
